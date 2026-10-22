@@ -100,3 +100,51 @@ Then **Phase 01 proposal** (to confirm against the canonical doc once available)
 No screen, route identifier, or manifest entry will be renamed or re-invented.
 
 **Status: PHASE 00 COMPLETE — EVIDENCE SUBMITTED. STOPPED PENDING OWNER APPROVAL. PHASE 01 NOT STARTED.**
+
+## 9. Completion evidence in contract §2.5 template (re-report of Phase 00, added 2026-10-23)
+
+PHASE / STEP / TITLE: Phase 00 / Step 01 — Baseline audit of connected repository (static analysis only).
+
+Requirement source clauses used: Directive sections 1 (repository baseline + verified constraints),
+§2.1 authority hierarchy, §2.2 GitHub/source control, §2.3 stage/step/file-batch discipline,
+§2.4 test-first gates, §2.5 evidence template. Canonical master prompt file absent from repo —
+requirement-source gap recorded instead of inventing phase rules (§2.1 compliance).
+
+Baseline commit SHA / branch: base `main` @ `eb34116` (grafted shallow clone); working branch
+`qwen-code-3daf4f97-7cb4-4a54-af89-c5f4e69a0b40`; audit commits `97a2946`, `bb4631c`. Tree clean at each commit.
+
+Files (status + exact relative path, max 10 per batch): NEW `docs/implementation/PHASE00_EVIDENCE.md`;
+NEW `docs/implementation/IMPLEMENTATION_LEDGER.md` (batch size 2; zero production files; see ledger tracker).
+
+Implemented behaviors and boundaries: none — Phase 00 is read-only audit. Boundaries enforced: no route
+identifiers renamed, origin `https://manger.adwas.example` untouched and never contacted over network,
+CSP/manifests unmodified, no schema/migration changes.
+
+Commands ACTUALLY run (never invented): git log/status/show/remote-ls/rev-parse; find/ls; grep/awk/wc over
+solution, csproj, props, SQL, manifests, 70 HTML pages, JS assets; JSON parse via python3 for
+action-manifest.json & screen-manifest.json (counts, key sets, error-code cross-check); secret-pattern scan.
+NOT run (capability absent): dotnet restore/build/test (no .NET SDK), any push/PR/Actions command (no remote/gh CLI).
+
+Unit/integration/security results including failing test names: NOT RUN — zero test projects exist in the
+repo; test-first feasibility blocked by that dependency; remediation scheduled as Phase 01 step 1. No bypass attempted.
+
+Windows CI link / workflow run ID / tested SHA / conclusion: NONE EXIST — `.github/workflows/windows-build.yml`
+is restore/build-only and was never executed or claimed to pass by me. No CI success statement is made anywhere.
+
+Artifacts produced with actual verified names and hashes (if any): two markdown docs only (paths above);
+no binaries, no published outputs, no databases.
+
+Security/privacy impact, migrations and reversibility: additive documentation only; no secrets/personal data
+committed (hygiene check in ledger); no migrations touched; fully reversible via `git revert` of doc commits.
+
+Open blockers, risks and intentional omissions: Gate 0 (canonical requirements file missing); owner must confirm
+real repo URL + approved base branch; no local build verification possible; intentional omission of any business
+logic, host project, or bridge implementation until Phase 01 approval.
+
+Acceptance checklist PASS / FAIL / NOT RUN: structure inventory PASS; manifest integrity (90 actions/11 services;
+69 screens) PASS; CSP/offline hygiene PASS; origin reservation PASS; build verification NOT RUN; tests NOT RUN;
+CI evidence NOT RUN; requirement-source completeness FAIL (gap recorded).
+
+Proposed NEXT step (do not start without OWNER APPROVAL): Gate 0 placement of canonical doc, then Phase 01
+Step 01 = xUnit test backbone (Domain/Application/Infrastructure) wired into a Windows-runner `dotnet test`
+job, batch <= 10 files, failing-test-first evidence collected on CI.
