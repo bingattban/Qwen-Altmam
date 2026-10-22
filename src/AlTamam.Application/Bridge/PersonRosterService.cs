@@ -511,7 +511,7 @@ public sealed class PersonRosterService
             return BridgeHelpers.Ok(
                 new JsonObject { ["archivedPersonIds"] = archived, ["effectiveLocalDate"] = effectiveDate },
                 revision: baseRevision + archived.Count,
-                events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelArchived, effectiveDate, archived));
+                events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelArchived, effectiveDate, ids));
         }, ct).ConfigureAwait(false);
     }
 
