@@ -132,15 +132,24 @@ public sealed class SchemaMigrationRunner
                     }
                     else
                     {
-                        // Pre-hardening bootstrap migration (V001): Sha256 column does not exist yet.
+                        // V001 SQL seeds its own SchemaVersions row before the Sha256 column exists.
+                        // Validate that row instead of inserting a duplicate primary key.
                         record.CommandText = """
-                            INSERT INTO SchemaVersions (SchemaVersion, MigrationName, AppliedAtUtc)
-                            VALUES ($v, $n, STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'));
+                            SELECT COUNT(*) FROM SchemaVersions
+                            WHERE SchemaVersion = $v AND MigrationName = $n;
                             """;
                     }
                     record.Parameters.Add("$v", SqliteType.Integer).Value = migration.Version;
                     record.Parameters.Add("$n", SqliteType.Text).Value = migration.Name;
-                    await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    if (migration.RecordsHash)
+                    {
+                        await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                    else if (Convert.ToInt32(await record.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) != 1)
+                    {
+                        throw new InvalidOperationException(
+                            $"Bootstrap migration '{migration.Name}' did not record its expected schema version.");
+                    }
                 }
 
                 transaction.Commit();
