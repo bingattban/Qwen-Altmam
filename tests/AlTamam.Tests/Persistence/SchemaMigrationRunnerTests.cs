@@ -166,27 +166,22 @@ public sealed class SchemaMigrationRunnerTests : IDisposable
         using var context = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex);
         using var connection = context.CreateOpenConnection();
 
-        // Register a deliberately broken V002 that references a non-existent table.
-        var brokenV002 = new SchemaMigration(2, "V002_Broken", V002.EmbeddedResourcePath);
+        // V001 SQL seeds its own SchemaVersions row; do not insert a duplicate.
         var runnerGood = DefaultRunner();
-        // Apply only V001 first via a runner that knows just two versions but we interrupt:
         await using (var apply = connection.CreateCommand())
         {
             apply.CommandText = runnerGood.ReadSql(V001);
             await apply.ExecuteNonQueryAsync();
-            using var record = connection.CreateCommand();
-            record.CommandText = "INSERT INTO SchemaVersions (SchemaVersion, MigrationName, AppliedAtUtc) VALUES (1,'V001_InitialSchema',STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'));";
-            await record.ExecuteNonQueryAsync();
         }
 
-        // A failing DDL statement inside the runner's step must roll back version recording.
-        var failingRunner = new FailingMigrationRunner([V001, brokenV002], connection);
+        // A failing DDL statement inside the transaction must not advance the version.
+        var failingRunner = new FailingMigrationRunner(connection);
         await Assert.ThrowsAnyAsync<SqliteException>(() => failingRunner.UpgradeWithBrokenSqlAsync());
         Assert.Equal(1, SchemaMigrationRunner.GetCurrentVersion(connection));
     }
 
     /// <summary>Test double that executes intentionally invalid SQL inside the migration transaction.</summary>
-    private sealed class FailingMigrationRunner(IReadOnlyList<SchemaMigration> migrations, SqliteConnection connection)
+    private sealed class FailingMigrationRunner(SqliteConnection connection)
     {
         public Task UpgradeWithBrokenSqlAsync()
         {
