@@ -322,7 +322,7 @@ public sealed class AutoAttendanceService
     internal static string JobKey(DateOnly businessDate) => "AUTO20H-" + Iso(businessDate);
     internal static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    private DateTime LocalNow() => _time.LocalTimeZone.GetUtcNow().LocalDateTime;
+    private DateTime LocalNow() => _time.GetLocalNow().DateTime;
 
     internal List<DateOnly> EnumeratePendingDates(DateOnly today, bool dayDue, int catchUpDays,
         DateOnly? lastCompleted, out int unrecoverable)

@@ -38,15 +38,15 @@ public static class BridgeHandlerCatalog
         },
         "AuthenticateLocalUser" => async (req, principal, ct) =>
         {
-            string username = req.Payload["username"]?.GetValue<string>() ?? "";
+            string username = req.Payload?["username"]?.GetValue<string>() ?? "";
             // Provisioning bootstrap: when no account exists yet, the first call creates the administrator.
             if (!await services.IsProvisionedAsync(ct).ConfigureAwait(false))
             {
-                string password0 = req.Payload["password"]?.GetValue<string>() ?? "";
+                string password0 = req.Payload?["password"]?.GetValue<string>() ?? "";
                 BridgeResponse created = await services.ProvisionFirstAdministratorAsync(username, password0, ct).ConfigureAwait(false);
                 if (!created.Success) return Fail(req, created);
             }
-            string password = req.Payload["password"]?.GetValue<string>() ?? "";
+            string password = req.Payload?["password"]?.GetValue<string>() ?? "";
             var (authPrincipal, failure) = await services.AuthenticateAsync(username, password, ct).ConfigureAwait(false);
             if (authPrincipal is null) return Fail(req, failure!);
             return Done(req, SessionData(authPrincipal), new[]
@@ -75,8 +75,8 @@ public static class BridgeHandlerCatalog
         },
         "SearchPersons" or "QueryPersons" or "SearchActivePersonsForAccount" => async (req, principal, ct) =>
         {
-            string term = req.Payload["term"]?.GetValue<string>() ?? "";
-            int take = TryInt(req.Payload["take"], 25);
+            string term = req.Payload?["term"]?.GetValue<string>() ?? "";
+            int take = TryInt(req.Payload?["take"], 25);
             BridgeResponse inner = await services.SearchPersonsAsync(term, take, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
@@ -87,12 +87,16 @@ public static class BridgeHandlerCatalog
         },
         "SaveAttendanceDraft" => async (req, principal, ct) =>
         {
-            BridgeResponse inner = await services.SaveDraftAsync(principal!.UserId, req.Payload, ct).ConfigureAwait(false);
+            if (req.Payload is not JsonObject payload)
+                return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError, "بيانات المسودة مطلوبة."));
+            BridgeResponse inner = await services.SaveDraftAsync(principal!.UserId, payload, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
         "DeleteAttendanceDraft" => async (req, principal, ct) =>
         {
-            BridgeResponse inner = await services.DeleteDraftAsync(principal!.UserId, req.Payload, ct).ConfigureAwait(false);
+            if (req.Payload is not JsonObject payload)
+                return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError, "بيانات المسودة مطلوبة."));
+            BridgeResponse inner = await services.DeleteDraftAsync(principal!.UserId, payload, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
         "GetApplicationVersion" => (req, principal, ct) =>
