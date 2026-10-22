@@ -158,3 +158,12 @@ requires this confirmation; we do not extend or relax the matrix without approva
 Obligation: exhaustive allow/deny test matrix across ALL 90 manifest actions × 3 roles (270 authorization cases,
 plus sensitive-action double-confirmation cases) starting Phase 01+; sensitive delete/reset/restore/account/
 historical-correction flows require explicit confirmation dialogs + structured audit rows.
+
+## External ChatGPT review handoff (contract §2.6) — codified 2026-10-23
+After every implemented step, produce a COMPACT paste-ready review packet containing exactly:
+requirement-clause mapping; changed-file list with statuses; commit SHA(s); PR URL (or "none yet");
+CI run URL + run ID + tested SHA (or "no CI executed — none claimed"); tests with outputs incl. failing-test
+evidence; security concerns; next gate. The packet is prepared for the OWNER to paste into ChatGPT manually;
+we NEVER claim ChatGPT automatically viewed or approved anything. ChatGPT findings are incorporated ONLY after
+(1) re-verification against current repository source and (2) owner decision where semantics are involved.
+Current packet SHAs (branch qwen-code-3daf4f97…): 97a2946, bb4631c, 8e5e867, 3a23b00, a6490df (+ this commit).
