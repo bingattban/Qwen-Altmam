@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AlTamam.Domain/AlTamam.Domain.csproj" />
+    <Project Path="src/AlTamam.Contracts/AlTamam.Contracts.csproj" />
+    <Project Path="src/AlTamam.Application/AlTamam.Application.csproj" />
+    <Project Path="src/AlTamam.Infrastructure/AlTamam.Infrastructure.csproj" />
+  </Folder>
+</Solution>
