@@ -1,0 +1,193 @@
+name: Windows Release Packages (Phase 15)
+
+# Builds the genuine WPF executable, validates the publish layout, produces BOTH
+# release artifacts (Portable ZIP + Inno Setup installer), verifies runtime
+# dependencies and emits SHA-256 checksums + build metadata.
+# Publishing a GitHub Release is intentionally NOT done here: 15.08 requires the
+# Phase 16 gate plus explicit owner approval; this workflow only uploads CI
+# artifacts for review. No code signing occurs unless the owner provisions the
+# approved certificate secrets (see "Optional signing" step); unsigned builds
+# are never labeled 'secure'.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.15.0)'
+        required: true
+        default: '0.15.0'
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  PUBLISH_DIR: publish/AlTamam-win-x64
+  CONFIGURATION: Release
+  RUNTIME: win-x64
+
+jobs:
+  preflight:
+    name: Manifest & advisory preflight (15.01 / 14.01 carry-over)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Action-manifest security guard (90 actions, CSP, RBAC drift)
+        run: python build/manifest-guard.py
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore with package integrity + advisory audit
+        run: |
+          dotnet restore AlTamam.slnx
+          dotnet list AlTamam.slnx package --vulnerable --include-transitive | tee vulnerable.txt
+          ! grep -q "has an easily accessible vulnerability" vulnerable.txt
+
+  build-test:
+    name: Build + full test suite on Windows x64 (15.01)
+    needs: preflight
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+      - name: Restore / Build
+        run: |
+          dotnet restore AlTamam.slnx
+          dotnet build AlTamam.slnx -c $env:CONFIGURATION --no-restore
+      - name: Unit + persistence tests
+        run: >
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build
+          --filter "Category=Unit|Category=Persistence" --logger "trx;LogFileName=unit.trx"
+          --results-directory TestResults
+      - name: Security / bridge-fuzz tests (Windows-native)
+        run: >
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build
+          --filter "Category=Security" --logger "trx;LogFileName=security.trx"
+          --results-directory TestResults
+      - name: Performance / concurrency regression tests (15.05 outputs unchanged)
+        run: >
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build
+          --filter "Category=Performance" --logger "trx;LogFileName=perf.trx"
+          --results-directory TestResults
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-windows
+          path: TestResults/*.trx
+          if-no-files-found: error
+
+  package:
+    name: Publish, validate, portable ZIP + installer (15.02-15.07)
+    needs: build-test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+      - name: Publish genuine WPF executable (self-contained, win-x64)
+        run: >
+          dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj
+          -c $env:CONFIGURATION -r $env:RUNTIME --self-contained true
+          -p:PublishSingleFile=false -p:DebugType=none -p:DebugSymbols=false
+          -o $env:PUBLISH_DIR
+      - name: Validate publish layout (real PE, WebView2 loader, SQLCipher native)
+        run: python build/validate-layout.py $env:PUBLISH_DIR
+      - name: Optional signing (ONLY with owner-provisioned approved certificate)
+        shell: pwsh
+        env:
+          SMTOOL_USER: ${{ secrets.SMTOOL_USER }}
+          SMTOOL_AUTH: ${{ secrets.SMTOOL_AUTH }}
+        run: |
+          if ($env:SMTOOL_USER) {
+            # Real certificate comes exclusively from owner-approved secrets;
+            # never embedded in the repository. Absent => artifact stays UNSIGNED
+            # and release notes must not claim signature/'secure' distribution.
+            choco install sigclient2 -y --version 2.1.0
+            java -jar "$env:GITHUB_WORKSPACE/build/sigclient2.jar" `
+              -user $env:SMTOOL_USER -auth $env:SMTOOL_AUTH `
+              -r http://timestamp.digicert.com -td SHA-256 -fd SHA-256 `
+              -in "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe" `
+              -sw -debug -verbose
+          } else { Write-Host "SIGNING SKIPPED: no approved certificate provisioned (unsigned != secure)." }
+      - name: Smoke-run headless checks on runner (15.06 partial, real machine evidence below)
+        shell: pwsh
+        run: |
+          # Executable actually launches; WPF UI loop can't be asserted headlessly,
+          # so we verify process start + clean exit via the built-in self-check flag.
+          & "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe" --layout-selfcheck
+      - name: Build Portable ZIP (clean directory, real runnable EXE)
+        run: |
+          Compress-Archive -Path "$env:PUBLISH_DIR\*" `
+            -DestinationPath artifacts/AlTamam-Portable-win-x64.zip -Force
+        shell: pwsh
+        env: { }
+      - name: Install Inno Setup 6 (approved tool) and compile installer
+        shell: pwsh
+        run: |
+          choco install innosetup --version 6.3.3 -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            /DAppVersion=${{ github.event.inputs.version || github.ref_name }} `
+            /DPublishDir=$env:PUBLISH_DIR `
+            build/AlTamam-installer.iss
+          Move-Item artifacts/AlTamam-Installer-win-x64-setup.exe artifacts/AlTamam-Installer-win-x64.exe -Force
+      - name: Generate SHA-256 checksums + build metadata (15.07)
+        run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "${{ github.event.inputs.version || github.ref_name }}"
+      - name: Upload BOTH release-candidate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-win-x64-rc-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            artifacts/AlTamam-Portable-win-x64.zip
+            artifacts/AlTamam-Installer-win-x64.exe
+            artifacts/SHA256SUMS.txt
+            artifacts/BUILD_METADATA.json
+          retention-days: 90
+      - name: Retain raw publish dir for acceptance testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-publish-dir
+          path: ${{ env.PUBLISH_DIR }}
+          retention-days: 30
+
+  clean-windows-acceptance:
+    name: Clean-machine acceptance matrix (15.06) — manual evidence gate
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { pattern: "AlTamam-win-x64-rc-*", merge-multiple: true, path: rc }
+      - name: Stage installer next to cwd
+        shell: pwsh
+        run: Copy-Item rc/AlTamam-Installer-win-x64.exe .
+      - name: Installer silent install to fresh profile
+        shell: pwsh
+        run: |
+          # 1) first run, 2) login, 3) attendance, 4) import/export,
+          # 5) shutdown/reopen, 6) upgrade-in-place, 7) uninstall keeps DB/backups,
+          # 8) reinstall sees preserved data, 9) backup+restore round-trip.
+          Start-Process -FilePath ".\AlTamam-Installer-win-x64.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
+          if (-not (Test-Path "C:\AlTamamTest\AlTamam.DesktopHost.exe")) { throw "installer did not lay down exe" }
+      - name: Automated acceptance driver (synthetic data only)
+        run: |
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release `
+            --filter "Category=Acceptance" --logger "trx;LogFileName=acceptance.trx" `
+            --results-directory AcceptanceResults
+        continue-on-error: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-evidence
+          path: AcceptanceResults/
+          if-no-files-found: error

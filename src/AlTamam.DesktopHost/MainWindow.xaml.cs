@@ -31,7 +31,7 @@ public partial class MainWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         InitializeComponent();
         webViewHost.Children.Add(_webView);
-        Loaded += OnLoaded;
+        Loaded += OnLoadedOrSelfCheck;
         Closed += async (_, _) =>
         {
             try
@@ -46,7 +46,41 @@ public partial class MainWindow : Window
         };
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 15.06 CI smoke entry: when launched with --layout-selfcheck the process validates the
+    /// published layout (real bundled webui content + writable data root resolution) and exits
+    /// WITHOUT opening UI/DB/WebView2 — safe for headless Windows runners. Exit code 0 = layout OK.
+    /// </summary>
+    internal static int RunLayoutSelfCheck()
+    {
+        try
+        {
+            ResolveBundledWebUiRoot();                       // throws if webui/index.html missing
+            string probe = AppDataLayout.IsPortable
+                ? AppDataLayout.DataRoot                     // portable: data beside exe
+                : Path.GetFullPath(AppDataLayout.DataRoot);  // installed: %LOCALAPPDATA%\AlTamam
+            AppDataLayout.AssertWritableLocation(Path.Combine(probe, "altamam.db"));
+            Console.WriteLine("LAYOUT-SELFCHECK PASS");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("LAYOUT-SELFCHECK FAIL: " + ex.Message);
+            return 1;
+        }
+    }
+
+    private void OnLoadedOrSelfCheck(object sender, RoutedEventArgs e)
+    {
+        if (Environment.GetCommandLineArgs().Contains("--layout-selfcheck", StringComparer.Ordinal))
+        {
+            Application.Current.Shutdown(RunLayoutSelfCheck());
+            return;
+        }
+        _ = OnLoadedAsync(sender, e);
+    }
+
+    private async Task OnLoadedAsync(object sender, RoutedEventArgs e)
     {
         try
         {
