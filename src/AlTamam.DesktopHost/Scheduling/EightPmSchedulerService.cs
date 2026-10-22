@@ -65,7 +65,7 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
     /// </summary>
     private TimeSpan SleepUntilNextCheck()
     {
-        DateTime local = _time.LocalTimeZone.GetUtcNow().LocalDateTime;
+        DateTime local = _time.GetLocalNow().DateTime;
         DateTime due = local.Date.AddHours(AutoAttendanceService.DefaultDueHour);
         if (local.TimeOfDay >= due.TimeOfDay)
             due = due.AddDays(1);
