@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><RootNamespace>AlTamam.Application</RootNamespace></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../AlTamam.Domain/AlTamam.Domain.csproj" /></ItemGroup>
+</Project>

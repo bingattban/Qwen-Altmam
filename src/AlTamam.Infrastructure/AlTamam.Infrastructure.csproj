@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><RootNamespace>AlTamam.Infrastructure</RootNamespace></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" />
+    <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
+    <EmbeddedResource Include="Persistence/Migrations/V001_InitialSchema.sql" />
+  </ItemGroup>
+</Project>

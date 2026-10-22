@@ -1,0 +1,37 @@
+/* Shared presentation layout extracted from HTML/JS without changing visual properties.
+   Keep screen-specific styles here so CSP needs no unsafe-inline exceptions. */
+.present70aa3b108 {background:rgba(255,255,255,0.14) !important;color:#FFF !important;text-decoration:none !important;}
+.present7f87d4a9f {max-width:1280px !important;margin:0 auto !important;width:100% !important;}
+.present4c462afda {font-size:12px !important;color:var(--text-muted) !important;}
+.presentb9bbe540d {display:flex !important;gap:8px !important;}
+.present4edeb9e71 {text-decoration:none !important;}
+.presentc67077d00 {display:grid !important;grid-template-columns:repeat(auto-fit,minmax(260px,1fr)) !important;gap:12px !important;margin-bottom:16px !important;}
+.present0d6e2345d {padding:12px !important;background:var(--bg-subtle) !important;border-radius:8px !important;}
+.present65c9a6077 {font-size:12px !important;color:var(--text-muted) !important;margin-top:4px !important;}
+.presente11051c0b {padding:12px !important;border:1px solid var(--border-color) !important;border-radius:8px !important;background:var(--bg-surface) !important;font-size:13px !important;}
+.presentf2f1452a6 {background:rgba(255,255,255,0.12) !important;color:#FFF !important;border-color:rgba(255,255,255,0.25) !important;}
+.present88b9d5c61 {margin-top:14px !important;}
+.presentbe8ffda67 {font-size:17px !important;}
+.present535d4cad6 {text-decoration:none !important;display:inline-flex !important;min-height:40px !important;align-items:center !important;}
+.present8b2e0334c {margin:10px 0 !important;color:var(--text-muted) !important;}
+.presentb7e106bd3 {display:flex !important;flex-wrap:wrap !important;gap:10px !important;margin-top:16px !important;}
+.presentf23e59d84 {text-align:center !important;color:var(--text-muted) !important;padding:24px}
+.present2bb5163fc {color:var(--text-muted) !important;font-size:12px}
+.present01ef7fc99 {display:flex !important;gap:8px !important;align-items:center}
+.present87c136dfd {margin-bottom:16px}
+.present2b583d738 {margin-bottom:14px}
+.present865c33f0e {font-size:12px !important;color:var(--text-muted)}
+.present06307df0e {display:flex !important;gap:8px !important;align-items:center !important;flex-wrap:wrap}
+.present7ed833a22 {text-decoration:none !important;color:inherit}
+
+.counter-kind-navy { border-right-color: var(--primary-navy); }
+.counter-kind-present { border-right-color: #38BDF8; }
+.counter-kind-leave { border-right-color: #22C55E; }
+.counter-kind-absent { border-right-color: #EF4444; }
+.counter-kind-permission { border-right-color: #EAB308; }
+.counter-kind-unprepared { border-right-color: #A86508; }
+.counter-kind-completion { border-right-color: #197A52; }
+.status-dot-present { background: #38BDF8; }
+.status-dot-leave { background: #22C55E; }
+.status-dot-absent { background: #EF4444; }
+.status-dot-permission { background: #EAB308; }

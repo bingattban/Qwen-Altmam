@@ -1,0 +1,2271 @@
+{
+  "protocolVersion": 1,
+  "virtualHostOrigin": "https://manger.adwas.example",
+  "offlineModeEnforced": true,
+  "allowExternalNetwork": false,
+  "contentSecurityPolicy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self';",
+  "centralSurrogateIdTypes": [
+    "PersonId",
+    "SiteId",
+    "StatusId",
+    "AssignmentId",
+    "MovementId",
+    "UserId",
+    "AuditEventId",
+    "ImportBatchId",
+    "ReportJobId",
+    "BackupId",
+    "FieldDefinitionId"
+  ],
+  "canonicalErrorCodes": [
+    "Unauthorized",
+    "SessionExpired",
+    "MissingData",
+    "ValidationError",
+    "DuplicateServiceNumber",
+    "DuplicateUsername",
+    "ConflictStale",
+    "AlreadyPrepared",
+    "TransferDayAttendanceForbidden",
+    "InvalidTransferSites",
+    "OverlappingAssignments",
+    "HistoricDayLocked",
+    "CustomStatusInactive",
+    "ImportPlanStale",
+    "InvalidWorkbook",
+    "ExcelExportFailed",
+    "BackupIntegrityFailed",
+    "WrongRecoveryKey",
+    "MissingEVolume",
+    "InsufficientDiskSpace",
+    "ScheduleUnavailable",
+    "ResetBackupGateFailed",
+    "StorageBusy",
+    "ClockRollbackSuspected"
+  ],
+  "uiInvalidationEvents": [
+    "AttendanceCommitted",
+    "AttendanceRevised",
+    "PersonnelMoved",
+    "PersonnelArchived",
+    "SiteCreated",
+    "SiteRenamed",
+    "StatusDefinitionCreated",
+    "StatusDefinitionChanged",
+    "PersonIdentityUpdated",
+    "VisibleAuditOverlayChanged",
+    "UserAccountChanged",
+    "BackupRestored",
+    "SessionEnded"
+  ],
+  "actions": [
+    {
+      "action": "GetProvisioningState",
+      "owningService": "AuthenticationService",
+      "allowedRoles": [
+        "Unauthenticated",
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "StorageBusy"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "AuthenticateLocalUser",
+      "owningService": "AuthenticationService",
+      "allowedRoles": [
+        "Unauthenticated",
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError",
+        "ClockRollbackSuspected"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetCurrentSession",
+      "owningService": "AuthenticationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetNavigationPermissions",
+      "owningService": "AuthenticationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "Logout",
+      "owningService": "AuthenticationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetAllowedRoles",
+      "owningService": "AuthenticationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetDashboardSummary",
+      "owningService": "DashboardService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryDailyRoster",
+      "owningService": "DashboardService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryUnprepared",
+      "owningService": "DashboardService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetAutoAttendanceRun",
+      "owningService": "DashboardService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetActiveAttendanceStatuses",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewAttendanceChange",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "ValidationError",
+        "TransferDayAttendanceForbidden",
+        "HistoricDayLocked"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "SubmitAttendance",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "AlreadyPrepared",
+        "TransferDayAttendanceForbidden",
+        "HistoricDayLocked",
+        "CustomStatusInactive",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "ReviseTodayAttendance",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "HistoricDayLocked",
+        "TransferDayAttendanceForbidden",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "SaveAttendanceDraft",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "StorageBusy"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "ListAttendanceDrafts",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "DeleteAttendanceDraft",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetAvailableArchivePeriods",
+      "owningService": "MonthlyGridService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryMonthlyGrid",
+      "owningService": "MonthlyGridService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetMonthlyCellDetails",
+      "owningService": "MonthlyGridService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "SearchPersons",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetPersonSummary",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryPersons",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewPersonIdentityUpdate",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "DuplicateServiceNumber",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "UpdatePersonIdentity",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "DuplicateServiceNumber",
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewArchivePersons",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "ArchivePersons",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryActivePersonsBySite",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewInternalTransfer",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "InvalidTransferSites",
+        "OverlappingAssignments"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitInternalTransfer",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "InvalidTransferSites",
+        "OverlappingAssignments",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewExternalTransfer",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "ValidationError",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitExternalTransfer",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryMovementArchive",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetMovementDetails",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewSeparation",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "ValidationError",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitSeparation",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QuerySeparationArchive",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetSeparationDetails",
+      "owningService": "MovementService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryPersonAttendanceTimeline",
+      "owningService": "ReportingService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryPersonAttendanceTotals",
+      "owningService": "ReportingService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "BuildPersonLifetimeReport",
+      "owningService": "ReportingService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryPersonOperationsTimeline",
+      "owningService": "ReportingService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryPersonMovements",
+      "owningService": "ReportingService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "ExportPersonLifetimeExcel",
+      "owningService": "ReportingService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ExcelExportFailed",
+        "InsufficientDiskSpace"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryAttendanceStatuses",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CreateAttendanceStatus",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "UpdateAttendanceStatus",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "DeactivateOrDeleteStatus",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QuerySites",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CreateSite",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "RenameSite",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "RemoveSiteAndReassignCurrentPersons",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetCustomFieldDefinitions",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CreateCustomFieldDefinition",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "UpdateCustomFieldMetadata",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "DeactivateCustomField",
+      "owningService": "ConfigurationService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "SelectImportWorkbook",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "InvalidWorkbook"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "AnalyzeImport",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "InvalidWorkbook",
+        "DuplicateServiceNumber"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewImportPlan",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "ImportPlanStale",
+        "InvalidWorkbook"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitImport",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ImportPlanStale",
+        "DuplicateServiceNumber",
+        "StorageBusy"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryImportOutcome",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "ExportImportIssues",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ExcelExportFailed"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetExportablePeriods",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewMonthlyExport",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "ExportMonthlyWorkbookSet",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ExcelExportFailed",
+        "InsufficientDiskSpace"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetExportProgress",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CancelExport",
+      "owningService": "ExcelSheetsService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "ListUserAccounts",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "SearchActivePersonsForAccount",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CreateUserAccount",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "DuplicateUsername",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "ChangeUserPassword",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "DeactivateUserAccount",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryAuditLog",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetAuditEntryDetails",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "UpdateAuditPresentation",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "DeleteAuditPresentation",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "QueryAuditPresentationChanges",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetSettingsOverview",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CreateVerifiedBackup",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "MissingEVolume",
+        "InsufficientDiskSpace",
+        "BackupIntegrityFailed"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "VerifyBackup",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "BackupIntegrityFailed",
+        "WrongRecoveryKey"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "InspectBackup",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "BackupIntegrityFailed",
+        "WrongRecoveryKey"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewRestore",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "BackupIntegrityFailed",
+        "WrongRecoveryKey"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "RestoreDatabaseAtomically",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "BackupIntegrityFailed",
+        "WrongRecoveryKey",
+        "StorageBusy"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetBackupSchedule",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "UpdateBackupSchedule",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ScheduleUnavailable"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "RunDatabaseIntegrityCheck",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "BackupIntegrityFailed",
+        "StorageBusy"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewFullReset",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "ResetBackupGateFailed"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitFullReset",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ResetBackupGateFailed",
+        "StorageBusy"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "SetTheme",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "GetApplicationVersion",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    }
+  ]
+}
