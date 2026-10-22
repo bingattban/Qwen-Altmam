@@ -45,7 +45,7 @@ public sealed class SchemaMigrationRunner
     public string ComputeExpectedHash(SchemaMigration migration)
     {
         ValidateRegistered(migration);
-        return Convert.ToHexString(SHA256.HashData(ReadSql(migration))).ToLowerInvariant();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(ReadSql(migration)))).ToLowerInvariant();
     }
 
     /// <summary>Reads and normalizes (CRLF→LF, UTF-8 no BOM) the embedded SQL body of a migration.</summary>
