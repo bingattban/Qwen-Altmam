@@ -107,6 +107,45 @@ public static class BridgeHandlerCatalog
                 ["offline"] = true,
                 ["bridgeProtocol"] = BridgeProtocol.ProtocolVersion
             })),
+        // ---------------- Phase 11: UserAuditService — audit portion (immutable evidence + overlays)
+        "QueryAuditLog" => async (req, principal, ct) =>
+        {
+            var svc = new AuditOverlayService(services.Db, services.Time);
+            BridgeResponse inner = await svc.QueryAuditLogAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
+        "GetAuditEntryDetails" => async (req, principal, ct) =>
+        {
+            var svc = new AuditOverlayService(services.Db, services.Time);
+            BridgeResponse inner = await svc.GetAuditEntryDetailsAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
+        "UpdateAuditPresentation" => async (req, principal, ct) =>
+        {
+            if (req.Payload is not JsonObject payload)
+                return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.MissingData, "حمولة التعديل مطلوبة."));
+            var svc = new AuditOverlayService(services.Db, services.Time);
+            BridgeResponse inner = await svc.UpdateAuditPresentationAsync(payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success
+                ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.VisibleAuditOverlayChanged))
+                : Fail(req, inner);
+        },
+        "DeleteAuditPresentation" => async (req, principal, ct) =>
+        {
+            if (req.Payload is not JsonObject payload)
+                return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.MissingData, "حمولة الحذف الظاهري مطلوبة."));
+            var svc = new AuditOverlayService(services.Db, services.Time);
+            BridgeResponse inner = await svc.DeleteAuditPresentationAsync(payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success
+                ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.VisibleAuditOverlayChanged))
+                : Fail(req, inner);
+        },
+        "QueryAuditPresentationChanges" => async (req, principal, ct) =>
+        {
+            var svc = new AuditOverlayService(services.Db, services.Time);
+            BridgeResponse inner = await svc.QueryAuditPresentationChangesAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
         _ => (req, principal, ct) => Task.FromResult(Fail(req, BridgeSharedServices.Error(
                 BridgeErrorCodes.MissingData,
                 $"الإجراء '{req.Action}' معتمد في العقد لكنه يُنفَّذ في مراحله المخصصة؛ لا تتوفر بياناته بعد.")))

@@ -324,6 +324,9 @@ public sealed class BridgeSharedServices
 
     // ---------------------------------------------------------------- helpers
 
+    internal AlTamamDbContext Db => _db;
+    internal TimeProvider Time => _time;
+
     internal static string NormalizeUsername(string value) => value.Trim().ToLowerInvariant();
 
     private static string GetRequired(JsonObject payload, string key)
