@@ -126,9 +126,15 @@ public sealed class SchemaMigrationRunner
                     record.Transaction = transaction;
                     if (migration.RecordsHash)
                     {
+                        // Some forward-only SQL migrations seed their own version row.
+                        // Insert when absent, otherwise hash-pin only the row created by
+                        // this migration, provided its name matches and no hash is pinned.
                         record.CommandText = """
                             INSERT INTO SchemaVersions (SchemaVersion, MigrationName, AppliedAtUtc, Sha256)
-                            VALUES ($v, $n, STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'), $h);
+                            VALUES ($v, $n, STRFTIME('%Y-%m-%dT%H:%M:%fZ','now'), $h)
+                            ON CONFLICT(SchemaVersion) DO UPDATE SET Sha256 = excluded.Sha256
+                            WHERE SchemaVersions.MigrationName = excluded.MigrationName
+                              AND SchemaVersions.Sha256 IS NULL;
                             """;
                         record.Parameters.Add("$h", SqliteType.Text).Value = hash;
                     }
@@ -145,7 +151,10 @@ public sealed class SchemaMigrationRunner
                     record.Parameters.Add("$n", SqliteType.Text).Value = migration.Name;
                     if (migration.RecordsHash)
                     {
-                        await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        int changed = await record.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+                        if (changed != 1)
+                            throw new InvalidOperationException(
+                                $"Migration '{migration.Name}' could not record its expected version and SHA-256 hash.");
                     }
                     else if (Convert.ToInt32(await record.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) != 1)
                     {
