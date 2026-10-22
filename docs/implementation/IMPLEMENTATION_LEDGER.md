@@ -117,3 +117,44 @@ Verification of live git state shows that commit does NOT exist on this branch (
 bb4631c -> 8e5e867). The §2.6–§2.9 narrative therefore exists only in chat, not in repository files — per
 §2.3 "chat excerpts are never source truth", it is being RE-DONE as a real commit now, together with §2.10.
 No GitHub action was performed or claimed; this correction itself is part of the current commit.
+
+## Architecture boundaries (contract §2.7) — codified 2026-10-23
+Layer order: WPF Host -> authenticated WebView2 JS/C# bridge -> Application use cases -> Domain policies
+-> repository abstractions/Infrastructure -> SQLCipher DB. Dependencies point INWARD only:
+- No Domain reference to WPF/WebView2/Infrastructure (verified: current csproj graph already complies —
+  Domain references nothing; Contracts references Domain only; Application references Domain+Contracts;
+  Infrastructure references all three).
+- JavaScript/localStorage hold UI state ONLY; business-state source of truth is C#+SQLCipher. Current WebUI
+  JS contains zero storage/network APIs (scanned), so the boundary holds on baseline.
+- The bridge dispatcher (future step) MUST treat renderer-supplied role, user ID and site authorization as
+  UNTRUSTED claims: identity/session context resolved in C#; every mutation re-authorized by Domain policy
+  server-side-equivalent before transaction commit. Local cache is never an authorization mechanism.
+- All service methods: async I/O with CancellationToken, structured results, explicit error types from the
+  existing Bridge error-code set (24 canonical codes) — no exception-as-control-flow across the bridge.
+
+## Exact invariant requirements (contract §2.8) — enforcement map + test obligations
+| Invariant | Current enforcement source | Gap / planned proof |
+|---|---|---|
+| Immutable canonical IDs (Person/Site/Status/Assignment/Movement…) | StrongIds.cs (durable IDs + creation timestamps) | Regression tests that update attempts fail; snapshots retain effective dates |
+| «الرقم (ع)» textual, not numeric PK; normalize for search/uniqueness per canonical policy; preserve display text | Schema stores it as TEXT | NORMALIZATION RULE UNSPECIFIED => requirement-source gap (Gate 0); do not invent |
+| Date intervals [start, end) inclusive/exclusive | V001 assignment-interval triggers | Trigger unit tests incl. boundary day == end date |
+| No overlapping active assignments per person | V001 overlap trigger | Same-day edge-case tests |
+| Exactly 0..1 committed attendance status/person/local-day | V001 uniqueness + AttendanceDayPolicy.cs | Concurrency test via serialized write helper |
+| Transfer-effective date prohibits normal attendance; movement+assignment transactionally consistent | Policy partial; Movement actions in manifest | NOT YET ENFORCED end-to-end => future step with failing-test-first |
+| Closed dates not silently writable; override = authorized+audited workflow | Statuses seeded; audit tables exist | Workflow unimplemented; blocked on canonical rules |
+| Historical reports resolve names/sites/statuses AS-OF date; never rewrite snapshots on rename | History/snapshot tables in V001 | Dedicated historical-reporter component; rename-does-not-touch-history test |
+| Audit evidence immutable; edits/deletes are overlay/tombstones, never physical deletion (except approved full reset) | Audit tables present | Enforce in service layer; tombstone tests |
+| Day/month/archive/dashboard counters & Excel exports from same committed SQL facts | None yet (dashboards are placeholders) | Single query-layer rule + parity tests |
+| Mutations: atomic transactions + request-level idempotency per action-manifest.json | Manifest declares idempotency keys | Dispatcher must dedupe; replay tests |
+| Data stays on local Windows device except explicit export/backup; no telemetry | Zero network calls in JS; no HTTP client packages | Advisory scan in CI; egress tests |
+
+## Roles and dangerous operations (contract §2.9) — snapshot verified against source
+RoleAuthorizationPolicy.cs (read in full this turn) confirms: tiers GeneralAdministration / OrdinaryAdministration
+/ Supervisor; GA creates OA & SV; OA creates SV; SV manages no users; full-DB reset and emergency closed-day
+override restricted to GeneralAdministration. GA/OA may edit/delete VISIBLE audit entries while underlying
+evidence stays immutable (overlay model matches §2.8 row above). CAUTION recorded: exact dangerous-operation
+semantics must be re-confirmed against newer owner requirements (Gate 0) before implementation — §2.9 itself
+requires this confirmation; we do not extend or relax the matrix without approval.
+Obligation: exhaustive allow/deny test matrix across ALL 90 manifest actions × 3 roles (270 authorization cases,
+plus sensitive-action double-confirmation cases) starting Phase 01+; sensitive delete/reset/restore/account/
+historical-correction flows require explicit confirmation dialogs + structured audit rows.
