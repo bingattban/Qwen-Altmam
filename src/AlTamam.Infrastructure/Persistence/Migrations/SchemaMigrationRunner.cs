@@ -102,8 +102,10 @@ public sealed class SchemaMigrationRunner
             using var transaction = connection.BeginTransaction();
             try
             {
-                using (var verify = connection.CreateCommand())
+                // The bootstrap migration creates SchemaVersions; it cannot be queried beforehand.
+                if (migration.Version > 1)
                 {
+                    using var verify = connection.CreateCommand();
                     verify.Transaction = transaction;
                     verify.CommandText = "SELECT COUNT(*) FROM SchemaVersions WHERE SchemaVersion = $v;";
                     verify.Parameters.Add("$v", SqliteType.Integer).Value = migration.Version;
