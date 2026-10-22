@@ -80,12 +80,19 @@ public sealed class SqlCipherConnectionTests : IDisposable
             // deliberately no Password
         };
         using var unencrypted = new SqliteConnection(builder.ConnectionString);
-        await Assert.ThrowsAnyAsync<SqliteException>(async () => await unencrypted.OpenAsync());
+        await Assert.ThrowsAnyAsync<SqliteException>(async () =>
+        {
+            await unencrypted.OpenAsync();
+            // SQLCipher may defer key validation until the first schema read.
+            using var check = unencrypted.CreateCommand();
+            check.CommandText = "SELECT COUNT(*) FROM sqlite_master;";
+            await check.ExecuteScalarAsync();
+        });
 
         // And even if a connection object were constructed, the header must not read "SQLite format 3".
         byte[] header = new byte[16];
         await using (var fs = new FileStream(_dbPath, FileMode.Open, FileAccess.Read))
-            await fs.ReadAsync(header.AsMemory(0, 16));
+            await fs.ReadExactlyAsync(header.AsMemory());
         Assert.NotEqual("SQLite format 3\0"u8.ToArray(), header);
         Assert.DoesNotContain("SQLite format 3", Encoding.ASCII.GetString(header));
     }
@@ -96,7 +103,7 @@ public sealed class SqlCipherConnectionTests : IDisposable
         using (var context = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex))
             await context.InitializeAsync();
 
-        string wrongKey = Convert.ToHexString(Enumerable.Repeat((byte)0xA5, 32)).ToLowerInvariant();
+        string wrongKey = Convert.ToHexString(Enumerable.Repeat((byte)0xA5, 32).ToArray()).ToLowerInvariant();
         using var attacker = new AlTamamDbContext(_dbPath, wrongKey);
         await Assert.ThrowsAnyAsync<SqliteException>(() => Task.Run(() =>
         {
