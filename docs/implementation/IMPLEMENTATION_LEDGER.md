@@ -51,11 +51,29 @@ Rules of this ledger (contract §2.3–§2.5):
     prerequisites; dependency/advisory/license/package-integrity checks are part of CI hardening
     (dotnet nuget audit / license scan) once the test job lands.
 
-| Phase | Scope (per screen-manifest phase tags until canonical doc arrives) | Status | Evidence | Owner approval |
-|-------|--------------------------------------------------------------------|--------|----------|----------------|
-| 00 | Baseline audit of connected repo; verify structure, manifests, CSP, origin; record gaps | COMPLETE — submitted | docs/implementation/PHASE00_EVIDENCE.md | PENDING |
-| 01 | (Proposed) test backbone + CI hardening + host/bridge skeleton — subject to canonical doc | NOT STARTED (blocked on Gate 0 + approval) | — | — |
-| 02+ | Per canonical master requirements archive once placed in repo | NOT STARTED | — | — |
+| Phase | Step | Scope | Status | Acceptance evidence link | Owner approval |
+|-------|------|-------|--------|--------------------------|----------------|
+| 00 | 00.01 | Repo/branch identification, HEAD, ZIP correspondence, dirty state, root & CI baseline | DONE (static) | PHASE00_EVIDENCE.md §1–2; AS_IS_ARCHITECTURE.md §1–2 | PENDING |
+| 00 | 00.02 | Read all canonical texts/README/schema/entities/manifests/UI JS/workflow; mark missing docs | DONE with recorded gap: master prompt file ABSENT (Gate 0) | PHASE00_EVIDENCE.md §3–8; REQUIREMENTS_TRACEABILITY.md §0 | PENDING |
+| 00 | 00.03 | REQUIREMENTS_TRACEABILITY.md (clause→invariant→action→screen→service→test→phase; flag unverified decisions) | NEW — created this step | docs/implementation/REQUIREMENTS_TRACEABILITY.md | PENDING |
+| 00 | 00.04 | AS_IS_ARCHITECTURE.md real-vs-placeholder; counts verified against REPO not only ZIP | NEW — created this step (69 screens / 90 actions re-counted by script) | docs/implementation/AS_IS_ARCHITECTURE.md | PENDING |
+| 00 | 00.05 | IMPLEMENTATION_LEDGER.md with phase/step/branch/SHA/status/acceptance links | MODIFIED — expanded to per-step rows this turn | this file | PENDING |
+| 00 | 00.06 | RISK_REGISTER.md (encryption, historical integrity, migration, import, 20:00 schedule, privilege, WPF host) | NEW — created this step (14 risks incl. all mandated categories) | docs/implementation/RISK_REGISTER.md | PENDING |
+| 00 | 00.07 | No-data-loss repository transition plan; preserve working code; document unbuilt deps & Windows-only verification | NEW — added below (§Transition plan) | this file | PENDING |
+| 00 | 00.08 | Submit baseline report + scoped phase plan; STOP before PHASE 01; do not declare program implemented | SUBMITTED — §2.5 template reply; program explicitly NOT declared implemented | PHASE00_EVIDENCE.md §9–11 | **AWAITING OWNER** |
+| 01 | — | (Proposed) test backbone + CI hardening + host/bridge skeleton — subject to canonical doc | NOT STARTED (blocked on Gate 0 + approval) | — | — |
+| 02+ | — | Per canonical master requirements archive once placed in repo; screen-manifest per-screen phase tags 03–13 must be reconciled at Gate 0 | NOT STARTED | — | — |
+
+## Repository transition plan — no data loss (Phase 00 / Step 00.07)
+
+Goal: evolve the connected repository without losing any working code, user-visible behavior, or history, while nothing is yet runtime-tested.
+
+1. PRESERVE FIRST: every engineering step starts from a clean `git status`, records base SHA, and lands as small coherent commits on feature branches (`feat/phase-NN-step-MM`) → PR onto owner-approved base (candidate `main`). No force-push, no branch deletion, no history rewrite, no merge without explicit owner authorization. Existing 103 baseline files are never deleted silently; deletions require a ledger row with necessity + owner sign-off.
+2. ADDITIVE-ONLY until proven: new projects (Host, tests) are ADDED to AlTamam.slnx without repurposing existing files; routeKeys, manifest fields, V001 SQL, reserved origin, CSP headers stay byte-stable unless an approved decision says otherwise. action-manifest.json and screen-manifest.json are treated as read-only authoritative inputs during Phase 00–01.
+3. UNBUILT DEPENDENCIES DOCUMENTED (not hidden): zero test projects, no dotnet SDK in sandbox, no git remote/gh CLI, no WPF/WebView2 host, no DPAPI key store, no service layer for 90 actions. Each appears in RISK_REGISTER with OPEN/BLOCKED status; steps depending on them are marked BLOCKED, never "passed" (§2.3).
+4. WINDOWS-ONLY VERIFICATION PATH: anything touching SQLCipher native bits, DPAPI, WebView2, installer/portable offline behavior can ONLY be accepted via GitHub Actions windows-latest runs (or a real Windows machine) with cited run URL + SHA + checks + artifacts. Browser preview of WebUI is explicitly NOT accepted as desktop proof (§2.4). Until such runs exist, those items remain NOT RUN in every evidence template.
+5. USER DATA SAFETY: the app has no shipped databases; future migrations get backup-before-upgrade + integrity-check-after + rollback drill using SYNTHETIC fixtures only; production personal data never enters repo/tests/artifacts (§2.2/§2.10). Full-database reset remains GeneralAdministration-only and requires explicit confirmation workflow before it is ever implemented.
+6. REVERSIBILITY: each merged PR is revertible independently (one coherent unit); docs evidence trail (this ledger + traceability + risk register + evidence file) moves forward with additions/corrections rather than silent rewrites; corrections carry an honesty note (precedent: ledger integrity correction section).
 
 ## File-batch tracker (contract §2.3) — exact relative paths, status, necessity
 All batches so far are documentation-only; zero production files touched; every batch <= 10 files;
@@ -167,3 +185,11 @@ evidence; security concerns; next gate. The packet is prepared for the OWNER to 
 we NEVER claim ChatGPT automatically viewed or approved anything. ChatGPT findings are incorporated ONLY after
 (1) re-verification against current repository source and (2) owner decision where semantics are involved.
 Current packet SHAs (branch qwen-code-3daf4f97…): 97a2946, bb4631c, 8e5e867, 3a23b00, a6490df (+ this commit).
+
+## Phase 00 step-batch rows (this commit)
+| Batch | File path | Status | Necessity |
+|---|---|---|---|
+| 00.03–00.07 (`this`) | docs/implementation/REQUIREMENTS_TRACEABILITY.md | NEW | Mandated deliverable 00.03: clause→invariant→action→screen→service→test→phase mapping with unverified-decision flags |
+| 00.03–00.07 (`this`) | docs/implementation/AS_IS_ARCHITECTURE.md | NEW | Mandated deliverable 00.04: real-vs-placeholder map; counts re-verified from connected repo (not only ZIP) |
+| 00.03–00.07 (`this`) | docs/implementation/RISK_REGISTER.md | NEW | Mandated deliverable 00.06: encryption, historical integrity, migration, import, 20:00 schedule, privilege, WPF host risks |
+| 00.05/00.07 (`this`) | docs/implementation/IMPLEMENTATION_LEDGER.md | MODIFIED | Deliverables 00.05 + 00.07: per-step ledger rows with acceptance links (all PENDING) and no-data-loss transition plan |
