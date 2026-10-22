@@ -148,3 +148,26 @@ CI evidence NOT RUN; requirement-source completeness FAIL (gap recorded).
 Proposed NEXT step (do not start without OWNER APPROVAL): Gate 0 placement of canonical doc, then Phase 01
 Step 01 = xUnit test backbone (Domain/Application/Infrastructure) wired into a Windows-runner `dotnet test`
 job, batch <= 10 files, failing-test-first evidence collected on CI.
+
+## 10. Contract §2.10 quality/security verification (performed 2026-10-23, static scans)
+Commands actually run (grep-based audits over tracked source; no build executed — no dotnet SDK):
+1. SQL interpolation scan: `grep -rn --include='*.cs' -E '\$"SELECT|\$"INSERT|\$"UPDATE|\$"DELETE|...' src/` → 0 matches.
+   Dynamic-SQL keywords (`exec(`, `ExecuteImmediate`, `string.Format` into SQL) → 0 matches.
+   AlTamamDbContext.cs contains no inline DML at all; it executes bundled V001_InitialSchema.sql verbatim.
+   => §2.10 "parameterized SQL only" currently vacuously satisfied; rule binding recorded for future queries.
+2. Argon2 subsystem: src/AlTamam.Infrastructure/Security/PasswordSecurity.cs — Argon2id via Konscious 1.3.1,
+   salt 16B CSPRNG, tag 32B, DegreeOfParallelism=2, Iterations=3, MemorySize=65536 KiB (64 MiB),
+   verification uses CryptographicOperations.FixedTimeEquals; rejects malformed/short inputs safely.
+   Parameters meet OWASP minimum (t=3, m=64MiB, p=1..4 @ Argon2id); any change = semantics change requiring owner approval.
+   DatabaseKeyGenerator: RandomNumberGenerator 32 bytes hex — no default/shared key anywhere in repo.
+3. DPAPI / secret-store: grep dpapi|ProtectedData|CryptoProtect across src/*.cs → 0 matches. GAP: per-install
+   key protection unimplemented; planned Windows-only Infrastructure component + reinstall/restore tests (§2.10).
+4. WebView2 navigation guard: grep CoreWebView2|NewWindow|NavigationStarting → only a doc-comment in
+   LocalWebUiOrigin.cs. No host exists (consistent with README). Default-deny rules codified in ledger for host step.
+5. WebUI hygiene re-scan: inline handlers (onclick/onload/onerror/javascript:) → 0 files;
+   unsafe-inline/unsafe-eval/eval( → 0 matches; localStorage/sessionStorage in JS → 0; fetch/XHR/WebSocket → 0.
+   => strict CSP + local-assets-only + no-business-state-in-JS constraints hold on current baseline.
+6. Central packages (Directory.Packages.props): Microsoft.Data.Sqlite.Core 9.0.2, SQLitePCLRaw.bundle_e_sqlcipher
+   2.1.10, Konscious.Security.Cryptography.Argon2 1.3.1. Advisory/license/integrity scan NOT RUN (no network audit
+   tooling invoked against public feeds from this sandbox; deferred to CI hardening step — honest non-claim).
+7. Test-data rule: zero test projects exist yet; synthetic-fixtures-only rule recorded as binding for Phase 01 Step 01.
