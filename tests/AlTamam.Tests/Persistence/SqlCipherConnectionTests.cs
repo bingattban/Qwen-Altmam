@@ -79,19 +79,21 @@ public sealed class SqlCipherConnectionTests : IDisposable
             ForeignKeys = false
             // deliberately no Password
         };
-        using var unencrypted = new SqliteConnection(builder.ConnectionString);
-        await Assert.ThrowsAnyAsync<SqliteException>(async () =>
+        using (var unencrypted = new SqliteConnection(builder.ConnectionString))
         {
-            await unencrypted.OpenAsync();
-            // SQLCipher may defer key validation until the first schema read.
-            using var check = unencrypted.CreateCommand();
-            check.CommandText = "SELECT COUNT(*) FROM sqlite_master;";
-            await check.ExecuteScalarAsync();
-        });
+            await Assert.ThrowsAnyAsync<SqliteException>(async () =>
+            {
+                await unencrypted.OpenAsync();
+                // SQLCipher may defer key validation until the first schema read.
+                using var check = unencrypted.CreateCommand();
+                check.CommandText = "SELECT COUNT(*) FROM sqlite_master;";
+                await check.ExecuteScalarAsync();
+            });
+        }
 
         // And even if a connection object were constructed, the header must not read "SQLite format 3".
         byte[] header = new byte[16];
-        await using (var fs = new FileStream(_dbPath, FileMode.Open, FileAccess.Read))
+        await using (var fs = new FileStream(_dbPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
             await fs.ReadExactlyAsync(header.AsMemory());
         Assert.NotEqual("SQLite format 3\0"u8.ToArray(), header);
         Assert.DoesNotContain("SQLite format 3", Encoding.ASCII.GetString(header));
@@ -126,7 +128,9 @@ public sealed class SqlCipherConnectionTests : IDisposable
     [Fact]
     public void Constructor_RejectsNullDatabasePath()
     {
-        Assert.Throws<ArgumentException>(() => new AlTamamDbContext(null!, SyntheticFixtures.TestKeyHex));
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            new AlTamamDbContext(null!, SyntheticFixtures.TestKeyHex));
+        Assert.Equal("databasePath", ex.ParamName);
     }
 
     public void Dispose() => SyntheticFixtures.DeleteTempDatabase(_dbPath);
