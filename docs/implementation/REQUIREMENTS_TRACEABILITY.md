@@ -47,6 +47,10 @@ Legend: Test column = planned regression test id (all NOT YET CREATED; Phase 01+
 - 13 uiInvalidationEvents defined; no C# publisher exists yet (GAP until bridge step)
 - Screen manifest declares implementationPhase 03–13 (6+6+12+5+1+12+4+10+5+6+2 = 69) — these are the CANONICAL per-screen phase tags; the master prompt's own phase list must reconcile with them at Gate 0.
 
+## 2b. Per-action coverage marking (directive §20, 2026-10-23)
+
+Moved to dedicated document: **`docs/implementation/MANIFEST_ACTION_COVERAGE.md`** — all 90 actions × (kind, idempotency, implementation status, test marking) generated mechanically from `action-manifest.json` + `BridgeHandlerCatalog.cs` switch arms and cross-checked against the §20 inventory with zero mismatches. Headline: 19 WIRED / 71 honest REFUSAL (phase-pending); RBAC matrix authored for 90×4=360 cases; execution status remains NOT RUN (no dotnet in sandbox) — no row was upgraded to PASS on the strength of authoring alone.
+
 ## 3. Explicit gaps blocking full traceability
 
 1. Master requirements text absent from repo (Gate 0) → clauses "canonical policy", "approved matrix", "as specified" cannot be fully cited.
