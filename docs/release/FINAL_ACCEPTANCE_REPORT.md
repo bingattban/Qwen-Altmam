@@ -10,13 +10,13 @@
 | Item | Value | State |
 |---|---|---|
 | Repository | `bingattban2/AlTamam` (production repo, `/workspace` clone) | OK |
-| Branch containing Phases 14–16 deliverables | `qwen-code-9b7d27ae-800b-4231-a238-4ffb193126b8` | Candidate batch commit on this branch (Local candidate commit: 06a46a81c20b0cdfd5a5618f32da80fc0cb5b107 — verifier MUST re-read the merged SHA from the remote branch tip, not trust in-file text) |
+| Branch containing Phases 14–16 deliverables | `qwen-code-9b7d27ae-800b-4231-a238-4ffb193126b8` | Two local commits: `06a46a8` (Phase 14–16 batch, 15 files) + bookkeeping commit recording branch tip. Verifier MUST derive FREEZE_SHA from the merged PR head on the remote, not from in-file text. |
 | Baseline HEAD before this batch | `db42f4e` ("Merge pull request #4 … phase-08-movements-grid-91837") | Recorded |
-| Candidate commit (local) | `0d06f1f37ce0259234c45c12262cd7622933cf14` "Phase 16: FINAL_ACCEPTANCE_REPORT…" | Contains all Phase 14/15/16 files (15 files, verified via `git status`) |
-| **Freeze SHA** | **TBD — becomes final only after `0d06f1f37ce0259234c45c12262cd7622933cf14` (or its squashed PR merge) lands on `main`** | ⛔ OPEN ITEM |
+| Candidate commit (local) | `06a46a8` "Phase 16: FINAL_ACCEPTANCE_REPORT…" (+ final bookkeeping commit = branch tip; see note above) | Contains all Phase 14/15/16 files (15 files, verified via `git show --stat`) |
+| **Freeze SHA** | **TBD — becomes final only after this branch's PR lands on `main`; derive it from the remote merge commit** | ⛔ OPEN ITEM |
 
 **Freeze procedure (to execute once, then no unrelated changes):**
-1. Push branch `qwen-code-…26b8` and merge its PR to `main` (squash or straight merge of `0d06f1f37ce0259234c45c12262cd7622933cf14`).
+1. Push branch `qwen-code-…26b8` and merge its PR to `main` (squash or straight merge of the two local commits).
 2. Record `git rev-parse main` → `FREEZE_SHA` in §1 above and in the acceptance-repo manifest (§4).
 3. Tag nothing. All CI runs for acceptance must check out `FREEZE_SHA` explicitly (`actions/checkout@v4` with `ref: FREEZE_SHA`), never a moving branch.
 
