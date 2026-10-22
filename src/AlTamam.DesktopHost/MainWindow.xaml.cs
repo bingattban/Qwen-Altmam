@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly WebView2 _webView = new();
     private AlTamamDbContext? _dbContext;
     private DesktopBridgeGateway? _gateway;
+    private Scheduling.EightPmSchedulerService? _scheduler;
 
     public MainWindow()
     {
@@ -31,7 +32,18 @@ public partial class MainWindow : Window
         InitializeComponent();
         webViewHost.Children.Add(_webView);
         Loaded += OnLoaded;
-        Closing += (_, _) => _dbContext?.Dispose();
+        Closed += async (_, _) =>
+        {
+            try
+            {
+                if (_scheduler is not null)
+                    await _scheduler.DisposeAsync();
+            }
+            finally
+            {
+                _dbContext?.Dispose();
+            }
+        };
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -64,7 +76,6 @@ public partial class MainWindow : Window
         // performs the approved bounded catch-up for dates missed while the machine was off. ---
         var autoAttendance = new AlTamam.Application.Scheduling.AutoAttendanceService(_dbContext);
         _scheduler = new Scheduling.EightPmSchedulerService(autoAttendance);
-        _gateway.AttachScheduler(_scheduler);
         _scheduler.Start();
 
         // --- 04.03: WebView2 environment with an isolated, application-owned user profile. ---
@@ -88,7 +99,6 @@ public partial class MainWindow : Window
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.AreBrowserAcceleratorKeysEnabled = false;
         core.Settings.IsZoomControlEnabled = false;
-        core.Settings.DefaultScrollBarStyle = CoreWebView2ScrollBarStyle.Hidden;
 
         core.NavigationStarting += (_, args) =>
         {
