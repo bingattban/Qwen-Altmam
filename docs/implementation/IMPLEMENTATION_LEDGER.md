@@ -220,3 +220,50 @@ HONEST VERIFICATION STATUS (per §2.3 BLOCKED rule):
 - Windows CI (01.08) cannot be triggered from this sandbox (no git remote, no gh CLI — capability gap restated). Owner action required: push branch qwen-code-3daf4f97-… (after I commit staged work next turn), let workflow `windows-build.yml` run, share run URL. I will then report actual pass/fail incl. failing test names before any gate claim.
 - Known design risk recorded for CI verification: SQLite ALTER TABLE ADD COLUMN is not IF-NOT-EXISTS-capable; V002 assumes pre-V002 databases (verified against V001 SchemaVersions definition: SchemaVersion/MigrationName/AppliedAtUtc only). First real test run will confirm.
 - Embedded-resource logical name for V002 must match `AlTamam.Infrastructure.Persistence.Migrations.V002_MigrationHardening.sql` (SDK auto-derivation from csproj path); runner throws explicit error if missing — first CI run validates.
+
+## PHASE 15 batch tracker (directive §18, steps 15.01–15.08) — status: STAGED, UNCOMMITTED, NOT RUN ON WINDOWS (2026-10-23)
+
+| # | Status | Path | Step | Necessity / evidence |
+|---|--------|------|------|----------------------|
+| 1 | NEW | .github/workflows/windows-release.yml | 15.01–15.07 | 4-job pipeline on windows-latest: preflight (manifest guard + `dotnet list package --vulnerable --include-transitive` gate), build+test by category filters (Unit/Persistence/Security/Performance), publish self-contained win-x64 + layout validation + optional signing (secrets-gated) + Portable ZIP + Inno Setup compile + SHA-256 metadata, clean-runner acceptance job with artifact evidence. YAML parse-verified locally; NEVER executed on a real runner from this sandbox (no git remote) — no CI pass claimed. |
+| 2 | MODIFIED | .github/workflows/windows-build.yml | — | unchanged this phase (core build/test workflow retained as PR gate). |
+| 3 | NEW | build/manifest-guard.py | 15.01/14.03 carry-over | CI security gate: 90 unique actions, role vocabulary, reset-family GA-only, mutating⇒idempotent, manifest↔ActionManifest.cs drift check, CSP strictness, pinned origin. EXECUTED LOCALLY: PASS (90 actions). Negative path proven during authoring (first version failed loudly on invented invariants → corrected to enforce the frozen contract, not imagined ones). |
+| 4 | NEW | build/validate-layout.py | 15.02/15.03 | Publish-layout gate: genuine PE-header check of AlTamam.DesktopHost.exe (rejects fake/renamed bundles), runtimeconfig/deps, WebView2Loader.dll, native SQLCipher under runtimes/, portable mode additionally requires webui/index.html + ≥69 screens and rejects .pdb/.xml/obj junk. SELF-TESTED LOCALLY 3/3: invalid-MZ→FAIL(1), forged-valid-PE→PASS(0), added app.pdb→FAIL(1). |
+| 5 | NEW | build/make-metadata.py | 15.07 | SHA256SUMS.txt + BUILD_METADATA.json (commit/branch/version/signing flag + explicit "unsigned ≠ secure" note); refuses to mint metadata if either artifact missing. SELF-TESTED LOCALLY: PASS with correct hashes for both names. |
+| 6 | NEW | build/AlTamam-installer.iss | 15.04 | REAL Inno Setup 6 script (approved tool): x64-only, MinVersion 10.0, admin+dialog override, Arabic/English wizards, Start-menu+desktop shortcuts, {localappdata}\AlTamam dirs with users-modify, launch-after-install, uninstall PRESERVES DB/backups/key (UninstallDelete only removes logs; post-uninstall bilingual data-preserved notice). GUID AppId generated properly. NOT compiled here (ISCC unavailable on Linux) — first Windows CI run is the compile proof. |
+| 7 | NEW | docs/release/LICENSE-NOTES.txt | 15.04 | Installer LicenseFile prerequisite; third-party runtime notices; owner EULA text still PENDING (flagged, placeholder disclosed). |
+| 8 | NEW | docs/release/RELEASE-NOTES-TEMPLATE.md | 15.07/15.08 | Release-notes template with checksum table, signing truthfulness clause ("unsigned builds carry NO 'secure' claim"), runtime strategy, publication blocked until Phase 16 gate + owner approval. |
+| 9 | MODIFIED | src/AlTamam.DesktopHost/App.xaml.cs | 15.06 | Explicit OnStartup replaces implicit StartupUri-less flow so `--layout-selfcheck` can exit before UI construction; normal path creates MainWindow exactly as before (behavior-preserving for interactive runs). InitializeComponent guarded against double-invocation. NOT COMPILED (no dotnet SDK in sandbox) — build proof deferred to CI; risk noted: WPF generated entry must still bind (App.xaml x:Class present). |
+| 10 | MODIFIED | src/AlTamam.DesktopHost/MainWindow.xaml.cs | 15.06 | Added RunLayoutSelfCheck() (bundled webui presence + writable-location guard via existing AppDataLayout APIs; zero DB/WebView2/network touch) and self-check branch in Loaded handler path. Existing initialization logic untouched. NOT COMPILED — same deferral as #9. |
+
+HONEST VERIFICATION STATUS (§2.3):
+- Executed & evidenced HERE: manifest-guard PASS; validate-layout negative/positive/junk tests; make-metadata round-trip; YAML parse of both workflows; installer .iss reviewed statically.
+- NOT executed (capability gap, no claims made): dotnet restore/build/test/publish, ISCC compile, ZIP production, clean-Windows install/uninstall matrix (15.06), GitHub Actions runs, artifact download/checksum verification on second machine. Phase 15 GATE REMAINS OPEN until a real windows-release workflow run URL + artifacts + acceptance logs exist and the owner approves.
+- 15.08 honored: workflow uploads RC artifacts only; no publish step, no signing without owner secrets, release notes forbid 'secure' wording for unsigned builds.
+- Open owner decisions carried: WebView2 offline fixed-version vs Evergreen bootstrap; final EULA text; artifact naming confirmation; certificate provider if signing desired.
+
+## PHASE 16 batch tracker (directive §19, steps 16.01–16.08) — status: REPORT DRAFTED, GATE NOT MET (2026-10-23)
+
+| # | Status | Path | Step | Necessity / evidence |
+|---|--------|------|------|----------------------|
+| 1 | NEW | docs/release/FINAL_ACCEPTANCE_REPORT.md | 16.01–16.08 | Single final report file required by 16.07. Contains: freeze procedure + recorded baseline HEAD `db42f4e` with Freeze-SHA field explicitly TBD (16.01 cannot be met while Phase 14/15 work is uncommitted from this sandbox — no push rights); independent-verification workspace spec targeting the exact immutable SHA (16.02); requirement→test traceability matrix where every row is honestly marked NOT RUN / UNVERIFIED because zero tests have executed in this environment (16.03/16.04 — absent coverage was NOT translated into PASS anywhere); package hash-comparison and offline clean-machine smoke procedure (16.05); external-review triage rules incl. re-freeze on fix PRs (16.06); complete limitations list; **NO-GO recommendation** (16.07); owner signature block, release/tag creation withheld pending explicit authorization (16.08). |
+
+HONEST VERIFICATION STATUS (§2.3):
+- Executed & evidenced HERE: report drafted against actual repo state (git log/status inspected; staged-file inventory matches §1 table of report).
+- NOT executed (capability gap, no claims made): any acceptance test run, artifact rebuild at a frozen SHA, clean-machine offline smoke, ChatGPT external review, tag/release creation. 
+- PHASE 16 GATE: NOT MET. "No fabricated evidence" is upheld (all statuses truthful); "no failing mandatory test" is vacuous-but-unproven (tests never ran); several critical areas remain UNVERIFIED. Release-blocking per directive until Windows CI evidence + independent verifier + owner acceptance exist.
+- Owner action sequence to close the gate: (1) commit/push+merge Phase 14/15 PR → record FREEZE_SHA in report §1; (2) provision acceptance repo (report §2); (3) run windows-release.yml at FREEZE_SHA; (4) fill §3–§5 with real logs/run URLs; (5) 16.06 review; (6) sign §9 → only then tag.
+
+## DIRECTIVE §20 batch tracker (manifest action coverage marking) — status: COMMITTED, EXECUTION STILL NOT RUN (2026-10-23)
+
+| # | Status | Path | Step | Necessity / evidence |
+|---|--------|------|------|----------------------|
+| 1 | NEW | docs/implementation/MANIFEST_ACTION_COVERAGE.md | §20 | Full 90-row checklist (11 services), each row marked READ/MUTATION + idempotency (read per-row from manifest JSON, not prose), implementation state (WIRED vs honest REFUSAL, extracted mechanically from BridgeHandlerCatalog switch arms), and test markings (RBAC matrix case, fuzz, feature-level or FT—). Generated by script at HEAD 2d0be83; post-generation verification confirmed all 90 manifest action names appear as rows. |
+| 2 | MODIFIED | docs/implementation/REQUIREMENTS_TRACEABILITY.md | §20 | Added §2b pointer so requirement→test tracing resolves to the per-action table; no statuses altered. |
+
+Evidence executed HERE:
+- Inventory↔manifest cross-check script: 90/90 names match, owningService matches every row, no extras/missing → directive §20 list is consistent with the authoritative manifest.
+- Handler-wiring extraction: 19 actions have authentic handlers (Auth 4, Attendance 4, Configuration 2, PersonRoster 2, SettingsBackup 1 [GetApplicationVersion], UserAudit 6 [audit-overlay portion]); 71 return the honest phase-pending refusal string — verified by reading BridgeHandlerCatalog.cs end-to-end, not assumed.
+- build/manifest-guard.py re-executed after doc generation: PASS (contract unchanged; this batch touches documentation only, zero production-code changes).
+
+Honest limitations (§2.3): tests are AUTHORED, never EXECUTED (no dotnet SDK/Windows here) — coverage doc states NOT RUN explicitly; UI screens still bind only a generic REFRESH marker (69 placeholders), so "independent of UI visibility" is satisfied at dispatcher level (server-side gate + 360-case matrix), while screen-level behavioral binding remains phase-pending and is recorded as such rather than claimed.
