@@ -15,5 +15,32 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Restore production projects
         run: dotnet restore AlTamam.slnx
+      - name: Record .NET SDK version (step 01.01)
+        run: |
+          dotnet --list-sdks
+          dotnet --version
       - name: Compile production foundation
         run: dotnet build AlTamam.slnx --configuration Release --no-restore
+
+  core-tests:
+    needs: compile-core
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore solution (production + tests)
+        run: dotnet restore AlTamam.slnx
+      - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
+        run: >
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
+          --configuration Release --no-restore --logger "trx;LogFileName=core-tests.trx"
+          --results-directory TestResults
+      - name: Upload test results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-results-windows
+          path: TestResults/core-tests.trx
+          if-no-files-found: error

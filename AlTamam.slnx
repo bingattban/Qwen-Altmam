@@ -5,4 +5,7 @@
     <Project Path="src/AlTamam.Application/AlTamam.Application.csproj" />
     <Project Path="src/AlTamam.Infrastructure/AlTamam.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AlTamam.Tests/AlTamam.Tests.csproj" />
+  </Folder>
 </Solution>

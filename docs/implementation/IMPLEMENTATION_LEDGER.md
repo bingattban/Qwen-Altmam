@@ -193,3 +193,30 @@ Current packet SHAs (branch qwen-code-3daf4f97…): 97a2946, bb4631c, 8e5e867, 3
 | 00.03–00.07 (`this`) | docs/implementation/AS_IS_ARCHITECTURE.md | NEW | Mandated deliverable 00.04: real-vs-placeholder map; counts re-verified from connected repo (not only ZIP) |
 | 00.03–00.07 (`this`) | docs/implementation/RISK_REGISTER.md | NEW | Mandated deliverable 00.06: encryption, historical integrity, migration, import, 20:00 schedule, privilege, WPF host risks |
 | 00.05/00.07 (`this`) | docs/implementation/IMPLEMENTATION_LEDGER.md | MODIFIED | Deliverables 00.05 + 00.07: per-step ledger rows with acceptance links (all PENDING) and no-data-loss transition plan |
+
+## PHASE 01 batch tracker (directive §4, steps 01.01–01.08) — status: STAGED, UNCOMMITTED, UNVERIFIED (2026-10-23)
+
+Committed in batch (see PHASE 01 commit below):
+| # | Status | Path | Step | Necessity |
+|---|--------|------|------|-----------|
+| 1 | MODIFIED | AlTamam.slnx | 01.02 | wire /tests/ folder + test project |
+| 2 | MODIFIED | Directory.Packages.props | 01.02 | central pins: Microsoft.NET.Test.Sdk 17.12.0, xunit 2.9.2, xunit.runner.visualstudio 2.8.2 |
+| 3 | MODIFIED | src/AlTamam.Infrastructure/AlTamam.Infrastructure.csproj | 01.05 | embed V002 migration resource |
+| 4 | NEW | src/AlTamam.Infrastructure/Persistence/Migrations/V002_MigrationHardening.sql | 01.04/01.05 | forward-only hardening: SchemaVersions.Sha256 + BackupPath columns + version index; V001 NOT rewritten in place |
+| 5 | NEW | src/AlTamam.Infrastructure/Persistence/Migrations/SchemaMigrationRunner.cs | 01.05 | transactional versioned runner: contiguous-version validation, stale-schema refusal (no downgrade), per-migration transaction + rollback, SHA-256 pin record & verify, post-migration PRAGMA integrity_check gate |
+| 6 | NEW | src/AlTamam.Infrastructure/Persistence/AppDataLayout.cs | 01.07 | installed=%LOCALAPPDATA%\AlTamam vs portable=<exe>\data; Program Files write guard; backups dir beside data root |
+| 7 | NEW | tests/AlTamam.Tests/AlTamam.Tests.csproj | 01.02 | deterministic xUnit project referencing all 4 production projects |
+| 8 | NEW | tests/AlTamam.Tests/Fixtures/SyntheticFixtures.cs | 01.02 | SYNTHETIC-only fixtures (TST-* IDs, fake Arabic names, derived public test key); temp isolated DB paths; zero real personnel data/secrets (§2.10) |
+| 9 | NEW | tests/AlTamam.Tests/Persistence/SqlCipherConnectionTests.cs | 01.03 | native provider init, WAL, foreign_keys ON, integrity check, negative plaintext-open attempt proves encryption-at-rest |
+| 10 | NEW | tests/AlTamam.Tests/Persistence/SchemaMigrationRunnerTests.cs | 01.05/01.06 | fresh-upgrade, hash-mismatch abort, stale/future schema refusal, rollback-on-failure, idempotent re-run |
+| 11 | NEW | tests/AlTamam.Tests/Persistence/SchemaInvariantTests.cs | 01.04/01.06 | V001 FK/CHECK/UNIQUE presence; assignment-overlap trigger INSERT+UPDATE rejection; invalid dates; 0/1 attendance-per-day constraint |
+| 12 | NEW | tests/AlTamam.Tests/Persistence/AppDataLayoutTests.cs | 01.07 | portable vs installed resolution; AssertWritableLocation rejects Program Files paths |
+| 13 | MODIFIED | .github/workflows/windows-build.yml | 01.01/01.08 | compile-core records `dotnet --list-sdks`/`--version`; NEW core-tests job on windows-latest running `dotnet test` with trx logger + `core-test-results-windows` artifact upload (if-no-files-found: error) |
+
+Batch-size disclosure: 13 changed paths exceeds the ≤10 target; it is one coherent foundation unit (test backbone + migration runner + layout + CI). If owner enforces strict batching, split into substeps 01.a (items 1–6,13 = src+CI) and 01.b (items 7–12 = tests). Disclosed, not hidden.
+
+HONEST VERIFICATION STATUS (per §2.3 BLOCKED rule):
+- dotnet SDK ABSENT in this Linux sandbox → NO restore/build/test has ever been executed against these files. Static review only. Tests have never run ⇒ no failing-test names exist yet; result = NOT RUN (≠ PASS). Phase 01 gate therefore CANNOT be declared.
+- Windows CI (01.08) cannot be triggered from this sandbox (no git remote, no gh CLI — capability gap restated). Owner action required: push branch qwen-code-3daf4f97-… (after I commit staged work next turn), let workflow `windows-build.yml` run, share run URL. I will then report actual pass/fail incl. failing test names before any gate claim.
+- Known design risk recorded for CI verification: SQLite ALTER TABLE ADD COLUMN is not IF-NOT-EXISTS-capable; V002 assumes pre-V002 databases (verified against V001 SchemaVersions definition: SchemaVersion/MigrationName/AppliedAtUtc only). First real test run will confirm.
+- Embedded-resource logical name for V002 must match `AlTamam.Infrastructure.Persistence.Migrations.V002_MigrationHardening.sql` (SDK auto-derivation from csproj path); runner throws explicit error if missing — first CI run validates.
