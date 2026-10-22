@@ -74,7 +74,7 @@ To be pasted verbatim from `docs/security/PHASE14_SECURITY_REPORT.md` once gener
 ## 7. Known limitations (complete list, no omissions)
 
 1. No .NET SDK or Windows environment existed in the authoring sandbox; **zero tests have ever executed**. Everything in §3 marked NOT RUN stays NOT RUN until CI evidence exists.
-2. Phase 14/15/16 work is committed locally (0d06f1f…) but cannot be pushed from this sandbox (no remote credentials); Freeze SHA on main therefore undefined → 16.01 not yet met.
+2. Phase 14/15/16 work is committed locally (commits 06a46a8..the final bookkeeping commits on this branch; read exact tip with `git rev-parse HEAD` after push) but cannot be pushed from this sandbox (no remote credentials); Freeze SHA on main therefore undefined → 16.01 not yet met.
 3. Dependency advisory audit (`dotnet list package --vulnerable`) never executed; pinned versions only.
 4. Installer binary never compiled (Inno Setup unavailable locally).
 5. WebView2 runtime distribution decision (Evergreen vs offline bootstrapper) pending owner approval (15.05).
