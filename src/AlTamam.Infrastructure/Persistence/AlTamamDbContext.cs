@@ -1,4 +1,5 @@
 using System.Reflection;
+using AlTamam.Infrastructure.Persistence.Migrations;
 using Microsoft.Data.Sqlite;
 
 namespace AlTamam.Infrastructure.Persistence;
@@ -6,7 +7,16 @@ namespace AlTamam.Infrastructure.Persistence;
 /// <summary>Encrypted SQLite connection management and atomic initialization of schema V001.</summary>
 public sealed class AlTamamDbContext : IDisposable
 {
-    private const int CurrentSchemaVersion = 1;
+    /// <summary>Highest schema version this build understands (V003 adds the Phase-05 preview-token store).</summary>
+    public const int CurrentSchemaVersion = 3;
+
+    /// <summary>The canonical, ordered migration set shipped with this build.</summary>
+    public static readonly SchemaMigration[] CanonicalMigrations =
+    [
+        new(1, "V001_InitialSchema", "AlTamam.Infrastructure.Persistence.Migrations.V001_InitialSchema.sql", RecordsHash: false),
+        new(2, "V002_MigrationHardening", "AlTamam.Infrastructure.Persistence.Migrations.V002_MigrationHardening.sql"),
+        new(3, "V003_PersonnelMasterData", "AlTamam.Infrastructure.Persistence.Migrations.V003_PersonnelMasterData.sql"),
+    ];
     private readonly string _databasePath;
     private readonly string _databaseKey;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
@@ -79,13 +89,22 @@ public sealed class AlTamamDbContext : IDisposable
                 check.CommandText = "SELECT MAX(SchemaVersion) FROM SchemaVersions;";
                 var result = await check.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
                 var version = result is DBNull or null ? 0 : Convert.ToInt32(result);
-                if (version != CurrentSchemaVersion)
+                if (version > CurrentSchemaVersion)
                     throw new InvalidOperationException($"Database schema version {version} is incompatible with {CurrentSchemaVersion}.");
+                // Bring an existing database up to this build's schema through the hash-pinned runner.
+                if (version < CurrentSchemaVersion)
+                {
+                    transaction.Commit();
+                    var runner = new SchemaMigrationRunner(CanonicalMigrations);
+                    await runner.UpgradeAsync(connection, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
             }
             else
             {
                 var assembly = typeof(AlTamamDbContext).Assembly;
                 const string resource = "AlTamam.Infrastructure.Persistence.Migrations.V001_InitialSchema.sql";
+
                 await using var stream = assembly.GetManifestResourceStream(resource)
                     ?? throw new InvalidOperationException("The embedded schema resource is missing.");
                 using var reader = new StreamReader(stream);
@@ -96,6 +115,14 @@ public sealed class AlTamamDbContext : IDisposable
                 await schema.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             }
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+            // Bootstrap path: V001 lands a version-1 database — upgrade it to this build's schema
+            // through the hash-pinned, forward-only migration runner (V002, V003, …).
+            if (!hasVersionTable && CurrentSchemaVersion > 1)
+            {
+                var runner = new SchemaMigrationRunner(CanonicalMigrations);
+                await runner.UpgradeAsync(connection, cancellationToken).ConfigureAwait(false);
+            }
         }
         finally { _writeGate.Release(); }
     }

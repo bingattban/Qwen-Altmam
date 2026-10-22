@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>AlTamam.DesktopHost</RootNamespace>
+    <AssemblyName>AlTamam.DesktopHost</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The offline UI is bundled content, never a web project build input. -->
+    <AddRazorSupportForMvc>false</AddRazorSupportForMvc>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AlTamam.Domain/AlTamam.Domain.csproj" />
+    <ProjectReference Include="../AlTamam.Contracts/AlTamam.Contracts.csproj" />
+    <ProjectReference Include="../AlTamam.Application/AlTamam.Application.csproj" />
+    <ProjectReference Include="../AlTamam.Infrastructure/AlTamam.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 04.02: bundle the full 69-screen WebUI as read-only application content. -->
+    <Content Include="../AlTamam.WebUI/**/*" LinkBase="webui" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

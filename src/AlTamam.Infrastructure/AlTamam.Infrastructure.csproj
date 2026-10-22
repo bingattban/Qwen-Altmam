@@ -6,5 +6,6 @@
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" />
     <EmbeddedResource Include="Persistence/Migrations/V001_InitialSchema.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V002_MigrationHardening.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/V003_PersonnelMasterData.sql" />
   </ItemGroup>
 </Project>
