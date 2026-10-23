@@ -348,54 +348,136 @@
     await load();
   }
 
+  function settingsValue(label,value) {
+    const row=node("div","settings-property");
+    row.append(node("span","settings-property-label",label),
+      node("strong","settings-property-value",value==null || value==="" ? "غير محدد" : value));
+    return row;
+  }
+  function settingsCard(title,mark) {
+    const box=card(title);
+    box.classList.add("settings-panel");
+    const heading=box.querySelector(".section-title");
+    heading.classList.add("settings-panel-title");
+    heading.prepend(node("span","settings-panel-icon",mark));
+    return box;
+  }
   async function renderSettings(session,logout) {
-    state.session=session;currentRequest++;
+    state.session=session;
+    const token=++currentRequest;
     const page=target();page.replaceChildren();
-    const overview=card("الإعدادات"),messages=node("div","admin-note");
-    overview.append(node("p","section-description",
-      "المعلومات والنسخ الاحتياطية تُقرأ وتُنفذ عبر خدمات الجهاز المحلية فقط."),messages);
-    page.appendChild(overview);
-    const actions=node("div","admin-groups");page.appendChild(actions);
+    const hero=card("الإعدادات");
+    hero.classList.add("settings-heading");
+    hero.appendChild(node("p","section-description",
+      "إدارة الحساب والنسخ الاحتياطية وسلامة البيانات على هذا الجهاز دون إنترنت."));
+    const notices=node("div","settings-feedback");
+    const grid=node("div","settings-grid");
+    grid.replaceChildren(warning("جارٍ قراءة إعدادات البرنامج المحفوظة..."));
+    page.append(hero,notices,grid);
     try {
-      const [infoResponse,versionResponse]=await Promise.all([
+      const [overview,versionReply]=await Promise.all([
         api().invoke("GetSettingsOverview",{}),
         api().invoke("GetApplicationVersion",{})
       ]);
-      const info=infoResponse.data||{},version=versionResponse.data||{};
-      const id=card("البرنامج والحساب");
-      id.append(node("p","","اسم البرنامج: التمام اليومي"),
-        node("p","","الإصدار: "+(version.version||"غير محدد")),
-        node("p","","اسم المستخدم: "+info.username),
-        node("p","","نوع الحساب: "+info.roleLabelAr));
-      id.append(btn("تسجيل الخروج",logout,"btn btn-outline"));actions.appendChild(id);
-      const backup=card("النسخ الاحتياطي المشفر");
-      backup.append(node("p","","مكان النسخ: "+info.backupDirectory),
-        node("p","","موعد النسخ المحفوظ: "+info.backupTime),
-        warning(info.automaticBackupNote||"النسخ التلقائي غير جاهز."));
-      const result=node("div","admin-note");
-      const b=btn("إنشاء نسخة مشفرة والتحقق منها",async()=>{
-        if(!confirm("حفظ نسخة احتياطية مشفرة إلى القرص E الآن؟"))return;
-        b.disabled=true;result.replaceChildren(warning("جارٍ نسخ قاعدة البيانات والتحقق من سلامتها..."));
-        try{
-          const data=(await api().invoke("CreateVerifiedBackup",{}, {timeoutMs:180000})).data;
-          result.replaceChildren(node("p","",data.verificationPassed?
-            "تمت كتابة نسخة مشفرة متحقق منها: "+data.path:"لم يتم تأكيد النسخة"));
-        }catch(e){errors(result,e);}finally{b.disabled=false;}
-      },"btn btn-primary");
-      backup.append(b,result);actions.appendChild(backup);
-      const integrity=card("فحص قاعدة البيانات");
-      const stateText=node("div","admin-note");
-      integrity.append(btn("فحص سلامة قاعدة البيانات",async()=>{
-        try{
-          const check=(await api().invoke("RunDatabaseIntegrityCheck",{})).data;
-          stateText.replaceChildren(node("p","",check.integrity==="ok"?
-            "قاعدة البيانات المشفرة سليمة.":"لم يتم تأكيد سلامة قاعدة البيانات"));
-        }catch(e){errors(stateText,e);}
-      }),stateText);actions.appendChild(integrity);
-      const pending=card("الاستعادة والجدولة والتصفير");
-      pending.append(warning("استيراد النسخة الاحتياطية وتعديل وقت الجدولة والحذف الشامل لم تُفعّل بعد. تتطلب اختبارات الاستعادة والصلاحيات والتأكيد، ولن يتم تعديل البيانات من هذه الشاشة حالياً."));
-      actions.appendChild(pending);
-    }catch(e){errors(messages,e);}
+      if(token!==currentRequest)return;
+      const info=overview.data||{},version=versionReply.data||{};
+      grid.replaceChildren();
+      // Identity and runtime version are read from the authenticated bridge.
+      const account=settingsCard("الحساب والبرنامج","◉");
+      const accountData=node("div","settings-properties");
+      accountData.append(
+        settingsValue("اسم البرنامج",version.productNameAr||"التمام اليومي"),
+        settingsValue("المستخدم الحالي",info.username||session.username),
+        settingsValue("نوع الحساب",info.roleLabelAr||session.roleLabelAr||info.role),
+        settingsValue("إصدار خدمات التطبيق",version.version)
+      );
+      const logoutButton=btn("تسجيل الخروج",logout,"btn btn-outline settings-action");
+      account.append(accountData,logoutButton);
+      grid.appendChild(account);
+
+      // The stored 16:00 schedule is explicitly NOT an operational scheduler.
+      const backup=settingsCard("النسخ الاحتياطي","▣");
+      backup.append(
+        node("p","settings-copy","حفظ نسخة مشفرة من قاعدة البيانات على القرص E مع فحص سلامتها قبل اعتمادها.")
+      );
+      const backupInfo=node("div","settings-properties");
+      backupInfo.append(
+        settingsValue("مسار الحفظ",info.backupDirectory),
+        settingsValue("الوقت المسجل للنسخ التلقائي",info.backupTime||"16:00"),
+        settingsValue("حالة القرص E",info.defaultDriveAvailable?"متصل":"غير متصل")
+      );
+      backup.appendChild(backupInfo);
+      const scheduleNote=warning(info.automaticBackupNote||
+        "النسخ الاحتياطي التلقائي غير مفعل بعد، حتى لو كان وقت الجدولة محفوظاً.");
+      backup.appendChild(scheduleNote);
+      const backupResult=node("div","settings-feedback");
+      backupResult.setAttribute("aria-live","polite");
+      const save=btn("إنشاء نسخة احتياطية الآن",async()=>{
+        if(!confirm("إنشاء نسخة احتياطية مشفرة على القرص E والتحقق من سلامتها؟"))return;
+        save.disabled=true;
+        backupResult.replaceChildren(warning("جارٍ إنشاء النسخة والتحقق من سلامتها..."));
+        try {
+          const response=await api().invoke("CreateVerifiedBackup",{}, {timeoutMs:180000});
+          if(token!==currentRequest)return;
+          const data=response.data||{};
+          if(!data.verificationPassed)throw new Error("لم يتم تأكيد سلامة النسخة الاحتياطية.");
+          backupResult.replaceChildren(node("p","settings-success",
+            "تم إنشاء نسخة مشفرة متحقق منها: "+data.path));
+        } catch(e) {
+          if(token===currentRequest)errors(backupResult,e);
+        } finally {
+          if(token===currentRequest)save.disabled=!info.defaultDriveAvailable;
+        }
+      },"btn btn-primary settings-action");
+      save.disabled=!info.defaultDriveAvailable;
+      backup.append(save,backupResult);
+      if(!info.defaultDriveAvailable)backup.appendChild(warning(
+        "القرص E غير متصل، لذا لا يمكن إنشاء النسخة الاحتياطية الآن."));
+      grid.appendChild(backup);
+
+      const integrity=settingsCard("سلامة قاعدة البيانات","◇");
+      integrity.appendChild(node("p","settings-copy",
+        "تحقق من سلامة البيانات المشفرة داخل البرنامج دون تعديل أي سجل."));
+      const result=node("div","settings-feedback");
+      result.setAttribute("aria-live","polite");
+      const checkButton=btn("فحص سلامة البيانات",async()=>{
+        checkButton.disabled=true;
+        result.replaceChildren(warning("جارٍ التحقق من قاعدة البيانات..."));
+        try {
+          const response=await api().invoke("RunDatabaseIntegrityCheck",{});
+          if(token!==currentRequest)return;
+          const data=response.data||{};
+          if(data.integrity!=="ok")throw new Error("لم يؤكد الفحص سلامة قاعدة البيانات.");
+          result.replaceChildren(node("p","settings-success",
+            "اكتمل الفحص: قاعدة البيانات المشفرة سليمة."));
+        }catch(e){
+          if(token===currentRequest)errors(result,e);
+        }finally{
+          if(token===currentRequest)checkButton.disabled=false;
+        }
+      },"btn btn-outline settings-action");
+      integrity.append(checkButton,result);
+      grid.appendChild(integrity);
+
+      const planned=settingsCard("الاستعادة والإعدادات المتقدمة","⚙");
+      planned.appendChild(node("p","settings-copy",
+        "هذه الإجراءات تحتاج إلى اختبارات حماية البيانات قبل السماح بتشغيلها."));
+      const forthcoming=node("div","settings-properties");
+      for(const [name,detail] of [
+        ["استيراد نسخة احتياطية","غير متاح حتى اكتمال فحص الاستعادة"],
+        ["النسخ التلقائي اليومي","الجدولة غير نشطة حالياً"],
+        ["تغيير وقت النسخ","غير متاح حتى تشغيل الجدولة"],
+        ["حذف جميع البيانات","موقوف لحماية قاعدة البيانات والنسخ"]
+      ]) forthcoming.appendChild(settingsValue(name,detail));
+      planned.appendChild(forthcoming);
+      grid.appendChild(planned);
+    }catch(e) {
+      if(token!==currentRequest)return;
+      grid.replaceChildren();
+      errors(notices,e);
+      notices.appendChild(btn("إعادة تحميل الإعدادات",
+        ()=>renderSettings(session,logout),"btn btn-outline"));
+    }
   }
   window.AltamamAdminSettings=Object.freeze({renderAdmin,renderSettings});
 })();
