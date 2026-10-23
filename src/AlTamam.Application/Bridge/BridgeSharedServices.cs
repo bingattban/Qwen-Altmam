@@ -259,7 +259,7 @@ public sealed class BridgeSharedServices
     {
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc FROM AttendanceDrafts WHERE CreatedByUserId = $u ORDER BY UpdatedAtUtc DESC;";
+        cmd.CommandText = "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson FROM AttendanceDrafts WHERE CreatedByUserId = $u ORDER BY UpdatedAtUtc DESC;";
         cmd.Parameters.AddWithValue("$u", userId);
         var rows = new JsonArray();
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -270,7 +270,8 @@ public sealed class BridgeSharedServices
                 ["businessDate"] = reader.GetString(1),
                 ["siteId"] = reader.IsDBNull(2) ? null : reader.GetString(2),
                 ["targetStatusId"] = reader.GetString(3),
-                ["updatedAtUtc"] = reader.GetString(4)
+                ["updatedAtUtc"] = reader.GetString(4),
+                ["selectedPersonIds"] = JsonNode.Parse(reader.GetString(5))
             });
         return Ok(rows);
     }
@@ -281,6 +282,11 @@ public sealed class BridgeSharedServices
         string targetStatusId = GetRequired(payload, "targetStatusId");
         JsonArray selected = payload["selectedPersonIds"] as JsonArray
             ?? throw new BridgeProtocolException(BridgeErrorCodes.ValidationError, "قائمة الأفراد المطلوبة مفقودة.");
+        if (selected.Count is < 1 or > 100 || selected.Any(p => p is null ||
+                p.GetValueKind() != System.Text.Json.JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(p.GetValue<string>())) ||
+            selected.Select(p => p!.GetValue<string>()).Distinct(StringComparer.Ordinal).Count() != selected.Count)
+            return Error(BridgeErrorCodes.ValidationError, "اختر من 1 إلى 100 فرد دون تكرار قبل حفظ المسودة.");
         string draftId = payload.TryGetPropertyValue("draftId", out var d) && d is JsonNode ds && ds.GetValueKind() == System.Text.Json.JsonValueKind.String
             ? ds.GetValue<string>()
             : "DRF-" + Guid.NewGuid().ToString("N");
@@ -292,7 +298,8 @@ public sealed class BridgeSharedServices
             cmd.CommandText = @"INSERT INTO AttendanceDrafts (DraftId, BusinessDate, SiteId, TargetStatusId, SelectedPersonIdsJson, CreatedByUserId, UpdatedAtUtc)
                                 VALUES ($id, $date, $site, $status, $json, $user, $now)
                                 ON CONFLICT(DraftId) DO UPDATE SET BusinessDate=$date, SiteId=$site, TargetStatusId=$status,
-                                                                   SelectedPersonIdsJson=$json, UpdatedAtUtc=$now;";
+                                                                   SelectedPersonIdsJson=$json, UpdatedAtUtc=$now
+                                WHERE AttendanceDrafts.CreatedByUserId = $user;";
             cmd.Parameters.AddWithValue("$id", draftId);
             cmd.Parameters.AddWithValue("$date", businessDate);
             cmd.Parameters.AddWithValue("$site", payload["siteId"]?.GetValue<string>() ?? (object)DBNull.Value);
@@ -300,7 +307,9 @@ public sealed class BridgeSharedServices
             cmd.Parameters.AddWithValue("$json", json);
             cmd.Parameters.AddWithValue("$user", userId);
             cmd.Parameters.AddWithValue("$now", _time.GetUtcNow().ToString("O"));
-            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            int updated = await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            if (updated == 0)
+                return Error(BridgeErrorCodes.ConflictStale, "هذه المسودة لا تتبع المستخدم الحالي.");
             return Ok(new JsonObject { ["draftId"] = draftId, ["savedAtUtc"] = _time.GetUtcNow().ToString("O") });
         }, ct).ConfigureAwait(false);
     }
