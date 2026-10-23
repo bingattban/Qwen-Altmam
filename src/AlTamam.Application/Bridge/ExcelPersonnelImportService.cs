@@ -176,7 +176,16 @@ public sealed class ExcelPersonnelImportService
             return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد أسماء جديدة صالحة للاستيراد.");
         // Only approved, conflict-free new rows are carried forward to the signed, one-use plan.
         string token = BridgePreviewTokens.Issue(_db, _time, PlanOperation, actor,
-            new JsonObject { ["rows"] = accepted.DeepClone() }, accepted.Count, ct);
+            new JsonObject { ["rows"] = new JsonArray(accepted.Select(node =>
+            {
+                var p = (JsonObject)node!;
+                return (JsonNode?)new JsonObject {
+                    ["row"] = p["row"]!.GetValue<int>(), ["name"] = p["name"]!.GetValue<string>(),
+                    ["number"] = p["serviceNumberA"]!.GetValue<string>(),
+                    ["normalizedName"] = p["normalizedName"]!.GetValue<string>(),
+                    ["normalizedNumber"] = p["normalizedNumber"]!.GetValue<string>()
+                };
+            }).ToArray()) }, accepted.Count, ct);
         return BridgeHelpers.Ok(new JsonObject
         {
             ["previewToken"] = token, ["newCount"] = accepted.Count,
@@ -205,6 +214,7 @@ public sealed class ExcelPersonnelImportService
             string now = _time.GetUtcNow().ToString("O");
             string today = DateOnly.FromDateTime(_time.GetLocalNow().DateTime)
                 .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var createdIds = new List<string>(rows.Count);
             foreach (var item in rows)
             {
                 ct.ThrowIfCancellationRequested();
@@ -229,6 +239,7 @@ public sealed class ExcelPersonnelImportService
                 insert.Parameters.AddWithValue("$now", now);
                 insert.Parameters.AddWithValue("$actor", actor);
                 await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                createdIds.Add(personId);
             }
             await BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 "PERSONNEL_IMPORT", "استيراد أفراد من ملف Excel",
@@ -239,8 +250,8 @@ public sealed class ExcelPersonnelImportService
                 "اعتماد كشف Excel بعد المعاينة", today, ct.CorrelationId(), ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(new JsonObject { ["createdCount"] = rows.Count,
                 ["committedAtUtc"] = now, ["importToken"] = token },
-                events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonCreated,
-                    today, rows.Select(x => x.Number).ToArray()));
+                events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonIdentityUpdated,
+                    today, createdIds));
         }, ct).ConfigureAwait(false);
     }
 
