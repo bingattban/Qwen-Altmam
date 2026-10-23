@@ -125,12 +125,10 @@ public sealed class ExcelImportOutcomeService
         if (issues.Count > 500)
             return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed, "عدد الصفوف المستبعدة خارج الحد المسموح.");
 
-        string root = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        if (string.IsNullOrWhiteSpace(root))
-            root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(root))
-            return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed, "تعذر تحديد مجلد المستندات.");
-        string directory = Path.Combine(root, "AlTamam", "Exports");
+        string selected = await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
+        if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
+            return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
+                "مجلد النسخ والتصدير غير متاح؛ غيّره من الإعدادات.");
         string filename = "AlTamam_ImportIssues_" + Guid.NewGuid().ToString("N") + ".xlsx";
         string destination = Path.Combine(directory, filename);
         string partial = destination + ".part";
