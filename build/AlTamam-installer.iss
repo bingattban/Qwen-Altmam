@@ -4,11 +4,11 @@
   #define AppVersion "0.0.0-dev"
 #endif
 #ifndef PublishDir
-  #define PublishDir "publish/AlTamam-win-x64"
+  #define PublishDir "..\publish\AlTamam-win-x64"
 #endif
 
 [Setup]
-AppId={{{3A156EF1-176E-45DD-A570-8224D739A454}
+AppId={{3A156EF1-176E-45DD-A570-8224D739A454}
 AppName=التمام اليومي (AlTamam)
 AppVersion={#AppVersion}
 AppPublisher=AlTamam
@@ -19,7 +19,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
-OutputDir=artifacts
+OutputDir=..\artifacts
 OutputBaseFilename=AlTamam-Installer-win-x64-setup
 Compression=lzma2/max
 SolidCompression=yes
@@ -27,9 +27,8 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\AlTamam.DesktopHost.exe
 ; 15.04 uninstall policy: NEVER delete the encrypted DB or backups — user data
 ; survives uninstall/reinstall by design (data lives in %LOCALAPPDATA%\AlTamam).
-DeleteFile=none
 DisableProgramGroupPage=yes
-LicenseFile=docs\release\LICENSE-NOTES.txt
+LicenseFile=..\docs\release\LICENSE-NOTES.txt
 
 [Languages]
 Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
