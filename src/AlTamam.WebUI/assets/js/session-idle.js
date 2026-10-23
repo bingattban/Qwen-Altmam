@@ -39,10 +39,12 @@
     }
   }
   function start(fresh,onIdle){
+    // Read the persisted value BEFORE stop(), which intentionally clears it.
+    const existing=fresh?Date.now():saved();
     stop();
     active=true;expiring=false;onExpire=onIdle;
-    last=fresh?Date.now():saved();
-    if(fresh)persist(last);
+    last=existing;
+    if(last)persist(last);
     lastHeartbeat=Date.now();
     for(const name of ["pointerdown","keydown","wheel","input","touchstart"])
       document.addEventListener(name,activity,{passive:true});
