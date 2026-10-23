@@ -135,6 +135,7 @@ jobs:
           & "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe" --layout-selfcheck
       - name: Build Portable ZIP (clean directory, real runnable EXE)
         run: |
+          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
           Compress-Archive -Path "$env:PUBLISH_DIR\*" `
             -DestinationPath artifacts/AlTamam-Portable-win-x64.zip -Force
         shell: pwsh
@@ -143,9 +144,10 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup --version 6.3.3 -y
+          $publishDirAbsolute = (Resolve-Path $env:PUBLISH_DIR).Path
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
             /DAppVersion=${{ github.event.inputs.version || github.ref_name }} `
-            /DPublishDir=$env:PUBLISH_DIR `
+            /DPublishDir=$publishDirAbsolute `
             build/AlTamam-installer.iss
           Move-Item artifacts/AlTamam-Installer-win-x64-setup.exe artifacts/AlTamam-Installer-win-x64.exe -Force
       - name: Generate SHA-256 checksums + build metadata (15.07)
