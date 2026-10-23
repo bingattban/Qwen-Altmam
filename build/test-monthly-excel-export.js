@@ -55,8 +55,8 @@ async function main(){
   await events.DOMContentLoaded();await tick();await tick();
   const headers=viewport.all().filter(x=>x.tag==="th");
   assert.ok(headers.length>5,"monthly roster has fixed columns and calendar days");
-  assert.equal(String(headers[4].textContent).split("\\n")[0],
-    String(new Date().getDate()),"today appears immediately after 4 fixed columns");
+  assert.equal(Number.parseInt(String(headers[4].textContent),10),
+    new Date().getDate(),"today appears immediately after 4 fixed columns");
   assert.ok(headers[4].className.includes("fixed-today"),
     "today stays pinned while the other days scroll horizontally");
   assert.ok(viewport.all().some(x=>x.className.includes("functional-paged-area")),
