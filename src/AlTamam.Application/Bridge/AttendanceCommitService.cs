@@ -96,6 +96,23 @@ public sealed class AttendanceCommitService
             return null; // ambiguous/overlapping assignment, never guess
         return snap;
     }
+    private static string PersonLabel(string name,string number) =>
+        "«"+name+"» (الرقم (ع): "+number+")";
+
+    // Resolve a rejected person's identity from SQLCipher itself even when the
+    // active assignment/status snapshot cannot be formed (transfer, inactivity).
+    private static async Task<string> PersonLabelAsync(SqliteConnection c,SqliteTransaction? tx,
+        string personId,CancellationToken ct)
+    {
+        using var cmd=c.CreateCommand();cmd.Transaction=tx;
+        cmd.CommandText="SELECT CurrentVisibleName,CurrentServiceNumberA FROM Persons WHERE PersonId=$id;";
+        cmd.Parameters.AddWithValue("$id",personId);
+        using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if(await r.ReadAsync(ct).ConfigureAwait(false))
+            return PersonLabel(r.GetString(0),r.GetString(1));
+        return "الفرد غير الموجود في الكشف";
+    }
+
     private static JsonObject ToJson(Snapshot s)=>new()
     {
         ["personId"]=s.PersonId,["name"]=s.Name,["serviceNumberA"]=s.Number,
@@ -132,15 +149,25 @@ public sealed class AttendanceCommitService
         foreach(var id in ids)
         {
             var s=await GetSnapshot(c,null,id,date,ct).ConfigureAwait(false);
-            if(s is null || (siteFilter.Length>0 && s.SiteId!=siteFilter))
+            if(s is null)
                 return Fail(BridgeErrorCodes.TransferDayAttendanceForbidden,
-                    "يوجد فرد غير نشط أو منقول اليوم أو لا يمتلك موقعاً مطابقاً؛ أُلغيت العملية كاملة.");
+                    "تعذر تحضير "+await PersonLabelAsync(c,null,id,ct).ConfigureAwait(false)+
+                    ": الفرد غير نشط أو منقول اليوم أو ليس له موقع صالح؛ أُلغيت العملية كاملة.");
+            string who=PersonLabel(s.Name,s.Number);
+            if(siteFilter.Length>0 && s.SiteId!=siteFilter)
+                return Fail(BridgeErrorCodes.TransferDayAttendanceForbidden,
+                    "تعذر تحضير "+who+": الموقع الحالي لا يطابق الموقع المحدد.");
             if(mode=="initial" && s.PreviousRevision!=0)
                 return Fail(BridgeErrorCodes.AlreadyPrepared,
-                    "يوجد فرد محضر اليوم؛ استخدم تغيير التحضير لهذا الفرد.");
-            if(mode=="revise" && (s.PreviousRevision==0||s.PreviousStatus==statusId))
+                    "تعذر تحضير "+who+": الحالة الحالية «"+s.PreviousName+
+                    "» مسجلة اليوم؛ استخدم تغيير الحالة.");
+            if(mode=="revise" && s.PreviousRevision==0)
                 return Fail(BridgeErrorCodes.ValidationError,
-                    "تغيير التحضير يتطلب حالة سابقة مختلفة عن الحالة المختارة.");
+                    "تعذر تغيير حالة "+who+": لا يوجد تحضير سابق لهذا اليوم.");
+            if(mode=="revise" && s.PreviousStatus==statusId)
+                return Fail(BridgeErrorCodes.ValidationError,
+                    "تعذر تغيير حالة "+who+": الحالة المختارة «"+status.Value.Name+
+                    "» هي نفسها الحالة المعتمدة.");
             people.Add(ToJson(s));
         }
         var sealedData=new JsonObject
@@ -195,13 +222,24 @@ public sealed class AttendanceCommitService
                 var current=await GetSnapshot(c,t,personId,date,ct).ConfigureAwait(false);
                 long revision;try{revision=prev["previousRevision"]!.GetValue<long>();}
                 catch{return Fail(BridgeErrorCodes.ValidationError,"مراجعة المعاينة غير صالحة.");}
-                if(current is null || current.AssignmentId!=Read(prev,"assignmentId")
+                if(current is null)
+                    return Fail(BridgeErrorCodes.ConflictStale,
+                        "تعذر اعتماد تحضير "+await PersonLabelAsync(c,t,personId,ct).ConfigureAwait(false)+
+                        ": الفرد غير متاح للتحضير الآن؛ حدّث القائمة.");
+                string who=PersonLabel(current.Name,current.Number);
+                if(current.AssignmentId!=Read(prev,"assignmentId")
                     || current.PreviousRevision!=revision
                     || (current.PreviousStatus??"")!=Read(prev,"previousStatusId"))
                     return Fail(BridgeErrorCodes.ConflictStale,
-                        "تغير التحضير أو الموقع لأحد الأفراد بعد المعاينة. حدّث القائمة.");
-                if((!revise && revision!=0)||(revise && (revision==0||current.PreviousStatus==statusId)))
-                    return Fail(BridgeErrorCodes.ConflictStale,"حالة أحد الأفراد لم تعد مناسبة للعملية.");
+                        "تعذر اعتماد تحضير "+who+
+                        ": تغيرت حالته أو موقعه بعد المعاينة؛ حدّث الكشف.");
+                if(!revise && revision!=0)
+                    return Fail(BridgeErrorCodes.ConflictStale,
+                        "تعذر اعتماد تحضير "+who+": تم تحضيره مسبقاً بعد المعاينة.");
+                if(revise && (revision==0||current.PreviousStatus==statusId))
+                    return Fail(BridgeErrorCodes.ConflictStale,
+                        "تعذر تغيير حالة "+who+
+                        ": الحالة الحالية غير مناسبة للتعديل؛ أعد المعاينة.");
                 snapshots.Add(current);
             }
             long? consumed=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,t,token,
