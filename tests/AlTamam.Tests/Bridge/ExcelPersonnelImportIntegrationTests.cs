@@ -88,6 +88,7 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         Assert.Equal(2,((JsonObject)saved.Data!)["createdCount"]!.GetValue<int>());
         Assert.Equal("2",Scalar("SELECT COUNT(*) FROM Persons"));
         Assert.Equal("2",Scalar("SELECT COUNT(*) FROM PersonIdentityHistory"));
+        Assert.Equal("2",Scalar("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId='SITE-UNSPECIFIED'"));
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM AttendanceRecords"));
         Assert.Equal("000123",Scalar("SELECT CurrentServiceNumberA FROM Persons WHERE CurrentServiceNumberA='000123'"));
         Assert.Equal("PERSONNEL_IMPORT",Scalar("SELECT OperationCode FROM AuditEvents ORDER BY rowid DESC LIMIT 1"));
