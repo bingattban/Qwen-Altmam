@@ -170,6 +170,7 @@ public sealed class AlTamamDbContext : IDisposable
                 Mode = SqliteOpenMode.ReadWriteCreate,
                 Password = _databaseKey,
                 ForeignKeys = true,
+                Pooling = false, // close actual file handle before checking / renaming
                 DefaultTimeout = 15
             }.ConnectionString))
             {
@@ -185,6 +186,7 @@ public sealed class AlTamamDbContext : IDisposable
                 DataSource = temp,
                 Mode = SqliteOpenMode.ReadOnly,
                 Password = _databaseKey,
+                Pooling = false, // no pooled connection may retain .pending on Windows
                 DefaultTimeout = 15
             }.ConnectionString))
             {
