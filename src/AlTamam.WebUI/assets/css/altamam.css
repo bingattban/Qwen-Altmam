@@ -1,3 +1,25 @@
+/* Offline fonts: Cairo headings, Tajawal interface and data. */
+@font-face {
+  font-family: "AlTamam Cairo";
+  src: url("../fonts/Cairo-Variable.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AlTamam Tajawal";
+  src: url("../fonts/Tajawal-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AlTamam Tajawal";
+  src: url("../fonts/Tajawal-Bold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}
 :root {
   --bg-main: #F5F7FA;
   --bg-surface: #FFFFFF;
@@ -37,7 +59,7 @@ body.dark-theme {
 }
 
 body {
-  font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+  font-family: "AlTamam Tajawal", "AlTamam Cairo", Tahoma, "Segoe UI", Arial, sans-serif;
   background-color: var(--bg-main);
   color: var(--text-main);
   direction: rtl;
@@ -667,3 +689,7 @@ table.monthly-table thead .sticky-col-4 {
 .app-sidebar[hidden], #logoutAction[hidden] { display:none !important; }
 
 .monthly-scroll th { white-space: pre-line; text-align:center; }
+
+/* Consistent Cairo headings; fields and tables stay Tajawal for readability. */
+h1,h2,h3,.page-title,.brand-title,.section-title,.nav-section-label { font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif; }
+button,input,select,textarea,table { font-family:inherit; }
