@@ -493,7 +493,7 @@
           item.operationArabicName,item.targetDisplay,
           [item.actorUsername,item.actorRosterFullName].filter(Boolean).join(" — "),
           item.executedAtUtc
-        ]));
+        ],"عرض التفاصيل",()=>showAuditDetails(item.auditEventId)));
         empty(t.body,4,"لا توجد عمليات مطابقة.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
@@ -501,6 +501,34 @@
         pager.append(node("span","","إجمالي "+(data.total||0)),prev,next);
         results.replaceChildren(t.wrap,pager);
       }catch(e){if(token===currentRequest)errors(results,e);}
+    }
+    async function showAuditDetails(auditEventId) {
+      const detail=card("تفاصيل القيد وسلامة السجل");
+      results.after(detail);
+      const content=node("div","admin-note");
+      detail.append(content,btn("إغلاق التفاصيل",()=>detail.remove()));
+      content.replaceChildren(warning("جارٍ التحقق من تفاصيل القيد..."));
+      try {
+        const reply=await api().invoke("GetAuditEntryDetails",{auditEventId});
+        if(state.active!=="log"){detail.remove();return;}
+        const item=reply.data||{};
+        const facts=node("div","settings-properties");
+        for(const [label,value] of [
+          ["العملية",item.operationArabicName],
+          ["المستهدف",item.targetDisplay],
+          ["اسم المستخدم",item.actorUsername],
+          ["الاسم الكامل",item.actorRosterFullName],
+          ["وقت التنفيذ",item.executedAtUtc],
+          ["الوصف الأصلي",item.rawDescription],
+          ["سلامة تسلسل السجل",item.chainValid?"موثوق":"تعذر إثبات سلامة التسلسل"]
+        ]){
+          const line=node("div","settings-property");
+          line.append(node("span","settings-property-label",label),
+            node("strong","settings-property-value",value||"—"));
+          facts.appendChild(line);
+        }
+        content.replaceChildren(facts);
+      }catch(e){errors(content,e);}
     }
     await load();
   }
