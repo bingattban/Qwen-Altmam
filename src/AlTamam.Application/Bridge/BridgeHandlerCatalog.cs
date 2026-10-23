@@ -86,6 +86,24 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await read.MonthlyGridAsync(req.Payload, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
+        "GetExportablePeriods" => async (req, principal, ct) =>
+        {
+            var excel = new MonthlyExcelExportService(services.Db);
+            var result = await excel.PeriodsAsync(ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
+        "PreviewMonthlyExport" => async (req, principal, ct) =>
+        {
+            var excel = new MonthlyExcelExportService(services.Db);
+            var result = await excel.PreviewAsync(req.Payload, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
+        "ExportMonthlyWorkbookSet" => async (req, principal, ct) =>
+        {
+            var excel = new MonthlyExcelExportService(services.Db);
+            var result = await excel.ExportAsync(req.Payload, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
         "GetMonthlyCellDetails" => async (req, principal, ct) =>
         {
             var read = new DailyMonthlyReadService(services.Db);
