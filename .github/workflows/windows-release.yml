@@ -159,10 +159,14 @@ jobs:
       - name: Install Inno Setup 6 (approved tool) and compile installer
         shell: pwsh
         run: |
-          choco install innosetup --version 6.3.3 -y
-          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup install failed' }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup install failed' }
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "Inno Setup compiler not found: $iscc" }
           $publishDirAbsolute = (Resolve-Path $env:PUBLISH_DIR).Path
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+          & $iscc `
             /DAppVersion=$env:RELEASE_VERSION `
             /DPublishDir=$publishDirAbsolute `
             build/AlTamam-installer.iss
