@@ -38,6 +38,7 @@ public partial class MainWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         InitializeComponent();
         webViewHost.Children.Add(_webView);
+        Panel.SetZIndex(_webView, 0); // keep the native Arabic startup message above the browser
         Loaded += OnLoadedOrSelfCheck;
         Closed += async (_, _) =>
         {
