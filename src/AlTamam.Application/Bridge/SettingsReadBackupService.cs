@@ -28,14 +28,14 @@ public sealed class SettingsReadBackupService
     }
     public async Task<BridgeResponse> OverviewAsync(BridgePrincipal person,CancellationToken ct)
     {
-        string backupPath=await Setting("PreferredBackupDirectory",@"E:\AlTamamAlYawmi\Backups",ct);
+        string backupPath=await new OutputDirectorySettings(_db).GetAsync(ct);
         string schedule=await Setting("AutoBackupTimeLocal","16:00",ct);
         string theme=await Setting("Theme","light",ct);
         return BridgeHelpers.Ok(new JsonObject
         {
             ["username"]=person.Username,["role"]=person.Role.ToString(),
             ["roleLabelAr"]=person.Role.ToArabicLabel(),
-            ["backupDirectory"]=backupPath,["defaultDriveAvailable"]=Directory.Exists(@"E:\"),
+            ["backupDirectory"]=backupPath,["defaultDriveAvailable"]=Directory.Exists(backupPath),
             ["backupTime"]=schedule,
             ["automaticBackupOperational"]=false,
             ["automaticBackupNote"]="الجدولة اليومية ليست نشطة بعد؛ لا تعتمد عليها قبل إكمال اختبار تشغيلها.",
@@ -60,15 +60,10 @@ public sealed class SettingsReadBackupService
     }
     public async Task<BridgeResponse> BackupAsync(BridgePrincipal person,CancellationToken ct)
     {
-        // Owner-approved E: destination only. Missing E: is an error, not success.
-        if(!OperatingSystem.IsWindows() || !Directory.Exists(@"E:\"))
-            return BridgeHelpers.Error(BridgeErrorCodes.MissingEVolume,
-                "القرص E غير متصل. وصّله قبل تصدير نسخة احتياطية مشفرة.");
-        string folder=await Setting("PreferredBackupDirectory",@"E:\AlTamamAlYawmi\Backups",ct);
-        string root=Path.GetPathRoot(Path.GetFullPath(folder))??"";
-        if(!string.Equals(root,@"E:\",StringComparison.OrdinalIgnoreCase))
+        string folder=await new OutputDirectorySettings(_db).GetAsync(ct);
+        if(!OutputDirectorySettings.IsSafeDirectory(folder,_db.DatabasePath,out folder))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "مسار النسخ الاحتياطي يجب أن يكون داخل القرص E.");
+                "مجلد النسخ الاحتياطي المختار غير متاح. غيّره من الإعدادات.");
         string backupId="BKP-"+Guid.NewGuid().ToString("N");
         string filename="AlTamam-"+_time.GetLocalNow().ToString("yyyyMMdd-HHmmss")+"-"+backupId+".dbbackup";
         string destination=Path.Combine(folder,filename);
@@ -110,7 +105,7 @@ public sealed class SettingsReadBackupService
         catch (Exception)
         {
             return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
-                "تعذر إنشاء نسخة احتياطية موثوقة؛ تحقّق من القرص E ومساحته والأذونات.");
+                "تعذر إنشاء نسخة احتياطية موثوقة؛ تحقّق من مجلد الحفظ ومساحته والأذونات.");
         }
     }
 }
