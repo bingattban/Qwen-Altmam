@@ -202,6 +202,31 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.DeactivateStatusAsync(req.Payload, principal!, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.StatusDefinitionChanged)) : Fail(req, inner);
         },
+        // Settings: read real configuration, audit manual encrypted backup.
+        // No fake success for scheduled backups, restore or destructive reset.
+        "GetSettingsOverview" => async (req, principal, ct) =>
+        {
+            var svc = new SettingsReadBackupService(services.Db);
+            BridgeResponse inner = await svc.OverviewAsync(principal!, ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "GetBackupSchedule" => async (req, principal, ct) =>
+        {
+            var svc = new SettingsReadBackupService(services.Db);
+            BridgeResponse inner = await svc.ScheduleAsync(ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "RunDatabaseIntegrityCheck" => (req, principal, ct) =>
+        {
+            var svc = new SettingsReadBackupService(services.Db);
+            return Task.FromResult(svc.Integrity() with { RequestId = req.RequestId });
+        },
+        "CreateVerifiedBackup" => async (req, principal, ct) =>
+        {
+            var svc = new SettingsReadBackupService(services.Db);
+            BridgeResponse inner = await svc.BackupAsync(principal!, ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
         // ---------------- Phase 11: UserAuditService — audit portion (immutable evidence + overlays)
         "QueryAuditLog" => async (req, principal, ct) =>
         {
