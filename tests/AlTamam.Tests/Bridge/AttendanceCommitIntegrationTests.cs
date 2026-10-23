@@ -119,6 +119,72 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     }
 
     [Fact]
+    public async Task PreviewRejectsAlreadyPreparedIndividualWithFullNameAndServiceNumber()
+    {
+        var service=new AttendanceCommitService(_db);
+        var first=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(first)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var rejected=await service.PreviewAsync(Payload("initial","STS-ABSENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Contains("فرد اختبار رقم 1",rejected.UserMessage);
+        Assert.Contains("TST-NUM-1",rejected.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRecords"));
+        var same=await service.PreviewAsync(Payload("revise","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.False(same.Success);
+        Assert.Contains("فرد اختبار رقم 1",same.UserMessage);
+        Assert.Contains("TST-NUM-1",same.UserMessage);
+        Assert.Equal(0L,Count("AttendanceRevisions"));
+    }
+
+    [Fact]
+    public async Task RejectsPersonWithNoValidAssignmentByNameAndNumber()
+    {
+        using(var connection=_db.CreateOpenConnection())
+        using(var command=connection.CreateCommand())
+        {
+            command.CommandText="""
+                UPDATE Persons SET ActiveFlag=0 WHERE PersonId='TST-ATTEND-P2';
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+        var service=new AttendanceCommitService(_db);
+        var rejected=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1","TST-ATTEND-P2"]),Actor,CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Contains("فرد اختبار رقم 2",rejected.UserMessage);
+        Assert.Contains("TST-NUM-2",rejected.UserMessage);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        Assert.Equal(0L,Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task StalePreviewIdentifiesIndividualWhoseAttendanceChanged()
+    {
+        var service=new AttendanceCommitService(_db);
+        var first=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        var competing=await service.PreviewAsync(Payload("initial","STS-ABSENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True(competing.Success,competing.UserMessage);
+        var accepted=await service.CommitAsync(
+            new JsonObject{["previewToken"]=Token(first)},
+            Actor,false,CancellationToken.None);
+        Assert.True(accepted.Success,accepted.UserMessage);
+        var stale=await service.CommitAsync(
+            new JsonObject{["previewToken"]=Token(competing)},
+            Actor,false,CancellationToken.None);
+        Assert.False(stale.Success);
+        Assert.Contains("فرد اختبار رقم 1",stale.UserMessage);
+        Assert.Contains("TST-NUM-1",stale.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRecords"));
+    }
+
+    [Fact]
     public async Task InvalidBulkSelection_WritesNothing()
     {
         var svc=new AttendanceCommitService(_db);
