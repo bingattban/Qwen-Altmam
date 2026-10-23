@@ -323,15 +323,21 @@ public sealed class DailyMonthlyReadService
                 string? targetId=movementReader.IsDBNull(5)?null:movementReader.GetString(5);
                 if(siteId.Length>0 && siteId!=sourceId && siteId!=targetId)continue;
                 string before=movementReader.GetString(4),after=movementReader.GetString(6);
-                string label=siteId.Length==0
-                    ?"تم نقله من "+before+" إلى "+after
-                    :siteId==sourceId?"تم نقله إلى "+after:"تم نقله من "+before;
+                int movementType=movementReader.GetInt32(2);
+                // Separation must remain visible historically even though the
+                // person is no longer in today's active roster.
+                string label=movementType==3?"مفصول":
+                    siteId.Length==0
+                        ?"تم نقله من "+before+" إلى "+after
+                        :siteId==sourceId?"تم نقله إلى "+after:"تم نقله من "+before;
                 JsonObject days=(JsonObject)ids[movementReader.GetString(0)]["days"]!;
                 string movementDate=movementReader.GetString(1);
                 if(days[movementDate] is null)
                     days[movementDate]=new JsonObject{
-                        ["name"]=label,["symbol"]="نقل",["color"]="#D8B4FE",
-                        ["kind"]="movement"
+                        ["name"]=label,
+                        ["symbol"]=movementType==3?"ف":"نقل",
+                        ["color"]=movementType==3?"#64748B":"#D8B4FE",
+                        ["kind"]=movementType==3?"separation":"movement"
                     };
             }
         }
