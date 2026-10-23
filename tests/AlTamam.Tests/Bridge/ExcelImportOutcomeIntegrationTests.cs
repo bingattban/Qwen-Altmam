@@ -12,6 +12,7 @@ namespace AlTamam.Tests.Bridge;
 public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDisposable
 {
     private readonly string _database = SyntheticFixtures.CreateTempDatabasePath();
+    private readonly string _output = Path.Combine(Path.GetTempPath(),"altamam-import-output-"+Guid.NewGuid().ToString("N"));
     private AlTamamDbContext _db = null!;
     private const string Actor = "TST-IMPORT-HISTORY-OWNER";
     private readonly List<string> _reports = new();
@@ -20,6 +21,12 @@ public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDispos
     {
         _db = new AlTamamDbContext(_database, SyntheticFixtures.TestKeyHex);
         await _db.InitializeAsync();
+        Directory.CreateDirectory(_output);
+        using var connection=_db.CreateOpenConnection();
+        using var cmd=connection.CreateCommand();
+        cmd.CommandText="UPDATE AppSettings SET SettingValue=$folder WHERE SettingKey='PreferredBackupDirectory';";
+        cmd.Parameters.AddWithValue("$folder",_output);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static JsonObject Workbook(params (string name, string number)[] rows)
@@ -181,5 +188,6 @@ public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDispos
             catch (UnauthorizedAccessException) { }
         }
         SyntheticFixtures.DeleteTempDatabase(_database);
+        try{Directory.Delete(_output,true);}catch(IOException){}catch(UnauthorizedAccessException){}
     }
 }
