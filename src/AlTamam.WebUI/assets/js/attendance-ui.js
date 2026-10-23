@@ -43,14 +43,15 @@
    const list=make("div"),info=make("div"),review=make("div");
    const choice=make("span","لم يتم تحديد أسماء");
    const selected=new Set();
-   let pageNo=1,loading=false,nonce=0;
+   let pageNo=1,loading=false,nonce=0,previewVersion=0;
    const summary=()=>choice.textContent="الأفراد المحددون: "+selected.size+" من 100";
-   const clearReview=()=>review.replaceChildren();
+   const clearReview=()=>{previewVersion++;review.replaceChildren();};
    const reset=()=>{selected.clear();clearReview();summary();};
    mode.addEventListener("change",()=>{
      reason.hidden=mode.value!=="revise";clearReview();
    });
    status.addEventListener("change",clearReview);
+   reason.addEventListener("input",clearReview);
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
    filters.append(site,status,mode,reason);
    header.append(filters,choice,info,list,review);
@@ -110,13 +111,14 @@
      if(mode.value==="revise"&&reason.value.trim().length<5)
        return showError(info,new Error("أدخل سبب تغيير التحضير."));
      clearReview();info.replaceChildren();
+     const expectedPreviewVersion=previewVersion;
      try{
        const r=await bridge.invoke("PreviewAttendanceChange",{
          businessDate:day,statusId:status.value,siteId:site.value,
          personIds:Array.from(selected).sort(),mode:mode.value,
          reason:mode.value==="revise"?reason.value.trim():""
        });
-       if(!host.isConnected)return;
+       if(!host.isConnected||previewVersion!==expectedPreviewVersion)return;
        const data=r.data||{};
        if(!data.previewToken||!Array.isArray(data.persons))
          throw Error("تعذر اعتماد المعاينة.");
@@ -141,7 +143,9 @@
          }catch(e){showError(info,e);clearReview();}
          finally{save.disabled=false;}
        });
-       c.append(save,button("إلغاء",clearReview));
+       c.append(save,button("إلغاء",()=>{
+         if(confirm("إلغاء المعاينة دون حفظ أي تغيير؟"))clearReview();
+       }));
        review.appendChild(c);
      }catch(e){showError(info,e);}
    }
