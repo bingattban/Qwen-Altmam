@@ -2,7 +2,7 @@
 """Phase 15 CI gate (15.01): validate action-manifest.json invariants BEFORE packaging.
 
 Fails the release pipeline (exit 1) on any violation:
-  * exactly 90 actions, unique names
+  * exactly 93 actions, unique names
   * every allowedRoles value is one of the 4 declared principal roles
   * manifest == compiled ActionManifest.cs table (name/service/roles/mutating)
     byte-for-byte after normalization — CI refuses drift before packaging
@@ -22,6 +22,7 @@ PATH = "src/AlTamam.WebUI/action-manifest.json"
 CODE_PATH = "src/AlTamam.Application/Bridge/ActionManifest.cs"
 ROLES = {"Unauthenticated", "GeneralAdministration", "OrdinaryAdministration", "Supervisor"}
 GA_ONLY_RESET = {"PreviewFullReset", "CommitFullReset"}
+GA_ONLY_CORRECTION = {"SetClosedDayCorrectionPolicy","PreviewClosedDayCorrection","CommitClosedDayCorrection"}
 MUTATING_DANGEROUS = {"CommitFullReset", "RestoreDatabaseAtomically"}
 
 def main() -> int:
@@ -35,8 +36,8 @@ def main() -> int:
     errors = []
     actions = m.get("actions", [])
     names = [a["action"] for a in actions]
-    if len(actions) != 90:
-        errors.append(f"expected 90 actions, found {len(actions)}")
+    if len(actions) != 93:
+        errors.append(f"expected 93 actions, found {len(actions)}")
     dupes = {n for n in names if names.count(n) > 1}
     if dupes:
         errors.append(f"duplicate action names: {sorted(dupes)}")
@@ -50,6 +51,8 @@ def main() -> int:
         name = a["action"]
         if name in GA_ONLY_RESET and set(a["allowedRoles"]) != {"GeneralAdministration"}:
             errors.append(f"{name}: full-reset family must be GeneralAdministration-only")
+        if name in GA_ONLY_CORRECTION and set(a["allowedRoles"]) != {"GeneralAdministration"}:
+            errors.append(f"{name}: historical correction must be GA-only")
         if name in MUTATING_DANGEROUS and "GeneralAdministration" not in a["allowedRoles"]:
             errors.append(f"{name}: dangerous mutating action lost GA authorization")
         if a.get("isMutating") and not a.get("idempotentByRequestId"):

@@ -7,8 +7,8 @@ using Xunit;
 namespace AlTamam.Tests.Bridge;
 
 /// <summary>
-/// PHASE 14 step 14.03 — systematic RBAC exercise of ALL 90 declared manifest actions,
-/// independent of UI visibility (directive: "Exercise RBAC systematically on all 90 declared
+/// PHASE 14 step 14.03 — systematic RBAC exercise of ALL 93 declared manifest actions,
+/// independent of UI visibility (directive: "Exercise RBAC systematically on all 93 declared
 /// manifest actions and all dangerous combinations, independent of UI visibility").
 /// The dispatcher is the single server-side authorization gate; these tests drive it directly
 /// with synthetic principals only (no DB, no real data) and assert allow/deny per role for
@@ -106,7 +106,7 @@ public sealed class BridgeRbacMatrixTests
         }
     }
 
-    /// <summary>90 actions × 4 caller identities (GA/OA/SV/unauthenticated) = 360 cases.</summary>
+    /// <summary>93 actions × 4 caller identities (GA/OA/SV/unauthenticated) = 372 cases.</summary>
     public static IEnumerable<object[]> AllActionsByRole()
     {
         foreach (var meta in ActionManifest.All)
@@ -119,10 +119,10 @@ public sealed class BridgeRbacMatrixTests
     }
 
     [Fact]
-    public void ManifestMirror_ContainsExactlyTheDeclaredNinetyActions()
+    public void ManifestMirror_ContainsExactlyTheDeclaredNinetyThreeActions()
     {
-        Assert.Equal(90, ActionManifest.All.Length);
-        Assert.Equal(90, ActionManifest.All.Select(a => a.Action).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(93, ActionManifest.All.Length);
+        Assert.Equal(93, ActionManifest.All.Select(a => a.Action).Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]

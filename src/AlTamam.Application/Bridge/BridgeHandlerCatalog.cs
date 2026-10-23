@@ -127,6 +127,24 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await services.SearchPersonsAsync(term, take, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
+        "SetClosedDayCorrectionPolicy" => async (req,principal,ct) =>
+        {
+            var service = new ClosedDayCorrectionService(services.Db,services.Time);
+            var result = await service.SetPolicyAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "PreviewClosedDayCorrection" => async (req,principal,ct) =>
+        {
+            var service = new ClosedDayCorrectionService(services.Db,services.Time);
+            var result = await service.PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "CommitClosedDayCorrection" => async (req,principal,ct) =>
+        {
+            var service = new ClosedDayCorrectionService(services.Db,services.Time);
+            var result = await service.CommitAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "PreviewAttendanceChange" => async (req,principal,ct) =>
         {
             var svc=new AttendanceCommitService(services.Db,services.Time);

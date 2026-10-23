@@ -6,7 +6,7 @@ public sealed record BridgeActionMetadata(string Action, string OwningService, s
 
 public static class ActionManifest
 {
-    /// <summary>All 90 canonical actions with owning service and allowed roles.</summary>
+    /// <summary>All 93 canonical actions with owning service and allowed roles.</summary>
     public static readonly BridgeActionMetadata[] All = new BridgeActionMetadata[]
     {
         new("GetProvisioningState", "AuthenticationService", new[] { "Unauthenticated", "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
@@ -26,6 +26,9 @@ public static class ActionManifest
         new("SaveAttendanceDraft", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("ListAttendanceDrafts", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("DeleteAttendanceDraft", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
+        new("SetClosedDayCorrectionPolicy", "AttendanceService", new[] { "GeneralAdministration" }, true),
+        new("PreviewClosedDayCorrection", "AttendanceService", new[] { "GeneralAdministration" }, false),
+        new("CommitClosedDayCorrection", "AttendanceService", new[] { "GeneralAdministration" }, true),
         new("GetAvailableArchivePeriods", "MonthlyGridService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("QueryMonthlyGrid", "MonthlyGridService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("GetMonthlyCellDetails", "MonthlyGridService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),

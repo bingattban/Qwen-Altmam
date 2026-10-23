@@ -53,7 +53,14 @@ const bridge = {
       RunDatabaseIntegrityCheck: { integrity:"ok" },
       GetAllowedRoles: [{ role:"Supervisor",name:"مشرف" }],
       ListUserAccounts: { items:[],total:0,hasNext:false },
-      QueryAuditLog: { items:[],total:0,hasNext:false }
+      QueryAuditLog: { items:[],total:0,hasNext:false },
+      GetActiveAttendanceStatuses: [{statusId:"STS-ABSENT",displayName:"غياب"}],
+      SearchPersons: {items:[{personId:"TST-CLOSED-P1",displayName:"اختبار",serviceNumberA:"C-1"}]},
+      SetClosedDayCorrectionPolicy: {enabled:true},
+      PreviewClosedDayCorrection: {previewToken:"T".repeat(64),requiresExplicitConfirmation:true,
+        personName:"اختبار",serviceNumberA:"C-1",siteName:"غير محدد",
+        businessDate:"2026-10-10",beforeStatusName:"موجود",afterStatusName:"غياب",reason:"تصحيح مستند"},
+      CommitClosedDayCorrection: {revisionNumber:2}
     };
     if (!(name in responses)) throw Error("Unexpected bridge action " + name);
     return { data: responses[name] };
@@ -62,7 +69,7 @@ const bridge = {
 const context = { window:{ AltamamBridge:bridge }, document, console,
   alert: () => { throw Error("Unexpected alert"); },
   prompt: () => { throw Error("Unexpected prompt"); },
-  confirm: () => { throw Error("Unexpected confirm"); } };
+  confirm: () => true };
 const script = fs.readFileSync(
   path.join(__dirname,"../src/AlTamam.WebUI/assets/js/admin-settings.js"),"utf8");
 vm.runInNewContext(script,context,{filename:"admin-settings.js"});
@@ -102,12 +109,42 @@ async function run() {
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="reports").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["personReport","separation"]);
+    ["personReport","separation","closedCorrection"]);
   byDataset("adminNested").find(x=>x.dataset.adminNested==="separation").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
     ["separatePerson","separatedArchive"]);
   buttonNamed("العودة إلى التقارير والفصل").handlers.click();
-  assert.equal(byDataset("adminNested").length,2,"back restores reports choices");
+  assert.equal(byDataset("adminNested").length,3,"back restores reports choices");
+
+  const correction=byDataset("adminNested").find(x=>x.dataset.adminNested==="closedCorrection");
+  assert.ok(correction,"GA sees restricted historical correction screen");
+  correction.handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(buttonNamed("معاينة التصحيح"));
+  assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,0,
+    "opening emergency screen must not mutate attendance");
+  const controls=visible().filter(x=>x.className==="form-control");
+  const date=controls.find(x=>x.type==="date");
+  date.value="2026-10-10";
+  const searchInput=controls.find(x=>x.type==="text");
+  searchInput.value="اختبار";
+  await buttonNamed("بحث عن فرد").handlers.click();
+  const selects=visible().filter(x=>x.tag==="select");
+  assert.equal(selects.length,2);
+  selects[0].value="TST-CLOSED-P1";
+  selects[1].value="STS-ABSENT";
+  const inputReason=controls.filter(x=>x.tag==="input"&&x.type==="text").slice(-1)[0];
+  inputReason.value="تصحيح مستند رسمي موثق";
+  await buttonNamed("معاينة التصحيح").handlers.click();
+  assert.equal(calls.filter(x=>x.name==="PreviewClosedDayCorrection").length,1);
+  assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,0,
+    "preview must not commit the closed-day correction");
+  await buttonNamed("اعتماد التصحيح الاستثنائي").handlers.click();
+  assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,1);
+  assert.ok(visible().some(x=>x.textContent.includes("اعتمد التصحيح بنجاح")));
+  controller.renderAdmin(admin);
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="reports").handlers.click();
 
   controller.renderAdmin({ role:"Supervisor" });
   assert.equal(byDataset("adminSection").length,4,"supervisor cannot see users card");

@@ -75,7 +75,8 @@
     ],
     reports: [
       ["personReport","التقارير الفردية"],
-      ["separation","الفصل"]
+      ["separation","الفصل"],
+      ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]
     ],
     separation: [
       ["separatePerson","فصل فرد"],
@@ -85,7 +86,8 @@
   const nestedParents = Object.freeze({
     transferInternal:"transfers",transferExternal:"transfers",transferArchive:"transfers",
     personReport:"reports",separation:"reports",
-    separatePerson:"separation",separatedArchive:"separation"
+    separatePerson:"separation",separatedArchive:"separation",
+    closedCorrection:"reports"
   });
   function parentOf(screen) {
     return sections.find(section => section.children.some(child => child[0] === screen));
@@ -170,6 +172,7 @@
     const grid=node("div","admin-subsection-grid");
     grid.setAttribute("aria-label","خيارات "+title);
     for(const [key,label] of nestedOptions[section]) {
+      if(key==="closedCorrection" && state.session?.role!=="GeneralAdministration")continue;
       const tile=btn(label,()=>navigate(key),"admin-subsection-tile");
       tile.dataset.adminNested=key;
       grid.appendChild(tile);
@@ -191,6 +194,7 @@
       return window.AltamamReports.render(target(),()=>navigate("reports"));
     if(screen==="export" && window.AltamamFunctional)
       return window.AltamamFunctional.render("monthly");
+    if(screen==="closedCorrection")return closedCorrection();
     if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
@@ -215,6 +219,105 @@
       "أو نقل أو فصل أو استيراد دون التأكيد والتحقق من الصلاحيات وحفظ سجل العمليات."
     ));
     page.appendChild(shell);
+  }
+
+  // Emergency historical changes are always gated in C#, never merely by hiding UI.
+  async function closedCorrection(){
+    if(state.session?.role!=="GeneralAdministration"){
+      start("الإدارة / التصحيح الاستثنائي");
+      target().appendChild(warning("هذه العملية مخصصة للإدارة العامة فقط."));
+      return;
+    }
+    const page=start("الإدارة / التقارير والفصل / التصحيح الاستثنائي");
+    const box=card("تصحيح تحضير يوم مغلق — الإدارة العامة");
+    const notice=node("div","admin-note");
+    box.appendChild(warning("عملية استثنائية وخاضعة للتدقيق. يجب تفعيل السياسة صراحة، ومعاينة حالة قديمة محفوظة، ولا يمكن تصحيح يوم نقل أو فصل. لا يُفتح اليوم ولا يُغيَّر وقت التحضير الأصلي."));
+    const date=field("التاريخ المغلق","","date");
+    const personSearch=field("بحث عن فرد بالاسم أو الرقم (ع)");
+    const personList=node("select","form-control");
+    const searchResults=node("label","admin-input");
+    searchResults.append(node("span","","اختر الفرد من نتائج البحث"),personList);
+    const statusList=node("select","form-control");
+    const statuses=node("label","admin-input");
+    statuses.append(node("span","","الحالة المصححة"),statusList);
+    const reason=field("السبب التفصيلي (10 إلى 400 حرف)");
+    const controls=node("div","functional-toolbar");
+    const previewPanel=node("div","admin-note");
+    let previewToken=null;
+    function clearPreview(){previewToken=null;previewPanel.replaceChildren();}
+    [date.input,personList,statusList,reason.input].forEach(input=>
+      input.addEventListener("change",clearPreview));
+    const search=btn("بحث عن فرد",async()=>{
+      clearPreview();search.disabled=true;
+      try{
+        const response=await api().invoke("SearchPersons",{term:personSearch.input.value, take:50});
+        const data=response.data||{};
+        personList.replaceChildren();
+        for(const item of data.items||[]){
+          const option=node("option","",item.displayName+" — "+item.serviceNumberA);
+          option.value=item.personId;personList.appendChild(option);
+        }
+        if(!(data.items||[]).length)throw Error("لا يوجد أفراد مطابقون للبحث.");
+        notice.replaceChildren(node("p","","تم اختيار الفرد؛ راجع اليوم والحالة والسبب قبل المعاينة."));
+      }catch(e){errors(notice,e);}
+      finally{search.disabled=false;}
+    });
+    const setPolicy=enabled=>async()=>{
+      clearPreview();
+      const verb=enabled?"تفعيل":"إيقاف";
+      if(!confirm("هل تؤكد "+verb+" التصحيح الاستثنائي وتسجيل السبب في سجل العمليات؟"))return;
+      try{
+        const result=await api().invoke("SetClosedDayCorrectionPolicy",{
+          enabled,reason:reason.input.value});
+        if(result.data?.enabled!==enabled)throw Error("لم يؤكد الخادم تعديل السياسة.");
+        notice.replaceChildren(node("p","", "تم "+verb+" التصحيح الاستثنائي وتسجيل العملية."));
+      }catch(e){errors(notice,e);}
+    };
+    const preview=btn("معاينة التصحيح",async()=>{
+      preview.disabled=true;clearPreview();
+      try{
+        const response=await api().invoke("PreviewClosedDayCorrection",{
+          personId:personList.value,businessDate:date.input.value,
+          statusId:statusList.value,reason:reason.input.value});
+        const result=response.data||{};
+        if(!result.previewToken||result.requiresExplicitConfirmation!==true)
+          throw Error("لم تُرجع الخدمة معاينة موثّقة.");
+        previewToken=result.previewToken;
+        const summary=node("div","settings-properties");
+        for(const [label,value] of [
+          ["الفرد",result.personName],["الرقم (ع)",result.serviceNumberA],
+          ["الموقع",result.siteName],["التاريخ",result.businessDate],
+          ["من الحالة",result.beforeStatusName],["إلى الحالة",result.afterStatusName],
+          ["السبب",result.reason]
+        ])summary.appendChild(settingsValue(label,value));
+        const submit=btn("اعتماد التصحيح الاستثنائي",async()=>{
+          if(!previewToken)return;
+          if(!confirm("اعتماد التصحيح النهائي لليوم المغلق؟ ستُحفظ الحالة السابقة والتعديل والسبب في سجل العمليات."))return;
+          const chosen=previewToken;previewToken=null;submit.disabled=true;
+          try{
+            const committed=await api().invoke("CommitClosedDayCorrection",{previewToken:chosen});
+            if(!committed.data?.revisionNumber)throw Error("لم يؤكد الخادم اعتماد التصحيح.");
+            previewPanel.replaceChildren(node("p","",
+              "اعتمد التصحيح بنجاح، ورقم المراجعة "+committed.data.revisionNumber+
+              ". لم يُغيَّر تاريخ التحضير الأصلي."));
+          }catch(e){errors(previewPanel,e);}
+        },"btn btn-primary");
+        previewPanel.replaceChildren(summary,submit,btn("إلغاء",clearPreview));
+      }catch(e){errors(previewPanel,e);}
+      finally{preview.disabled=false;}
+    },"btn btn-primary");
+    controls.append(search,btn("تفعيل الإذن الاستثنائي",setPolicy(true)),
+      btn("إيقاف الإذن الاستثنائي",setPolicy(false)),preview);
+    box.append(date.wrap,personSearch.wrap,searchResults,statuses,reason.wrap,controls,notice,previewPanel);
+    page.appendChild(box);
+    try{
+      const response=await api().invoke("GetActiveAttendanceStatuses",{});
+      const data=Array.isArray(response.data)?response.data:[];
+      for(const item of data){
+        const option=node("option","",item.name||item.displayName||item.statusId);
+        option.value=item.statusId;statusList.appendChild(option);
+      }
+    }catch(e){errors(notice,e);}
   }
 
   // Users open directly from the administration home. No extra "إدارة الحسابات"
