@@ -92,9 +92,17 @@ public sealed class BridgeRbacMatrixTests
         }
         else
         {
-            Assert.Equal(BridgeOutcomeKind.Forbidden, result.Kind);
+            if (callerRole == "Unauthenticated")
+            {
+                Assert.Equal(BridgeOutcomeKind.Unauthorized, result.Kind);
+                Assert.Equal(BridgeErrorCodes.SessionExpired, result.Response.ErrorCode);
+            }
+            else
+            {
+                Assert.Equal(BridgeOutcomeKind.Forbidden, result.Kind);
+                Assert.Equal(BridgeErrorCodes.Unauthorized, result.Response.ErrorCode);
+            }
             Assert.False(result.Response.Success);
-            Assert.Equal(BridgeErrorCodes.Unauthorized, result.Response.ErrorCode);
         }
     }
 
@@ -181,7 +189,7 @@ public sealed class BridgeRbacMatrixTests
             BridgeDispatchResult result = await dispatcher.DispatchAsync(
                 Envelope(action, nonce, $"DNG-{action}-{nonce[..4]}"),
                 ValidOrigin, isMainFrame: true, Authenticate);
-            Assert.Equal(BridgeOutcomeKind.Forbidden, result.Kind);
+            Assert.Equal(nonce == NonceUnknown ? BridgeOutcomeKind.Unauthorized : BridgeOutcomeKind.Forbidden, result.Kind);
         }
         Assert.Empty(executed);
     }
