@@ -72,15 +72,13 @@ public sealed class UserAccountManagementService
         count.Parameters.AddWithValue("$term",pattern);
         long total=Convert.ToInt64(await count.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var cmd=c.CreateCommand();
-        cmd.CommandText="""
+        cmd.CommandText=$"""
             SELECT u.UserId, u.Username, u.Role, u.ActiveFlag, u.RowVersion,
                 COALESCE(p.CurrentVisibleName,'غير مرتبط بكشف القوة'),
                 COALESCE(p.CurrentServiceNumberA,''),
                 u.LinkedPersonId, u.CreatedByDisplaySnapshot, u.CreatedAtUtc
             FROM Users u LEFT JOIN Persons p ON p.PersonId=u.LinkedPersonId
-            """ + "
-" + where + "
-" + """
+            {where}
             ORDER BY u.CreatedAtUtc DESC, u.UserId DESC
             LIMIT $limit OFFSET $offset;
             """;
