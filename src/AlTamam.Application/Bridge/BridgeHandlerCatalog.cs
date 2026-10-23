@@ -103,6 +103,24 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await services.SearchPersonsAsync(term, take, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
+        "PreviewAttendanceChange" => async (req,principal,ct) =>
+        {
+            var svc=new AttendanceCommitService(services.Db,services.Time);
+            BridgeResponse result=await svc.PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "SubmitAttendance" => async (req,principal,ct) =>
+        {
+            var svc=new AttendanceCommitService(services.Db,services.Time);
+            BridgeResponse result=await svc.CommitAsync(req.Payload,principal!,false,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "ReviseTodayAttendance" => async (req,principal,ct) =>
+        {
+            var svc=new AttendanceCommitService(services.Db,services.Time);
+            BridgeResponse result=await svc.CommitAsync(req.Payload,principal!,true,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "ListAttendanceDrafts" => async (req, principal, ct) =>
         {
             BridgeResponse inner = await services.ListDraftsAsync(principal!.UserId, ct).ConfigureAwait(false);
