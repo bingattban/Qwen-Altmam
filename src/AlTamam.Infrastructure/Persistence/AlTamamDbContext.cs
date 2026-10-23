@@ -143,6 +143,81 @@ public sealed class AlTamamDbContext : IDisposable
         finally { _writeGate.Release(); }
     }
 
+    /// <summary>
+    /// Produce a transactionally consistent encrypted SQLCipher snapshot into an
+    /// application-controlled path, then verify the copied database with the same
+    /// key before moving it into place. No plaintext database is ever written.
+    /// </summary>
+    public async Task CreateVerifiedEncryptedBackupAsync(string destinationPath,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        string output = Path.GetFullPath(destinationPath);
+        string source = Path.GetFullPath(_databasePath);
+        if (string.Equals(output, source, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The backup destination cannot be the active database.");
+        string folder = Path.GetDirectoryName(output)!;
+        Directory.CreateDirectory(folder);
+        string temp = output + "." + Guid.NewGuid().ToString("N") + ".pending";
+        await _writeGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            using (var primary = CreateOpenConnection())
+            using (var backup = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = temp,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Password = _databaseKey,
+                ForeignKeys = true,
+                Pooling = false, // close actual file handle before checking / renaming
+                DefaultTimeout = 15
+            }.ConnectionString))
+            {
+                backup.Open();
+                primary.BackupDatabase(backup);
+            }
+
+            ct.ThrowIfCancellationRequested();
+            // Reopen under SQLCipher and verify BOTH the cipher header and SQL
+            // integrity. This prevents falsely reporting a plaintext copy as safe.
+            using (var verification = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = temp,
+                Mode = SqliteOpenMode.ReadOnly,
+                Password = _databaseKey,
+                Pooling = false, // no pooled connection may retain .pending on Windows
+                DefaultTimeout = 15
+            }.ConnectionString))
+            {
+                verification.Open();
+                using var check = verification.CreateCommand();
+                check.CommandText = "PRAGMA integrity_check;";
+                if (!string.Equals(check.ExecuteScalar()?.ToString(), "ok", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Encrypted backup integrity check failed.");
+                check.CommandText = "SELECT COUNT(*) FROM SchemaVersions;";
+                if (Convert.ToInt64(check.ExecuteScalar()) < 1)
+                    throw new InvalidOperationException("Encrypted backup schema is incomplete.");
+            }
+            using (var raw = File.OpenRead(temp))
+            {
+                Span<byte> prefix = stackalloc byte[16];
+                if (raw.Read(prefix) != prefix.Length)
+                    throw new InvalidOperationException("Encrypted backup was unexpectedly empty.");
+                if (prefix.SequenceEqual("SQLite format 3\0"u8))
+                    throw new InvalidOperationException("Backup was not encrypted; refusing to publish.");
+            }
+            ct.ThrowIfCancellationRequested();
+            File.Move(temp, output, overwrite: false);
+        }
+        finally
+        {
+            _writeGate.Release();
+            try { if (File.Exists(temp)) File.Delete(temp); }
+            catch (IOException) { /* Cleanup is best-effort; pending files are never advertised as backups. */ }
+        }
+    }
+
     public bool HasValidIntegrity()
     {
         using var connection = CreateOpenConnection();

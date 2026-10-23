@@ -1,3 +1,25 @@
+/* Offline fonts: Cairo headings, Tajawal interface and data. */
+@font-face {
+  font-family: "AlTamam Cairo";
+  src: url("../fonts/Cairo-Variable.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AlTamam Tajawal";
+  src: url("../fonts/Tajawal-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AlTamam Tajawal";
+  src: url("../fonts/Tajawal-Bold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 700 900;
+  font-display: swap;
+}
 :root {
   --bg-main: #F5F7FA;
   --bg-surface: #FFFFFF;
@@ -37,7 +59,7 @@ body.dark-theme {
 }
 
 body {
-  font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+  font-family: "AlTamam Tajawal", "AlTamam Cairo", Tahoma, "Segoe UI", Arial, sans-serif;
   background-color: var(--bg-main);
   color: var(--text-main);
   direction: rtl;
@@ -667,3 +689,23 @@ table.monthly-table thead .sticky-col-4 {
 .app-sidebar[hidden], #logoutAction[hidden] { display:none !important; }
 
 .monthly-scroll th { white-space: pre-line; text-align:center; }
+
+/* Consistent Cairo headings; fields and tables stay Tajawal for readability. */
+h1,h2,h3,.page-title,.brand-title,.section-title,.nav-section-label { font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif; }
+button,input,select,textarea,table { font-family:inherit; }
+
+/* Administration and settings: functional nested RTL cards, not screen placeholders. */
+.admin-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}
+.admin-card{min-width:0}
+.admin-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.admin-tile{min-height:48px;white-space:normal;text-align:center;line-height:1.55}
+.admin-input{display:flex;flex-direction:column;gap:6px;min-width:160px;flex:1;font-weight:600}
+.admin-input input{width:100%;max-width:100%}
+.admin-warning{border:1px solid var(--border-color);border-right:4px solid var(--warning);background:var(--bg-subtle);border-radius:7px;padding:12px;line-height:1.8;margin-top:8px}
+.admin-card .section-title{margin-bottom:14px}
+.admin-card>p{margin-top:10px}
+.admin-card .functional-toolbar{margin-bottom:16px}
+.admin-note{margin-top:14px;min-width:0;word-break:break-word}
+.admin-row-buttons{display:flex;flex-wrap:wrap;gap:8px}
+.admin-color{display:inline-block;padding:5px 10px;border-radius:4px}
+@media(max-width:700px){.admin-groups{grid-template-columns:1fr}.admin-action-grid{grid-template-columns:1fr 1fr}}

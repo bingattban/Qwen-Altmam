@@ -96,7 +96,7 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await services.ListActiveStatusesAsync(ct).ConfigureAwait(false);
             return Done(req, inner.Data);
         },
-        "SearchPersons" or "QueryPersons" or "SearchActivePersonsForAccount" => async (req, principal, ct) =>
+        "SearchPersons" or "SearchActivePersonsForAccount" => async (req, principal, ct) =>
         {
             string term = req.Payload?["term"]?.GetValue<string>() ?? "";
             int take = TryInt(req.Payload?["take"], 25);
@@ -130,6 +130,103 @@ public static class BridgeHandlerCatalog
                 ["offline"] = true,
                 ["bridgeProtocol"] = BridgeProtocol.ProtocolVersion
             })),
+        // Phase 05 already contains real person CRUD; expose its canonical bridge
+        // contracts instead of accidentally routing QueryPersons to a 25-row search.
+        "QueryPersons" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.QueryPersonsAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "GetPersonSummary" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.GetPersonSummaryAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "PreviewPersonIdentityUpdate" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.PreviewPersonIdentityUpdateAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "UpdatePersonIdentity" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.UpdatePersonIdentityAsync(principal!.UserId, principal.Username,
+                req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "PreviewArchivePersons" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.PreviewArchivePersonsAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "ArchivePersons" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.ArchivePersonsAsync(principal!.UserId, principal.Username,
+                req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        // Configuration writes are registered with server-side role checks and
+        // audit/identity-history updates in the same encrypted transaction.
+        "CreateSite" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.CreateSiteAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.SiteCreated)) : Fail(req, inner);
+        },
+        "RenameSite" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.RenameSiteAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.SiteRenamed)) : Fail(req, inner);
+        },
+        "CreateAttendanceStatus" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.CreateStatusAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.StatusDefinitionCreated)) : Fail(req, inner);
+        },
+        "UpdateAttendanceStatus" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.UpdateStatusAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.StatusDefinitionChanged)) : Fail(req, inner);
+        },
+        "DeactivateOrDeleteStatus" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.DeactivateStatusAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.StatusDefinitionChanged)) : Fail(req, inner);
+        },
+        // Settings: read real configuration, audit manual encrypted backup.
+        // No fake success for scheduled backups, restore or destructive reset.
+        "GetSettingsOverview" => async (req, principal, ct) =>
+        {
+            var svc = new SettingsReadBackupService(services.Db);
+            BridgeResponse inner = await svc.OverviewAsync(principal!, ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "GetBackupSchedule" => async (req, principal, ct) =>
+        {
+            var svc = new SettingsReadBackupService(services.Db);
+            BridgeResponse inner = await svc.ScheduleAsync(ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "RunDatabaseIntegrityCheck" => (req, principal, ct) =>
+        {
+            var svc = new SettingsReadBackupService(services.Db);
+            return Task.FromResult(svc.Integrity() with { RequestId = req.RequestId });
+        },
+        "CreateVerifiedBackup" => async (req, principal, ct) =>
+        {
+            var svc = new SettingsReadBackupService(services.Db);
+            BridgeResponse inner = await svc.BackupAsync(principal!, ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
         // ---------------- Phase 11: UserAuditService — audit portion (immutable evidence + overlays)
         "QueryAuditLog" => async (req, principal, ct) =>
         {

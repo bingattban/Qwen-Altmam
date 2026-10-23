@@ -65,6 +65,16 @@ def main() -> int:
         webui = os.path.join(root, "webui", "index.html")
         if not os.path.isfile(webui):
             errors.append("portable ZIP must bundle webui/index.html content")
+        # Arabic typography is part of the offline contract: font files and OFL
+        # licenses MUST be embedded into the packaged WebUI (never a CDN).
+        font_dir = os.path.join(root, "webui", "assets", "fonts")
+        for font in ("Cairo-Variable.ttf", "Tajawal-Regular.ttf", "Tajawal-Bold.ttf"):
+            candidate = os.path.join(font_dir, font)
+            if not os.path.isfile(candidate) or os.path.getsize(candidate) < 10000:
+                errors.append(f"offline Arabic font missing or truncated: {font}")
+        for license_file in ("OFL-cairo.txt", "OFL-tajawal.txt"):
+            if not os.path.isfile(os.path.join(font_dir, license_file)):
+                errors.append(f"offline Arabic font license missing: {license_file}")
         screens = os.path.join(root, "webui", "screens")
         if os.path.isdir(screens):
             # Screens are nested route directories (screens/**/index.html),
