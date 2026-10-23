@@ -180,8 +180,12 @@ public sealed class DailyMonthlyReadService
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
-            SELECT DISTINCT SUBSTR(AttendanceLocalDate, 1, 7) AS period
-            FROM AttendanceRecords ORDER BY period DESC;
+            SELECT DISTINCT SUBSTR(eventDate, 1, 7) AS period
+            FROM (
+                SELECT AttendanceLocalDate AS eventDate FROM AttendanceRecords
+                UNION ALL
+                SELECT EffectiveLocalDate AS eventDate FROM PersonnelMovements
+            ) ORDER BY period DESC;
             """;
         var result = new JsonArray();
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -204,11 +208,17 @@ public sealed class DailyMonthlyReadService
         const string fromSql = """
             FROM Persons p
             WHERE p.FirstRecordedLocalDate < $next
-              AND EXISTS (SELECT 1 FROM PersonAssignments a
-                          WHERE a.PersonId = p.PersonId
-                            AND a.ValidFromLocalDate < $next
-                            AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $start)
-                            AND ($site = '' OR a.SiteId = $site))
+              AND (
+                EXISTS (SELECT 1 FROM PersonAssignments a
+                        WHERE a.PersonId = p.PersonId
+                          AND a.ValidFromLocalDate < $next
+                          AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $start)
+                          AND ($site = '' OR a.SiteId = $site))
+                OR EXISTS(SELECT 1 FROM PersonnelMovements m
+                         WHERE m.PersonId=p.PersonId AND m.EffectiveLocalDate >= $start
+                           AND m.EffectiveLocalDate < $next
+                           AND ($site='' OR m.SourceSiteId=$site OR m.DestinationSiteId=$site))
+              )
             """;
         using var connection = _db.CreateOpenConnection();
         using var count = connection.CreateCommand();
@@ -289,6 +299,40 @@ public sealed class DailyMonthlyReadService
                     ["symbol"] = reader.GetString(3),
                     ["color"] = reader.GetString(4)
                 };
+            }
+            reader.Close();
+            // A move is its own monthly cell even when no attendance was made on
+            // transfer day. Show source and destination perspectives separately.
+            using var movements = connection.CreateCommand();
+            movements.CommandText = """
+                SELECT PersonId,EffectiveLocalDate,MovementType,SourceSiteId,
+                       SourceSiteNameSnapshot,DestinationSiteId,
+                       COALESCE(DestinationSiteNameSnapshot,DestinationExternalName,'')
+                FROM PersonnelMovements
+                WHERE EffectiveLocalDate >= $start AND EffectiveLocalDate < $next
+                  AND PersonId IN (
+                """ + string.Join(",",holders) + ") ORDER BY EffectiveLocalDate;";
+            movements.Parameters.AddWithValue("$start",startIso);
+            movements.Parameters.AddWithValue("$next",nextIso);
+            for(int i=0;i<people.Count;i++)
+                movements.Parameters.AddWithValue("$p"+i,people[i].Id);
+            using var movementReader=await movements.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await movementReader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string sourceId=movementReader.GetString(3);
+                string? targetId=movementReader.IsDBNull(5)?null:movementReader.GetString(5);
+                if(siteId.Length>0 && siteId!=sourceId && siteId!=targetId)continue;
+                string before=movementReader.GetString(4),after=movementReader.GetString(6);
+                string label=siteId.Length==0
+                    ?"تم نقله من "+before+" إلى "+after
+                    :siteId==sourceId?"تم نقله إلى "+after:"تم نقله من "+before;
+                JsonObject days=(JsonObject)ids[movementReader.GetString(0)]["days"]!;
+                string movementDate=movementReader.GetString(1);
+                if(days[movementDate] is null)
+                    days[movementDate]=new JsonObject{
+                        ["name"]=label,["symbol"]="نقل",["color"]="#D8B4FE",
+                        ["kind"]="movement"
+                    };
             }
         }
         var rows = new JsonArray();
