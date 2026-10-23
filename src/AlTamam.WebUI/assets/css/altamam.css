@@ -665,3 +665,5 @@ table.monthly-table thead .sticky-col-4 {
 }
 
 .app-sidebar[hidden], #logoutAction[hidden] { display:none !important; }
+
+.monthly-scroll th { white-space: pre-line; text-align:center; }
