@@ -28,6 +28,11 @@ public sealed class UserAccountManagementService
         try { return data?[key]?.GetValue<string>()?.Trim() ?? ""; }
         catch { return ""; }
     }
+    private static string ReadSecret(JsonObject? data)
+    {
+        try { return data?["password"]?.GetValue<string>() ?? ""; }
+        catch { return ""; }
+    }
     private static int ReadInt(JsonObject? data, string key, int fallback = 0)
     {
         try { return data?[key]?.GetValue<int>() ?? fallback; }
@@ -73,7 +78,9 @@ public sealed class UserAccountManagementService
                 COALESCE(p.CurrentServiceNumberA,''),
                 u.LinkedPersonId, u.CreatedByDisplaySnapshot, u.CreatedAtUtc
             FROM Users u LEFT JOIN Persons p ON p.PersonId=u.LinkedPersonId
-            """ + "\n" + where + """
+            """ + "
+" + where + "
+" + """
             ORDER BY u.CreatedAtUtc DESC, u.UserId DESC
             LIMIT $limit OFFSET $offset;
             """;
@@ -123,7 +130,7 @@ public sealed class UserAccountManagementService
     public async Task<BridgeResponse> CreateAsync(JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
     {
         string username=Read(payload,"username"), personId=Read(payload,"personId");
-        string password=Read(payload,"password"),roleText=Read(payload,"role");
+        string password=ReadSecret(payload),roleText=Read(payload,"role");
         if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
             return Error("ليست لديك صلاحية إضافة مستخدم.",BridgeErrorCodes.Unauthorized);
         if(!Enum.TryParse<UserRole>(roleText,false,out var role)
@@ -193,7 +200,7 @@ public sealed class UserAccountManagementService
     {
         string id=Read(payload,"userId");
         long expected=ReadLong(payload,"expectedRevision");
-        string password=Read(payload,"password");
+        string password=ReadSecret(payload);
         if(id.Length==0||expected<1)return Error("اختر الحساب وإصداره الحالي.");
         if(id==actor.UserId)return Error("لا يمكن تعديل أو تعطيل الحساب المستخدم حالياً.");
         if(!deactivate)
