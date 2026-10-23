@@ -49,10 +49,8 @@ public static class BridgeHandlerCatalog
             string password = req.Payload?["password"]?.GetValue<string>() ?? "";
             var (authPrincipal, failure) = await services.AuthenticateAsync(username, password, ct).ConfigureAwait(false);
             if (authPrincipal is null) return Fail(req, failure!);
-            return Done(req, SessionData(authPrincipal), new[]
-            {
-                new Contracts.Events.UiInvalidationEventPayload(UiInvalidationEvents.SessionEnded, Array.Empty<string>(), DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd"), 1)
-            });
+            // Authentication creates a session; it must not broadcast SessionEnded.
+            return Done(req, SessionData(authPrincipal));
         },
         "GetCurrentSession" => async (req, principal, ct) =>
             principal is null
