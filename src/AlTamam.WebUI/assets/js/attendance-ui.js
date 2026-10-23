@@ -212,7 +212,7 @@
          }catch(e){showError(info,e);clearReview();}
          finally{save.disabled=false;}
        });
-       save.classList.add("attendance-confirm-action");
+       save.className += " attendance-confirm-action";
        c.insertBefore(save,t.outer); // keep explicit approval visible ABOVE long rosters
        c.appendChild(button("إلغاء",async()=>{
          if(await modalConfirm("إلغاء المعاينة دون حفظ أي تغيير؟"))clearReview();
