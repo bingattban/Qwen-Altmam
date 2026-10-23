@@ -391,15 +391,21 @@
       // immutable identity/site columns. Historical months retain normal order.
       const days=currentDay?[currentDay,...Array.from({length:dayCount},(_,i)=>i+1)
         .filter(day=>day!==currentDay)]:Array.from({length:dayCount},(_,i)=>i+1);
-      for(const day of days)cols.push({label:day+"\n"+weekdayLabel(year,month,day),
-        cls:day===currentDay?"pinned fixed-today current-day-column":"day-column"});
+      for(const day of days)cols.push({
+        label:day+"\n"+weekdayLabel(year,month,day)+(day===currentDay?"\nاليوم":""),
+        cls:day===currentDay?"pinned fixed-today current-day-column":"day-column"
+      });
       const tb=createTable(cols);
       tb.wrap.classList.add("monthly-scroll");
       tableHost.replaceChildren(tb.wrap);
       for(const [index,person] of (grid.items||[]).entries()){
         const tr=el("tr");
         [(STATE.monthPage-1)*50+index+1,person.serviceNumberA,person.name,person.siteName]
-          .forEach((v,j)=>tr.appendChild(el("td","pinned fixed-"+["one","two","three","four"][j],v)));
+          .forEach((v,j)=>{
+            const td=el("td","pinned fixed-"+["one","two","three","four"][j],v);
+            td.title=String(v??"");
+            tr.appendChild(td);
+          });
         for(const day of days){
           const date=period+"-"+String(day).padStart(2,"0");
           const info=(person.days||{})[date];
@@ -412,8 +418,14 @@
             open.setAttribute("aria-label","عرض تفاصيل "+person.name+" في "+date);
             cell.appendChild(open);
           }
-          if(info && /^#[0-9a-fA-F]{6}$/.test(info.color||""))
+          if(info && /^#[0-9a-fA-F]{6}$/.test(info.color||"")){
             cell.style.backgroundColor=info.color;
+            // Choose contrasting ink over colored status backgrounds.
+            const rgb=[1,3,5].map(i=>parseInt(info.color.slice(i,i+2),16)/255)
+              .map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);
+            const brightness=rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
+            cell.style.color=brightness>0.179?"#17212B":"#FFFFFF";
+          }
           tr.appendChild(cell);
         }
         tb.body.appendChild(tr);
