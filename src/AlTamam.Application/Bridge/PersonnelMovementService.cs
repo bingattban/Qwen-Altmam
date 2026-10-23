@@ -40,18 +40,21 @@ public sealed class PersonnelMovementService
         string AssignmentId,string SiteId,string SiteName);
 
     private static async Task<Person?> ActivePerson(SqliteConnection conn,SqliteTransaction? tx,
-        string id,CancellationToken ct)
+        string id,string date,CancellationToken ct)
     {
         using var cmd=conn.CreateCommand();cmd.Transaction=tx;
         cmd.CommandText="""
             SELECT p.CurrentVisibleName,p.CurrentServiceNumberA,p.RowVersion,
                    a.AssignmentId,a.SiteId,s.VisibleName
             FROM Persons p
-            JOIN PersonAssignments a ON a.PersonId=p.PersonId AND a.ValidToLocalDate IS NULL
+            JOIN PersonAssignments a ON a.PersonId=p.PersonId
+                AND a.ValidFromLocalDate <= $date AND a.ValidToLocalDate IS NULL
             JOIN Sites s ON s.SiteId=a.SiteId
-            WHERE p.PersonId=$id AND p.OrganizationalStatus=1 AND p.ActiveFlag=1;
+            WHERE p.PersonId=$id AND p.OrganizationalStatus=1 AND p.ActiveFlag=1
+              AND p.FirstRecordedLocalDate <= $date;
             """;
         cmd.Parameters.AddWithValue("$id",id);
+        cmd.Parameters.AddWithValue("$date",date);
         using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         if(!await r.ReadAsync(ct).ConfigureAwait(false))return null;
         var person=new Person(id,r.GetString(0),r.GetString(1),r.GetInt64(2),
@@ -119,7 +122,7 @@ public sealed class PersonnelMovementService
         var selected=new JsonArray();
         foreach(var id in ids)
         {
-            var p=await ActivePerson(c,null,id,ct).ConfigureAwait(false);
+            var p=await ActivePerson(c,null,id,date,ct).ConfigureAwait(false);
             if(p is null||p.SiteId!=source)
                 return Reject(BridgeErrorCodes.ConflictStale,"تغير موقع الفرد أو انتهى نشاطه. حدّث الكشف.");
             if(await DayConflict(c,null,id,date,ct).ConfigureAwait(false))
@@ -173,9 +176,10 @@ public sealed class PersonnelMovementService
             foreach(var item in people)
             {
                 if(item is not JsonObject previous)return Reject(BridgeErrorCodes.ValidationError,"معاينة تالفة.");
-                var person=await ActivePerson(c,t,Get(previous,"personId"),ct).ConfigureAwait(false);
+                var person=await ActivePerson(c,t,Get(previous,"personId"),date,ct).ConfigureAwait(false);
                 if(person is null || person.SiteId!=source ||
                    person.AssignmentId!=Get(previous,"sourceAssignmentId") ||
+                   person.SiteName!=Get(previous,"sourceSiteName") ||
                    person.Revision!=previous["rowVersion"]?.GetValue<long>() ||
                    await DayConflict(c,t,Get(previous,"personId"),date,ct).ConfigureAwait(false))
                     return Reject(BridgeErrorCodes.ConflictStale,
