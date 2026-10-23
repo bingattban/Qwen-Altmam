@@ -163,14 +163,12 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
     {
         const int depth = 100;
         string nested = new string('[', depth) + new string(']', depth);
-        string raw = new JsonObject
-        {
-            ["requestId"] = "DEPTH-1",
-            ["protocolVersion"] = BridgeProtocol.ProtocolVersion,
-            ["action"] = "GetCurrentSession",
-            ["sessionNonce"] = _gaNonce,
-            ["payload"] = JsonNode.Parse("{\"arr\":" + nested + "}")
-        }.ToJsonString();
+        // Construct wire JSON directly: parsing the nested value here would throw
+        // before the production bridge parser could enforce its own depth limit.
+        string raw = "{\"requestId\":\"DEPTH-1\",\"protocolVersion\":" +
+            BridgeProtocol.ProtocolVersion +
+            ",\"action\":\"GetCurrentSession\",\"sessionNonce\":\"" + _gaNonce +
+            "\",\"payload\":{\"arr\":" + nested + "}}";
 
         BridgeDispatchResult result = await _dispatcher.DispatchAsync(
             raw, LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
