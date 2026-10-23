@@ -38,7 +38,7 @@
    site.appendChild(option("","جميع المواقع"));
    status.appendChild(option("","اختر الحالة"));
    mode.append(option("initial","تحضير جديد"),option("revise","تغيير حالة التحضير"));
-   const list=make("div"),info=make("div"),review=make("div");
+   const list=make("div"),info=make("div");
    const choice=make("span","لم يتم تحديد أسماء");
    const draftPanel=make("section",undefined,"card attendance-drafts");
    const draftResults=make("div");
@@ -47,7 +47,7 @@
    let activeDraftId=null;
    let pageNo=1,loading=false,nonce=0,previewVersion=0;
    const summary=()=>choice.textContent="الأفراد المحددون: "+selected.size+" من 100";
-   const clearReview=()=>{previewVersion++;review.replaceChildren();};
+   const clearReview=()=>{previewVersion++;};
    const reset=()=>{selected.clear();activeDraftId=null;clearReview();summary();};
    mode.addEventListener("change",()=>{
      clearReview();
@@ -56,7 +56,7 @@
    status.addEventListener("change",clearReview);
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
    filters.append(site,status,mode);
-   header.append(filters,choice,info,list,review);
+   header.append(filters,choice,info,list);
    host.appendChild(draftPanel);
    host.insertBefore(header,draftPanel);
    const fields=["تحديد","الرقم (ع)","الاسم","الموقع","الحالة الحالية"];
@@ -176,6 +176,7 @@
        return showError(info,new Error("اختر الحالة والأفراد."));
      clearReview();info.replaceChildren();
      const expectedPreviewVersion=previewVersion;
+     previewButton.disabled=true;
      try{
        const r=await bridge.invoke("PreviewAttendanceChange",{
          businessDate:day,statusId:status.value,siteId:site.value,
@@ -185,38 +186,30 @@
        const data=r.data||{};
        if(!data.previewToken||!Array.isArray(data.persons))
          throw Error("تعذر اعتماد المعاينة.");
-       const c=make("section",undefined,"card");
-       c.appendChild(make("h3",data.mode==="revise"?"مراجعة تغيير الحالة قبل التأكيد":
-         "مراجعة التحضير قبل التأكيد","section-title"));
-       const t=table(["الرقم (ع)","الاسم","الحالة السابقة","الحالة الجديدة"]);
-       for(const p of data.persons){
-         const row=make("tr");
-         [p.serviceNumberA,p.name,p.previousStatusName,data.statusName]
-           .forEach(v=>row.appendChild(make("td",v)));
-         t.body.appendChild(row);
-       }
-       c.appendChild(t.outer);
+       const review=window.AltamamDialog?.attendanceReview;
+       if(typeof review!=="function")
+         throw Error("تعذر فتح نافذة معاينة التمام؛ لا يمكن اعتماد التحضير دون مراجعتها.");
        const changing=data.mode==="revise";
-       const save=button(changing?"تأكيد تغيير الحالة":"تأكيد وحفظ التحضير",async()=>{
-         if(!await modalConfirm("هل تؤكد "+(changing?"تغيير حالة":"تحضير")+
-           " "+data.count+" فرداً إلى «"+data.statusName+"»؟"))return;
-         save.disabled=true;
-         try{
-           const action=data.mode==="revise"?"ReviseTodayAttendance":"SubmitAttendance";
-           const result=await bridge.invoke(action,{previewToken:data.previewToken});
-           reset();pageNo=1;await load();
-           info.replaceChildren(make("p",changing?"تم تأكيد تغيير حالة "+result.data.count+" فرداً.":
-             "تم حفظ "+result.data.count+" فرداً.","settings-success"));
-         }catch(e){showError(info,e);clearReview();}
-         finally{save.disabled=false;}
+       const accepted=await review(data,{
+         title:changing?"معاينة تغيير حالة التحضير":"معاينة التحضير",
+         message:changing?
+           "راجع الحالة السابقة والجديدة لكل فرد قبل تأكيد التغيير.":
+           "راجع الأسماء والأرقام (ع) والحالات قبل اعتماد التحضير.",
+         confirmLabel:changing?"تأكيد تغيير الحالة":"تأكيد وحفظ التحضير"
        });
-       save.className = "btn btn-primary attendance-confirm-action";
-       c.insertBefore(save,t.outer); // keep explicit approval visible ABOVE long rosters
-       c.appendChild(button("إلغاء",async()=>{
-         if(await modalConfirm("إلغاء المعاينة دون حفظ أي تغيير؟"))clearReview();
-       }));
-       review.appendChild(c);
-     }catch(e){showError(info,e);}
+       if(!accepted||!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+       const action=changing?"ReviseTodayAttendance":"SubmitAttendance";
+       const saved=await bridge.invoke(action,{previewToken:data.previewToken});
+       if(!saved.data||!Number.isInteger(saved.data.count))
+         throw Error("لم يؤكد الخادم نجاح عملية التحضير.");
+       reset();pageNo=1;await load();
+       info.replaceChildren(make("p",changing?
+         "تم تأكيد تغيير حالة "+saved.data.count+" فرداً.":
+         "تم حفظ "+saved.data.count+" فرداً.","settings-success"));
+     }catch(e){
+       if(host.isConnected&&previewVersion===expectedPreviewVersion)
+         showError(info,e);
+     }finally{previewButton.disabled=false;}
    }
    filters.appendChild(button("تحديث",()=>{reset();load();}));
    const previewButton=button("معاينة التحضير",preview);
