@@ -99,6 +99,91 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
         Assert.False(result.Success);
     }
 
+    [Fact]
+    public async Task MonthlyCellDetails_UsesSavedStatusAndRevisionEvidence()
+    {
+        using (var connection = _db.CreateOpenConnection())
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO AttendanceRevisions(PersonId,TargetLocalDate,BeforeStatusId,
+                    BeforeStatusNameSnapshot,AfterStatusId,AfterStatusNameSnapshot,
+                    Reason,ActorUserId,ExecutedAtUtc,AuthorizationMethod)
+                VALUES('TST-P-1','2026-10-19','STS-PRESENT','موجود','STS-ABSENT',
+                    'غياب','تعديل اختباري موثق','TST-U','2026-10-19T08:00:00Z','authorized');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var svc = new DailyMonthlyReadService(_db);
+        var details = await svc.MonthlyCellDetailsAsync(new JsonObject
+        {
+            ["personId"] = "TST-P-1", ["businessDate"] = "2026-10-19",
+            ["siteId"] = "SITE-UNSPECIFIED"
+        }, CancellationToken.None);
+        Assert.True(details.Success, details.UserMessage);
+        var data = Assert.IsType<JsonObject>(details.Data);
+        Assert.Equal("X001", data["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("شخص اختباري", data["personName"]!.GetValue<string>());
+        var attendance = Assert.IsType<JsonObject>(data["attendance"]);
+        Assert.Equal("غياب", attendance["statusName"]!.GetValue<string>());
+        Assert.Equal("#EF4444", attendance["color"]!.GetValue<string>());
+        Assert.Equal("2026-10-19T07:00:00Z", attendance["committedAtUtc"]!.GetValue<string>());
+        var revision = Assert.Single(Assert.IsType<JsonArray>(data["revisions"]));
+        Assert.Equal("تعديل اختباري موثق", revision!["reason"]!.GetValue<string>());
+        Assert.Null(data["movement"]);
+    }
+
+    [Fact]
+    public async Task MonthlyCellDetails_RejectsUnknownDateSiteAndPerson()
+    {
+        var svc = new DailyMonthlyReadService(_db);
+        var badDate = await svc.MonthlyCellDetailsAsync(new JsonObject
+        {
+            ["personId"] = "TST-P-1", ["businessDate"] = "invalid"
+        }, CancellationToken.None);
+        Assert.False(badDate.Success);
+        Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.ValidationError, badDate.ErrorCode);
+        var foreignSite = await svc.MonthlyCellDetailsAsync(new JsonObject
+        {
+            ["personId"] = "TST-P-1", ["businessDate"] = "2026-10-19", ["siteId"] = "SITE-OTHER"
+        }, CancellationToken.None);
+        Assert.False(foreignSite.Success);
+        Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.MissingData, foreignSite.ErrorCode);
+        var unknown = await svc.MonthlyCellDetailsAsync(new JsonObject
+        {
+            ["personId"] = "TST-P-UNKNOWN", ["businessDate"] = "2026-10-19"
+        }, CancellationToken.None);
+        Assert.False(unknown.Success);
+    }
+
+    [Fact]
+    public async Task MonthlyCellDetails_ShowsMovementWithoutInventingAttendance()
+    {
+        using (var connection = _db.CreateOpenConnection())
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
+                    ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                    DestinationExternalName,EffectiveLocalDate,CommittedAtUtc,ActorUserId,IdempotencyKey)
+                VALUES('TST-M-2','TST-P-1','شخص اختباري','X001',2,'SITE-UNSPECIFIED',
+                    'غير محدد','جهة خارجية','2026-10-20','2026-10-20T08:00:00Z','TST-U','TST-M-IDEM');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var result = await new DailyMonthlyReadService(_db).MonthlyCellDetailsAsync(new JsonObject
+        {
+            ["personId"] = "TST-P-1", ["businessDate"] = "2026-10-20"
+        }, CancellationToken.None);
+        Assert.True(result.Success, result.UserMessage);
+        var data = Assert.IsType<JsonObject>(result.Data);
+        Assert.Null(data["attendance"]);
+        Assert.Empty(Assert.IsType<JsonArray>(data["revisions"]));
+        var movement = Assert.IsType<JsonObject>(data["movement"]);
+        Assert.Equal(2, movement["type"]!.GetValue<int>());
+        Assert.Equal("جهة خارجية", movement["destinationExternalName"]!.GetValue<string>());
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {
