@@ -663,3 +663,5 @@ table.monthly-table thead .sticky-col-4 {
  .functional-archive>*{flex:1}
  .functional-table-wrap{max-height:55vh}
 }
+
+.app-sidebar[hidden], #logoutAction[hidden] { display:none !important; }
