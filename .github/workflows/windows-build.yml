@@ -24,6 +24,11 @@ jobs:
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
           }
+      - name: Test administration drill-down and settings safeguards
+        shell: pwsh
+        run: |
+          node build/test-admin-settings-navigation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
 
   compile-core:
     needs: manifest-contract
