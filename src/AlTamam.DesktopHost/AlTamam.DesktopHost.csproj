@@ -6,6 +6,9 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>AlTamam.DesktopHost</RootNamespace>
     <AssemblyName>AlTamam.DesktopHost</AssemblyName>
+    <!-- Windows executable metadata matches the Arabic installation/shortcut identity. -->
+    <Product>التمام اليومي</Product>
+    <AssemblyTitle>التمام اليومي</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- The offline UI is bundled content, never a web project build input. -->
     <AddRazorSupportForMvc>false</AddRazorSupportForMvc>

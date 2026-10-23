@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
 using AlTamam.DesktopHost.Bridge;
@@ -38,6 +39,7 @@ public partial class MainWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         InitializeComponent();
         webViewHost.Children.Add(_webView);
+        Panel.SetZIndex(_webView, 0); // keep the native Arabic startup message above the browser
         Loaded += OnLoadedOrSelfCheck;
         Closed += async (_, _) =>
         {
@@ -101,9 +103,42 @@ public partial class MainWindow : Window
                 System.Windows.Application.Current.Shutdown(1);
                 return;
             }
+            startupMessage.Text = "تعذر فتح التطبيق. تحقّق من قاعدة البيانات وبيئة WebView2.";
             MessageBox.Show(
                 "تعذر تشغيل واجهة التطبيق: " + ex.Message,
                 "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private sealed record PreparedServices(
+        AlTamamDbContext Database, DesktopBridgeGateway Gateway,
+        Scheduling.EightPmSchedulerService Scheduler);
+
+    /// <summary>
+    /// SQLCipher key validation, migrations and bridge construction are independent of WPF.
+    /// Move these potentially blocking disk operations off the UI thread. Start WebView2
+    /// concurrently instead of waiting for the database to open before launching Edge.
+    /// </summary>
+    private static async Task<PreparedServices> PrepareServicesAsync()
+    {
+        string databasePath = AppDataLayout.ResolveDatabasePath();
+        string key = new Infrastructure.Security.WindowsDatabaseKeyStore(
+            Path.Combine(AppDataLayout.DataRoot, "db.key.protected")).LoadOrCreate(databasePath);
+        var database = new AlTamamDbContext(databasePath, key);
+        try
+        {
+            await database.InitializeAsync().ConfigureAwait(false);
+            var services = new BridgeSharedServices(database);
+            var dispatcher = BridgeHandlerCatalog.Create(services);
+            var gateway = new DesktopBridgeGateway(dispatcher, services);
+            var attendance = new AlTamam.Application.Scheduling.AutoAttendanceService(database);
+            return new PreparedServices(database, gateway,
+                new Scheduling.EightPmSchedulerService(attendance));
+        }
+        catch
+        {
+            database.Dispose();
+            throw;
         }
     }
 
@@ -111,33 +146,45 @@ public partial class MainWindow : Window
     {
         bool webViewSelfCheck = Environment.GetCommandLineArgs()
             .Contains("--webview-selfcheck", StringComparer.Ordinal);
-        if (!webViewSelfCheck)
+        // WebView self-check intentionally bypasses DPAPI/SQLCipher entirely.
+        Task<PreparedServices>? preparing = webViewSelfCheck
+            ? null : Task.Run(PrepareServicesAsync);
+        try
         {
-            // --- Host data layer: encrypted local database, key materialized on first run. ---
-            string databasePath = AppDataLayout.ResolveDatabasePath();
-            string key = new Infrastructure.Security.WindowsDatabaseKeyStore(
-                Path.Combine(AppDataLayout.DataRoot, "db.key.protected")).LoadOrCreate(databasePath);
-            _dbContext = new AlTamamDbContext(databasePath, key);
-            await _dbContext.InitializeAsync().ConfigureAwait(true);
+            // WebView2 profile creation and SQLCipher initialization overlap.
+            string userDataFolder = Path.Combine(AppDataLayout.DataRoot, "WebView2");
+            Directory.CreateDirectory(userDataFolder);
+            var options = new CoreWebView2EnvironmentOptions();
+            CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(
+                browserExecutableFolder: null, userDataFolder: userDataFolder,
+                options: options).ConfigureAwait(true);
+            await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
 
-            var services = new BridgeSharedServices(_dbContext);
-            WebView2BridgeDispatcher dispatcher = BridgeHandlerCatalog.Create(services);
-            _gateway = new DesktopBridgeGateway(dispatcher, services);
-
-            // --- 07.02: durable host-side 20:00 scheduler (no HTML page, no JS timer).
-            // Startup performs bounded catch-up for approved missed dates. ---
-            var autoAttendance = new AlTamam.Application.Scheduling.AutoAttendanceService(_dbContext);
-            _scheduler = new Scheduling.EightPmSchedulerService(autoAttendance);
-            _scheduler.Start();
+            if (preparing is not null)
+            {
+                // Do not attach the bridge or navigate until migrations are finished.
+                // Assignment happens on the WPF dispatcher after the background task.
+                PreparedServices ready = await preparing.ConfigureAwait(true);
+                _dbContext = ready.Database;
+                _gateway = ready.Gateway;
+                _scheduler = ready.Scheduler;
+            }
         }
-
-        // --- 04.03: WebView2 environment with an isolated, application-owned user profile. ---
-        string userDataFolder = Path.Combine(AppDataLayout.DataRoot, "WebView2");
-        Directory.CreateDirectory(userDataFolder);
-        var options = new CoreWebView2EnvironmentOptions();
-        CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(
-            browserExecutableFolder: null, userDataFolder: userDataFolder, options: options).ConfigureAwait(true);
-        await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+        catch
+        {
+            // WebView2 can fail while the independent database task is still running.
+            // Observe that task and dispose its database rather than leaking a connection.
+            if (preparing is not null && _dbContext is null)
+            {
+                try
+                {
+                    PreparedServices abandoned = await preparing.ConfigureAwait(true);
+                    abandoned.Database.Dispose();
+                }
+                catch { /* preserve the original startup failure */ }
+            }
+            throw;
+        }
 
         CoreWebView2 core = _webView.CoreWebView2;
 
@@ -182,7 +229,13 @@ public partial class MainWindow : Window
         // --- 04.03: failed-load recovery (reload once, then a local error page route). ---
         core.NavigationCompleted += async (_, args) =>
         {
-            if (args.IsSuccess || webViewSelfCheck) return;
+            if (webViewSelfCheck) return;
+            if (args.IsSuccess)
+            {
+                startupPanel.Visibility = Visibility.Collapsed;
+                _scheduler?.Start(); // start catch-up after UI is ready; never delay first paint
+                return;
+            }
             if (!_recoveredOnce)
             {
                 _recoveredOnce = true;
