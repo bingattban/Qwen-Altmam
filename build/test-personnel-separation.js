@@ -15,7 +15,7 @@ class Node {
  get classList(){return {add:x=>this.className+=" "+x};}
 }
 const root=new Node("div"),calls=[],commits=[],timers=[];
-let confirmDecision=false;
+let confirmDecision=false,reasonDialogCalls=0,confirmationDialogCalls=0;
 const data={
  QueryPersons:{items:[{personId:"PERSON-1",displayName:"فرد من الكشف",serviceNumberA:"999",
     siteName:"موقع مختبر",active:true}],total:1,hasNext:false},
@@ -35,7 +35,10 @@ const api={invoke:async(name,payload)=>{
  if(!(name in data))throw Error("Unexpected bridge action "+name);
  return {data:data[name]};
 }};
-const context={window:{AltamamBridge:api},document:{createElement:tag=>new Node(tag)},
+const context={window:{AltamamBridge:api,AltamamDialog:{
+ reason:async()=>{reasonDialogCalls++;return "سبب فصل مسجل";},
+ confirm:async()=>{confirmationDialogCalls++;return confirmDecision;}
+}},document:{createElement:tag=>new Node(tag)},
  setInterval:(fn)=>{timers.push(fn);return timers.length;},clearInterval:()=>{},
  Intl,Date,console,confirm:()=>confirmDecision};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
@@ -48,9 +51,10 @@ async function run(){
  assert.ok(byText("بحث"));
  assert.equal(commits.length,0);
  byText("اختيار").handlers.click();
- const reason=root.all().find(x=>x.tag==="textarea");
- reason.value="سبب فصل مسجل";
- await byText("معاينة طلب الفصل").handlers.click();
+ assert.equal(root.all().filter(x=>x.tag==="textarea").length,0,
+   "reason must be collected in a centered popup, not an inline textarea");
+ await byText("تحديد سبب الفصل والمعاينة").handlers.click();
+ assert.equal(reasonDialogCalls,1,"separation asks for reason in modal");
  await tick();
  const save=byText("تأكيد الفصل");
  assert.ok(save);
@@ -63,6 +67,7 @@ async function run(){
  confirmDecision=true;
  await save.handlers.click();
  assert.equal(commits.length,1);
+ assert.equal(confirmationDialogCalls,2,"both final approval attempts use modal");
  assert.equal(commits[0].previewToken,"ONLY_SERVER_TOKEN");
  const archive=new Node("div");
  await ui.render(archive,"separatedArchive");

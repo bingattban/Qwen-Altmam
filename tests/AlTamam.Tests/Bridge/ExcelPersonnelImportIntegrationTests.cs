@@ -100,14 +100,14 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
     [Fact]
     public async Task DuplicateWithinFileAndPreviouslyImportedNumber_AreReportedButNeverOverwritten()
     {
-        var first=await Service.SelectAsync(FilePayload(Workbook(("خالد سعيد الحضرمي","001"))),Owner,CancellationToken.None);
+        var first=await Service.SelectAsync(FilePayload(Workbook(("خالد سعيد الحضرمي","00001"))),Owner,CancellationToken.None);
         string file1=((JsonObject)first.Data!)["workbookToken"]!.GetValue<string>();
         var p1=await Service.PreviewAsync(new JsonObject{["workbookToken"]=file1},Owner,CancellationToken.None);
         string token1=((JsonObject)p1.Data!)["previewToken"]!.GetValue<string>();
         Assert.True((await Service.CommitAsync(new JsonObject{["previewToken"]=token1},Owner,"owner",CancellationToken.None)).Success);
 
         var second=await Service.SelectAsync(FilePayload(Workbook(
-            ("اسم بديل لا يجوز","001"),("سعيد عبدالله منصر","002"),("سعيد عبدالله منصر","002"))),
+            ("اسم بديل لا يجوز","00001"),("سعيد عبدالله منصر","00002"),("سعيد عبدالله منصر","00002"))),
             Owner,CancellationToken.None);
         string file2=((JsonObject)second.Data!)["workbookToken"]!.GetValue<string>();
         var analyzed=await Service.AnalyzeAsync(new JsonObject{["workbookToken"]=file2},Owner,CancellationToken.None);
@@ -119,13 +119,13 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         var saved=await Service.CommitAsync(new JsonObject{["previewToken"]=token2},Owner,"owner",CancellationToken.None);
         Assert.True(saved.Success,saved.UserMessage);
         Assert.Equal("2",Scalar("SELECT COUNT(*) FROM Persons"));
-        Assert.Equal("خالد سعيد الحضرمي",Scalar("SELECT CurrentVisibleName FROM Persons WHERE CurrentServiceNumberA='001'"));
+        Assert.Equal("خالد سعيد الحضرمي",Scalar("SELECT CurrentVisibleName FROM Persons WHERE CurrentServiceNumberA='00001'"));
     }
 
     [Fact]
     public async Task StalePlanAndWrongUserAreDeniedBeforeWriting()
     {
-        var selected=await Service.SelectAsync(FilePayload(Workbook(("فارس محمد صالح","010"))),Owner,CancellationToken.None);
+        var selected=await Service.SelectAsync(FilePayload(Workbook(("فارس محمد صالح","00010"))),Owner,CancellationToken.None);
         var ticket=((JsonObject)selected.Data!)["workbookToken"]!.GetValue<string>();
         var other=await Service.AnalyzeAsync(new JsonObject{["workbookToken"]=ticket},"ANOTHER-USER",CancellationToken.None);
         Assert.False(other.Success);
@@ -145,7 +145,7 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
             ["fileName"]="wrong.xlsx",["base64"]=Convert.ToBase64String(Encoding.UTF8.GetBytes("not excel"))
         },Owner,CancellationToken.None);
         Assert.False(fake.Success);
-        var bytes=Workbook(("محمد خالد سالم","005"));
+        var bytes=Workbook(("محمد خالد سالم","00005"));
         using(var input=new MemoryStream(bytes))
         using(var zip=new ZipArchive(input,ZipArchiveMode.Read))
             Assert.NotNull(zip.GetEntry("xl/worksheets/sheet1.xml"));

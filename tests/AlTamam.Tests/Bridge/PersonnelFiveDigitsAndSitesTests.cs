@@ -1,0 +1,141 @@
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json.Nodes;
+using AlTamam.Application.Bridge;
+using AlTamam.Infrastructure.Persistence;
+using AlTamam.Tests.Fixtures;
+using Xunit;
+
+namespace AlTamam.Tests.Bridge;
+
+public sealed class PersonnelFiveDigitsAndSitesTests : IAsyncLifetime, IDisposable
+{
+    private readonly string _path = SyntheticFixtures.CreateTempDatabasePath();
+    private AlTamamDbContext _db = null!;
+    private const string Actor = "TST-SITES-ACTOR";
+    public async Task InitializeAsync()
+    {
+        _db = new AlTamamDbContext(_path, SyntheticFixtures.TestKeyHex);
+        await _db.InitializeAsync();
+    }
+    private long Count(string sql)
+    {
+        using var c=_db.CreateOpenConnection();
+        using var cmd=c.CreateCommand();
+        cmd.CommandText=sql;
+        return Convert.ToInt64(cmd.ExecuteScalar());
+    }
+    private string Read(string sql)
+    {
+        using var c=_db.CreateOpenConnection();
+        using var cmd=c.CreateCommand();
+        cmd.CommandText=sql;
+        return Convert.ToString(cmd.ExecuteScalar()) ?? "";
+    }
+
+    [Fact]
+    public async Task SinglePerson_RequiresFiveDigitsAndAutoCreatesOrReusesSiteWithHistory()
+    {
+        var service = new PersonRosterService(_db);
+        var invalid=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
+            ["visibleName"]="محمد صالح باصالح",["serviceNumberA"]="1234",["siteName"]="قطاع الشمال"
+        },CancellationToken.None);
+        Assert.False(invalid.Success);
+        Assert.Equal(0,Count("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal(0,Count("SELECT COUNT(*) FROM Sites WHERE NormalizedName<>'غير محدد'"));
+
+        var first=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
+            ["visibleName"]="محمد صالح باصالح",["serviceNumberA"]="١٢٣٤٥",["siteName"]="قطاع الشمال"
+        },CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='قطاع الشمال'"));
+        Assert.Equal("12345",Read("SELECT CurrentServiceNumberA FROM Persons WHERE NormalizedServiceNumberA='12345'"));
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM SiteNameHistory WHERE SiteId IN (SELECT SiteId FROM Sites WHERE VisibleName='قطاع الشمال')"));
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId IN (SELECT SiteId FROM Sites WHERE VisibleName='قطاع الشمال')"));
+
+        var second=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
+            ["visibleName"]="علي عبدالله الحضرمي",["serviceNumberA"]="12346",["siteName"]="قطاع الشمال"
+        },CancellationToken.None);
+        Assert.True(second.Success,second.UserMessage);
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='قطاع الشمال'"));
+        Assert.Equal(2,Count("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId IN (SELECT SiteId FROM Sites WHERE VisibleName='قطاع الشمال')"));
+        Assert.Equal(2,Count("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal(2,Count("SELECT COUNT(*) FROM PersonIdentityHistory"));
+        Assert.True(Count("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_CREATE'")>=2);
+    }
+
+    private static JsonObject Workbook()
+    {
+        using var stream = new MemoryStream();
+        using(var zip=new ZipArchive(stream,ZipArchiveMode.Create,leaveOpen:true))
+        {
+            void Add(string name,string xml)
+            {
+                using var s=zip.CreateEntry(name).Open();
+                var bytes=Encoding.UTF8.GetBytes(xml);s.Write(bytes);
+            }
+            Add("[Content_Types].xml","<Types/>");
+            Add("xl/workbook.xml","<workbook/>");
+            Add("xl/worksheets/sheet1.xml","""
+                <?xml version="1.0" encoding="utf-8"?>
+                <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
+                  <row r="1">
+                    <c r="A1" t="inlineStr"><is><t>الرقم</t></is></c>
+                    <c r="B1" t="inlineStr"><is><t>الاسم</t></is></c>
+                    <c r="C1" t="inlineStr"><is><t>الرقم (ع)</t></is></c>
+                    <c r="D1" t="inlineStr"><is><t>الموقع</t></is></c>
+                  </row>
+                  <row r="2">
+                    <c r="A2"><v>1</v></c><c r="B2" t="inlineStr"><is><t>محمد كرامة عبد الله</t></is></c>
+                    <c r="C2"><v>12345</v></c><c r="D2" t="inlineStr"><is><t>الموقع الشرقي</t></is></c>
+                  </row>
+                  <row r="3">
+                    <c r="A3"><v>2</v></c><c r="B3" t="inlineStr"><is><t>سعيد أحمد عبدالله</t></is></c>
+                    <c r="C3"><v>12346</v></c><c r="D3" t="inlineStr"><is><t>الموقع الشرقي</t></is></c>
+                  </row>
+                  <row r="4">
+                    <c r="A4"><v>3</v></c><c r="B4" t="inlineStr"><is><t>خالد محمد سالم</t></is></c>
+                    <c r="C4"><v>123</v></c><c r="D4" t="inlineStr"><is><t>الموقع الغربي</t></is></c>
+                  </row>
+                </sheetData></worksheet>
+                """);
+        }
+        return new JsonObject {["fileName"]="القوة.xlsx",
+            ["base64"]=Convert.ToBase64String(stream.ToArray())};
+    }
+
+    [Fact]
+    public async Task Excel_UsesOnlyServiceNumberColumn_CreatesSitesForValidRows()
+    {
+        var service=new ExcelPersonnelImportService(_db);
+        var selected=await service.SelectAsync(Workbook(),Actor,CancellationToken.None);
+        Assert.True(selected.Success,selected.UserMessage);
+        string workbook=((JsonObject)selected.Data!)["workbookToken"]!.GetValue<string>();
+        var analysis=await service.AnalyzeAsync(new JsonObject {["workbookToken"]=workbook},
+            Actor,CancellationToken.None);
+        Assert.True(analysis.Success,analysis.UserMessage);
+        var report=(JsonObject)analysis.Data!;
+        Assert.Equal(2,report["newCount"]!.GetValue<int>());
+        Assert.Equal(1,report["issueCount"]!.GetValue<int>());
+        var preview=await service.PreviewAsync(new JsonObject {["workbookToken"]=workbook},Actor,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        string token=((JsonObject)preview.Data!)["previewToken"]!.GetValue<string>();
+        var committed=await service.CommitAsync(new JsonObject {["previewToken"]=token},
+            Actor,"tester",CancellationToken.None);
+        Assert.True(committed.Success,committed.UserMessage);
+        Assert.Equal(2,Count("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='الموقع الشرقي'"));
+        Assert.Equal(0,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='الموقع الغربي'"));
+        Assert.Equal(2,Count("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId IN (SELECT SiteId FROM Sites WHERE VisibleName='الموقع الشرقي')"));
+        Assert.Equal(1,((JsonObject)committed.Data!)["createdSitesCount"]!.GetValue<int>());
+        Assert.Equal("الموقع الغربي",Read("SELECT RawSiteName FROM ImportIssues LIMIT 1"));
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM ImportIssues"));
+    }
+
+    public Task DisposeAsync()=>Task.CompletedTask;
+    public void Dispose()
+    {
+        _db?.Dispose();
+        SyntheticFixtures.DeleteTempDatabase(_path);
+    }
+}

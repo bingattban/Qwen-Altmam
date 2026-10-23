@@ -6,7 +6,7 @@ public sealed record BridgeActionMetadata(string Action, string OwningService, s
 
 public static class ActionManifest
 {
-    /// <summary>All 93 canonical actions with owning service and allowed roles.</summary>
+    /// <summary>All 94 canonical actions with owning service and allowed roles.</summary>
     public static readonly BridgeActionMetadata[] All = new BridgeActionMetadata[]
     {
         new("GetProvisioningState", "AuthenticationService", new[] { "Unauthenticated", "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
@@ -35,6 +35,7 @@ public static class ActionManifest
         new("SearchPersons", "PersonRosterService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("GetPersonSummary", "PersonRosterService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("QueryPersons", "PersonRosterService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
+        new("CreatePerson", "PersonRosterService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("PreviewPersonIdentityUpdate", "PersonRosterService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("UpdatePersonIdentity", "PersonRosterService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("PreviewArchivePersons", "PersonRosterService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, false),

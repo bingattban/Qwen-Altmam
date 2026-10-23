@@ -240,6 +240,13 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.QueryPersonsAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
+        "CreatePerson" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.CreatePersonAsync(principal!.UserId,
+                principal.Username, req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
         "GetPersonSummary" => async (req, principal, ct) =>
         {
             var svc = new PersonRosterService(services.Db);

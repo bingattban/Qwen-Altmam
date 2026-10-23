@@ -1,6 +1,8 @@
 "use strict";
 (function(){
 const api=()=>window.AltamamBridge;
+ const modalConfirm=text=>window.AltamamDialog?.confirm(text,{title:"تأكيد النقل"}) ??
+   Promise.resolve(confirm(text));
 function el(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=String(text);if(cls)e.className=cls;return e;}
 function btn(label,fn){const b=el("button",label,"btn btn-outline");b.type="button";b.addEventListener("click",fn);return b;}
 function opt(value,label){const x=el("option",label);x.value=value;return x;}
@@ -77,7 +79,7 @@ async function transfer(host,external){
       data.persons.forEach(p=>row(t.body,[p.serviceNumberA,p.name,p.sourceSiteName,data.destinationName]));
       review.appendChild(t.wrap);
       const confirmButton=btn("تأكيد النقل النهائي",async()=>{
-        if(!confirm("تأكيد نقل "+data.count+" فرداً إلى "+data.destinationName+"؟"))return;
+        if(!await modalConfirm("تأكيد نقل "+data.count+" فرداً إلى "+data.destinationName+"؟"))return;
         confirmButton.disabled=true;
         try{
           const result=await api().invoke(external?"CommitExternalTransfer":"CommitInternalTransfer",
@@ -87,7 +89,7 @@ async function transfer(host,external){
         }catch(e){err(note,e);confirmation.replaceChildren();}
         finally{confirmButton.disabled=false;}
       });
-      review.append(confirmButton,btn("إلغاء",()=>{if(confirm("إلغاء المعاينة دون نقل؟"))confirmation.replaceChildren();}));
+      review.append(confirmButton,btn("إلغاء",async()=>{if(await modalConfirm("إلغاء المعاينة دون نقل؟"))confirmation.replaceChildren();}));
       confirmation.replaceChildren(review);
     }catch(e){err(note,e);}
     finally{previewButton.disabled=false;}

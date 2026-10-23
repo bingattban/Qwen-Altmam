@@ -480,7 +480,8 @@
     if(["AttendanceCommitted","AttendanceRevised","PersonnelMoved","PersonnelArchived","SiteCreated",
       "SiteRenamed","StatusDefinitionChanged","BackupRestored"].includes(name)) {
       const section=location.hash.slice(1);
-      if(sections.has(section)&&STATE.session)render(section);
+      // Administration refreshes its own nested screen after a write; keep its context.
+     if(sections.has(section)&&section!=="admin"&&STATE.session)render(section);
     }
     if(name==="SessionEnded"){STATE.session=null;bridge().setSessionNonce(null);loginGate();}
   });

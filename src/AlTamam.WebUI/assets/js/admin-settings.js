@@ -4,6 +4,13 @@
 (function () {
   const target = () => document.getElementById("appViewport");
   const api = () => window.AltamamBridge;
+  // The real WebView always loads operation-dialogs.js. Native fallbacks are
+  // reserved for legacy isolated Node UI stubs that do not load the HTML shell.
+  const dialogs = {
+    confirm: message => window.AltamamDialog?.confirm(message) ?? Promise.resolve(confirm(message)),
+    prompt: (message,value="") => window.AltamamDialog?.prompt(message,value) ?? Promise.resolve(prompt(message,value)),
+    alert: message => window.AltamamDialog?.alert(message) ?? Promise.resolve(alert(message))
+  };
   let currentRequest = 0;
   let state = { session: null, active: "home", page: 1, term: "", siteId: "" };
   const sections = [
@@ -227,9 +234,9 @@
     const page=start("الإدارة / الكشوفات / استيراد Excel");
     const shell=card("استيراد أسماء جديدة من ملف Excel");
     shell.appendChild(node("p","section-description",
-      "الأعمدة المطلوبة: الاسم | الرقم (ع). العدد الأقصى 500 فرد وحجم الملف 160 كيلوبايت. " +
-      "سيُضاف الأفراد الجدد فقط بتاريخ اليوم؛ الأرقام الموجودة أو المكررة لا تُستبدل. " +
-      "اكتب الرقم (ع) كرقم صحيح في Excel مباشرة، دون الحاجة لتحويل العمود إلى نص."));
+      "أعمدة الكشف: الاسم، الرقم (ع)، الموقع (اختياري)، والرقم العادي للتسلسل فقط. " +
+      "الرقم (ع) لا يقل عن خمس خانات، ويختلف عن رقم ترتيب الصف. الحد 500 فرد و160 كيلوبايت. " +
+      "سيُنشئ البرنامج المواقع غير الموجودة تلقائياً عند التأكيد، ولن يغير هوية أو تحضير فرد موجود."));
     const choose=node("input","form-control");choose.type="file";
     choose.accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     const picker=node("label","admin-input");
@@ -376,7 +383,7 @@
             out.append(names.wrap);
             const commit=btn("تأكيد استيراد الأفراد الجدد",async()=>{
               if(!previewToken)return;
-              if(!confirm("تأكيد إضافة "+plan.newCount+" فرداً جديداً بعد مراجعة التعارضات؟"))return;
+              if(!await dialogs.confirm("تأكيد إضافة "+plan.newCount+" فرداً جديداً بعد مراجعة التعارضات؟"))return;
               const token=previewToken;previewToken="";
               commit.disabled=true;
               try{
@@ -453,7 +460,7 @@
     const setPolicy=enabled=>async()=>{
       clearPreview();
       const verb=enabled?"تفعيل":"إيقاف";
-      if(!confirm("هل تؤكد "+verb+" التصحيح الاستثنائي وتسجيل السبب في سجل العمليات؟"))return;
+      if(!await dialogs.confirm("هل تؤكد "+verb+" التصحيح الاستثنائي وتسجيل السبب في سجل العمليات؟"))return;
       try{
         const result=await api().invoke("SetClosedDayCorrectionPolicy",{
           enabled,reason:reason.input.value});
@@ -480,7 +487,7 @@
         ])summary.appendChild(settingsValue(label,value));
         const submit=btn("اعتماد التصحيح الاستثنائي",async()=>{
           if(!previewToken)return;
-          if(!confirm("اعتماد التصحيح النهائي لليوم المغلق؟ ستُحفظ الحالة السابقة والتعديل والسبب في سجل العمليات."))return;
+          if(!await dialogs.confirm("اعتماد التصحيح النهائي لليوم المغلق؟ ستُحفظ الحالة السابقة والتعديل والسبب في سجل العمليات."))return;
           const chosen=previewToken;previewToken=null;submit.disabled=true;
           try{
             const committed=await api().invoke("CommitClosedDayCorrection",{previewToken:chosen});
@@ -572,7 +579,7 @@
       const save=btn("تأكيد إضافة الحساب",async()=>{
         if(!personPick.value||!username.input.value.trim()||!password.input.value)
           return errors(message,new Error("اختر فرداً وأدخل اسم المستخدم وكلمة المرور."));
-        if(!confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
+        if(!await dialogs.confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
         save.disabled=true;message.replaceChildren();
         try {
           await api().invoke("CreateUserAccount",{
@@ -614,7 +621,7 @@
           if(account.canModify && account.active){
             cell.appendChild(btn("تغيير كلمة المرور",()=>showPassword(account),"btn btn-outline"));
             cell.appendChild(btn("تعطيل الحساب",async()=>{
-              if(!confirm("تأكيد تعطيل حساب «"+account.username+
+              if(!await dialogs.confirm("تأكيد تعطيل حساب «"+account.username+
                 "»؟ لن يتمكن من الدخول، وستلغى جلساته الحالية."))return;
               try {
                 await api().invoke("DeactivateUserAccount",{
@@ -642,7 +649,7 @@
       pwd.input.autocomplete="new-password";
       const result=node("div","admin-note");
       const save=btn("تأكيد التغيير",async()=>{
-        if(!confirm("اعتماد كلمة المرور الجديدة وإلغاء جلسات هذا الحساب؟"))return;
+        if(!await dialogs.confirm("اعتماد كلمة المرور الجديدة وإلغاء جلسات هذا الحساب؟"))return;
         save.disabled=true;
         try {
           await api().invoke("ChangeUserPassword",{
@@ -672,6 +679,7 @@
       const name=field("اسم الموقع");
       const note=node("div","admin-note");
       const send=btn("إضافة الموقع",async()=>{
+        if(!await dialogs.confirm("تأكيد إنشاء الموقع «"+name.input.value.trim()+"»؟"))return;
         send.disabled=true;note.replaceChildren();
         try {await api().invoke("CreateSite",{name:name.input.value});
           name.input.value="";await sites();}
@@ -682,13 +690,13 @@
       list.forEach(item=>{
         const sys=item.siteId==="SITE-UNSPECIFIED";
         addRow(t.body,[item.name,item.active?"نشط":"موقوف"],
-          sys?"موقع محمي":"إعادة تسمية",()=>{
-            if(sys){alert("موقع غير محدد محمي من التعديل والحذف.");return;}
-            const next=prompt("اسم الموقع الجديد",item.name);
+          sys?"موقع محمي":"إعادة تسمية",async()=>{
+            if(sys){void dialogs.alert("موقع غير محدد محمي من التعديل والحذف.");return;}
+            const next=await dialogs.prompt("اسم الموقع الجديد",item.name);
             if(!next||next.trim()===item.name)return;
-            if(!confirm("اعتماد تغيير اسم الموقع من «"+item.name+"» إلى «"+next+"»؟"))return;
+            if(!await dialogs.confirm("اعتماد تغيير اسم الموقع من «"+item.name+"» إلى «"+next+"»؟"))return;
             api().invoke("RenameSite",{siteId:item.siteId,name:next.trim(),
-              expectedRevision:item.rowVersion}).then(sites).catch(e=>alert(e.message));
+              expectedRevision:item.rowVersion}).then(sites).catch(e=>void dialogs.alert(e.message));
           });
       });
       empty(t.body,3,"لا توجد مواقع مسجلة.");
@@ -708,6 +716,7 @@
       const name=field("اسم الحالة"), symbol=field("الرمز"),color=field("اللون","#38BDF8","color");
       const note=node("div","admin-note");
       const save=btn("إضافة حالة",async()=>{
+        if(!await dialogs.confirm("تأكيد إضافة حالة التحضير «"+name.input.value.trim()+"»؟"))return;
         note.replaceChildren();save.disabled=true;
         try {await api().invoke("CreateAttendanceStatus",{
           name:name.input.value,symbol:symbol.input.value,color:color.input.value});
@@ -723,23 +732,23 @@
         const tdColor=node("td");tdColor.appendChild(colorBox);tr.appendChild(tdColor);
         const td=node("td","admin-row-buttons");
         td.appendChild(btn("تعديل",async()=>{
-          const newName=prompt("اسم الحالة",item.displayName);
+          const newName=await dialogs.prompt("اسم الحالة",item.displayName);
           if(newName===null)return;
-          const newSymbol=prompt("رمز الحالة",item.shortSymbol);
+          const newSymbol=await dialogs.prompt("رمز الحالة",item.shortSymbol);
           if(newSymbol===null)return;
-          const newColor=prompt("لون الحالة #RRGGBB",item.color);
+          const newColor=await dialogs.prompt("لون الحالة #RRGGBB",item.color);
           if(newColor===null)return;
-          if(!confirm("تأكيد تعديل الحالة «"+item.displayName+"»؟"))return;
+          if(!await dialogs.confirm("تأكيد تعديل الحالة «"+item.displayName+"»؟"))return;
           try{await api().invoke("UpdateAttendanceStatus",{
             statusId:item.statusId,name:newName,symbol:newSymbol,color:newColor,
             expectedRevision:item.version});await statuses();}
-          catch(e){alert(e.message);}
+          catch(e){void dialogs.alert(e.message);}
         }));
         td.appendChild(btn("تعطيل",async()=>{
-          if(!confirm("تعطيل الحالة «"+item.displayName+"» دون حذف سجلات تحضيرها التاريخية؟"))return;
+          if(!await dialogs.confirm("تعطيل الحالة «"+item.displayName+"» دون حذف سجلات تحضيرها التاريخية؟"))return;
           try{await api().invoke("DeactivateOrDeleteStatus",{
             statusId:item.statusId,expectedRevision:item.version});await statuses();}
-          catch(e){alert(e.message);}
+          catch(e){void dialogs.alert(e.message);}
         },"btn btn-danger"));
         tr.appendChild(td);t.body.appendChild(tr);
       }
@@ -750,7 +759,46 @@
 
   async function persons() {
     const page=start("الإدارة / إدارة القوة / تعديل الأسماء"), box=card("الأفراد المسجلون");
-    page.appendChild(box);
+    const creation=node("details","admin-create-person card");
+    const toggle=node("summary","btn btn-primary","إضافة فرد واحد للكشف");
+    const creationFields=node("div","admin-site-form");
+    const nameField=field("الاسم الكامل"), numberField=field("الرقم (ع) — خمس خانات فأكثر"),
+      siteField=field("الموقع (اختر الموجود أو اكتب موقعاً جديداً)","غير محدد");
+    const siteSuggestions=node("datalist");
+    siteSuggestions.id="person-site-options";
+    siteField.input.setAttribute("list","person-site-options");
+    numberField.input.inputMode="numeric";
+    numberField.input.minLength=5;
+    numberField.input.maxLength=70;
+    const addMessage=node("div","admin-note");
+    const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
+      const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
+        siteName=siteField.input.value.trim()||"غير محدد";
+      if(name.length<3 || !/^[0-9٠-٩۰-۹]{5,70}$/.test(number) || siteName.length<2)
+        return errors(addMessage,new Error("أدخل الاسم والرقم (ع) بخمس خانات رقمية على الأقل والموقع."));
+      if(!await dialogs.confirm("تأكيد إضافة «"+name+"» بالرقم (ع) «"+number+
+        "» في الموقع «"+siteName+"»؟ سيُسجَّل الموقع تلقائياً إذا لم يكن موجوداً."))return;
+      saveNew.disabled=true;
+      try{
+        const response=await api().invoke("CreatePerson",{visibleName:name,
+          serviceNumberA:number,siteName});
+        if(!response.data?.personId)throw Error("لم يتم تأكيد إنشاء السجل.");
+        nameField.input.value="";numberField.input.value="";
+        addMessage.replaceChildren(node("p","settings-success",
+          "تمت إضافة الفرد بنجاح. رقم (ع): "+number+" — الموقع: "+siteName));
+        await load();
+        const sites=await api().invoke("QuerySites",{});
+        siteSuggestions.replaceChildren();
+        for(const item of sites.data||[]){
+          if(!item.active)continue;
+          const option=node("option");option.value=item.name;siteSuggestions.appendChild(option);
+        }
+      }catch(e){errors(addMessage,e);}
+      finally{saveNew.disabled=false;}
+    },"btn btn-primary");
+    creationFields.append(nameField.wrap,numberField.wrap,siteField.wrap);
+    creation.append(toggle,creationFields,siteSuggestions,saveNew,addMessage);
+    page.append(creation,box);
     const controls=node("div","functional-toolbar"),search=field("بحث بالاسم أو الرقم (ع)",state.term);
     const filter=node("select","form-select");
     filter.appendChild(node("option","","جميع المواقع"));filter.firstChild.value="";
@@ -763,6 +811,7 @@
         if(!site.active)continue;
         const option=node("option","",site.name);option.value=site.siteId;
         filter.appendChild(option);
+        const hint=node("option");hint.value=site.name;siteSuggestions.appendChild(hint);
       }
       filter.value=state.siteId;
       filter.addEventListener("change",()=>{state.siteId=filter.value;state.page=1;load();});
@@ -788,9 +837,9 @@
       }catch(e){if(token===currentRequest)errors(content,e);}
     }
     async function editPerson(person) {
-      const visibleName=prompt("الاسم الكامل الجديد",person.displayName);
+      const visibleName=await dialogs.prompt("الاسم الكامل الجديد",person.displayName);
       if(visibleName===null)return;
-      const serviceNumberA=prompt("الرقم (ع) الجديد",person.serviceNumberA);
+      const serviceNumberA=await dialogs.prompt("الرقم (ع) الجديد",person.serviceNumberA);
       if(serviceNumberA===null)return;
       const now=new Date();
       const businessDate=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
@@ -799,12 +848,12 @@
         baseRevision:person.revision,effectiveLocalDate:businessDate};
       try {
         const preview=(await api().invoke("PreviewPersonIdentityUpdate",payload)).data;
-        if(!confirm("اعتماد تعديل «"+preview.oldName+"» (ع: "+preview.oldServiceNumberA+
+        if(!await dialogs.confirm("اعتماد تعديل «"+preview.oldName+"» (ع: "+preview.oldServiceNumberA+
           ") إلى «"+preview.newName+"» (ع: "+preview.newServiceNumberA+")؟"))return;
         await api().invoke("UpdatePersonIdentity",{...payload,
           expectedRevision:person.revision,reason:"تعديل من شاشة إدارة القوة"});
         await load();
-      }catch(e){alert(e.message);}
+      }catch(e){void dialogs.alert(e.message);}
     }
     await load();
   }
@@ -937,7 +986,7 @@
       const backupResult=node("div","settings-feedback");
       backupResult.setAttribute("aria-live","polite");
       const save=btn("إنشاء نسخة احتياطية الآن",async()=>{
-        if(!confirm("إنشاء نسخة احتياطية مشفرة على القرص E والتحقق من سلامتها؟"))return;
+        if(!await dialogs.confirm("إنشاء نسخة احتياطية مشفرة على القرص E والتحقق من سلامتها؟"))return;
         save.disabled=true;
         backupResult.replaceChildren(warning("جارٍ إنشاء النسخة والتحقق من سلامتها..."));
         try {

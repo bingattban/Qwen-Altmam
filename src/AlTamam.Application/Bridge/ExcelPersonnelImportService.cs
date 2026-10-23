@@ -38,7 +38,7 @@ public sealed class ExcelPersonnelImportService
         catch { return ""; }
     }
 
-    private sealed record PersonInput(int Row, string Name, string Number, string NormalizedName, string NormalizedNumber);
+    private sealed record PersonInput(int Row, string Name, string Number, string NormalizedName, string NormalizedNumber, string SiteName);
 
     public async Task<BridgeResponse> SelectAsync(JsonObject? payload, string actor, CancellationToken ct)
     {
@@ -60,7 +60,8 @@ public sealed class ExcelPersonnelImportService
                 data.Add(new JsonObject
                 {
                     ["row"] = row.Row, ["name"] = row.Name, ["number"] = row.Number,
-                    ["normalizedName"] = row.NormalizedName, ["normalizedNumber"] = row.NormalizedNumber
+                    ["normalizedName"] = row.NormalizedName, ["normalizedNumber"] = row.NormalizedNumber,
+                    ["siteName"] = row.SiteName
                 });
             string sha256 = Convert.ToHexString(
                 System.Security.Cryptography.SHA256.HashData(bytes));
@@ -109,7 +110,8 @@ public sealed class ExcelPersonnelImportService
             var obj = n as JsonObject ?? throw new InvalidDataException("صف غير صالح.");
             return new PersonInput(obj["row"]!.GetValue<int>(),
                 obj["name"]!.GetValue<string>(), obj["number"]!.GetValue<string>(),
-                obj["normalizedName"]!.GetValue<string>(), obj["normalizedNumber"]!.GetValue<string>());
+                obj["normalizedName"]!.GetValue<string>(), obj["normalizedNumber"]!.GetValue<string>(),
+                obj["siteName"]?.GetValue<string>() ?? "غير محدد");
         }).ToList();
     }
 
@@ -130,12 +132,14 @@ public sealed class ExcelPersonnelImportService
         {
             ct.ThrowIfCancellationRequested();
             string? reason = null;
-            if (item.Name.Length is < 3 or > 180 || item.Number.Length is < 1 or > 70 ||
-                item.Name.Any(char.IsControl) || item.Number.Any(char.IsControl) ||
+            if (item.Name.Length is < 3 or > 180 ||
+                item.Name.Any(char.IsControl) || item.NormalizedName.Length == 0 ||
                 item.NormalizedName != ArabicTextNormalizer.NormalizeForSearch(item.Name) ||
-                item.NormalizedNumber != ArabicTextNormalizer.NormalizeForSearch(item.Number) ||
-                item.NormalizedName.Length == 0 || item.NormalizedNumber.Length == 0)
-                reason = "بيانات اسم أو رقم غير صالحة.";
+                !ServiceNumberPolicy.TryCanonicalize(item.Number, out string canonical) ||
+                item.NormalizedNumber != canonical)
+                reason = "الرقم (ع) يجب أن يتكون من خمسة أرقام على الأقل، وهو غير الرقم التسلسلي العادي.";
+            else if (item.SiteName.Length is < 2 or > 100 || item.SiteName.Any(char.IsControl))
+                reason = "اسم الموقع غير صالح.";
             else if (!seen.Add(item.NormalizedNumber))
                 reason = "«الرقم (ع)» مكرر داخل الملف.";
             else
@@ -146,11 +150,11 @@ public sealed class ExcelPersonnelImportService
             }
             if (reason is not null)
                 issues.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
-                    ["serviceNumberA"] = item.Number, ["reason"] = reason });
+                    ["serviceNumberA"] = item.Number, ["siteName"] = item.SiteName, ["reason"] = reason });
             else
                 accepted.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
                     ["serviceNumberA"] = item.Number, ["normalizedName"] = item.NormalizedName,
-                    ["normalizedNumber"] = item.NormalizedNumber });
+                    ["normalizedNumber"] = item.NormalizedNumber, ["siteName"] = item.SiteName });
         }
         return (accepted, issues);
     }
@@ -192,7 +196,8 @@ public sealed class ExcelPersonnelImportService
                     ["row"] = p["row"]!.GetValue<int>(), ["name"] = p["name"]!.GetValue<string>(),
                     ["number"] = p["serviceNumberA"]!.GetValue<string>(),
                     ["normalizedName"] = p["normalizedName"]!.GetValue<string>(),
-                    ["normalizedNumber"] = p["normalizedNumber"]!.GetValue<string>()
+                    ["normalizedNumber"] = p["normalizedNumber"]!.GetValue<string>(),
+                    ["siteName"] = p["siteName"]!.GetValue<string>()
                 };
             }).ToArray()) }, accepted.Count, ct);
         return BridgeHelpers.Ok(new JsonObject
@@ -251,22 +256,66 @@ public sealed class ExcelPersonnelImportService
                 record.CommandText = """
                     INSERT INTO ImportIssues(ImportBatchId,WorksheetName,RowNumber,
                         RawServiceNumberA,RawPersonName,RawSiteName,IssueReasonArabic)
-                    VALUES($batch,'الورقة الأولى',$row,$number,$name,NULL,$reason);
+                    VALUES($batch,'الورقة الأولى',$row,$number,$name,$site,$reason);
                     """;
                 record.Parameters.AddWithValue("$batch", batchId);
                 record.Parameters.AddWithValue("$row", rejected["row"]!.GetValue<int>());
                 record.Parameters.AddWithValue("$number", rejected["serviceNumberA"]?.GetValue<string>() ?? "");
                 record.Parameters.AddWithValue("$name", rejected["name"]?.GetValue<string>() ?? "");
+                record.Parameters.AddWithValue("$site", rejected["siteName"]?.GetValue<string>() ?? "غير محدد");
                 record.Parameters.AddWithValue("$reason", rejected["reason"]!.GetValue<string>());
                 await record.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
             string today = DateOnly.FromDateTime(_time.GetLocalNow().DateTime)
                 .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var siteIds = new Dictionary<string, string>(StringComparer.Ordinal);
+            int createdSites = 0;
             var createdIds = new List<string>(rows.Count);
             foreach (var item in rows)
             {
                 ct.ThrowIfCancellationRequested();
                 string personId = "PRN-" + Guid.NewGuid().ToString("N");
+                string siteId = "SITE-UNSPECIFIED";
+                if (item.SiteName != "غير محدد")
+                {
+                    string normalizedSite = ArabicTextNormalizer.NormalizeForSearch(item.SiteName);
+                    if (!siteIds.TryGetValue(normalizedSite, out var savedSiteId))
+                    {
+                        using var findSite = connection.CreateCommand();
+                        findSite.Transaction = tx;
+                        findSite.CommandText = "SELECT SiteId FROM Sites WHERE NormalizedName=$name AND ActiveFlag=1 LIMIT 1;";
+                        findSite.Parameters.AddWithValue("$name", normalizedSite);
+                        siteId = await findSite.ExecuteScalarAsync(ct).ConfigureAwait(false) as string ?? "";
+                        if (siteId.Length == 0)
+                        {
+                            siteId = "SITE-" + Guid.NewGuid().ToString("N");
+                            using var newSite = connection.CreateCommand();
+                            newSite.Transaction = tx;
+                            newSite.CommandText = """
+                                INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,ActiveFlag,CreatedAtUtc,RowVersion)
+                                VALUES($id,$name,$norm,0,1,$now,1);
+                                INSERT INTO SiteNameHistory(SiteId,VisibleNameSnapshot,ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc)
+                                VALUES($id,$name,$day,NULL,$actor,$now);
+                                """;
+                            newSite.Parameters.AddWithValue("$id", siteId);
+                            newSite.Parameters.AddWithValue("$name", item.SiteName);
+                            newSite.Parameters.AddWithValue("$norm", normalizedSite);
+                            newSite.Parameters.AddWithValue("$day", today);
+                            newSite.Parameters.AddWithValue("$actor", actor);
+                            newSite.Parameters.AddWithValue("$now", now);
+                            await newSite.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                            createdSites++;
+                            await BridgeAuditWriter.WriteAsync(connection, tx, _time,
+                                "SITE_CREATE", "إنشاء موقع أثناء الاستيراد", actor, username, username,
+                                "Site", siteId, item.SiteName, null,
+                                new JsonObject { ["siteId"] = siteId, ["name"] = item.SiteName }.ToJsonString(),
+                                "تعريف موقع جديد تلقائياً من كشف Excel", null, today,
+                                ct.CorrelationId(), ct).ConfigureAwait(false);
+                        }
+                        siteIds[normalizedSite] = siteId;
+                    }
+                    else siteId = savedSiteId;
+                }
                 using var insert = connection.CreateCommand();
                 insert.Transaction = tx;
                 insert.CommandText = """
@@ -279,7 +328,7 @@ public sealed class ExcelPersonnelImportService
                     VALUES($id,$name,$number,$today,NULL,$actor,$now,'استيراد Excel معتمد');
                     INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
                         ValidToLocalDate,SourceMovementId,CreatedAtUtc)
-                    VALUES($assignment,$id,'SITE-UNSPECIFIED',$today,NULL,NULL,$now);
+                    VALUES($assignment,$id,$site,$today,NULL,NULL,$now);
                     """;
                 insert.Parameters.AddWithValue("$id", personId);
                 insert.Parameters.AddWithValue("$name", item.Name);
@@ -290,8 +339,17 @@ public sealed class ExcelPersonnelImportService
                 insert.Parameters.AddWithValue("$now", now);
                 insert.Parameters.AddWithValue("$actor", actor);
                 insert.Parameters.AddWithValue("$assignment", "ASG-" + Guid.NewGuid().ToString("N"));
+                insert.Parameters.AddWithValue("$site", siteId);
                 await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 createdIds.Add(personId);
+            }
+            using (var updateBatch = connection.CreateCommand())
+            {
+                updateBatch.Transaction = tx;
+                updateBatch.CommandText = "UPDATE ImportBatches SET CreatedSitesCount=$count WHERE ImportBatchId=$id;";
+                updateBatch.Parameters.AddWithValue("$count", createdSites);
+                updateBatch.Parameters.AddWithValue("$id", batchId);
+                await updateBatch.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
             await BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 "PERSONNEL_IMPORT", "استيراد أفراد من ملف Excel",
@@ -303,7 +361,8 @@ public sealed class ExcelPersonnelImportService
                 "اعتماد كشف Excel بعد المعاينة", today, ct.CorrelationId(), ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(new JsonObject { ["createdCount"] = rows.Count,
                 ["committedAtUtc"] = now, ["importToken"] = token,
-                ["importBatchId"] = batchId, ["rejectedCount"] = plannedIssues.Count },
+                ["importBatchId"] = batchId, ["rejectedCount"] = plannedIssues.Count,
+                ["createdSitesCount"] = createdSites },
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonIdentityUpdated,
                     today, createdIds));
         }, ct).ConfigureAwait(false);
@@ -386,18 +445,20 @@ public sealed class ExcelPersonnelImportService
             }
             // Some official monthly workbooks put a report title and period above the header.
             // Locate the first valid header within five rows, never interpret title rows as persons.
-            int headerIndex = -1, nameCol = 0, numberCol = 0;
+            int headerIndex = -1, nameCol = 0, numberCol = 0, siteCol = 0;
             for (int index = 0; index < Math.Min(rows.Count, 5); index++)
             {
                 var headers = rows[index].Elements(Ns + "c")
                     .Select(cell => (column: Col(cell), value: Value(cell))).ToList();
                 int name = headers.Where(x => x.value is "الاسم" or "الاسم الكامل" or "اسم الفرد")
                     .Select(x => x.column).FirstOrDefault();
-                int number = headers.Where(x => x.value is "الرقم (ع)" or "الرقم ع" or "الرقم" or "الرقم(ع)")
+                int number = headers.Where(x => x.value is "الرقم (ع)" or "الرقم ع" or "الرقم(ع)")
                     .Select(x => x.column).FirstOrDefault();
                 if (name > 0 && number > 0 && name != number)
                 {
                     headerIndex = index; nameCol = name; numberCol = number;
+                    siteCol = headers.Where(x => x.value is "الموقع" or "اسم الموقع" or "موقع الفرد")
+                        .Select(x => x.column).FirstOrDefault();
                     break;
                 }
             }
@@ -412,10 +473,14 @@ public sealed class ExcelPersonnelImportService
                 cells.TryGetValue(numberCol, out var numberCell);
                 string name = nameCell is null ? "" : Value(nameCell);
                 string number = numberCell is null ? "" : ServiceNumber(numberCell, Value(numberCell), rowIndex);
+                cells.TryGetValue(siteCol, out var siteCell);
+                string siteName = siteCell is null ? "غير محدد" : Value(siteCell);
+                if (string.IsNullOrWhiteSpace(siteName)) siteName = "غير محدد";
                 if (name.Length == 0 && number.Length == 0) continue;
-                records.Add(new PersonInput(rowIndex, name, number,
+                bool isValidNumber=ServiceNumberPolicy.TryCanonicalize(number,out string canonical);
+                records.Add(new PersonInput(rowIndex, name, isValidNumber ? canonical : number,
                     ArabicTextNormalizer.NormalizeForSearch(name),
-                    ArabicTextNormalizer.NormalizeForSearch(number)));
+                    isValidNumber ? canonical : ArabicTextNormalizer.NormalizeForSearch(number), siteName));
                 if (records.Count > MaxRecords) throw new InvalidDataException("تجاوز عدد الأفراد الحد الآمن.");
             }
             return records;
