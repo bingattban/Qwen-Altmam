@@ -23,16 +23,19 @@ namespace AlTamam.Tests.Performance;
 ///     hot predicates" via EXPLAIN QUERY PLAN.
 /// Deterministic seeded synthetic data; zero real personnel records (§2.10).
 /// </summary>
-public sealed class SqliteIndexPerformanceTests : IAsyncLifetime, IDisposable
+public sealed class SqliteIndexPerformanceFixture : IAsyncLifetime, IDisposable
 {
-    private const int PersonCount = 2_000;              // synthetic force size
+    public const int PersonCount = 2_000;              // synthetic force size
     private const int DaysPerMonth = 31;
     private const int MonthsBack = 6;                   // ~6 month-periods of attendance
-    private const string MonthPrefix = "2025-06";       // primary measured month period
+    public const string MonthPrefix = "2025-06";       // primary measured month period
 
     private readonly string _dbPath = SyntheticFixtures.CreateTempDatabasePath();
     private AlTamamDbContext _db = null!;
     private BridgeSharedServices _services = null!;
+
+    public AlTamamDbContext Database => _db;
+    public BridgeSharedServices Services => _services;
 
     public async Task InitializeAsync()
     {
@@ -119,6 +122,22 @@ public sealed class SqliteIndexPerformanceTests : IAsyncLifetime, IDisposable
         cmd.ExecuteNonQuery();
     }
 
+}
+
+public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerformanceFixture>
+{
+    private const int PersonCount = SqliteIndexPerformanceFixture.PersonCount;
+    private const string MonthPrefix = SqliteIndexPerformanceFixture.MonthPrefix;
+
+    private readonly AlTamamDbContext _db;
+    private readonly BridgeSharedServices _services;
+
+    public SqliteIndexPerformanceTests(SqliteIndexPerformanceFixture fixture)
+    {
+        _db = fixture.Database;
+        _services = fixture.Services;
+    }
+
     // ------------------------------------------------------------------ index presence & plans
 
     [Theory]
@@ -200,11 +219,12 @@ public sealed class SqliteIndexPerformanceTests : IAsyncLifetime, IDisposable
         // Independent expectation: persons whose normalized name contains "تجريبي 0042".
         BridgeResponse response = await _services.SearchPersonsAsync("تجريبي 0042", take: 25, default);
         Assert.True(response.Success);
-        JsonArray items = (JsonArray)((JsonObject)response.Data!)["items"];
+        JsonArray items = Assert.IsType<JsonArray>(((JsonObject)response.Data!)["items"]);
         Assert.NotEmpty(items);
-        foreach (JsonNode item in items)
+        foreach (JsonNode? item in items)
         {
-            string displayName = item["displayName"]!.GetValue<string>();
+            string displayName = Assert.IsType<JsonObject>(item)["displayName"]?.GetValue<string>()
+                ?? throw new InvalidOperationException("Person displayName is missing.");
             Assert.Contains("تجريبي 0042", displayName, StringComparison.Ordinal);
         }
         // Exact total from raw SQL over the same predicate.
@@ -263,7 +283,7 @@ public sealed class SqliteIndexPerformanceTests : IAsyncLifetime, IDisposable
         const string newDay = "2025-07-01";
 
         var tasks = new List<Task>();
-        for (int r = 0; r < readers; r)
+        for (int r = 0; r < readers; r++)
             tasks.Add(Task.Run(async () =>
             {
                 for (int i = 0; i < 5; i++)

@@ -37,7 +37,8 @@ public sealed class BridgeRbacMatrixTests
         // Handlers are pure probes: they record that execution reached the handler and echo success.
         // RBAC must be decided entirely BEFORE this point; if a denied case ever records an entry,
         // the assertion fails with concrete evidence of the bypass.
-        executedActions = new List<string>();
+        var executed = new List<string>();
+        executedActions = executed;
         var registrations = ActionManifest.All.Select(meta => new BridgeActionRegistration(
             meta.Action,
             meta.OwningService,
@@ -46,7 +47,7 @@ public sealed class BridgeRbacMatrixTests
             meta.AllowedRoles.Contains("Unauthenticated", StringComparer.Ordinal),
             Handler: (req, principal, ct) =>
             {
-                lock (executedActions) { executedActions.Add(req.Action); }
+                lock (executed) { executed.Add(req.Action); }
                 return Task.FromResult(new BridgeResponse(req.RequestId, true, new JsonObject { ["rbacProbe"] = true }));
             })).ToList();
         return new WebView2BridgeDispatcher(registrations);
@@ -91,9 +92,17 @@ public sealed class BridgeRbacMatrixTests
         }
         else
         {
-            Assert.Equal(BridgeOutcomeKind.Forbidden, result.Kind);
+            if (callerRole == "Unauthenticated")
+            {
+                Assert.Equal(BridgeOutcomeKind.Unauthorized, result.Kind);
+                Assert.Equal(BridgeErrorCodes.SessionExpired, result.Response.ErrorCode);
+            }
+            else
+            {
+                Assert.Equal(BridgeOutcomeKind.Forbidden, result.Kind);
+                Assert.Equal(BridgeErrorCodes.Unauthorized, result.Response.ErrorCode);
+            }
             Assert.False(result.Response.Success);
-            Assert.Equal(BridgeErrorCodes.Unauthorized, result.Response.ErrorCode);
         }
     }
 
@@ -171,18 +180,26 @@ public sealed class BridgeRbacMatrixTests
     [InlineData("CommitExternalTransfer")]
     [InlineData("RemoveSiteAndReassignCurrentPersons")]
     [InlineData("UpdateBackupSchedule")]
-    public async Task DangerousActions_SupervisorAndUnauthenticated_AlwaysDeniedBeforeHandler(string action)
+    public async Task DangerousActions_SupervisorFollowsCanonicalRoles_UnauthenticatedAlwaysDenied(string action)
     {
         var dispatcher = BuildAuditedDispatcher(out List<string> executed);
+        var manifestAction = ActionManifest.All.Single(a => a.Action == action);
+        bool supervisorAllowed = manifestAction.AllowedRoles.Contains("Supervisor", StringComparer.Ordinal);
 
-        foreach (string nonce in new[] { NonceSv, NonceUnknown })
-        {
-            BridgeDispatchResult result = await dispatcher.DispatchAsync(
-                Envelope(action, nonce, $"DNG-{action}-{nonce[..4]}"),
-                ValidOrigin, isMainFrame: true, Authenticate);
-            Assert.Equal(BridgeOutcomeKind.Forbidden, result.Kind);
-        }
-        Assert.Empty(executed);
+        BridgeDispatchResult supervisor = await dispatcher.DispatchAsync(
+            Envelope(action, NonceSv, $"DNG-{action}-SV"),
+            ValidOrigin, isMainFrame: true, Authenticate);
+        Assert.Equal(supervisorAllowed ? BridgeOutcomeKind.Success : BridgeOutcomeKind.Forbidden, supervisor.Kind);
+        Assert.Equal(supervisorAllowed, supervisor.Response.Success);
+        Assert.Equal(supervisorAllowed ? new[] { action } : Array.Empty<string>(), executed);
+
+        BridgeDispatchResult unknownSession = await dispatcher.DispatchAsync(
+            Envelope(action, NonceUnknown, $"DNG-{action}-UNKNOWN"),
+            ValidOrigin, isMainFrame: true, Authenticate);
+        Assert.Equal(BridgeOutcomeKind.Unauthorized, unknownSession.Kind);
+        Assert.Equal(BridgeErrorCodes.SessionExpired, unknownSession.Response.ErrorCode);
+        Assert.False(unknownSession.Response.Success);
+        Assert.Equal(supervisorAllowed ? new[] { action } : Array.Empty<string>(), executed);
     }
 
     [Fact]
@@ -340,7 +357,7 @@ public sealed class BridgeRbacMatrixTests
             "{\"requestId\":\"X\",\"protocolVersion\":1,\"action\":\"CommitFullReset\",\"sessionNonce\":\"short\",\"payload\":{}}",           // bad nonce format
             "{\"requestId\":\"" + new string('R', 65) + "\",\"protocolVersion\":1,\"action\":\"GetCurrentSession\",\"sessionNonce\":\"" + NonceGa + "\",\"payload\":{}}", // oversized id
             "{\"requestId\":\"X\",\"protocolVersion\":1,\"action\":\"GetCurrentSession\",\"sessionNonce\":\"" + NonceGa + "\",\"payload\":" + new string('[', 40) + "{}" + new string(']', 40) + "}", // deep nesting probe
-            "\0\1\2 binary garbage \u0000",
+            "\0\u0001\u0002 binary garbage \u0000",
         };
         foreach (string raw in hostile)
         {

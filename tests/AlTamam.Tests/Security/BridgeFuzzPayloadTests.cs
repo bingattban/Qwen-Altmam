@@ -102,7 +102,7 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
         string reqId = $"FUZZ-{Math.Abs(hostile.GetHashCode()):X}";
         BridgeDispatchResult result = await _dispatcher.DispatchAsync(
             Envelope("SearchPersons", new JsonObject { ["term"] = hostile, ["take"] = 5 }, reqId),
-            LocalWebUiOrigin.BaseUrl, isMainFrame: true, _services.ResolveSessionAsync);
+            LocalWebUiOrigin.BaseUrl, isMainFrame: true, nonce => _services.ResolveSessionAsync(nonce));
 
         // Contract: dispatch NEVER throws; whatever the outcome, it is a canonical envelope.
         Assert.Equal(reqId, result.Response.RequestId);
@@ -144,9 +144,10 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
                 ["targetStatusId"] = hostile,
                 ["selectedPersonIds"] = new JsonArray(hostile)
             }, $"FUZZ-DRAFT-{Math.Abs(hostile.GetHashCode()):X}"),
-            LocalWebUiOrigin.BaseUrl, true, _services.ResolveSessionAsync);
+            LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
 
-        Assert.Equal(BridgeOutcomeKind.Success, result.Kind == BridgeOutcomeKind.Success ? result.Kind : result.Kind);
+        // Invalid hostile fields may be rejected; success and error envelopes must agree.
+        Assert.Equal(result.Kind == BridgeOutcomeKind.Success, result.Response.Success);
         if (!result.Response.Success)
             Assert.False(string.IsNullOrWhiteSpace(result.Response.ErrorCode));
 
@@ -162,17 +163,15 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
     {
         const int depth = 100;
         string nested = new string('[', depth) + new string(']', depth);
-        string raw = new JsonObject
-        {
-            ["requestId"] = "DEPTH-1",
-            ["protocolVersion"] = BridgeProtocol.ProtocolVersion,
-            ["action"] = "GetCurrentSession",
-            ["sessionNonce"] = _gaNonce,
-            ["payload"] = JsonNode.Parse("{\"arr\":" + nested + "}")
-        }.ToJsonString();
+        // Construct wire JSON directly: parsing the nested value here would throw
+        // before the production bridge parser could enforce its own depth limit.
+        string raw = "{\"requestId\":\"DEPTH-1\",\"protocolVersion\":" +
+            BridgeProtocol.ProtocolVersion +
+            ",\"action\":\"GetCurrentSession\",\"sessionNonce\":\"" + _gaNonce +
+            "\",\"payload\":{\"arr\":" + nested + "}}";
 
         BridgeDispatchResult result = await _dispatcher.DispatchAsync(
-            raw, LocalWebUiOrigin.BaseUrl, true, _services.ResolveSessionAsync);
+            raw, LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
         Assert.NotEqual(BridgeOutcomeKind.Success, result.Kind);
         Assert.False(result.Response.Success);
     }

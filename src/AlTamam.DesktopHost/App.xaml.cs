@@ -8,8 +8,6 @@ namespace AlTamam.DesktopHost;
 /// <summary>Application entry point for the real Windows desktop host (04.01).</summary>
 public partial class App : System.Windows.Application
 {
-    private bool initialized;
-
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -18,16 +16,12 @@ public partial class App : System.Windows.Application
         // constructs the UI, database, or WebView2 environment.
         if (e.Args.Contains("--layout-selfcheck", StringComparer.Ordinal))
         {
-            Shutdown(MainWindow.RunLayoutSelfCheck());
+            Shutdown(AlTamam.DesktopHost.MainWindow.RunLayoutSelfCheck());
             return;
         }
 
-        // Generated App.g.cs provides InitializeComponent(); runs once before any window opens.
-        if (!initialized)
-        {
-            InitializeComponent();
-            initialized = true;
-        }
+        // WPF initializes App.xaml through its generated application entry point.
+        // Do not invoke a second InitializeComponent() from OnStartup.
         MainWindow window = new();
         MainWindow = window;
         window.Show();
