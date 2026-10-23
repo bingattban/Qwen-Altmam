@@ -130,6 +130,38 @@ public static class BridgeHandlerCatalog
                 ["offline"] = true,
                 ["bridgeProtocol"] = BridgeProtocol.ProtocolVersion
             })),
+        // Configuration writes are registered with server-side role checks and
+        // audit/identity-history updates in the same encrypted transaction.
+        "CreateSite" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.CreateSiteAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.SiteCreated)) : Fail(req, inner);
+        },
+        "RenameSite" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.RenameSiteAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.SiteRenamed)) : Fail(req, inner);
+        },
+        "CreateAttendanceStatus" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.CreateStatusAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.StatusDefinitionCreated)) : Fail(req, inner);
+        },
+        "UpdateAttendanceStatus" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.UpdateStatusAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.StatusDefinitionChanged)) : Fail(req, inner);
+        },
+        "DeactivateOrDeleteStatus" => async (req, principal, ct) =>
+        {
+            var svc = new AdminConfigurationService(services.Db);
+            BridgeResponse inner = await svc.DeactivateStatusAsync(req.Payload, principal!, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.StatusDefinitionChanged)) : Fail(req, inner);
+        },
         // ---------------- Phase 11: UserAuditService — audit portion (immutable evidence + overlays)
         "QueryAuditLog" => async (req, principal, ct) =>
         {
