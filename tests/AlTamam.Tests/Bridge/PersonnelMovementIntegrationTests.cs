@@ -81,6 +81,31 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.True(commit.Success,commit.UserMessage);
         Assert.Equal(2L,Count("PersonnelMovements"));
         Assert.Equal(2L,Count("AuditEvents"));
+        var month=new DailyMonthlyReadService(_db);
+        DateTime now=DateTime.Now;
+        foreach(var (location,expected) in new[] {
+            ("SITE-UNSPECIFIED","تم نقله إلى"),
+            ("SITE-DEST","تم نقله من")
+        })
+        {
+            var monthly=await month.MonthlyGridAsync(new JsonObject{
+                ["year"]=now.Year,["month"]=now.Month,["siteId"]=location,
+                ["page"]=1,["pageSize"]=50
+            },CancellationToken.None);
+            Assert.True(monthly.Success,monthly.UserMessage);
+            var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(monthly.Data)["items"]);
+            Assert.Equal(2,items.Count);
+            foreach(var item in items)
+            {
+                var days=Assert.IsType<JsonObject>(item!["days"]);
+                var transferCell=Assert.IsType<JsonObject>(days[Today()]);
+                Assert.Equal("movement",transferCell["kind"]!.GetValue<string>());
+                Assert.Contains(expected,transferCell["name"]!.GetValue<string>());
+            }
+        }
+        var archivePeriods=await month.ArchivePeriodsAsync(CancellationToken.None);
+        Assert.Contains(DateTime.Now.ToString("yyyy-MM"),
+            Assert.IsType<JsonArray>(archivePeriods.Data).Select(x=>x!.GetValue<string>()));
         using(var c=_db.CreateOpenConnection())
         {
             using var cmd=c.CreateCommand();
