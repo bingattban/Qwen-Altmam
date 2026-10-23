@@ -24,7 +24,8 @@
  async function render(page){
    const bridge=window.AltamamBridge;
    const day=localDate();
-   page.replaceChildren();
+   const host=make("div",undefined,"admin-attendance-host");
+   page.replaceChildren(host);
    const header=make("section",undefined,"card");
    header.append(make("h2","التمام اليومي","section-title"),
        make("p","تحضير فردي أو جماعي لليوم الحالي. لا يحفظ أي تعديل قبل المراجعة.","section-description"));
@@ -53,7 +54,7 @@
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
    filters.append(site,status,mode,reason);
    header.append(filters,choice,info,list,review);
-   page.appendChild(header);
+   host.appendChild(header);
    const fields=["تحديد","الرقم (ع)","الاسم","الموقع","الحالة الحالية"];
    function table(headers){
      const outer=make("div",undefined,"functional-table-wrap");
@@ -73,7 +74,7 @@
          businessDate:day,siteId:site.value,statusId:"",
          page:pageNo,pageSize:50
        });
-       if(current!==nonce||!page.isConnected)return;
+       if(current!==nonce||!host.isConnected)return;
        const d=response.data||{},t=table(fields);
        for(const p of d.items||[]){
          const tr=make("tr"),td=make("td"),cb=make("input");
@@ -115,7 +116,7 @@
          personIds:Array.from(selected).sort(),mode:mode.value,
          reason:mode.value==="revise"?reason.value.trim():""
        });
-       if(!page.isConnected)return;
+       if(!host.isConnected)return;
        const data=r.data||{};
        if(!data.previewToken||!Array.isArray(data.persons))
          throw Error("تعذر اعتماد المعاينة.");
@@ -146,6 +147,9 @@
    }
    filters.appendChild(button("تحديث",()=>{reset();load();}));
    header.insertBefore(button("معاينة التحضير",preview),choice);
+   header.insertBefore(button("العودة إلى إدارة القوة",()=>{
+     window.AltamamAdminSettings.renderGroup("force");
+   }),filters);
    try{
      const [sites,statuses]=await Promise.all([
        bridge.invoke("QuerySites",{}),bridge.invoke("GetActiveAttendanceStatuses",{})
