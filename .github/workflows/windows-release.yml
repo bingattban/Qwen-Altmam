@@ -22,6 +22,9 @@ on:
     paths:
       - '.github/workflows/windows-release.yml'
       - 'build/**'
+      - 'src/AlTamam.DesktopHost/**'
+      - 'src/AlTamam.Contracts/Bridge/LocalWebUiOrigin.cs'
+      - 'src/AlTamam.WebUI/**'
 
 permissions:
   contents: read
@@ -149,6 +152,19 @@ jobs:
           # Executable actually launches; WPF UI loop can't be asserted headlessly,
           # so we verify process start + clean exit via the built-in self-check flag.
           & "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe" --layout-selfcheck
+      - name: Verify WebView2 loads the bundled offline UI on Windows
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe").Path
+          $probe = Start-Process -FilePath $exe -ArgumentList '--webview-selfcheck' -PassThru
+          if (-not $probe.WaitForExit(60000)) {
+            $probe.Kill()
+            throw 'WebView2 offline UI navigation test timed out'
+          }
+          if ($probe.ExitCode -ne 0) {
+            throw "WebView2 offline UI navigation failed (exit $($probe.ExitCode))"
+          }
+          Write-Host 'WEBVIEW-SELFCHECK PASS (real Windows WebView2 navigation)'
       - name: Build Portable ZIP (clean directory, real runnable EXE)
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null

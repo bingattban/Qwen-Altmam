@@ -92,7 +92,7 @@ public sealed class SecretHygieneAndFailureTests : IDisposable
     [Fact]
     public void ProductionSource_ContainsNoConsoleOrDebugLoggingOfSecrets()
     {
-        // The WPF --layout-selfcheck emits only two known diagnostics and no key material.
+        // Only explicit offline UI smoke diagnostics are permitted; no secrets.
         // Any other production console/debug/tracing sink remains forbidden by this gate.
         string srcRoot = Locate.SourceDirectory();
         string[] offenders = Directory
@@ -104,7 +104,9 @@ public sealed class SecretHygieneAndFailureTests : IDisposable
                 {
                     text = text
                         .Replace("Console.WriteLine(\"LAYOUT-SELFCHECK PASS\");", "", StringComparison.Ordinal)
-                        .Replace("Console.Error.WriteLine(\"LAYOUT-SELFCHECK FAIL: \" + ex.Message);", "", StringComparison.Ordinal);
+                        .Replace("Console.Error.WriteLine(\"LAYOUT-SELFCHECK FAIL: \" + ex.Message);", "", StringComparison.Ordinal)
+                        .Replace("Console.WriteLine(\"WEBVIEW-SELFCHECK PASS\");", "", StringComparison.Ordinal)
+                        .Replace("Console.Error.WriteLine(\"WEBVIEW-SELFCHECK FAIL: \" + ex.Message);", "", StringComparison.Ordinal);
                 }
                 return text.Contains("Console.Write", StringComparison.Ordinal)
                     || text.Contains("Console.Error.Write", StringComparison.Ordinal)
