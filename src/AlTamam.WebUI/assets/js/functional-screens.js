@@ -148,6 +148,7 @@
   }
 
   async function renderDashboard() {
+    STATE.date=startOfToday();
     const container=view();
     container.replaceChildren(header("التمام اليومي"));
     const controls=el("div","card functional-toolbar");
@@ -244,6 +245,7 @@
       const noneMonth=el("option","","الشهر (الحالي عند الفراغ)");
       noneMonth.value="";monthPick.appendChild(noneMonth);
       const years=new Set([now.getFullYear()]);
+      for(let y=now.getFullYear();y>=Math.max(1900,now.getFullYear()-40);y--)years.add(y);
       for(const period of STATE.archivePeriods)years.add(Number(String(period).slice(0,4)));
       Array.from(years).sort((a,b)=>b-a).forEach(value=>{
         const option=el("option","",value);option.value=value;yearPick.appendChild(option);
@@ -276,7 +278,7 @@
         {label:"الرقم (ع)",cls:"pinned fixed-two"},
         {label:"الاسم",cls:"pinned fixed-three"},
         {label:"الموقع",cls:"pinned fixed-four"}];
-      for(let day=1;day<=dayCount;day++)cols.push({label:day+" "+weekdayLabel(year,month,day)});
+      for(let day=1;day<=dayCount;day++)cols.push({label:day+"\n"+weekdayLabel(year,month,day)});
       const tb=createTable(cols);
       tb.wrap.classList.add("monthly-scroll");
       tableHost.replaceChildren(tb.wrap);
