@@ -54,10 +54,37 @@ async function run(){
  listeners.get("keydown")({key:"Escape",preventDefault(){},shiftKey:false});
  assert.equal(await canceled,null);
  assert.equal(overlay.classList.open,false);
+ const reviewData={businessDate:"2026-10-24",statusName:"موجود",
+   persons:[{name:"محمد صالح الحضرمي",serviceNumberA:"12345",
+     previousStatusName:"غير محضر"},
+     {name:"أحمد سالم باصالح",serviceNumberA:"67890",
+       previousStatusName:"غياب"}]};
+ const canceledReview=dialog.attendanceReview(reviewData,
+   {confirmLabel:"تأكيد وحفظ التحضير"});
+ assert.equal(overlay.classList.open,true,"review is shown inside app modal");
+ assert.equal(body.all().filter(x=>x.tag==="table").length,1,
+   "modal contains the entire server-verified attendance list");
+ assert.ok(body.all().some(x=>x.textContent==="محمد صالح الحضرمي"));
+ assert.ok(body.all().some(x=>x.textContent==="12345"));
+ assert.ok(body.all().some(x=>x.textContent==="أحمد سالم باصالح"));
+ assert.ok(body.all().some(x=>x.textContent==="67890"));
+ assert.ok(body.all().some(x=>x.textContent==="غير محضر"));
+ assert.ok(body.all().some(x=>x.textContent==="غياب"));
+ assert.ok(body.all().some(x=>x.textContent==="موجود"));
+ button("إلغاء").click();
+ assert.equal(await canceledReview,false,"cancel closes without approval");
+ const acceptedReview=dialog.attendanceReview(reviewData,
+   {title:"معاينة التحضير",confirmLabel:"تأكيد وحفظ التحضير"});
+ assert.equal(title.textContent,"معاينة التحضير");
+ button("تأكيد وحفظ التحضير").click();
+ assert.equal(await acceptedReview,true,"review itself owns the approval action");
+ assert.equal(overlay.classList.open,false);
+ const invalidReview=await dialog.attendanceReview({...reviewData,persons:[]});
+ assert.equal(invalidReview,false,"never approve an empty or missing server preview");
  const css=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
  assert.ok(css.includes(".modal-backdrop{z-index:1000;align-items:center;justify-content:center}"),
    "dialogs are horizontally and vertically centered");
- console.log("APP DIALOGS PASS: centered theme, confirm/cancel, required reason, keyboard dismissal, focus restore");
+ console.log("APP DIALOGS PASS: centered theme, full attendance preview, no-write cancel, one-step approval, reason validation and focus restore");
 }
 run().catch(error=>{console.error(error);process.exitCode=1;});
