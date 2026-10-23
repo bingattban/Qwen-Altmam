@@ -74,7 +74,7 @@ public partial class MainWindow : Window
     {
         if (Environment.GetCommandLineArgs().Contains("--layout-selfcheck", StringComparer.Ordinal))
         {
-            Application.Current.Shutdown(RunLayoutSelfCheck());
+            System.Windows.Application.Current.Shutdown(RunLayoutSelfCheck());
             return;
         }
         _ = OnLoadedAsync(sender, e);
