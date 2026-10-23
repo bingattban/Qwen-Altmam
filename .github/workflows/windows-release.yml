@@ -18,6 +18,10 @@ on:
         default: '0.15.0'
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/windows-release.yml'
+      - 'build/**'
 
 permissions:
   contents: read
@@ -28,6 +32,7 @@ env:
   PUBLISH_DIR: publish/AlTamam-win-x64
   CONFIGURATION: Release
   RUNTIME: win-x64
+  RELEASE_VERSION: ${{ github.event_name == 'pull_request' && '0.15.0-ci' || (github.event.inputs.version || github.ref_name) }}
 
 jobs:
   preflight:
@@ -44,7 +49,7 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Restore with package integrity + advisory audit
         shell: pwsh
-        run: >
+        run: |
           dotnet restore AlTamam.slnx; if ($LASTEXITCODE -ne 0) { throw 'restore failed' }
           dotnet list AlTamam.slnx package --vulnerable --include-transitive | Tee-Object vulnerable.txt
           if ($LASTEXITCODE -ne 0) { throw 'vulnerability scan command failed' }
@@ -102,6 +107,8 @@ jobs:
           dotnet-version: '10.0.x'
           cache: true
           cache-dependency-path: Directory.Packages.props
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Publish genuine WPF executable (self-contained, win-x64)
         run: >
           dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj
@@ -109,14 +116,16 @@ jobs:
           -p:PublishSingleFile=false -p:DebugType=none -p:DebugSymbols=false
           -o $env:PUBLISH_DIR
       - name: Validate publish layout (real PE, WebView2 loader, SQLCipher native)
-        run: python build/validate-layout.py $env:PUBLISH_DIR
+        run: python build/validate-layout.py $env:PUBLISH_DIR --portable
       - name: Optional signing (ONLY with owner-provisioned approved certificate)
         shell: pwsh
         env:
           SMTOOL_USER: ${{ secrets.SMTOOL_USER }}
           SMTOOL_AUTH: ${{ secrets.SMTOOL_AUTH }}
         run: |
-          if ($env:SMTOOL_USER) {
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            Write-Host "Signing disabled for PR validation; production signing requires owner approval."
+          } elseif ($env:SMTOOL_USER) {
             # Real certificate comes exclusively from owner-approved secrets;
             # never embedded in the repository. Absent => artifact stays UNSIGNED
             # and release notes must not claim signature/'secure' distribution.
@@ -144,18 +153,20 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup --version 6.3.3 -y
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup install failed' }
           $publishDirAbsolute = (Resolve-Path $env:PUBLISH_DIR).Path
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
-            /DAppVersion=${{ github.event.inputs.version || github.ref_name }} `
+            /DAppVersion=$env:RELEASE_VERSION `
             /DPublishDir=$publishDirAbsolute `
             build/AlTamam-installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compiler failed' }
           Move-Item artifacts/AlTamam-Installer-win-x64-setup.exe artifacts/AlTamam-Installer-win-x64.exe -Force
       - name: Generate SHA-256 checksums + build metadata (15.07)
-        run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "${{ github.event.inputs.version || github.ref_name }}"
+        run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION"
       - name: Upload BOTH release-candidate artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AlTamam-win-x64-rc-${{ github.event.inputs.version || github.ref_name }}
+          name: AlTamam-win-x64-rc-${{ env.RELEASE_VERSION }}
           path: |
             artifacts/AlTamam-Portable-win-x64.zip
             artifacts/AlTamam-Installer-win-x64.exe
@@ -174,6 +185,10 @@ jobs:
     needs: package
     runs-on: windows-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
       - uses: actions/download-artifact@v4
         with: { pattern: "AlTamam-win-x64-rc-*", merge-multiple: true, path: rc }
       - name: Stage installer next to cwd
