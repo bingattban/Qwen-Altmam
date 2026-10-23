@@ -45,7 +45,7 @@
    const results=el("div"),report=el("div"),status=el("div");
    controls.append(term,btn("بحث",search));
    searchCard.append(controls,status,results);root.append(searchCard,report);
-   let chosen=null,serial=0,attendancePage=1,auditPage=1;
+   let chosen=null,serial=0,attendancePage=1,auditPage=1,identityPage=1,movementPage=1;
    async function search(){
      const value=term.value.trim();
      if(!value)return alert(status,new Error("أدخل اسم الفرد أو الرقم (ع)."));
@@ -65,7 +65,7 @@
            .forEach(v=>tr.appendChild(el("td",v)));
          const cell=el("td");
          cell.appendChild(btn("عرض التقرير",()=>{
-           chosen=person.personId;attendancePage=1;auditPage=1;
+           chosen=person.personId;attendancePage=1;auditPage=1;identityPage=1;movementPage=1;
            void loadReport();
          }));
          tr.appendChild(cell);t.body.appendChild(tr);
@@ -92,7 +92,7 @@
      report.replaceChildren(el("p","جارٍ قراءة تاريخ الفرد من قاعدة البيانات المشفرة..."));
      try{
        const reply=await api().invoke("BuildPersonLifetimeReport",{
-         personId:chosen,attendancePage,auditPage
+         personId:chosen,attendancePage,auditPage,identityPage,movementPage
        });
        if(ticket!==serial||!root.isConnected)return;
        const d=reply.data||{},person=d.person||{};
@@ -122,10 +122,14 @@
        rows(history,["الاسم السابق أو الحالي","الرقم (ع)","بداية النفاذ","نهاية النفاذ",
          "سبب التعديل"],d.identityHistory,
          x=>[x.name,x.serviceNumberA,x.from,x.to,x.reason]);
+       pageBar(history,"تغييرات الهوية",d.identityPage,d.identityTotal,d.identityHasNext,
+         p=>{identityPage=p;void loadReport();});
        report.appendChild(history);
        const moves=card("التنقلات والفصل");
        rows(moves,["النوع","الموقع السابق","الجهة الجديدة","التاريخ","سبب الفصل"],
          d.movements,x=>[x.type,x.source,x.destination,x.date,x.reason]);
+       pageBar(moves,"التنقلات والفصل",d.movementPage,d.movementTotal,d.movementHasNext,
+         p=>{movementPage=p;void loadReport();});
        report.appendChild(moves);
        const audit=card("سجل العمليات المرتبطة بالفرد");
        rows(audit,["العملية","من قام بالتنفيذ","الاسم الكامل","التاريخ","الوصف"],
