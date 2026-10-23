@@ -94,14 +94,18 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
             },CancellationToken.None);
             Assert.True(monthly.Success,monthly.UserMessage);
             var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(monthly.Data)["items"]);
-            Assert.Equal(2,items.Count);
+            Assert.Equal(location=="SITE-UNSPECIFIED"?3:2,items.Count);
+            int transferCells=0;
             foreach(var item in items)
             {
                 var days=Assert.IsType<JsonObject>(item!["days"]);
-                var transferCell=Assert.IsType<JsonObject>(days[Today()]);
+                var transferCell=days[Today()] as JsonObject;
+                if(transferCell is null)continue; // The third person stays at the source site.
+                transferCells++;
                 Assert.Equal("movement",transferCell["kind"]!.GetValue<string>());
                 Assert.Contains(expected,transferCell["name"]!.GetValue<string>());
             }
+            Assert.Equal(2,transferCells);
         }
         var archivePeriods=await month.ArchivePeriodsAsync(CancellationToken.None);
         Assert.Contains(DateTime.Now.ToString("yyyy-MM"),
