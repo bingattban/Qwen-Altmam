@@ -70,9 +70,9 @@ public sealed class ExcelNumericServiceNumberTests : IAsyncLifetime, IDisposable
     public async Task PlainNumericCells_AreAcceptedAndCommittedWithoutChangingIdentifiers()
     {
         var workbook = Workbook(
-            ("عبدالله سالم بن عمر", "123", "n", ""),
-            ("محمد أحمد باصالح", "1.23E+3", "", ""),
-            ("سعيد صالح محمد", "0007", "inlineStr", ""),
+            ("عبدالله سالم بن عمر", "12345", "n", ""),
+            ("محمد أحمد باصالح", "1.23E+5", "", ""),
+            ("سعيد صالح محمد", "00007", "inlineStr", ""),
             ("علي حسن عبدالله", "123456789012345", "n", ""));
         var service = new ExcelPersonnelImportService(_db);
         var selected = await service.SelectAsync(workbook, Actor, CancellationToken.None);
@@ -95,7 +95,7 @@ public sealed class ExcelNumericServiceNumberTests : IAsyncLifetime, IDisposable
         using var reader = await command.ExecuteReaderAsync();
         var numbers = new List<string>();
         while (await reader.ReadAsync()) numbers.Add(reader.GetString(0));
-        Assert.Equal(new[] { "0007", "123", "1230", "123456789012345" }, numbers);
+        Assert.Equal(new[] { "00007", "12345", "123000", "123456789012345" }, numbers);
     }
 
     [Fact]
@@ -103,8 +103,8 @@ public sealed class ExcelNumericServiceNumberTests : IAsyncLifetime, IDisposable
     {
         var service = new ExcelPersonnelImportService(_db);
         var selected = await service.SelectAsync(Workbook(
-            ("سالم علي سعيد", "456", "n", ""),
-            ("محمد صالح عبدالله", "456", "inlineStr", "")), Actor, CancellationToken.None);
+            ("سالم علي سعيد", "45678", "n", ""),
+            ("محمد صالح عبدالله", "45678", "inlineStr", "")), Actor, CancellationToken.None);
         Assert.True(selected.Success, selected.UserMessage);
         var ticket = ((JsonObject)selected.Data!)["workbookToken"]!.GetValue<string>();
         var result = await service.AnalyzeAsync(new JsonObject { ["workbookToken"] = ticket },
