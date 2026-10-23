@@ -43,10 +43,14 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Restore with package integrity + advisory audit
-        run: |
-          dotnet restore AlTamam.slnx
-          dotnet list AlTamam.slnx package --vulnerable --include-transitive | tee vulnerable.txt
-          ! grep -q "has an easily accessible vulnerability" vulnerable.txt
+        shell: pwsh
+        run: >
+          dotnet restore AlTamam.slnx; if ($LASTEXITCODE -ne 0) { throw 'restore failed' }
+          dotnet list AlTamam.slnx package --vulnerable --include-transitive | Tee-Object vulnerable.txt
+          if ($LASTEXITCODE -ne 0) { throw 'vulnerability scan command failed' }
+          if (Select-String -Path vulnerable.txt -SimpleMatch 'has an easily accessible vulnerability') {
+            throw 'ADVISORY GATE FAILED: transitive package vulnerability present'
+          }
 
   build-test:
     name: Build + full test suite on Windows x64 (15.01)
@@ -63,21 +67,23 @@ jobs:
         run: |
           dotnet restore AlTamam.slnx
           dotnet build AlTamam.slnx -c $env:CONFIGURATION --no-restore
-      - name: Unit + persistence tests
+      # NOTE (2026-10-23 §22 audit): the previous category-filtered steps (--filter
+      # "Category=Unit|Persistence|Security|Performance") were a SILENT NO-OP: zero test
+      # files declare any Trait/Category today, so those filters matched nothing while
+      # `dotnet test` still exited 0 — exactly the false-green this contract forbids.
+      # Until categories are declared on the tests themselves, run the FULL suite.
+      - name: Full deterministic test suite (all authored tests; unit+persistence+security+bridge+performance)
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build
-          --filter "Category=Unit|Category=Persistence" --logger "trx;LogFileName=unit.trx"
-          --results-directory TestResults
-      - name: Security / bridge-fuzz tests (Windows-native)
-        run: >
-          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build
-          --filter "Category=Security" --logger "trx;LogFileName=security.trx"
-          --results-directory TestResults
-      - name: Performance / concurrency regression tests (15.05 outputs unchanged)
-        run: >
-          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build
-          --filter "Category=Performance" --logger "trx;LogFileName=perf.trx"
-          --results-directory TestResults
+          --logger "trx;LogFileName=full-suite.trx" --results-directory TestResults
+      - name: Guard against zero-tests-executed (fail if trx reports 0 tests)
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem TestResults/full-suite.trx
+          $xml = [xml](Get-Content $trx)
+          $count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Tests executed: $count"
+          if ($count -lt 1) { throw 'TEST SUITE RAN 0 TESTS — filter/project drift detected' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -180,10 +186,22 @@ jobs:
           Start-Process -FilePath ".\AlTamam-Installer-win-x64.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
           if (-not (Test-Path "C:\AlTamamTest\AlTamam.DesktopHost.exe")) { throw "installer did not lay down exe" }
       - name: Automated acceptance driver (synthetic data only)
+        # §22 audit 2026-10-23: Category=Acceptance tests DO NOT EXIST in the repo yet.
+        # Running `dotnet test --filter Category=Acceptance` would execute 0 tests and
+        # exit 0 — a false green this contract forbids. Until Windows-UI acceptance
+        # tests are authored (Phase 15/16 scope), this step hard-FAILS with an explicit
+        # BLOCKED message instead of pretending to pass. Restore the dotnet-test form
+        # only after at least one [Trait("Category","Acceptance")] test exists.
+        shell: pwsh
         run: |
+          $hits = Get-ChildItem tests -Recurse -Filter *.cs | Select-String -SimpleMatch 'Category","Acceptance'
+          if (-not $hits) {
+            throw 'BLOCKED: no Windows-UI acceptance tests exist yet (Category=Acceptance absent). This gate cannot be claimed green.'
+          }
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release `
             --filter "Category=Acceptance" --logger "trx;LogFileName=acceptance.trx" `
             --results-directory AcceptanceResults
+          if ($LASTEXITCODE -ne 0) { throw "acceptance suite failed (exit $LASTEXITCODE)" }
         continue-on-error: false
       - uses: actions/upload-artifact@v4
         if: always()
