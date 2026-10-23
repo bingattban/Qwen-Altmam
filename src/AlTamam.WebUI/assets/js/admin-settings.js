@@ -67,28 +67,71 @@
     state.active=screen;state.page=1;state.term="";currentRequest++;
     renderDetail(screen);
   }
+  function parentOf(screen) {
+    return sections.find(section => section.children.some(child => child[0] === screen));
+  }
   function start(title) {
     const page=target();page.replaceChildren();
-    const head=card(title), back=btn("العودة إلى الإدارة",()=>renderAdmin(state.session),"btn btn-outline");
-    head.appendChild(back);page.appendChild(head);
+    const parent=parentOf(state.active);
+    const head=card(title);
+    head.classList.add("admin-subpage-heading");
+    const back=btn(parent ? "العودة إلى "+parent.title : "العودة إلى الإدارة",
+      () => parent ? renderGroup(parent.key) : renderAdmin(state.session),
+      "btn btn-outline");
+    head.appendChild(back);
+    page.appendChild(head);
     return page;
   }
   function renderAdmin(session) {
-    state.session=session;state.active="home";currentRequest++;
+    state.session=session;
+    state.active="home";
+    currentRequest++;
     const page=target();page.replaceChildren();
     const heading=card("الإدارة");
+    heading.classList.add("admin-section-heading");
     heading.appendChild(node("p","section-description",
-      "اختر مجال العمل، ثم إحدى شاشاته. يتم حفظ البيانات الحقيقية محلياً وفق صلاحية الحساب."));
+      "اختر القسم المطلوب لعرض شاشاته. لن تظهر الخيارات الفرعية إلا بعد الدخول إليه."));
     page.appendChild(heading);
-    const grid=node("div","admin-groups");
+    const grid=node("div","admin-home-grid");
+    grid.setAttribute("aria-label","أقسام الإدارة");
+    const icons={force:"♙",config:"◈",sheets:"▤",users:"♧",audit:"◷"};
     for(const section of sections) {
       if(section.key==="users" && session.role==="Supervisor")continue;
-      const group=card(section.title), actions=node("div","admin-action-grid");
-      for(const [key,title] of section.children) {
-        const b=btn(title,()=>navigate(key),"btn btn-outline admin-tile");
-        actions.appendChild(b);
-      }
-      group.appendChild(actions);grid.appendChild(group);
+      const tile=btn(section.title,()=>renderGroup(section.key),"admin-primary-tile");
+      tile.textContent="";
+      tile.dataset.adminSection=section.key;
+      tile.setAttribute("aria-label","فتح "+section.title);
+      tile.append(
+        node("span","admin-primary-icon",icons[section.key]),
+        node("span","admin-primary-title",section.title),
+        node("span","admin-primary-chevron","فتح القسم ←")
+      );
+      grid.appendChild(tile);
+    }
+    page.appendChild(grid);
+  }
+  function renderGroup(sectionKey) {
+    const section=sections.find(item=>item.key===sectionKey);
+    if(!section || (section.key==="users" && state.session.role==="Supervisor")) {
+      renderAdmin(state.session);return;
+    }
+    state.active="group:"+section.key;
+    currentRequest++;
+    const page=target();page.replaceChildren();
+    const heading=card(section.title);
+    heading.classList.add("admin-subpage-heading");
+    heading.append(
+      node("p","section-description","اختر الشاشة التي تريد فتحها من هذا القسم."),
+      btn("العودة إلى الإدارة",()=>renderAdmin(state.session),"btn btn-outline")
+    );
+    page.appendChild(heading);
+    const grid=node("div","admin-subsection-grid");
+    grid.setAttribute("aria-label","شاشات "+section.title);
+    for(const [key,title] of section.children) {
+      const item=btn(title,()=>navigate(key),"admin-subsection-tile");
+      item.dataset.adminScreen=key;
+      item.setAttribute("aria-label","فتح شاشة "+title);
+      grid.appendChild(item);
     }
     page.appendChild(grid);
   }
