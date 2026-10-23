@@ -29,6 +29,8 @@ jobs:
         run: |
           node build/test-admin-settings-navigation.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings UI regression' }
+          node build/test-monthly-excel-export.js
+          if ($LASTEXITCODE -ne 0) { throw 'Monthly native Excel UI regression' }
           node build/test-monthly-cell-details.js
           if ($LASTEXITCODE -ne 0) { throw 'Monthly cell details UI regression' }
           node build/test-attendance-ui.js
