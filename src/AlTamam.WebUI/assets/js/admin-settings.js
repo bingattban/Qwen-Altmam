@@ -679,6 +679,7 @@
       const name=field("اسم الموقع");
       const note=node("div","admin-note");
       const send=btn("إضافة الموقع",async()=>{
+        if(!await dialogs.confirm("تأكيد إنشاء الموقع «"+name.input.value.trim()+"»؟"))return;
         send.disabled=true;note.replaceChildren();
         try {await api().invoke("CreateSite",{name:name.input.value});
           name.input.value="";await sites();}
@@ -715,6 +716,7 @@
       const name=field("اسم الحالة"), symbol=field("الرمز"),color=field("اللون","#38BDF8","color");
       const note=node("div","admin-note");
       const save=btn("إضافة حالة",async()=>{
+        if(!await dialogs.confirm("تأكيد إضافة حالة التحضير «"+name.input.value.trim()+"»؟"))return;
         note.replaceChildren();save.disabled=true;
         try {await api().invoke("CreateAttendanceStatus",{
           name:name.input.value,symbol:symbol.input.value,color:color.input.value});
