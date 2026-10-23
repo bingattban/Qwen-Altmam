@@ -25,6 +25,9 @@ on:
       - 'src/AlTamam.DesktopHost/**'
       - 'src/AlTamam.Contracts/Bridge/LocalWebUiOrigin.cs'
       - 'src/AlTamam.WebUI/**'
+      - 'src/AlTamam.Application/**'
+      - 'src/AlTamam.Infrastructure/**'
+      - 'tests/**'
 
 permissions:
   contents: read
@@ -52,7 +55,7 @@ jobs:
         run: |
           python build/validate-ui-shell.py
           if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
-          foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js')) {
+          foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
           }
