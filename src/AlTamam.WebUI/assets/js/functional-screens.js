@@ -321,7 +321,7 @@
           const description=el("p","section-description",
             "سيتم حفظ "+preview.personCount+" فرد في ملف Excel لشهر "+
             year+"-"+String(month).padStart(2,"0")+
-            ". الحفظ في المستندات / AlTamam / Exports، دون تعديل سجلات التحضير.");
+            ". يتم حفظ ملف Excel في المجلد المحدد في الإعدادات، دون تعديل سجلات التحضير.");
           const confirmSave=button("حفظ ملف Excel",async()=>{
             confirmSave.disabled=true;
             exportPanel.replaceChildren(description,message("جارٍ إنشاء ملف Excel..."));
