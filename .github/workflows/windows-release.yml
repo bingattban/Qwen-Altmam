@@ -115,6 +115,13 @@ jobs:
           -c $env:CONFIGURATION -r $env:RUNTIME --self-contained true
           -p:PublishSingleFile=false -p:DebugType=none -p:DebugSymbols=false
           -o $env:PUBLISH_DIR
+      - name: Remove WebView2 XML API documentation from distribution only
+        shell: pwsh
+        run: |
+          # Generated API reference files are not required by WebView2 at runtime.
+          # Keep DLLs, native loaders, application XML assets, and all other files.
+          Get-ChildItem -LiteralPath $env:PUBLISH_DIR -File -Filter 'Microsoft.Web.WebView2.*.xml' |
+            Remove-Item -Force
       - name: Validate publish layout (real PE, WebView2 loader, SQLCipher native)
         run: python build/validate-layout.py $env:PUBLISH_DIR --portable
       - name: Optional signing (ONLY with owner-provisioned approved certificate)
