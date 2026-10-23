@@ -2266,6 +2266,84 @@
           "payload"
         ]
       }
+    },
+    {
+      "action": "SetClosedDayCorrectionPolicy",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError",
+        "HistoricDayLocked",
+        "ConflictStale",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "PreviewClosedDayCorrection",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError",
+        "HistoricDayLocked",
+        "ConflictStale",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitClosedDayCorrection",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError",
+        "HistoricDayLocked",
+        "ConflictStale",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
     }
   ]
 }
