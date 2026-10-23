@@ -20,15 +20,13 @@ public sealed class PersonnelReportService
     { try{return Math.Clamp(node?[key]?.GetValue<int>()??1,1,100000);}catch{return 1;} }
     private static BridgeResponse NotFound()=>BridgeHelpers.Error(
         BridgeErrorCodes.MissingData,"لم يُعثر على الفرد في سجلات البرنامج.");
-    private static JsonArray MakeArray(IEnumerable<JsonObject> xs)
-    { var result=new JsonArray();foreach(var value in xs)result.Add(value);return result; }
-
     public async Task<BridgeResponse> ReportAsync(JsonObject? payload,CancellationToken ct)
     {
         string personId=Text(payload,"personId");
         if(personId.Length<3||personId.Length>128)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"حدد الفرد من كشف البرنامج.");
-        int attendPage=Page(payload,"attendancePage"),auditPage=Page(payload,"auditPage");
+        int attendPage=Page(payload,"attendancePage"),auditPage=Page(payload,"auditPage"),
+            identityPage=Page(payload,"identityPage"),movementPage=Page(payload,"movementPage");
         const int limit=100;
         using var conn=_db.CreateOpenConnection();
         using var person=conn.CreateCommand();
@@ -113,14 +111,20 @@ public sealed class PersonnelReportService
                     ["committedAtUtc"]=r.GetString(6)
                 });
 
+        using var identityCount=conn.CreateCommand();
+        identityCount.CommandText="SELECT COUNT(*) FROM PersonIdentityHistory WHERE PersonId=$id;";
+        identityCount.Parameters.AddWithValue("$id",personId);
+        long totalIdentities=Convert.ToInt64(await identityCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var histories=conn.CreateCommand();
         histories.CommandText="""
             SELECT NameSnapshot,ServiceNumberASnapshot,ValidFromLocalDate,
                    ValidToLocalDate,ChangedByUserId,Reason
             FROM PersonIdentityHistory WHERE PersonId=$id
-            ORDER BY ValidFromLocalDate DESC,HistoryId DESC LIMIT 200;
+            ORDER BY ValidFromLocalDate DESC,HistoryId DESC LIMIT $size OFFSET $offset;
             """;
         histories.Parameters.AddWithValue("$id",personId);
+        histories.Parameters.AddWithValue("$size",limit);
+        histories.Parameters.AddWithValue("$offset",(long)(identityPage-1)*limit);
         var names=new JsonArray();
         using(var r=await histories.ExecuteReaderAsync(ct).ConfigureAwait(false))
             while(await r.ReadAsync(ct).ConfigureAwait(false))
@@ -131,15 +135,21 @@ public sealed class PersonnelReportService
                     ["actorUserId"]=r.GetString(4),["reason"]=r.GetString(5)
                 });
 
+        using var movementCount=conn.CreateCommand();
+        movementCount.CommandText="SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId=$id;";
+        movementCount.Parameters.AddWithValue("$id",personId);
+        long totalMovements=Convert.ToInt64(await movementCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var movements=conn.CreateCommand();
         movements.CommandText="""
             SELECT MovementType,SourceSiteNameSnapshot,
                    COALESCE(DestinationSiteNameSnapshot,DestinationExternalName,''),
                    SeparationReason,EffectiveLocalDate,CommittedAtUtc,ActorUserId
             FROM PersonnelMovements WHERE PersonId=$id
-            ORDER BY EffectiveLocalDate DESC,CommittedAtUtc DESC LIMIT 200;
+            ORDER BY EffectiveLocalDate DESC,CommittedAtUtc DESC LIMIT $size OFFSET $offset;
             """;
         movements.Parameters.AddWithValue("$id",personId);
+        movements.Parameters.AddWithValue("$size",limit);
+        movements.Parameters.AddWithValue("$offset",(long)(movementPage-1)*limit);
         var moves=new JsonArray();
         using(var r=await movements.ExecuteReaderAsync(ct).ConfigureAwait(false))
             while(await r.ReadAsync(ct).ConfigureAwait(false))
@@ -187,7 +197,12 @@ public sealed class PersonnelReportService
             ["person"]=identity,["statusTotals"]=totals,["monthlyTotals"]=monthly,
             ["attendance"]=daily,["attendanceTotal"]=totalDays,
             ["attendancePage"]=attendPage,["attendanceHasNext"]=(long)attendPage*limit<totalDays,
-            ["identityHistory"]=names,["movements"]=moves,
+            ["identityHistory"]=names,["identityTotal"]=totalIdentities,
+            ["identityPage"]=identityPage,
+            ["identityHasNext"]=(long)identityPage*limit<totalIdentities,
+            ["movements"]=moves,["movementTotal"]=totalMovements,
+            ["movementPage"]=movementPage,
+            ["movementHasNext"]=(long)movementPage*limit<totalMovements,
             ["audit"]=events,["auditTotal"]=audits,["auditPage"]=auditPage,
             ["auditHasNext"]=(long)auditPage*limit<audits,
             ["pageSize"]=limit
