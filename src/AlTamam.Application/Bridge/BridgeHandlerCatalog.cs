@@ -150,6 +150,12 @@ public static class BridgeHandlerCatalog
             })),
         // Phase 05 already contains real person CRUD; expose its canonical bridge
         // contracts instead of accidentally routing QueryPersons to a 25-row search.
+        "BuildPersonLifetimeReport" => async (req, principal, ct) =>
+        {
+            var service=new PersonnelReportService(services.Db);
+            BridgeResponse result=await service.ReportAsync(req.Payload,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "QueryPersons" => async (req, principal, ct) =>
         {
             var svc = new PersonRosterService(services.Db);
