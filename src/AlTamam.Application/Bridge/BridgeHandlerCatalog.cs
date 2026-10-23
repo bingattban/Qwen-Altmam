@@ -227,6 +227,37 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.BackupAsync(principal!, ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
+        // Phase 11: secure user administration, not the older "not implemented" fallback.
+        "GetAllowedRoles" => (req, principal, ct) =>
+        {
+            var svc = new UserAccountManagementService(services.Db,services.Time);
+            BridgeResponse inner=svc.AllowedRoles(principal!);
+            return Task.FromResult(inner.Success?Done(req,inner.Data):Fail(req,inner));
+        },
+        "ListUserAccounts" => async(req,principal,ct) =>
+        {
+            var svc=new UserAccountManagementService(services.Db,services.Time);
+            BridgeResponse inner=await svc.ListAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return inner.Success?Done(req,inner.Data):Fail(req,inner);
+        },
+        "CreateUserAccount" => async(req,principal,ct) =>
+        {
+            var svc=new UserAccountManagementService(services.Db,services.Time);
+            BridgeResponse inner=await svc.CreateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged)):Fail(req,inner);
+        },
+        "ChangeUserPassword" => async(req,principal,ct) =>
+        {
+            var svc=new UserAccountManagementService(services.Db,services.Time);
+            BridgeResponse inner=await svc.ChangePasswordAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged)):Fail(req,inner);
+        },
+        "DeactivateUserAccount" => async(req,principal,ct) =>
+        {
+            var svc=new UserAccountManagementService(services.Db,services.Time);
+            BridgeResponse inner=await svc.DeactivateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged)):Fail(req,inner);
+        },
         // ---------------- Phase 11: UserAuditService — audit portion (immutable evidence + overlays)
         "QueryAuditLog" => async (req, principal, ct) =>
         {
