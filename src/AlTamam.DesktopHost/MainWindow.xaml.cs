@@ -88,6 +88,12 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            if (Environment.GetCommandLineArgs().Contains("--webview-selfcheck", StringComparer.Ordinal))
+            {
+                Console.Error.WriteLine("WEBVIEW-SELFCHECK FAIL: " + ex.Message);
+                System.Windows.Application.Current.Shutdown(1);
+                return;
+            }
             MessageBox.Show(
                 "تعذر تشغيل واجهة التطبيق: " + ex.Message,
                 "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -96,21 +102,26 @@ public partial class MainWindow : Window
 
     private async Task InitializeAsync()
     {
-        // --- Host data layer: encrypted local database, key materialized on first run. ---
-        string databasePath = AppDataLayout.ResolveDatabasePath();
-        string key = LocalSecretStore.GetOrCreateDatabaseKey();
-        _dbContext = new AlTamamDbContext(databasePath, key);
-        await _dbContext.InitializeAsync().ConfigureAwait(true);
+        bool webViewSelfCheck = Environment.GetCommandLineArgs()
+            .Contains("--webview-selfcheck", StringComparer.Ordinal);
+        if (!webViewSelfCheck)
+        {
+            // --- Host data layer: encrypted local database, key materialized on first run. ---
+            string databasePath = AppDataLayout.ResolveDatabasePath();
+            string key = LocalSecretStore.GetOrCreateDatabaseKey();
+            _dbContext = new AlTamamDbContext(databasePath, key);
+            await _dbContext.InitializeAsync().ConfigureAwait(true);
 
-        var services = new BridgeSharedServices(_dbContext);
-        WebView2BridgeDispatcher dispatcher = BridgeHandlerCatalog.Create(services);
-        _gateway = new DesktopBridgeGateway(dispatcher, services);
+            var services = new BridgeSharedServices(_dbContext);
+            WebView2BridgeDispatcher dispatcher = BridgeHandlerCatalog.Create(services);
+            _gateway = new DesktopBridgeGateway(dispatcher, services);
 
-        // --- 07.02: durable host-side 20:00 scheduler (no HTML page, no JS timer). Startup call
-        // performs the approved bounded catch-up for dates missed while the machine was off. ---
-        var autoAttendance = new AlTamam.Application.Scheduling.AutoAttendanceService(_dbContext);
-        _scheduler = new Scheduling.EightPmSchedulerService(autoAttendance);
-        _scheduler.Start();
+            // --- 07.02: durable host-side 20:00 scheduler (no HTML page, no JS timer).
+            // Startup performs bounded catch-up for approved missed dates. ---
+            var autoAttendance = new AlTamam.Application.Scheduling.AutoAttendanceService(_dbContext);
+            _scheduler = new Scheduling.EightPmSchedulerService(autoAttendance);
+            _scheduler.Start();
+        }
 
         // --- 04.03: WebView2 environment with an isolated, application-owned user profile. ---
         string userDataFolder = Path.Combine(AppDataLayout.DataRoot, "WebView2");
@@ -163,22 +174,66 @@ public partial class MainWindow : Window
         // --- 04.03: failed-load recovery (reload once, then a local error page route). ---
         core.NavigationCompleted += async (_, args) =>
         {
-            if (args.IsSuccess) return;
+            if (args.IsSuccess || webViewSelfCheck) return;
             if (!_recoveredOnce)
             {
                 _recoveredOnce = true;
                 await Task.Delay(500).ConfigureAwait(true);
                 core.Reload();
             }
+            else
+            {
+                MessageBox.Show(
+                    "تعذر تحميل واجهة التطبيق المحلية. حالة WebView2: " + args.WebErrorStatus,
+                    "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         };
 
-        // --- 04.04: attach the typed bridge after the pipe exists. ---
-        _gateway.Attach(core);
+        if (webViewSelfCheck)
+        {
+            await CheckActualWebViewNavigationAsync(core).ConfigureAwait(true);
+            return;
+        }
 
-        core.Navigate(LocalWebUiOrigin.BaseUrl);
+        // --- 04.04: attach the typed bridge after the pipe exists. ---
+        _gateway!.Attach(core);
+
+        core.Navigate(LocalWebUiOrigin.EntryPointUrl);
     }
 
     private bool _recoveredOnce;
+
+    /// <summary>
+    /// Real Windows-only navigation smoke test: unlike --layout-selfcheck it creates
+    /// WebView2, resolves the virtual host, loads the bundled document, and verifies
+    /// its title without requiring a database or credentials.
+    /// </summary>
+    private static async Task CheckActualWebViewNavigationAsync(CoreWebView2 core)
+    {
+        var completion = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<CoreWebView2NavigationCompletedEventArgs> onNavigation =
+            (_, args) => completion.TrySetResult(args);
+        core.NavigationCompleted += onNavigation;
+        try
+        {
+            core.Navigate(LocalWebUiOrigin.EntryPointUrl);
+            CoreWebView2NavigationCompletedEventArgs result =
+                await completion.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            if (!result.IsSuccess)
+                throw new InvalidOperationException(
+                    "Local UI navigation failed: " + result.WebErrorStatus);
+            string title = await core.ExecuteScriptAsync("document.title").ConfigureAwait(true);
+            if (!title.Contains("التمام اليومي", StringComparison.Ordinal))
+                throw new InvalidOperationException("Local UI did not load the expected document.");
+            Console.WriteLine("WEBVIEW-SELFCHECK PASS");
+            System.Windows.Application.Current.Shutdown(0);
+        }
+        finally
+        {
+            core.NavigationCompleted -= onNavigation;
+        }
+    }
 
     /// <summary>Bundled WebUI lives next to the executable under webui/ (copied by the csproj).</summary>
     private static string ResolveBundledWebUiRoot()
