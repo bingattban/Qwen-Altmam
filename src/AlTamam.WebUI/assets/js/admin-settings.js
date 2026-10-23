@@ -189,6 +189,8 @@
     }
     if(screen==="personReport" && window.AltamamReports)
       return window.AltamamReports.render(target(),()=>navigate("reports"));
+    if(screen==="export" && window.AltamamFunctional)
+      return window.AltamamFunctional.render("monthly");
     if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
