@@ -102,7 +102,7 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
         string reqId = $"FUZZ-{Math.Abs(hostile.GetHashCode()):X}";
         BridgeDispatchResult result = await _dispatcher.DispatchAsync(
             Envelope("SearchPersons", new JsonObject { ["term"] = hostile, ["take"] = 5 }, reqId),
-            LocalWebUiOrigin.BaseUrl, isMainFrame: true, _services.ResolveSessionAsync);
+            LocalWebUiOrigin.BaseUrl, isMainFrame: true, nonce => _services.ResolveSessionAsync(nonce));
 
         // Contract: dispatch NEVER throws; whatever the outcome, it is a canonical envelope.
         Assert.Equal(reqId, result.Response.RequestId);
@@ -144,7 +144,7 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
                 ["targetStatusId"] = hostile,
                 ["selectedPersonIds"] = new JsonArray(hostile)
             }, $"FUZZ-DRAFT-{Math.Abs(hostile.GetHashCode()):X}"),
-            LocalWebUiOrigin.BaseUrl, true, _services.ResolveSessionAsync);
+            LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
 
         Assert.Equal(BridgeOutcomeKind.Success, result.Kind == BridgeOutcomeKind.Success ? result.Kind : result.Kind);
         if (!result.Response.Success)
@@ -172,7 +172,7 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
         }.ToJsonString();
 
         BridgeDispatchResult result = await _dispatcher.DispatchAsync(
-            raw, LocalWebUiOrigin.BaseUrl, true, _services.ResolveSessionAsync);
+            raw, LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
         Assert.NotEqual(BridgeOutcomeKind.Success, result.Kind);
         Assert.False(result.Response.Success);
     }
