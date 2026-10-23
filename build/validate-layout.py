@@ -67,9 +67,15 @@ def main() -> int:
             errors.append("portable ZIP must bundle webui/index.html content")
         screens = os.path.join(root, "webui", "screens")
         if os.path.isdir(screens):
-            n = len([f for f in os.listdir(screens) if f.endswith(".html")])
+            # Screens are nested route directories (screens/**/index.html),
+            # not 69 HTML files immediately inside screens/.
+            n = sum(
+                1 for directory, _, files in os.walk(screens)
+                for name in files
+                if name.lower() == "index.html"
+            )
             if n < 69:
-                errors.append(f"webui/screens has {n} html files, expected >=69")
+                errors.append(f"webui/screens has {n} route index.html files, expected >=69")
         else:
             errors.append("portable ZIP missing webui/screens")
         for junk in ("*.pdb", "*.xml", "obj", "*.binlog"):
