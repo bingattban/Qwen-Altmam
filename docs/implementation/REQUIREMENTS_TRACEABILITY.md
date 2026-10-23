@@ -47,9 +47,61 @@ Legend: Test column = planned regression test id (all NOT YET CREATED; Phase 01+
 - 13 uiInvalidationEvents defined; no C# publisher exists yet (GAP until bridge step)
 - Screen manifest declares implementationPhase 03–13 (6+6+12+5+1+12+4+10+5+6+2 = 69) — these are the CANONICAL per-screen phase tags; the master prompt's own phase list must reconcile with them at Gate 0.
 
+### 2c. Directive §21 screen-inventory reconciliation (Phase 00 naming/ownership, 2026-10-23)
+
+The owner directive section 21 lists the existing screen inventory as 69 routes grouped by
+source-declared phases 03–13 and instructs: reconcile naming and ownership in Phase 00; do not
+silently remove routes. Reconciliation result (script-verified against `screen-manifest.json` and
+on-disk `screens/**/index.html`, not prose):
+
+- **Inventory ↔ manifest ↔ disk: exact match.** All 69 routeKeys, all 69 `localAssetPath`s and every
+  per-screen `implementationPhase` tag in directive §21 equal the manifest values (0 mismatches,
+  0 duplicates, 0 orphan pages, 0 missing files). Per-phase counts confirmed: 03→6, 04→6, 05→12,
+  06→5, 07→1, 08→12, 09→4, 10→10, 11→5, 12→6, 13→2.
+- **Naming:** no routeKey or folder was renamed, merged or re-cased during this reconciliation. The
+  ASCII PascalCase identifiers (`Dashboard`, `InternalTransfer`, `DismissedPersonnelArchive`, …) remain
+  canonical; Arabic titles/breadcrumbs untouched.
+- **Ownership:** each route belongs to exactly one owning service via its `data-bridge-action` bindings
+  recorded in MANIFEST_ACTION_COVERAGE.md; nothing re-parented.
+- **Phase numbering decision (Gate 0 record):** the directive adds Phase 00 (baseline audit), Phase 01
+  (test backbone/CI/host skeleton) and Phase 02 (bridge/dispatcher foundation) *before* the UI phases,
+  plus later release gates (Phase 15 packaging, Phase 16 final acceptance). These added phases own
+  **zero screens**: they are engineering/gate phases. Therefore screen-manifest `implementationPhase`
+  tags 03–13 stay byte-stable and authoritative for screens; the plan-level phase sequence is
+  00→01→02→03…13→15→16. No route was removed to "fit" the new numbering.
+- **Constraint honored:** routes were neither silently removed nor silently re-tagged; any future change
+  to a phase tag requires an explicit ledger row + owner approval (§Transition plan rule 2).
+
 ## 2b. Per-action coverage marking (directive §20, 2026-10-23)
 
 Moved to dedicated document: **`docs/implementation/MANIFEST_ACTION_COVERAGE.md`** — all 90 actions × (kind, idempotency, implementation status, test marking) generated mechanically from `action-manifest.json` + `BridgeHandlerCatalog.cs` switch arms and cross-checked against the §20 inventory with zero mismatches. Headline: 19 WIRED / 71 honest REFUSAL (phase-pending); RBAC matrix authored for 90×4=360 cases; execution status remains NOT RUN (no dotnet in sandbox) — no row was upgraded to PASS on the strength of authoring alone.
+
+### 2d. Directive §22 tracking & CI-contract audit (2026-10-23)
+
+§22 mandates the doc set + per-step ledger fields + GitHub-workflow acceptance rules + the
+8-condition Definition of DONE. Audit executed against REAL repo files (not prose):
+
+- **Doc set:** REQUIREMENTS_TRACEABILITY.md ✔, IMPLEMENTATION_LEDGER.md ✔, AS_IS_ARCHITECTURE.md ✔,
+  RISK_REGISTER.md ✔ present; **ACCEPTANCE_CRITERIA.md was MISSING → created** (Definition of DONE,
+  ledger field schema, workflow rules, false-green findings); FINAL_ACCEPTANCE_REPORT.md exists in
+  `docs/release/` as final-only draft with NO-GO status — left untouched this step except that its
+  §3 rows remain honestly NOT RUN.
+- **Ledger machine-readability:** every batch table already carries path/status/necessity; §22's
+  fuller field list is now templated in ACCEPTANCE_CRITERIA.md §2 and referenced from the ledger.
+- **CI contract verification (executed here):** YAML parse OK for both workflows; runner labels =
+  `windows-latest` only (documented GitHub-hosted image — no assumed tools: python/dotnet installed
+  via pinned setup actions); zero `|| true`; zero `continue-on-error: true`; solution contains the
+  WPF executable project AND test project; `dotnet test` with trx + upload-artifact
+  (`if-no-files-found: error`) present; manifest-guard (69 routes/90 actions) now enforced on BOTH
+  PR-gate and release paths; artifacts limited to logs/hashes/packages (no raw personal data);
+  release produces Portable ZIP + installer + SHA256SUMS + BUILD_METADATA; NO auto-publish anywhere
+  (workflow_dispatch/tag-triggered RC uploads only — publication reserved behind Phase 16 gate).
+- **False greens found & fixed (detail in ACCEPTANCE_CRITERIA.md §3a):** bash-pipe masking of the
+  advisory gate; category filters matching zero tests; nonexistent Category=Acceptance driver;
+  missing manifest-contract job on the build workflow. All four corrected in-file this step.
+- **Explicit NOT RUN / BLOCKED:** no dotnet SDK and no git remote in this sandbox ⇒ restore/build/
+  test/workflow execution NEVER happened; first real evidence must come from owner-side Actions
+  runs at a pushed SHA. Per §22 last bullet this is reported as BLOCKED, not skipped silently.
 
 ## 3. Explicit gaps blocking full traceability
 

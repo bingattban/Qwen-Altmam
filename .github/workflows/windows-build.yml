@@ -6,7 +6,18 @@ on:
 permissions:
   contents: read
 jobs:
+  manifest-contract:
+    name: Manifest contract guard (69 routes / 90 actions)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Action/screen manifest security + drift guard
+        run: python build/manifest-guard.py
+
   compile-core:
+    needs: manifest-contract
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
