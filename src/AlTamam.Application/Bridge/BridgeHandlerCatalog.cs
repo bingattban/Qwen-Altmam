@@ -250,6 +250,31 @@ public static class BridgeHandlerCatalog
             BridgeResponse result=await service.ArchiveAsync(req.Payload,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
+        // Separation is a soft historical transition, not deletion.
+        "PreviewSeparation" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelSeparationService(services.Db,services.Time);
+            BridgeResponse response=await service.PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return response with {RequestId=req.RequestId};
+        },
+        "CommitSeparation" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelSeparationService(services.Db,services.Time);
+            BridgeResponse response=await service.CommitAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return response with {RequestId=req.RequestId};
+        },
+        "QuerySeparationArchive" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelSeparationService(services.Db,services.Time);
+            BridgeResponse response=await service.ArchiveAsync(req.Payload,ct).ConfigureAwait(false);
+            return response with {RequestId=req.RequestId};
+        },
+        "GetSeparationDetails" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelSeparationService(services.Db,services.Time);
+            BridgeResponse response=await service.DetailsAsync(req.Payload,ct).ConfigureAwait(false);
+            return response with {RequestId=req.RequestId};
+        },
         // Settings: read real configuration, audit manual encrypted backup.
         // No fake success for scheduled backups, restore or destructive reset.
         "GetSettingsOverview" => async (req, principal, ct) =>
