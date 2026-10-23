@@ -67,16 +67,42 @@
     state.active=screen;state.page=1;state.term="";currentRequest++;
     renderDetail(screen);
   }
+  const nestedOptions = Object.freeze({
+    transfers: [
+      ["transferInternal","النقل الداخلي"],
+      ["transferExternal","النقل الخارجي"],
+      ["transferArchive","أرشيف التنقلات"]
+    ],
+    reports: [
+      ["personReport","التقارير الفردية"],
+      ["separation","الفصل"]
+    ],
+    separation: [
+      ["separatePerson","فصل فرد"],
+      ["separatedArchive","أرشيف المفصولين"]
+    ]
+  });
+  const nestedParents = Object.freeze({
+    transferInternal:"transfers",transferExternal:"transfers",transferArchive:"transfers",
+    personReport:"reports",separation:"reports",
+    separatePerson:"separation",separatedArchive:"separation"
+  });
   function parentOf(screen) {
     return sections.find(section => section.children.some(child => child[0] === screen));
   }
   function start(title) {
     const page=target();page.replaceChildren();
     const parent=parentOf(state.active);
+    const parentKey=nestedParents[state.active];
+    const parentLabel=parentKey==="transfers"?"التنقلات":
+      parentKey==="reports"?"التقارير والفصل":
+      parentKey==="separation"?"الفصل":null;
     const head=card(title);
     head.classList.add("admin-subpage-heading");
-    const back=btn(parent ? "العودة إلى "+parent.title : "العودة إلى الإدارة",
-      () => parent ? renderGroup(parent.key) : renderAdmin(state.session),
+    const back=btn(parentLabel?"العودة إلى "+parentLabel:
+      parent?"العودة إلى "+parent.title:"العودة إلى الإدارة",
+      () => parentKey ? navigate(parentKey) :
+        parent ? renderGroup(parent.key) : renderAdmin(state.session),
       "btn btn-outline");
     head.appendChild(back);
     page.appendChild(head);
@@ -139,33 +165,41 @@
     }
     page.appendChild(grid);
   }
+  function renderNested(section,title) {
+    const page=start("الإدارة / "+title);
+    const grid=node("div","admin-subsection-grid");
+    grid.setAttribute("aria-label","خيارات "+title);
+    for(const [key,label] of nestedOptions[section]) {
+      const tile=btn(label,()=>navigate(key),"admin-subsection-tile");
+      tile.dataset.adminNested=key;
+      grid.appendChild(tile);
+    }
+    page.appendChild(grid);
+  }
   function renderDetail(screen) {
     if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
     if(screen==="persons")return persons();
     if(screen==="log")return audit();
-    const labels={attendance:"التمام",transfers:"التنقلات",reports:"التقارير والفصل",
-      import:"استيراد Excel",export:"تصدير Excel",layout:"هيكل الكشف",accounts:"المستخدمون"};
-    const page=start(labels[screen]||"الإدارة");
-    const shell=card("الوظائف المطلوبة");
-    const sub={
-      attendance:["كشف القوة","تحديد الأفراد","معاينة تغيير الحالات","التأكيد الجماعي"],
-      transfers:["النقل الداخلي","النقل الخارجي","أرشيف التنقلات"],
-      reports:["التقارير الفردية","الفصل","أرشيف المفصولين"],
-      import:["اختيار ملف Excel","فحص التكرارات","معاينة ودمج الأفراد"],
-      export:["الموقع والشهر والسنة","معاينة التصدير","حفظ ملف Excel"],
-      layout:["إضافة عمود عرض","تعديل اسم عرض","ترتيب الأعمدة"],
-      accounts:["إضافة حساب","تغيير كلمة المرور","تعطيل الحساب"]
-    }[screen]||[];
-    const grid=node("div","admin-action-grid");
-    sub.forEach(name=>{
-      const element=btn(name,()=>alert("هذه الوظيفة قيد التنفيذ والفحص، ولم تُحفظ أي تغييرات."),
-        "btn btn-outline");
-      element.title="قيد التنفيذ — غير متصل بعملية حفظ";
-      grid.appendChild(element);
-    });
-    shell.append(grid,warning("هذه الشاشة لم تُربط بعد بخدمة معتمدة؛ لن يُعلن نجاح أي عملية غير منفّذة."));
+    if(screen==="transfers")return renderNested(screen,"التنقلات");
+    if(screen==="reports")return renderNested(screen,"التقارير والفصل");
+    if(screen==="separation")return renderNested(screen,"الفصل");
+
+    const labels={
+      attendance:"التمام",transferInternal:"النقل الداخلي",
+      transferExternal:"النقل الخارجي",transferArchive:"أرشيف التنقلات",
+      personReport:"التقارير الفردية",separatePerson:"فصل فرد",
+      separatedArchive:"أرشيف المفصولين",
+      import:"استيراد Excel",export:"تصدير Excel",
+      layout:"تعديل هيكل الكشف"
+    };
+    const page=start("الإدارة / "+(labels[screen]||"الشاشة المطلوبة"));
+    const shell=card("حالة الربط الوظيفي");
+    shell.appendChild(warning(
+      "وظائف هذه الشاشة لم تُعتمد بعد للاستخدام. لن تُنفّذ عمليات تعديل " +
+      "أو نقل أو فصل أو استيراد دون التأكيد والتحقق من الصلاحيات وحفظ سجل العمليات."
+    ));
     page.appendChild(shell);
   }
 
