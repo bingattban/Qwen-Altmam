@@ -308,7 +308,7 @@ public sealed class ExcelPersonnelImportService
             }
             XDocument document = SafeXml(sheet);
             var rows = document.Descendants(Ns + "sheetData").Elements(Ns + "row").ToList();
-            if (rows.Count is < 2 or > MaxRecords + 2)
+            if (rows.Count is < 2 or > MaxRecords + 6)
                 throw new InvalidDataException("يجب أن يحتوي الكشف على عناوين وصفوف أفراد (الحد 500 فرد).");
             string Value(XElement cell)
             {
@@ -335,16 +335,27 @@ public sealed class ExcelPersonnelImportService
                 }
                 return idx;
             }
-            var headers = rows[0].Elements(Ns + "c")
-                .Select(cell => (column: Col(cell), value: Value(cell))).ToList();
-            int nameCol = headers.Where(x => x.value is "الاسم" or "الاسم الكامل" or "اسم الفرد")
-                .Select(x => x.column).FirstOrDefault();
-            int numberCol = headers.Where(x => x.value is "الرقم (ع)" or "الرقم ع" or "الرقم" or "الرقم(ع)")
-                .Select(x => x.column).FirstOrDefault();
-            if (nameCol < 1 || numberCol < 1 || nameCol == numberCol)
-                throw new InvalidDataException("الصف الأول يجب أن يحتوي على عمودي «الاسم» و«الرقم (ع)».");
+            // Some official monthly workbooks put a report title and period above the header.
+            // Locate the first valid header within five rows, never interpret title rows as persons.
+            int headerIndex = -1, nameCol = 0, numberCol = 0;
+            for (int index = 0; index < Math.Min(rows.Count, 5); index++)
+            {
+                var headers = rows[index].Elements(Ns + "c")
+                    .Select(cell => (column: Col(cell), value: Value(cell))).ToList();
+                int name = headers.Where(x => x.value is "الاسم" or "الاسم الكامل" or "اسم الفرد")
+                    .Select(x => x.column).FirstOrDefault();
+                int number = headers.Where(x => x.value is "الرقم (ع)" or "الرقم ع" or "الرقم" or "الرقم(ع)")
+                    .Select(x => x.column).FirstOrDefault();
+                if (name > 0 && number > 0 && name != number)
+                {
+                    headerIndex = index; nameCol = name; numberCol = number;
+                    break;
+                }
+            }
+            if (headerIndex < 0)
+                throw new InvalidDataException("تحتاج ورقة Excel إلى عمودي «الاسم» و«الرقم (ع)» ضمن الصفوف الخمسة الأولى.");
             var records = new List<PersonInput>();
-            foreach (var row in rows.Skip(1))
+            foreach (var row in rows.Skip(headerIndex + 1))
             {
                 int rowIndex = int.TryParse((string?)row.Attribute("r"), out int n) ? n : records.Count + 2;
                 var cells = row.Elements(Ns + "c").ToDictionary(Col);
