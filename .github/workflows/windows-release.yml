@@ -121,6 +121,11 @@ jobs:
           cache-dependency-path: Directory.Packages.props
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
+      - name: Stage and verify offline Cairo and Tajawal fonts
+        shell: pwsh
+        run: |
+          ./build/prepare-offline-fonts.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Offline font preparation failed' }
       - name: Publish genuine WPF executable (self-contained, win-x64)
         run: >
           dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj
