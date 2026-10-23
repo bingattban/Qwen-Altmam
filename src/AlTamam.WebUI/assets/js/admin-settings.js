@@ -192,6 +192,7 @@
     }
     if(screen==="personReport" && window.AltamamReports)
       return window.AltamamReports.render(target(),()=>navigate("reports"));
+    if(screen==="import")return importExcel();
     if(screen==="export" && window.AltamamFunctional)
       return window.AltamamFunctional.render("monthly");
     if(screen==="closedCorrection")return closedCorrection();
@@ -218,6 +219,113 @@
       "وظائف هذه الشاشة لم تُعتمد بعد للاستخدام. لن تُنفّذ عمليات تعديل " +
       "أو نقل أو فصل أو استيراد دون التأكيد والتحقق من الصلاحيات وحفظ سجل العمليات."
     ));
+    page.appendChild(shell);
+  }
+
+  // Safe two-step XLSX import: do not mutate existing people, assignments or attendance.
+  function importExcel(){
+    const page=start("الإدارة / الكشوفات / استيراد Excel");
+    const shell=card("استيراد أسماء جديدة من ملف Excel");
+    shell.appendChild(node("p","section-description",
+      "الصف الأول: الاسم | الرقم (ع). العدد الأقصى 500 فرد وحجم الملف 1 ميجابايت. " +
+      "سيُضاف الأفراد الجدد فقط بتاريخ اليوم؛ الأرقام الموجودة أو المكررة لا تُستبدل. " +
+      "يفضّل ضبط خلايا الرقم (ع) كنص للحفاظ على الأصفار."));
+    const choose=node("input","form-control");choose.type="file";
+    choose.accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const picker=node("label","admin-input");
+    picker.append(node("span","","اختر الملف من الجهاز"),choose);
+    const status=node("div","admin-note");
+    const analysis=node("div","admin-note");
+    const confirmBox=node("div","admin-note");
+    let workbookToken="",previewToken="",serial=0;
+    const valid=()=>state.active==="import"&&page.isConnected!==false;
+    function reset(){
+      serial++;workbookToken="";previewToken="";
+      analysis.replaceChildren();confirmBox.replaceChildren();status.replaceChildren();
+    }
+    choose.addEventListener("change",reset);
+    async function dataUrl(file){
+      return await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onerror=()=>reject(new Error("تعذر فتح الملف المختار."));
+        reader.onload=()=>resolve(String(reader.result||"").split(",",2)[1]||"");
+        reader.readAsDataURL(file);
+      });
+    }
+    const examine=btn("تحليل الملف",async()=>{
+      reset();
+      const file=choose.files?.[0];
+      if(!file||!file.name.toLowerCase().endsWith(".xlsx")||
+          file.size>1048576||file.size<=0)
+        return errors(status,new Error("اختر ملف xlsx لا يتجاوز حجمه 1 ميجابايت."));
+      const current=serial;examine.disabled=true;
+      try{
+        status.replaceChildren(warning("جارٍ فحص ملف Excel واكتشاف التعارضات..."));
+        const selected=await api().invoke("SelectImportWorkbook",{
+          fileName:file.name,base64:await dataUrl(file)
+        });
+        if(current!==serial||!valid())return;
+        workbookToken=selected.data?.workbookToken||"";
+        if(!workbookToken)throw Error("لم تُنشأ تذكرة استيراد صالحة.");
+        const analyzed=await api().invoke("AnalyzeImport",{workbookToken});
+        if(current!==serial||!valid())return;
+        const report=analyzed.data||{};
+        const summary=node("div","settings-properties");
+        for(const [key,value] of [["إجمالي الصفوف",report.totalRows],
+          ["أفراد جدد",report.newCount],["صفوف متعارضة أو غير صالحة",report.issueCount]])
+          summary.appendChild(settingsValue(key,value));
+        const issues=table(["الصف","الاسم","الرقم (ع)","سبب الاستبعاد"]);
+        for(const item of (report.issues||[]).slice(0,500))
+          addRow(issues.body,[item.row,item.name,item.serviceNumberA,item.reason]);
+        if((report.issues||[]).length)
+          summary.append(node("h3","section-title","الصفوف المستبعدة"),issues.wrap);
+        const preview=btn("معاينة خطة الإضافة",async()=>{
+          preview.disabled=true;confirmBox.replaceChildren();previewToken="";
+          try{
+            const result=await api().invoke("PreviewImportPlan",{workbookToken});
+            if(current!==serial||!valid())return;
+            const plan=result.data||{};
+            if(!plan.previewToken||!plan.requiresExplicitConfirmation)
+              throw Error("معاينة الاستيراد لم تُعتمد على الخادم.");
+            previewToken=plan.previewToken;
+            const out=card("خطة الإضافة النهائية");
+            out.append(node("p","section-description",
+              "سيتم إنشاء "+plan.newCount+" فرد جديد. " +
+              "لن تتغير أي هوية أو حالة تحضير أو تاريخ قديم."),
+              node("p","section-description","صفوف مستبعدة: "+plan.issueCount));
+            const names=table(["الاسم الجديد","الرقم (ع)"]);
+            for(const person of plan.acceptedPreview||[])
+              addRow(names.body,[person.name,person.serviceNumberA]);
+            out.append(names.wrap);
+            const commit=btn("تأكيد استيراد الأفراد الجدد",async()=>{
+              if(!previewToken)return;
+              if(!confirm("تأكيد إضافة "+plan.newCount+" فرداً جديداً بعد مراجعة التعارضات؟"))return;
+              const token=previewToken;previewToken="";
+              commit.disabled=true;
+              try{
+                const done=await api().invoke("CommitImport",{previewToken:token});
+                if(!valid())return;
+                if(!Number.isInteger(done.data?.createdCount))
+                  throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
+                confirmBox.replaceChildren(node("p","settings-success",
+                  "تم إنشاء "+done.data.createdCount+" فرداً جديداً، وحُفظت العملية في سجل التدقيق."));
+                workbookToken="";
+              }catch(e){errors(confirmBox,e);}
+            },"btn btn-primary");
+            out.append(commit,btn("إلغاء المعاينة",()=>{
+              previewToken="";confirmBox.replaceChildren();
+            }));
+            confirmBox.appendChild(out);
+          }catch(e){errors(confirmBox,e);}
+          finally{preview.disabled=false;}
+        },"btn btn-primary");
+        analysis.replaceChildren(summary);
+        if(Number(report.newCount)>0)analysis.appendChild(preview);
+        status.replaceChildren(node("p","settings-success","اكتمل التحليل؛ راجع الصفوف قبل اعتماد الخطة."));
+      }catch(e){errors(status,e);}
+      finally{examine.disabled=false;}
+    },"btn btn-primary");
+    shell.append(picker,examine,status,analysis,confirmBox);
     page.appendChild(shell);
   }
 
