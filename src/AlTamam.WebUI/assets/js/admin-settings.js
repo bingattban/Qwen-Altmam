@@ -227,9 +227,9 @@
     const page=start("الإدارة / الكشوفات / استيراد Excel");
     const shell=card("استيراد أسماء جديدة من ملف Excel");
     shell.appendChild(node("p","section-description",
-      "الصف الأول: الاسم | الرقم (ع). العدد الأقصى 500 فرد وحجم الملف 160 كيلوبايت. " +
+      "الأعمدة المطلوبة: الاسم | الرقم (ع). العدد الأقصى 500 فرد وحجم الملف 160 كيلوبايت. " +
       "سيُضاف الأفراد الجدد فقط بتاريخ اليوم؛ الأرقام الموجودة أو المكررة لا تُستبدل. " +
-      "يفضّل ضبط خلايا الرقم (ع) كنص للحفاظ على الأصفار."));
+      "اكتب الرقم (ع) كرقم صحيح في Excel مباشرة، دون الحاجة لتحويل العمود إلى نص."));
     const choose=node("input","form-control");choose.type="file";
     choose.accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     const picker=node("label","admin-input");

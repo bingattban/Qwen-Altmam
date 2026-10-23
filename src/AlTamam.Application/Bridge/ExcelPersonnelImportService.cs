@@ -411,10 +411,8 @@ public sealed class ExcelPersonnelImportService
                 cells.TryGetValue(nameCol, out var nameCell);
                 cells.TryGetValue(numberCol, out var numberCell);
                 string name = nameCell is null ? "" : Value(nameCell);
-                string number = numberCell is null ? "" : Value(numberCell);
+                string number = numberCell is null ? "" : ServiceNumber(numberCell, Value(numberCell), rowIndex);
                 if (name.Length == 0 && number.Length == 0) continue;
-                if (numberCell is not null && (string?)numberCell.Attribute("t") is not ("inlineStr" or "s" or "str"))
-                    throw new InvalidDataException($"الرقم (ع) في الصف {rowIndex} يجب أن يكون نصاً للحفاظ على الأصفار.");
                 records.Add(new PersonInput(rowIndex, name, number,
                     ArabicTextNormalizer.NormalizeForSearch(name),
                     ArabicTextNormalizer.NormalizeForSearch(number)));
@@ -425,6 +423,34 @@ public sealed class ExcelPersonnelImportService
         catch (InvalidDataException) { throw; }
         catch (Exception ex) when (ex is IOException or ArgumentException or OverflowException or InvalidOperationException or XmlException)
         { throw new InvalidDataException("ملف Excel تالف أو لا يطابق نموذج الكشف المعتمد.", ex); }
+    }
+
+    /// <summary>
+    /// Excel supports genuine numeric cells for الرقم (ع). Convert integer-valued numbers
+    /// using invariant culture; keep the database identity as an exact string because
+    /// it is an identifier, not a quantity. Reject fractions, formulae and values beyond
+    /// Excel's 15-digit numeric precision rather than silently corrupting identities.
+    /// Existing text cells remain supported for historic cards with leading zeroes.
+    /// </summary>
+    private static string ServiceNumber(XElement cell, string raw, int rowIndex)
+    {
+        if (cell.Element(Ns + "f") is not null)
+            throw new InvalidDataException(
+                $"الرقم (ع) في الصف {rowIndex} يجب أن يكون قيمة مباشرة وليس صيغة Excel.");
+        string kind = (string?)cell.Attribute("t") ?? "";
+        if (kind is "inlineStr" or "s" or "str")
+            return raw; // preserve legacy leading zeroes from genuine text cells
+        if (kind is not ("" or "n"))
+            throw new InvalidDataException(
+                $"نوع خلية الرقم (ع) في الصف {rowIndex} غير مدعوم؛ استخدم رقماً صحيحاً.");
+        if (raw.Length == 0) return ""; // mark incomplete row as an import issue
+        if (!decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture,
+                out decimal value) ||
+            value < 0m || value > 999_999_999_999_999m ||
+            decimal.Truncate(value) != value)
+            throw new InvalidDataException(
+                $"الرقم (ع) في الصف {rowIndex} يجب أن يكون عدداً صحيحاً غير سالب لا يزيد عن 15 خانة.");
+        return value.ToString("0", CultureInfo.InvariantCulture);
     }
 
     private static XDocument SafeXml(ZipArchiveEntry entry)
