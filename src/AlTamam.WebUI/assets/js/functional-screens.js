@@ -310,16 +310,11 @@
     history.replaceState(null,"","#"+section);
     if(section==="dashboard")renderDashboard();
     else if(section==="monthly")renderMonthly();
-    else {
-      nav.navigateTop(section);
-      if(section==="settings"){
-        const panel=el("section","card");
-        append(panel,el("h2","section-title","الحساب الحالي"),
-          el("p","",STATE.session.username+" — "+(STATE.session.roleLabelAr||STATE.session.role)),
-          button("تسجيل الخروج",logout,"btn btn-outline"));
-        view().prepend(panel);
-      }
-    }
+    else if (section==="admin" && window.AltamamAdminSettings)
+      window.AltamamAdminSettings.renderAdmin(STATE.session);
+    else if (section==="settings" && window.AltamamAdminSettings)
+      window.AltamamAdminSettings.renderSettings(STATE.session, logout);
+    else nav.navigateTop(section);
   }
 
   async function boot() {
