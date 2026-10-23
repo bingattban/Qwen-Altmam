@@ -81,9 +81,9 @@ public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDispos
     [Fact]
     public async Task CommitPersistsBatchAndIssues_OnlyOwnerCanReadOrExport()
     {
-        await Commit(("خالد سعيد الحضرمي", "0001"));
-        var saved = await Commit(("=HYPERLINK(\"https://example.invalid\")", "0001"),
-            ("محمد صالح عبدالله", "0002"));
+        await Commit(("خالد سعيد الحضرمي", "00001"));
+        var saved = await Commit(("=HYPERLINK(\"https://example.invalid\")", "00001"),
+            ("محمد صالح عبدالله", "00002"));
         Assert.Equal(1, saved["createdCount"]!.GetValue<int>());
         Assert.Equal(1, saved["rejectedCount"]!.GetValue<int>());
         string batchId = saved["importBatchId"]!.GetValue<string>();
@@ -106,7 +106,7 @@ public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDispos
             Actor, CancellationToken.None);
         Assert.True(details.Success, details.UserMessage);
         var issue = Assert.Single((JsonArray)((JsonObject)details.Data!)["issues"]!);
-        Assert.Equal("0001", issue!["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("00001", issue!["serviceNumberA"]!.GetValue<string>());
         Assert.Equal("=HYPERLINK(\"https://example.invalid\")",
             issue["name"]!.GetValue<string>());
 
@@ -137,21 +137,21 @@ public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDispos
         Assert.Empty(xml.Descendants(ns + "f"));
         Assert.Contains(xml.Descendants(ns + "t"),
             t => t.Value == "=HYPERLINK(\"https://example.invalid\")");
-        Assert.Contains(xml.Descendants(ns + "t"), t => t.Value == "0001");
+        Assert.Contains(xml.Descendants(ns + "t"), t => t.Value == "00001");
         Assert.Equal("1", xml.Descendants(ns + "sheetView").Single().Attribute("rightToLeft")?.Value);
     }
 
     [Fact]
     public async Task NoIssuesCannotExportAndRepeatedExportsNeverOverwriteEachOther()
     {
-        var onlyNew = await Commit(("عمر محمد سالم", "0555"));
+        var onlyNew = await Commit(("عمر محمد سالم", "00555"));
         var outcome = new ExcelImportOutcomeService(_db);
         var empty = await outcome.ExportIssuesAsync(new JsonObject {
             ["importBatchId"] = onlyNew["importBatchId"]!.GetValue<string>()
         }, Actor, CancellationToken.None);
         Assert.False(empty.Success);
-        await Commit(("صالح سعيد أحمد", "0666"));
-        var duplicate = await Commit(("محمد عبد الله", "0666"), ("سعيد أحمد بن سعد", "0777"));
+        await Commit(("صالح سعيد أحمد", "00666"));
+        var duplicate = await Commit(("محمد عبد الله", "00666"), ("سعيد أحمد بن سعد", "00777"));
         string batchId = duplicate["importBatchId"]!.GetValue<string>();
         var first = await outcome.ExportIssuesAsync(new JsonObject {
             ["importBatchId"] = batchId
