@@ -237,7 +237,84 @@
     const status=node("div","admin-note");
     const analysis=node("div","admin-note");
     const confirmBox=node("div","admin-note");
+    const history=card("سجل دفعات الاستيراد المعتمدة");
+    const historyContent=node("div","admin-note");
+    const historyDetails=node("div","admin-note");
+    let detailsSerial=0;
+    const refreshHistory=btn("تحديث سجل الاستيراد",loadHistory,"btn btn-outline");
+    history.append(refreshHistory,historyContent,historyDetails);
     let workbookToken="",previewToken="",serial=0;
+
+    async function loadHistory(){
+      const request=++detailsSerial;
+      historyContent.replaceChildren(warning("جارٍ قراءة سجل الاستيراد..."));
+      historyDetails.replaceChildren();
+      try{
+        const response=await api().invoke("QueryImportOutcome",{});
+        if(!valid()||request!==detailsSerial)return;
+        const batches=Array.isArray(response.data?.batches)?response.data.batches:[];
+        if(!batches.length){
+          historyContent.replaceChildren(node("p","section-description",
+            "لا توجد دفعات استيراد محفوظة لهذا الحساب بعد."));
+          return;
+        }
+        const report=table(["تاريخ الاعتماد UTC","الملف","الإجمالي","أضيف","استُبعد","التفاصيل"]);
+        for(const batch of batches){
+          const row=node("tr");
+          for(const value of [batch.committedAtUtc,batch.fileName,batch.totalRows,
+            batch.acceptedRows,batch.rejectedRows])
+            row.appendChild(node("td","",value==null?"—":value));
+          const actions=node("td");
+          actions.appendChild(btn("عرض الدفعة",()=>showOutcome(batch.importBatchId)));
+          row.appendChild(actions);report.body.appendChild(row);
+        }
+        historyContent.replaceChildren(report.wrap);
+      }catch(e){if(valid()&&request===detailsSerial)errors(historyContent,e);}
+    }
+
+    async function showOutcome(batchId){
+      const request=++detailsSerial;
+      historyDetails.replaceChildren(warning("جارٍ قراءة تفاصيل الدفعة..."));
+      try{
+        const response=await api().invoke("QueryImportOutcome",{importBatchId:batchId});
+        if(!valid()||request!==detailsSerial)return;
+        const record=response.data?.batch;
+        if(!record||record.importBatchId!==batchId)
+          throw Error("تعذر مطابقة بيانات الدفعة المحفوظة.");
+        const panel=card("تفاصيل الدفعة — "+record.fileName);
+        const summary=node("div","settings-properties");
+        for(const [label,value] of [["الإجمالي",record.totalRows],
+          ["أفراد أُضيفوا",record.acceptedRows],["صفوف استُبعدت",record.rejectedRows],
+          ["وقت الاعتماد UTC",record.committedAtUtc]])
+          summary.appendChild(settingsValue(label,value));
+        panel.appendChild(summary);
+        const issues=Array.isArray(response.data?.issues)?response.data.issues:[];
+        if(issues.length){
+          panel.appendChild(node("h3","section-title","أسباب استبعاد الصفوف"));
+          const issueTable=table(["الصف","الاسم","الرقم (ع)","السبب"]);
+          for(const issue of issues)
+            addRow(issueTable.body,[issue.row,issue.name,issue.serviceNumberA,issue.reason]);
+          panel.appendChild(issueTable.wrap);
+          const exportButton=btn("حفظ تقرير الأخطاء Excel",async()=>{
+            exportButton.disabled=true;
+            try{
+              const result=await api().invoke("ExportImportIssues",{importBatchId:batchId});
+              if(!valid()||request!==detailsSerial)return;
+              if(result.data?.format!=="xlsx"||!result.data?.filePath)
+                throw Error("لم يؤكد الخادم إنشاء ملف Excel.");
+              historyDetails.appendChild(node("p","settings-success",
+                "تم حفظ تقرير الأخطاء: "+result.data.filePath));
+            }catch(e){if(valid())errors(historyDetails,e);}
+            finally{exportButton.disabled=false;}
+          },"btn btn-primary");
+          panel.appendChild(exportButton);
+        }else{
+          panel.appendChild(node("p","section-description",
+            "لا توجد صفوف مستبعدة لهذه الدفعة."));
+        }
+        historyDetails.replaceChildren(panel);
+      }catch(e){if(valid()&&request===detailsSerial)errors(historyDetails,e);}
+    }
     const valid=()=>state.active==="import"&&page.isConnected!==false;
     function reset(){
       serial++;workbookToken="";previewToken="";
@@ -308,8 +385,10 @@
                 if(!Number.isInteger(done.data?.createdCount))
                   throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
                 confirmBox.replaceChildren(node("p","settings-success",
-                  "تم إنشاء "+done.data.createdCount+" فرداً جديداً، وحُفظت العملية في سجل التدقيق."));
+                  "تم إنشاء "+done.data.createdCount+" فرداً جديداً، وحُفظت العملية في سجل التدقيق."+
+                  " معرف الدفعة: "+(done.data.importBatchId||"—")));
                 workbookToken="";
+                await loadHistory();
               }catch(e){errors(confirmBox,e);}
             },"btn btn-primary");
             out.append(commit,btn("إلغاء المعاينة",()=>{
@@ -326,7 +405,8 @@
       finally{examine.disabled=false;}
     },"btn btn-primary");
     shell.append(picker,examine,status,analysis,confirmBox);
-    page.appendChild(shell);
+    page.append(shell,history);
+    void loadHistory();
   }
 
   // Emergency historical changes are always gated in C#, never merely by hiding UI.

@@ -15,6 +15,10 @@ class Element {
   all(){return [this,...this.children.flatMap(c=>c instanceof Element?c.all():[])];}
 }
 const viewport=new Element("main"),calls=[];
+let committed=false;
+const sampleBatch={importBatchId:"IMP-TEST-1",fileName:"كشف_القوة.xlsx",
+  totalRows:3,acceptedRows:2,rejectedRows:1,status:"COMMITTED",
+  committedAtUtc:"2026-10-23T20:00:00Z"};
 const responses={
   SelectImportWorkbook:{workbookToken:"A".repeat(64),rowCount:3,maxRows:500},
   AnalyzeImport:{totalRows:3,newCount:2,issueCount:1,
@@ -24,11 +28,17 @@ const responses={
     requiresExplicitConfirmation:true,issues:[],
     acceptedPreview:[{name:"أحمد صالح",serviceNumberA:"002"},
       {name:"حسن سعيد",serviceNumberA:"003"}]},
-  CommitImport:{createdCount:2}
+  CommitImport:{createdCount:2,importBatchId:"IMP-TEST-1",rejectedCount:1},
+  ExportImportIssues:{format:"xlsx",filePath:"C:/Users/Test/Documents/AlTamam/Exports/issues.xlsx"}
 };
 const bridge={invoke:async (name,body)=>{
   calls.push({name,body});
+  if(name==="QueryImportOutcome")return {data:body?.importBatchId?
+    {batch:sampleBatch,issues:[{row:4,name:"مكرر",serviceNumberA:"001",
+      reason:"الرقم موجود"}]}:
+    {batches:committed?[sampleBatch]:[]}};
   if(!(name in responses)) throw Error("Unexpected bridge call "+name);
+  if(name==="CommitImport")committed=true;
   return {data:responses[name]};
 }};
 class FakeFileReader{
@@ -52,12 +62,17 @@ async function run(){
   all().find(x=>x.dataset.adminSection==="sheets").handlers.click();
   all().find(x=>x.dataset.adminScreen==="import").handlers.click();
   assert.ok(button("تحليل الملف"),"real XLSX importer should replace placeholder");
-  assert.equal(calls.length,0,"opening screen never imports a person");
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.filter(c=>c.name==="QueryImportOutcome").length,1,
+    "opening screen only requests a read-only import history");
+  assert.equal(calls.some(c=>c.name==="CommitImport"),false,
+    "opening screen never imports a person");
   const picker=all().find(x=>x.tag==="input"&&x.type==="file");
   assert.ok(picker.accept.includes(".xlsx"));
   picker.files=[{name:"كشف_القوة.xlsx",size:80,base64:"UEsDBBQ"}];
   await button("تحليل الملف").handlers.click();
-  assert.deepEqual(calls.map(x=>x.name),["SelectImportWorkbook","AnalyzeImport"]);
+  assert.deepEqual(calls.filter(c=>c.name!=="QueryImportOutcome").map(x=>x.name),
+    ["SelectImportWorkbook","AnalyzeImport"]);
   assert.ok(all().some(x=>x.textContent.includes("الصفوف المستبعدة")));
   await button("معاينة خطة الإضافة").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,0,
@@ -65,12 +80,20 @@ async function run(){
   assert.ok(button("تأكيد استيراد الأفراد الجدد"));
   await button("تأكيد استيراد الأفراد الجدد").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,1);
-  assert.equal(calls.at(-1).body.previewToken,"B".repeat(64));
+  assert.equal(calls.find(x=>x.name==="CommitImport").body.previewToken,"B".repeat(64));
   assert.ok(all().some(x=>x.textContent.includes("تم إنشاء 2 فرداً جديداً")));
+  assert.ok(button("عرض الدفعة"),"saved history includes the new batch");
+  await button("عرض الدفعة").handlers.click();
+  assert.ok(button("حفظ تقرير الأخطاء Excel"),"rejected row report is available");
+  assert.ok(all().some(x=>x.textContent.includes("الرقم موجود")));
+  await button("حفظ تقرير الأخطاء Excel").handlers.click();
+  assert.equal(calls.filter(x=>x.name==="ExportImportIssues").length,1);
+  assert.equal(calls.find(x=>x.name==="ExportImportIssues").body.importBatchId,"IMP-TEST-1");
+  assert.ok(all().some(x=>x.textContent.includes("issues.xlsx")));
   picker.files=[{name:"too-large.xlsx",size:163_841,base64:"A"}];
   const before=calls.length;
   await button("تحليل الملف").handlers.click();
   assert.equal(calls.length,before,"oversize file must never enter the bridge");
-  console.log("EXCEL IMPORT UI PASS: no implicit write, select/analyze/preview/commit, server token, size guard");
+  console.log("EXCEL IMPORT UI PASS: safe batch history, report XLSX, no implicit write, server token and size guard");
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});

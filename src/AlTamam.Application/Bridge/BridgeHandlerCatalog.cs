@@ -110,6 +110,18 @@ public static class BridgeHandlerCatalog
             var result = await import.CommitAsync(req.Payload, principal!.UserId, principal.Username, ct).ConfigureAwait(false);
             return result with { RequestId = req.RequestId };
         },
+        "QueryImportOutcome" => async (req, principal, ct) =>
+        {
+            var outcome = new ExcelImportOutcomeService(services.Db);
+            var result = await outcome.QueryAsync(req.Payload, principal!.UserId, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
+        "ExportImportIssues" => async (req, principal, ct) =>
+        {
+            var outcome = new ExcelImportOutcomeService(services.Db);
+            var result = await outcome.ExportIssuesAsync(req.Payload, principal!.UserId, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
         "GetExportablePeriods" => async (req, principal, ct) =>
         {
             var excel = new MonthlyExcelExportService(services.Db);

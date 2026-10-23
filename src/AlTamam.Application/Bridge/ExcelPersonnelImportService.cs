@@ -62,8 +62,11 @@ public sealed class ExcelPersonnelImportService
                     ["row"] = row.Row, ["name"] = row.Name, ["number"] = row.Number,
                     ["normalizedName"] = row.NormalizedName, ["normalizedNumber"] = row.NormalizedNumber
                 });
+            string sha256 = Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(bytes));
             string token = BridgePreviewTokens.Issue(_db, _time, WorkbookOperation, actor,
-                new JsonObject { ["rows"] = data }, 0, ct);
+                new JsonObject { ["rows"] = data, ["fileName"] = fileName,
+                    ["sha256"] = sha256 }, 0, ct);
             return BridgeHelpers.Ok(new JsonObject { ["workbookToken"] = token,
                 ["rowCount"] = rows.Count, ["fileName"] = fileName,
                 ["maxRows"] = MaxRecords });
@@ -178,7 +181,11 @@ public sealed class ExcelPersonnelImportService
             return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد أسماء جديدة صالحة للاستيراد.");
         // Only approved, conflict-free new rows are carried forward to the signed, one-use plan.
         string token = BridgePreviewTokens.Issue(_db, _time, PlanOperation, actor,
-            new JsonObject { ["rows"] = new JsonArray(accepted.Select(node =>
+            new JsonObject { ["fileName"] = Read(staged, "fileName"),
+                ["sha256"] = Read(staged, "sha256"),
+                ["totalRows"] = accepted.Count + issues.Count,
+                ["issues"] = issues.DeepClone(),
+                ["rows"] = new JsonArray(accepted.Select(node =>
             {
                 var p = (JsonObject)node!;
                 return (JsonNode?)new JsonObject {
@@ -214,6 +221,45 @@ public sealed class ExcelPersonnelImportService
             if (consumed != rows.Count) return Stale();
 
             string now = _time.GetUtcNow().ToString("O");
+            string batchId = "IMP-" + Guid.NewGuid().ToString("N");
+            var plannedIssues = plan["issues"] as JsonArray ?? new JsonArray();
+            using (var record = connection.CreateCommand())
+            {
+                record.Transaction = tx;
+                record.CommandText = """
+                    INSERT INTO ImportBatches(ImportBatchId,SourceFileName,SourceFileSha256,
+                        TotalRows,AcceptedRows,RejectedRows,CreatedSitesCount,Status,
+                        CreatedByUserId,CreatedAtUtc,CommittedAtUtc)
+                    VALUES($id,$file,$hash,$total,$accepted,$rejected,0,'COMMITTED',$actor,$now,$now);
+                    """;
+                record.Parameters.AddWithValue("$id", batchId);
+                record.Parameters.AddWithValue("$file", Read(plan, "fileName"));
+                record.Parameters.AddWithValue("$hash", Read(plan, "sha256"));
+                record.Parameters.AddWithValue("$total", rows.Count + plannedIssues.Count);
+                record.Parameters.AddWithValue("$accepted", rows.Count);
+                record.Parameters.AddWithValue("$rejected", plannedIssues.Count);
+                record.Parameters.AddWithValue("$actor", actor);
+                record.Parameters.AddWithValue("$now", now);
+                await record.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+            foreach (var issue in plannedIssues)
+            {
+                var rejected = issue as JsonObject ??
+                    throw new InvalidDataException("تعذر استرجاع أسباب الاستبعاد المعتمدة.");
+                using var record = connection.CreateCommand();
+                record.Transaction = tx;
+                record.CommandText = """
+                    INSERT INTO ImportIssues(ImportBatchId,WorksheetName,RowNumber,
+                        RawServiceNumberA,RawPersonName,RawSiteName,IssueReasonArabic)
+                    VALUES($batch,'الورقة الأولى',$row,$number,$name,NULL,$reason);
+                    """;
+                record.Parameters.AddWithValue("$batch", batchId);
+                record.Parameters.AddWithValue("$row", rejected["row"]!.GetValue<int>());
+                record.Parameters.AddWithValue("$number", rejected["serviceNumberA"]?.GetValue<string>() ?? "");
+                record.Parameters.AddWithValue("$name", rejected["name"]?.GetValue<string>() ?? "");
+                record.Parameters.AddWithValue("$reason", rejected["reason"]!.GetValue<string>());
+                await record.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
             string today = DateOnly.FromDateTime(_time.GetLocalNow().DateTime)
                 .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             var createdIds = new List<string>(rows.Count);
@@ -249,13 +295,15 @@ public sealed class ExcelPersonnelImportService
             }
             await BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 "PERSONNEL_IMPORT", "استيراد أفراد من ملف Excel",
-                actor, username, username, "PersonImport", token, "دفعة استيراد",
-                null, new JsonObject { ["createdCount"] = rows.Count,
+                actor, username, username, "PersonImport", batchId, "دفعة استيراد",
+                null, new JsonObject { ["importBatchId"] = batchId,
+                    ["createdCount"] = rows.Count, ["rejectedCount"] = plannedIssues.Count,
                     ["rows"] = new JsonArray(rows.Select(r => (JsonNode?)JsonValue.Create(r.Number)).ToArray()) }.ToJsonString(),
                 $"إنشاء {rows.Count} سجل فرد جديد فقط دون تعديل أي تحضير أو هوية موجودة.",
                 "اعتماد كشف Excel بعد المعاينة", today, ct.CorrelationId(), ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(new JsonObject { ["createdCount"] = rows.Count,
-                ["committedAtUtc"] = now, ["importToken"] = token },
+                ["committedAtUtc"] = now, ["importToken"] = token,
+                ["importBatchId"] = batchId, ["rejectedCount"] = plannedIssues.Count },
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonIdentityUpdated,
                     today, createdIds));
         }, ct).ConfigureAwait(false);
