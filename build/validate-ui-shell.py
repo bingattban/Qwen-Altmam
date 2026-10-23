@@ -32,7 +32,7 @@ def main() -> None:
         "settings": "الإعدادات",
     }
     check(len(manifest["screens"]) == manifest["screenCount"] == 69, "missing route manifest entries")
-    check(len(actions) == 90, "action manifest drift")
+    check(len(actions) == 93, "action manifest drift")
     for section, title in sections.items():
         tag = re.search(
             r'<button\b[^>]*id="navBtn-' + re.escape(section)
