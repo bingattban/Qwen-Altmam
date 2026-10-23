@@ -602,3 +602,25 @@ table.monthly-table thead .sticky-col-4 {
     width: auto;
   }
 }
+
+/* Four-section Arabic navigation with nested, accessible route groups. */
+#appViewport { display:flex; flex-direction:column; gap:16px; min-width:0; width:100%; }
+.main-section-heading { padding:20px 22px; }
+.section-description { color:var(--text-muted); margin-top:8px; }
+.section-title { font-size:17px; font-weight:700; margin-bottom:15px; }
+.route-tree { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr)); }
+.route-item { border:1px solid var(--border-color); border-radius:var(--radius); background:var(--bg-surface); padding:12px; min-width:0; }
+.route-item-root { border-right:4px solid var(--accent-teal); }
+.route-item-heading { display:flex; gap:8px; align-items:center; }
+.route-link { color:var(--text-main); text-decoration:none; font-weight:700; line-height:1.6; display:block; padding:8px 10px; border-radius:7px; min-height:38px; flex:1; }
+.route-link:hover, .route-link:focus-visible { background:var(--bg-subtle); outline-color:var(--accent-teal); }
+.route-children { margin-top:8px; color:var(--text-muted); }
+.route-children-toggle { padding:7px 10px; cursor:pointer; font-weight:600; font-size:12px; }
+.route-children-list { margin-top:7px; display:flex; flex-direction:column; gap:8px; padding-right:12px; border-right:1px solid var(--border-color); }
+.route-children-list .route-item { box-shadow:none; }
+.shared-route-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,215px),1fr)); gap:8px; }
+.shared-route-grid .route-link { border:1px solid var(--border-color); }
+@media (max-width:860px) {
+ .app-main { padding:12px; width:100%; min-width:0; }
+ .route-tree { grid-template-columns:1fr; }
+}
