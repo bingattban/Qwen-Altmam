@@ -278,7 +278,7 @@ public sealed class ExcelPersonnelImportService
                 if (item.SiteName != "غير محدد")
                 {
                     string normalizedSite = ArabicTextNormalizer.NormalizeForSearch(item.SiteName);
-                    if (!siteIds.TryGetValue(normalizedSite, out siteId!))
+                    if (!siteIds.TryGetValue(normalizedSite, out var savedSiteId))
                     {
                         using var findSite = connection.CreateCommand();
                         findSite.Transaction = tx;
@@ -313,6 +313,7 @@ public sealed class ExcelPersonnelImportService
                         }
                         siteIds[normalizedSite] = siteId;
                     }
+                    else siteId = savedSiteId;
                 }
                 using var insert = connection.CreateCommand();
                 insert.Transaction = tx;
