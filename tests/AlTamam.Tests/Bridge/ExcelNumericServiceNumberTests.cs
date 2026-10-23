@@ -131,7 +131,7 @@ public sealed class ExcelNumericServiceNumberTests : IAsyncLifetime, IDisposable
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM Persons;";
-        Assert.Equal(0L, (long)await cmd.ExecuteScalarAsync()!);
+        Assert.Equal(0L, Convert.ToInt64(await cmd.ExecuteScalarAsync()));
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
