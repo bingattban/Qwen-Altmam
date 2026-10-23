@@ -23,16 +23,19 @@ namespace AlTamam.Tests.Performance;
 ///     hot predicates" via EXPLAIN QUERY PLAN.
 /// Deterministic seeded synthetic data; zero real personnel records (§2.10).
 /// </summary>
-public sealed class SqliteIndexPerformanceTests : IAsyncLifetime, IDisposable
+public sealed class SqliteIndexPerformanceFixture : IAsyncLifetime, IDisposable
 {
-    private const int PersonCount = 2_000;              // synthetic force size
+    public const int PersonCount = 2_000;              // synthetic force size
     private const int DaysPerMonth = 31;
     private const int MonthsBack = 6;                   // ~6 month-periods of attendance
-    private const string MonthPrefix = "2025-06";       // primary measured month period
+    public const string MonthPrefix = "2025-06";       // primary measured month period
 
     private readonly string _dbPath = SyntheticFixtures.CreateTempDatabasePath();
     private AlTamamDbContext _db = null!;
     private BridgeSharedServices _services = null!;
+
+    public AlTamamDbContext Database => _db;
+    public BridgeSharedServices Services => _services;
 
     public async Task InitializeAsync()
     {
@@ -117,6 +120,22 @@ public sealed class SqliteIndexPerformanceTests : IAsyncLifetime, IDisposable
         cmd.CommandText = sql;
         foreach (var (name, value) in parameters) cmd.Parameters.AddWithValue(name, value);
         cmd.ExecuteNonQuery();
+    }
+
+}
+
+public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerformanceFixture>
+{
+    private const int PersonCount = SqliteIndexPerformanceFixture.PersonCount;
+    private const string MonthPrefix = SqliteIndexPerformanceFixture.MonthPrefix;
+
+    private readonly AlTamamDbContext _db;
+    private readonly BridgeSharedServices _services;
+
+    public SqliteIndexPerformanceTests(SqliteIndexPerformanceFixture fixture)
+    {
+        _db = fixture.Database;
+        _services = fixture.Services;
     }
 
     // ------------------------------------------------------------------ index presence & plans
