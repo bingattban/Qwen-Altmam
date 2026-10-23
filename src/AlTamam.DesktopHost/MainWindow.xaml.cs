@@ -167,6 +167,17 @@ public partial class MainWindow : Window
                 PreparedServices ready = await preparing.ConfigureAwait(true);
                 _dbContext = ready.Database;
                 _gateway = ready.Gateway;
+                _gateway.FolderPicker = current =>
+                {
+                    var dialog = new Microsoft.Win32.OpenFolderDialog
+                    {
+                        Title = "اختر مجلد النسخ الاحتياطي وتصدير الجداول",
+                        InitialDirectory = Directory.Exists(current) ? current :
+                            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                    };
+                    string? result = dialog.ShowDialog(this) == true ? dialog.FolderName : null;
+                    return Task.FromResult(result);
+                };
                 _scheduler = ready.Scheduler;
             }
         }
