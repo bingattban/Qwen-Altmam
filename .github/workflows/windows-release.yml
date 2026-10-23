@@ -78,6 +78,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
           node build/test-personnel-movements.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
+          node build/test-session-idle.js
+          if ($LASTEXITCODE -ne 0) { throw '10-minute session inactivity regression' }
           node build/test-operation-dialogs.js
           if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
           node build/test-personnel-separation.js
