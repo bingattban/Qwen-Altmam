@@ -187,6 +187,8 @@
       const page=start("الإدارة / التقارير والفصل / الفصل");
       return window.AltamamSeparation.render(page,screen);
     }
+    if(screen==="personReport" && window.AltamamReports)
+      return window.AltamamReports.render(target(),()=>navigate("reports"));
     if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
