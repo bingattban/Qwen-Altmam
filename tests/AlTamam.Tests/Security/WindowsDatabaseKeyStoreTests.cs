@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using AlTamam.Infrastructure.Security;
@@ -9,6 +10,7 @@ namespace AlTamam.Tests.Security;
 /// Verify that existing SQLCipher files are never orphaned by a replacement DPAPI key.
 /// Windows DPAPI cases run on the native Windows CI; no secret or protected blob is committed.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class WindowsDatabaseKeyStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(),
