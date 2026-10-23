@@ -133,8 +133,8 @@ public sealed class SecretHygieneAndFailureTests : IDisposable
             .Where(f =>
             {
                 string text = File.ReadAllText(f);
-                return text.Contains("BEGIN PRIVATE KEY", StringComparison.Ordinal)
-                    || text.Contains("-----BEGIN RSA PRIVATE KEY", StringComparison.Ordinal)
+                return text.Contains("BEGIN " + "PRIVATE KEY", StringComparison.Ordinal)
+                    || text.Contains("-----BEGIN RSA " + "PRIVATE KEY", StringComparison.Ordinal)
                     || Regex_LikeProtectedBlob(text);
             })
             .Select(file => Path.GetRelativePath(repo, file))
