@@ -184,9 +184,15 @@ public sealed class PersonRosterService
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "الاسم الكامل قصير جداً.");
 
         string normalizedName = ArabicTextNormalizer.NormalizeForSearch(visibleName);
-        string normalizedNumber = ArabicTextNormalizer.NormalizeForSearch(serviceNumber);
-        if (normalizedNumber.Length == 0)
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "«الرقم (ع)» مطلوب نصياً.");
+        if (!ServiceNumberPolicy.TryCanonicalize(serviceNumber, out serviceNumber))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "الرقم (ع) يجب أن يتكون من خمسة أرقام على الأقل؛ لا تستخدم الرقم التسلسلي العادي.");
+        string normalizedNumber = serviceNumber;
+        string siteName = ReadString(payload, "siteName").Trim();
+        if (siteName.Length == 0) siteName = "غير محدد";
+        if (siteName.Length > 100 || (siteName != "غير محدد" && siteName.Length < 2)
+            || siteName.Any(char.IsControl))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "اسم الموقع غير صالح.");
 
         string personId = "PRN-" + Guid.NewGuid().ToString("N");
         DateTimeOffset nowUtc = _time.GetUtcNow();
@@ -200,6 +206,45 @@ public sealed class PersonRosterService
                 return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
                     "«الرقم (ع)» مستخدم بالفعل لفرد نشط بعد التطبيع؛ لا يمكن تكراره.");
 
+            string siteId = "SITE-UNSPECIFIED";
+            if (siteName != "غير محدد")
+            {
+                string normalizedSite = ArabicTextNormalizer.NormalizeForSearch(siteName);
+                using var find = connection.CreateCommand();
+                find.Transaction = tx;
+                find.CommandText = """
+                    SELECT SiteId FROM Sites WHERE NormalizedName=$name AND ActiveFlag=1 LIMIT 1;
+                    """;
+                find.Parameters.AddWithValue("$name", normalizedSite);
+                siteId = await find.ExecuteScalarAsync(ct).ConfigureAwait(false) as string ?? "";
+                if (siteId.Length == 0)
+                {
+                    siteId = "SITE-" + Guid.NewGuid().ToString("N");
+                    using var create = connection.CreateCommand();
+                    create.Transaction = tx;
+                    create.CommandText = """
+                        INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,
+                                          ActiveFlag,CreatedAtUtc,RowVersion)
+                        VALUES($id,$name,$normalized,0,1,$now,1);
+                        INSERT INTO SiteNameHistory(SiteId,VisibleNameSnapshot,ValidFromLocalDate,
+                                                    ValidToLocalDate,ChangedByUserId,RecordedAtUtc)
+                        VALUES($id,$name,$day,NULL,$actor,$now);
+                        """;
+                    create.Parameters.AddWithValue("$id", siteId);
+                    create.Parameters.AddWithValue("$name", siteName);
+                    create.Parameters.AddWithValue("$normalized", normalizedSite);
+                    create.Parameters.AddWithValue("$now", nowUtc.ToString("O"));
+                    create.Parameters.AddWithValue("$day", effectiveDate);
+                    create.Parameters.AddWithValue("$actor", userId);
+                    await create.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    await BridgeAuditWriter.WriteAsync(connection, tx, _time,
+                        "SITE_CREATE", "إنشاء موقع تلقائياً", userId, username, username,
+                        "Site", siteId, siteName, null,
+                        new JsonObject { ["siteId"] = siteId, ["name"] = siteName }.ToJsonString(),
+                        "تسجيل موقع غير موجود عند إضافة فرد", null, effectiveDate,
+                        ct.CorrelationId(), ct).ConfigureAwait(false);
+                }
+            }
             using var insert = connection.CreateCommand();
             insert.Transaction = tx;
             insert.CommandText = """
@@ -231,6 +276,21 @@ public sealed class PersonRosterService
             snapshot.Parameters.Add("$user", SqliteType.Text).Value = userId;
             snapshot.Parameters.Add("$now", SqliteType.Text).Value = nowUtc.ToString("O");
             await snapshot.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            using (var assign = connection.CreateCommand())
+            {
+                assign.Transaction = tx;
+                assign.CommandText = """
+                    INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                        ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                    VALUES($id,$person,$site,$day,NULL,NULL,$now);
+                    """;
+                assign.Parameters.AddWithValue("$id", "ASG-" + Guid.NewGuid().ToString("N"));
+                assign.Parameters.AddWithValue("$person", personId);
+                assign.Parameters.AddWithValue("$site", siteId);
+                assign.Parameters.AddWithValue("$day", effectiveDate);
+                assign.Parameters.AddWithValue("$now", nowUtc.ToString("O"));
+                await assign.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
 
             await BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 operationCode: "PERSON_CREATE", operationArabicName: "إنشاء فرد",
@@ -241,7 +301,7 @@ public sealed class PersonRosterService
                 reason: null, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
 
             return BridgeHelpers.Ok(
-                new JsonObject { ["personId"] = personId, ["revision"] = 1L },
+                new JsonObject { ["personId"] = personId, ["siteId"] = siteId, ["revision"] = 1L },
                 revision: 1,
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.AttendanceCommitted, effectiveDate, [personId]));
         }, ct).ConfigureAwait(false);
