@@ -86,6 +86,30 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await read.MonthlyGridAsync(req.Payload, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
+        "SelectImportWorkbook" => async (req, principal, ct) =>
+        {
+            var import = new ExcelPersonnelImportService(services.Db, services.Time);
+            var result = await import.SelectAsync(req.Payload, principal!.UserId, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
+        "AnalyzeImport" => async (req, principal, ct) =>
+        {
+            var import = new ExcelPersonnelImportService(services.Db, services.Time);
+            var result = await import.AnalyzeAsync(req.Payload, principal!.UserId, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
+        "PreviewImportPlan" => async (req, principal, ct) =>
+        {
+            var import = new ExcelPersonnelImportService(services.Db, services.Time);
+            var result = await import.PreviewAsync(req.Payload, principal!.UserId, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
+        "CommitImport" => async (req, principal, ct) =>
+        {
+            var import = new ExcelPersonnelImportService(services.Db, services.Time);
+            var result = await import.CommitAsync(req.Payload, principal!.UserId, principal.Username, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
         "GetExportablePeriods" => async (req, principal, ct) =>
         {
             var excel = new MonthlyExcelExportService(services.Db);
