@@ -89,7 +89,7 @@ async function main(){
   close.handlers.click();
   assert.equal(details.hidden,true,"close hides details without touching attendance");
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
-    "QueryMonthlyGrid","GetMonthlyCellDetails"].includes(x.action)).length,0,
+    "QueryMonthlyGrid","GetMonthlyCellDetails","PreviewMonthlyExport","ExportMonthlyWorkbookSet"].includes(x.action)).length,0,
     "read-only click must never commit attendance or modify history");
   console.log("MONTHLY EXCEL + MONTHLY CELL UI PASS: guarded preview, native export response, date-bound read-only details");
 }
