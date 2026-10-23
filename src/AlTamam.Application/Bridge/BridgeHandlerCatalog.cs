@@ -86,6 +86,12 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await read.MonthlyGridAsync(req.Payload, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
+        "GetMonthlyCellDetails" => async (req, principal, ct) =>
+        {
+            var read = new DailyMonthlyReadService(services.Db);
+            BridgeResponse inner = await read.MonthlyCellDetailsAsync(req.Payload as JsonObject, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
         "QuerySites" => async (req, principal, ct) =>
         {
             BridgeResponse inner = await services.ListSitesAsync(includeInactive: principal?.Role != UserRole.Supervisor, ct).ConfigureAwait(false);
