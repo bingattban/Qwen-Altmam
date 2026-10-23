@@ -21,12 +21,13 @@
     <div class="topbar-controls">
       <span class="badge-pill">تطبيق محلي — بدون خدمات سحابية</span>
       <span id="headerRoleBadge" class="badge-pill">لم يتم تسجيل الدخول</span>
+      <button id="logoutAction" class="btn btn-outline" type="button" hidden>تسجيل الخروج</button>
       <button class="btn btn-outline presentf2f1452a6" data-action="toggleTheme">🌓 المظهر</button>
     </div>
   </header>
 
   <div class="app-body">
-    <aside class="app-sidebar" aria-label="الأقسام الأربعة الرئيسية">
+    <aside class="app-sidebar" aria-label="الأقسام الأربعة الرئيسية" hidden>
       <div class="nav-section-label">الأقسام الرئيسية</div>
       <button id="navBtn-dashboard" class="nav-btn active" data-action="navigateTop" data-section="dashboard">
         <span>الرئيسية</span>
@@ -67,5 +68,6 @@
 
   <script src="assets/js/altamam-app.js"></script>
     <script src="./assets/js/bridge-client.js"></script>
+  <script src="assets/js/functional-screens.js"></script>
 </body>
 </html>

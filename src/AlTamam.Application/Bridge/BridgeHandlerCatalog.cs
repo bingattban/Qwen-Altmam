@@ -49,10 +49,8 @@ public static class BridgeHandlerCatalog
             string password = req.Payload?["password"]?.GetValue<string>() ?? "";
             var (authPrincipal, failure) = await services.AuthenticateAsync(username, password, ct).ConfigureAwait(false);
             if (authPrincipal is null) return Fail(req, failure!);
-            return Done(req, SessionData(authPrincipal), new[]
-            {
-                new Contracts.Events.UiInvalidationEventPayload(UiInvalidationEvents.SessionEnded, Array.Empty<string>(), DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd"), 1)
-            });
+            // Authentication creates a session; it must not broadcast SessionEnded.
+            return Done(req, SessionData(authPrincipal));
         },
         "GetCurrentSession" => async (req, principal, ct) =>
             principal is null
@@ -62,6 +60,31 @@ public static class BridgeHandlerCatalog
         {
             await services.RevokeSessionAsync(req.SessionNonce, ct).ConfigureAwait(false);
             return Done(req, new JsonObject { ["loggedOut"] = true }, Invalidation(UiInvalidationEvents.SessionEnded));
+        },
+        // Real read-only projections: all SQL executes locally against SQLCipher.
+        "GetDashboardSummary" => async (req, principal, ct) =>
+        {
+            var read = new DailyMonthlyReadService(services.Db);
+            BridgeResponse inner = await read.DashboardSummaryAsync(req.Payload, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
+        "QueryDailyRoster" => async (req, principal, ct) =>
+        {
+            var read = new DailyMonthlyReadService(services.Db);
+            BridgeResponse inner = await read.DailyRosterAsync(req.Payload, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
+        "GetAvailableArchivePeriods" => async (req, principal, ct) =>
+        {
+            var read = new DailyMonthlyReadService(services.Db);
+            BridgeResponse inner = await read.ArchivePeriodsAsync(ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
+        "QueryMonthlyGrid" => async (req, principal, ct) =>
+        {
+            var read = new DailyMonthlyReadService(services.Db);
+            BridgeResponse inner = await read.MonthlyGridAsync(req.Payload, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
         "QuerySites" => async (req, principal, ct) =>
         {

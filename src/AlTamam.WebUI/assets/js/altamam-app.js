@@ -30,7 +30,8 @@ function parentRoute(route) {
 }
 
 function getPrimaryRoutes(section) {
-  return SCREEN_CATALOG.filter(route => sectionForRoute(route) === section);
+  return SCREEN_CATALOG.filter(route => sectionForRoute(route) === section &&
+    (!window.AltamamFunctional || window.AltamamFunctional.canSeeRoute(route)));
 }
 
 function openScreen(key) {
@@ -147,6 +148,7 @@ document.addEventListener("click", event => {
   }
 });
 window.addEventListener("DOMContentLoaded", () => {
+  if (window.AltamamFunctional) return;
   const requested = decodeURIComponent(location.hash.slice(1));
   const route = SCREEN_BY_KEY.get(requested);
   // Module return links point to #RouteKey: show its containing section instead

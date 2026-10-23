@@ -52,7 +52,7 @@ jobs:
         run: |
           python build/validate-ui-shell.py
           if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
-          foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js')) {
+          foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
           }
