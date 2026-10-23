@@ -226,11 +226,13 @@
     container.replaceChildren(header("التمام الشهري لشهر "+monthLabel(year,month)+" "+year));
     const tool=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
+    const exportPanel=el("section","card functional-export-preview");
+    exportPanel.hidden=true;
     const tableHost=el("section","card");
     const detailsBox=el("section","card monthly-cell-details");
     detailsBox.hidden=true;
     const bottom=el("form","card functional-archive");
-    append(container,tool,feedback,detailsBox,tableHost,bottom);
+    append(container,tool,feedback,exportPanel,detailsBox,tableHost,bottom);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
     const item=(label,value)=>{
@@ -299,6 +301,46 @@
       STATE.archivePeriods=parseData(periodReply)||[];
       tool.appendChild(siteSelector(sites,showMonth));
       tool.appendChild(button("تحديث",renderMonthly,"btn btn-primary"));
+      const previewExport=button("معاينة تصدير Excel",async()=>{
+        const chosen={year,month,siteId:STATE.siteId};
+        previewExport.disabled=true;
+        exportPanel.hidden=false;
+        exportPanel.replaceChildren(message("جارٍ التحقق من سجلات الشهر قبل التصدير..."));
+        try{
+          const preview=parseData(await bridge().invoke("PreviewMonthlyExport",chosen));
+          if(STATE.monthEpoch!==epoch)return;
+          if(!preview||!Number.isSafeInteger(preview.personCount)||preview.personCount<0)
+            throw new Error("لم يرجع الخادم معاينة تصدير صالحة.");
+          if(!preview.personCount){
+            exportPanel.replaceChildren(message("لا توجد أسماء في هذا الشهر والموقع للتصدير."));
+            return;
+          }
+          const description=el("p","section-description",
+            "سيتم حفظ "+preview.personCount+" فرد في ملف Excel لشهر "+
+            year+"-"+String(month).padStart(2,"0")+
+            ". الحفظ في المستندات / AlTamam / Exports، دون تعديل سجلات التحضير.");
+          const confirmSave=button("حفظ ملف Excel",async()=>{
+            confirmSave.disabled=true;
+            exportPanel.replaceChildren(description,message("جارٍ إنشاء ملف Excel..."));
+            try{
+              const result=parseData(await bridge().invoke("ExportMonthlyWorkbookSet",chosen));
+              if(STATE.monthEpoch!==epoch)return;
+              if(!result||result.format!=="xlsx"||!result.filePath)
+                throw new Error("لم يؤكد الخادم إنشاء ملف Excel.");
+              exportPanel.replaceChildren(message("تم حفظ الكشف بنجاح: "+result.filePath));
+            }catch(error){
+              if(STATE.monthEpoch===epoch)showError(exportPanel,error);
+            }finally{confirmSave.disabled=false;}
+          },"btn btn-primary");
+          const cancel=button("إلغاء التصدير",()=>{
+            exportPanel.replaceChildren();exportPanel.hidden=true;
+          });
+          exportPanel.replaceChildren(description,confirmSave,cancel);
+        }catch(error){
+          if(STATE.monthEpoch===epoch)showError(exportPanel,error);
+        }finally{previewExport.disabled=false;}
+      });
+      tool.appendChild(previewExport);
       const yearPick=el("select","form-select"),monthPick=el("select","form-select");
       const noneYear=el("option","","السنة (الحالية عند الفراغ)");
       noneYear.value="";yearPick.appendChild(noneYear);
