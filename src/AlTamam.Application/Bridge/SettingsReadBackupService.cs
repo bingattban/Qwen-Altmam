@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 
 namespace AlTamam.Application.Bridge;
@@ -74,7 +75,8 @@ public sealed class SettingsReadBackupService
         try
         {
             await _db.CreateVerifiedEncryptedBackupAsync(destination,ct).ConfigureAwait(false);
-            byte[] hash=await SHA256.HashDataAsync(File.OpenRead(destination),ct).ConfigureAwait(false);
+            using var stream=File.OpenRead(destination);
+            byte[] hash=await SHA256.HashDataAsync(stream,ct).ConfigureAwait(false);
             string checksum=Convert.ToHexString(hash).ToLowerInvariant();
             await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{
                 using var insert=c.CreateCommand();
