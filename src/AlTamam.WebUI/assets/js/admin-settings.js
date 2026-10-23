@@ -177,6 +177,8 @@
     page.appendChild(grid);
   }
   function renderDetail(screen) {
+    if(screen==="attendance" && window.AltamamAttendance)
+      return window.AltamamAttendance.render(target());
     if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
