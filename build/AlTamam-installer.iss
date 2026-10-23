@@ -9,12 +9,12 @@
 
 [Setup]
 AppId={{3A156EF1-176E-45DD-A570-8224D739A454}
-AppName=التمام الشهري
-UninstallDisplayName=التمام الشهري
+AppName=التمام اليومي
+UninstallDisplayName=التمام اليومي
 AppVersion={#AppVersion}
 AppPublisher=AlTamam
 DefaultDirName={autopf}\AlTamam
-DefaultGroupName=التمام الشهري
+DefaultGroupName=التمام اليومي
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
@@ -49,11 +49,11 @@ Name: "{localappdata}\AlTamam"; Permissions: users-modify
 Name: "{localappdata}\AlTamam\backups"; Permissions: users-modify
 
 [Icons]
-Name: "{group}\التمام الشهري"; Filename: "{app}\AlTamam.DesktopHost.exe"
-Name: "{autodesktop}\التمام الشهري"; Filename: "{app}\AlTamam.DesktopHost.exe"; Tasks: desktopicon
+Name: "{group}\التمام اليومي"; Filename: "{app}\AlTamam.DesktopHost.exe"
+Name: "{autodesktop}\التمام اليومي"; Filename: "{app}\AlTamam.DesktopHost.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\AlTamam.DesktopHost.exe"; Description: "{cm:LaunchProgram,التمام الشهري}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\AlTamam.DesktopHost.exe"; Description: "{cm:LaunchProgram,التمام اليومي}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; Intentionally EMPTY for data files: {localappdata}\AlTamam must survive.
