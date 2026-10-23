@@ -146,7 +146,8 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
             }, $"FUZZ-DRAFT-{Math.Abs(hostile.GetHashCode()):X}"),
             LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
 
-        Assert.Equal(BridgeOutcomeKind.Success, result.Kind == BridgeOutcomeKind.Success ? result.Kind : result.Kind);
+        // Invalid hostile fields may be rejected; success and error envelopes must agree.
+        Assert.Equal(result.Kind == BridgeOutcomeKind.Success, result.Response.Success);
         if (!result.Response.Success)
             Assert.False(string.IsNullOrWhiteSpace(result.Response.ErrorCode));
 
