@@ -67,7 +67,7 @@ async function run(){
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,1);
   assert.equal(calls.at(-1).body.previewToken,"B".repeat(64));
   assert.ok(all().some(x=>x.textContent.includes("تم إنشاء 2 فرداً جديداً")));
-  picker.files=[{name:"too-large.xlsx",size:1_048_577,base64:"A"}];
+  picker.files=[{name:"too-large.xlsx",size:163_841,base64:"A"}];
   const before=calls.length;
   await button("تحليل الملف").handlers.click();
   assert.equal(calls.length,before,"oversize file must never enter the bridge");
