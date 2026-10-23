@@ -129,99 +129,12 @@
   }
 
   // ---------------------------------------------------------------- unified navigation (04.06)
-  const SCREEN_ROUTES = {"AboutApplication": "screens/Settings/AboutApplication/index.html", "AddOrEditColumn": "screens/Administration/Rosters/RosterLayout/AddOrEditColumn/index.html", "AddSite": "screens/Administration/StatusesAndSites/Sites/AddSite/index.html", "AddStatus": "screens/Administration/StatusesAndSites/Statuses/AddStatus/index.html", "AddUser": "screens/Administration/Users/AddUser/index.html", "Administration": "screens/Administration/index.html", "AppearanceAndDiagnostics": "screens/Settings/AppearanceAndDiagnostics/index.html", "Attendance": "screens/Administration/PersonnelManagement/Attendance/index.html", "AuditLog": "screens/Administration/AuditLog/index.html", "ChangePassword": "screens/Administration/Users/ChangePassword/index.html", "ClosedDayExceptionalCorrection": "screens/SharedScreens/ClosedDayExceptionalCorrection/index.html", "ConfirmAttendance": "screens/Administration/PersonnelManagement/Attendance/ConfirmAttendance/index.html", "ConfirmDismissal": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissPerson/ConfirmDismissal/index.html", "ConfirmExternalTransfer": "screens/Administration/PersonnelManagement/Transfers/ExternalTransfer/ConfirmExternalTransfer/index.html", "ConfirmTransfer": "screens/Administration/PersonnelManagement/Transfers/InternalTransfer/ConfirmTransfer/index.html", "ConfirmationAndWarning": "screens/SharedScreens/ConfirmationAndWarning/index.html", "ConflictsAndNotifications": "screens/SharedScreens/ConflictsAndNotifications/index.html", "CreateBackup": "screens/Settings/CreateBackup/index.html", "Dashboard": "screens/Dashboard/index.html", "DeleteAccount": "screens/Administration/Users/DeleteAccount/index.html", "DeleteAuditEntry": "screens/Administration/AuditLog/DeleteAuditEntry/index.html", "DeleteSite": "screens/Administration/StatusesAndSites/Sites/DeleteSite/index.html", "DeleteStatus": "screens/Administration/StatusesAndSites/Statuses/DeleteStatus/index.html", "DismissPerson": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissPerson/index.html", "Dismissal": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/index.html", "DismissedPersonnelArchive": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissedPersonnelArchive/index.html", "DraftsAndTemporarySave": "screens/SharedScreens/DraftsAndTemporarySave/index.html", "EditAuditEntry": "screens/Administration/AuditLog/EditAuditEntry/index.html", "EditPersonDetails": "screens/Administration/PersonnelManagement/EditPersonnelNames/EditPersonDetails/index.html", "EditPersonnelNames": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html", "EditSite": "screens/Administration/StatusesAndSites/Sites/EditSite/index.html", "EditStatus": "screens/Administration/StatusesAndSites/Statuses/EditStatus/index.html", "EightPmScheduler": "screens/SharedScreens/EightPmScheduler/index.html", "Export": "screens/Administration/Rosters/Export/index.html", "ExportPersonReport": "screens/Administration/PersonnelManagement/PersonnelReport/ExportPersonReport/index.html", "ExportProgressAndResult": "screens/Administration/Rosters/Export/ExportProgressAndResult/index.html", "ExternalTransfer": "screens/Administration/PersonnelManagement/Transfers/ExternalTransfer/index.html", "FirstRunSetup": "screens/SharedScreens/FirstRunSetup/index.html", "Import": "screens/Administration/Rosters/Import/index.html", "ImportResults": "screens/Administration/Rosters/Import/ImportResults/index.html", "InternalTransfer": "screens/Administration/PersonnelManagement/Transfers/InternalTransfer/index.html", "Login": "screens/SharedScreens/Login/index.html", "Logout": "screens/Settings/Logout/index.html", "ModifiedDeletedAuditEntries": "screens/Administration/AuditLog/ModifiedDeletedAuditEntries/index.html", "MonthlyAttendance": "screens/MonthlyAttendance/index.html", "PersonPickerAndSearch": "screens/SharedScreens/PersonPickerAndSearch/index.html", "PersonnelManagement": "screens/Administration/PersonnelManagement/index.html", "PersonnelReport": "screens/Administration/PersonnelManagement/PersonnelReport/index.html", "PreviewAndConfirmExport": "screens/Administration/Rosters/Export/PreviewAndConfirmExport/index.html", "PreviewAndValidate": "screens/Administration/Rosters/Import/PreviewAndValidate/index.html", "RemovePersonnel": "screens/Administration/PersonnelManagement/EditPersonnelNames/RemovePersonnel/index.html", "Reports": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Reports/index.html", "ReportsAndDismissal": "screens/Administration/PersonnelManagement/ReportsAndDismissal/index.html", "ResetApplicationData": "screens/Settings/ResetApplicationData/index.html", "RestoreBackup": "screens/Settings/RestoreBackup/index.html", "RosterLayout": "screens/Administration/Rosters/RosterLayout/index.html", "Rosters": "screens/Administration/Rosters/index.html", "ScheduledBackups": "screens/Settings/ScheduledBackups/index.html", "SelectArchive": "screens/MonthlyAttendance/SelectArchive/index.html", "SelectFile": "screens/Administration/Rosters/Import/SelectFile/index.html", "SelectStatusAndConfirm": "screens/Dashboard/UnpreparedPersonnel/SelectStatusAndConfirm/index.html", "Settings": "screens/Settings/index.html", "Sites": "screens/Administration/StatusesAndSites/Sites/index.html", "Statuses": "screens/Administration/StatusesAndSites/Statuses/index.html", "StatusesAndSites": "screens/Administration/StatusesAndSites/index.html", "TransferArchive": "screens/Administration/PersonnelManagement/Transfers/TransferArchive/index.html", "Transfers": "screens/Administration/PersonnelManagement/Transfers/index.html", "UnpreparedPersonnel": "screens/Dashboard/UnpreparedPersonnel/index.html", "Users": "screens/Administration/Users/index.html"};
-
-  const SECTIONS = {
-    dashboard: 'Dashboard', monthly: 'MonthlyAttendance', admin: 'Administration',
-    settings: 'Settings', auth: 'SharedScreens', routes69: null
-  };
-
-  function screenMatchesSection(routeKey, section) {
-    const path = SCREEN_ROUTES[routeKey];
-    if (!path) return false;
-    if (section === 'routes69') return true;
-    const folder = SECTIONS[section];
-    return folder ? path.indexOf('screens/' + folder + '/') === 0 : false;
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-    });
-  }
-
-  function renderRouteIndex(container, section) {
-    const keys = Object.keys(SCREEN_ROUTES).filter(function (k) { return screenMatchesSection(k, section); });
-    const wrap = document.createElement('section');
-    wrap.className = 'card';
-    const head = document.createElement('div');
-    head.className = 'card-header';
-    const title = document.createElement('h2');
-    title.className = 'page-title';
-    title.textContent = 'فهرس الشاشات المتصلة بالجسر';
-    head.appendChild(title);
-    wrap.appendChild(head);
-    const grid = document.createElement('div');
-    grid.className = 'presentb7e106bd3';
-    keys.forEach(function (k) {
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-outline';
-      btn.dataset.action = 'openScreen';
-      btn.dataset.screen = k;
-      btn.textContent = k;
-      grid.appendChild(btn);
-    });
-    wrap.appendChild(grid);
-    container.insertBefore(wrap, container.firstChild);
-  }
-
+  // The main window owns navigation, so avoid injecting a second English index,
+  // nested iframe, or duplicated event listeners into its Arabic page.
   function openScreen(routeKey) {
-    const viewport = document.getElementById('appViewport');
-    if (!viewport) return;
-    const path = SCREEN_ROUTES[routeKey];
-    if (!path) return;
-    history.replaceState(null, '', '#' + encodeURIComponent(routeKey));
-    viewport.textContent = '';
-    const bar = document.createElement('div');
-    bar.className = 'present8b2e0334c';
-    const close = document.createElement('button');
-    close.className = 'btn btn-outline';
-    close.dataset.action = 'closeScreen';
-    close.textContent = '← إغلاق الشاشة';
-    bar.appendChild(close);
-    const frame = document.createElement('iframe');
-    frame.className = 'screen-frame';
-    frame.setAttribute('style', 'width:100%;min-height:70vh;border:0;background:#fff;');
-    frame.setAttribute('title', routeKey);
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
-    frame.src = encodeURI(path);
-    viewport.appendChild(bar);
-    viewport.appendChild(frame);
+    const navigation = window.AltamamNavigation;
+    return !!(navigation && navigation.openScreen(routeKey));
   }
-
-  document.addEventListener('click', function (event) {
-    const control = event.target.closest('[data-action]');
-    if (!control) return;
-    if (control.dataset.action === 'openScreen') { event.preventDefault(); openScreen(control.dataset.screen); }
-    if (control.dataset.action === 'closeScreen') {
-      event.preventDefault();
-      const v = document.getElementById('appViewport');
-      if (v) v.textContent = '';
-    }
-  });
-
-  // Keep the existing top-level navigation but append the authentic route index per section.
-  const originalNavigateTop = window.navigateTop;
-  window.navigateTop = function (section) {
-    if (typeof originalNavigateTop === 'function') originalNavigateTop(section);
-    const viewport = document.getElementById('appViewport');
-    if (viewport) renderRouteIndex(viewport, section);
-  };
-
-  document.addEventListener('DOMContentLoaded', function () {
-    const name = decodeURIComponent(location.hash.slice(1));
-    if (SCREEN_ROUTES[name]) openScreen(name);
-  });
 
   // ---------------------------------------------------------------- REFRESH wiring (04.07)
   const ROUTE_ACTIONS = {
