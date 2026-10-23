@@ -91,6 +91,7 @@ public static class ActionManifest
         new("DeleteAuditPresentation", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
         new("QueryAuditPresentationChanges", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, false),
         new("GetSettingsOverview", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
+        new("SetOutputDirectory", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("CreateVerifiedBackup", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("VerifyBackup", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("InspectBackup", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
