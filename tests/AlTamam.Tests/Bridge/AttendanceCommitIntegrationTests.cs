@@ -89,6 +89,36 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
         Assert.Equal(2L,Convert.ToInt64(check.ExecuteScalar()));
     }
     [Fact]
+    public async Task ReviseTodayWithoutTypedReason_RequiresPreviewAndPreservesAutomaticAuditReason()
+    {
+        var service=new AttendanceCommitService(_db);
+        var initial=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(initial)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var changed=await service.PreviewAsync(Payload("revise","STS-ABSENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True(changed.Success,changed.UserMessage);
+        var preview=Assert.IsType<JsonObject>(changed.Data);
+        Assert.Equal("تغيير حالة التمام بتأكيد المستخدم",
+            preview["reason"]!.GetValue<string>());
+        Assert.Equal(0L,Count("AttendanceRevisions")); // preview cannot save changes
+        var done=await service.CommitAsync(new JsonObject{
+            ["previewToken"]=Token(changed)},Actor,true,CancellationToken.None);
+        Assert.True(done.Success,done.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRevisions"));
+        using var connection=_db.CreateOpenConnection();
+        using var command=connection.CreateCommand();
+        command.CommandText="SELECT Reason FROM AttendanceRevisions WHERE PersonId='TST-ATTEND-P1';";
+        Assert.Equal("تغيير حالة التمام بتأكيد المستخدم",
+            Convert.ToString(command.ExecuteScalar()));
+        var secondAttempt=await service.CommitAsync(new JsonObject{
+            ["previewToken"]=Token(changed)},Actor,true,CancellationToken.None);
+        Assert.False(secondAttempt.Success); // one-use token
+    }
+
+    [Fact]
     public async Task InvalidBulkSelection_WritesNothing()
     {
         var svc=new AttendanceCommitService(_db);
