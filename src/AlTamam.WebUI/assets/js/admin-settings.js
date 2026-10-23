@@ -179,6 +179,10 @@
   function renderDetail(screen) {
     if(screen==="attendance" && window.AltamamAttendance)
       return window.AltamamAttendance.render(target());
+    if(["transferInternal","transferExternal","transferArchive"].includes(screen) && window.AltamamMovements){
+      const page=start("الإدارة / التنقلات");
+      return window.AltamamMovements.render(page,screen);
+    }
     if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
