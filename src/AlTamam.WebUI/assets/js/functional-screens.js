@@ -101,6 +101,7 @@
     const container=view(); if(!container)return;
     document.querySelector(".app-sidebar").hidden=true;
     document.getElementById("headerRoleBadge").textContent="لم يتم تسجيل الدخول";
+    document.getElementById("logoutAction").hidden=true;
     container.replaceChildren(header("تسجيل الدخول إلى التمام اليومي"));
     const form=el("form","card auth-form");
     const name=field("text","اسم المستخدم",true);
@@ -134,6 +135,7 @@
         document.querySelector(".app-sidebar").hidden=false;
         document.getElementById("headerRoleBadge").textContent=
           result.username+" — "+(result.roleLabelAr||result.role);
+        document.getElementById("logoutAction").hidden=false;
         render("dashboard");
       } catch(e) { showError(status,e); }
       finally { submit.disabled=false; }
@@ -306,7 +308,16 @@
     history.replaceState(null,"","#"+section);
     if(section==="dashboard")renderDashboard();
     else if(section==="monthly")renderMonthly();
-    else nav.navigateTop(section);
+    else {
+      nav.navigateTop(section);
+      if(section==="settings"){
+        const panel=el("section","card");
+        append(panel,el("h2","section-title","الحساب الحالي"),
+          el("p","",STATE.session.username+" — "+(STATE.session.roleLabelAr||STATE.session.role)),
+          button("تسجيل الخروج",logout,"btn btn-outline"));
+        view().prepend(panel);
+      }
+    }
   }
 
   async function boot() {
@@ -322,12 +333,23 @@
         document.querySelector(".app-sidebar").hidden=false;
         document.getElementById("headerRoleBadge").textContent=
           state.username+" — "+(state.roleLabelAr||state.role);
+        document.getElementById("logoutAction").hidden=false;
         render(["dashboard","monthly","admin","settings"].includes(location.hash.slice(1))
           ?location.hash.slice(1):"dashboard");
       } else await loginGate();
     } catch { await loginGate(); }
   }
 
+  async function logout(){
+    try { await bridge().invoke("Logout",{}); }
+    catch(e) { /* Do not continue using a possibly expired session. */ }
+    finally {
+      bridge().setSessionNonce(null);
+      STATE.session=null;
+      await loginGate();
+    }
+  }
+  document.getElementById("logoutAction")?.addEventListener("click",logout);
   document.addEventListener("click",e=>{
     const control=e.target.closest("[data-action='navigateTop']");
     if(!control)return;
@@ -337,11 +359,12 @@
   document.addEventListener("DOMContentLoaded",boot);
   window.AltamamFunctional=Object.freeze({render});
   bridge().onInvalidation(evt=>{
+    const name=typeof evt==="string"?evt:(evt&&evt.eventName);
     if(["AttendanceCommitted","AttendanceRevised","PersonnelMoved","PersonnelArchived","SiteCreated",
-      "SiteRenamed","StatusDefinitionChanged","BackupRestored"].includes(evt)) {
+      "SiteRenamed","StatusDefinitionChanged","BackupRestored"].includes(name)) {
       const section=location.hash.slice(1);
       if(sections.has(section)&&STATE.session)render(section);
     }
-    if(evt==="SessionEnded"){STATE.session=null;loginGate();}
+    if(name==="SessionEnded"){STATE.session=null;bridge().setSessionNonce(null);loginGate();}
   });
 })();
