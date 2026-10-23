@@ -140,7 +140,7 @@ public sealed class DailyMonthlyReadService
             SELECT p.PersonId, p.CurrentServiceNumberA, p.CurrentVisibleName,
                    COALESCE(s.VisibleName, 'غير محدد'),
                    ar.StatusId, ar.StatusNameSnapshot, ar.StatusColorSnapshot
-            """ + fromSql + """
+            """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
         BindFilters(cmd, Iso(date), siteId, statusId);
@@ -234,7 +234,7 @@ public sealed class DailyMonthlyReadService
                         AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $start)
                         AND ($site = '' OR a.SiteId = $site)
                       ORDER BY a.ValidFromLocalDate DESC LIMIT 1), 'غير محدد')
-            """ + fromSql + """
+            """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
         BindPeriod(cmd, startIso, nextIso, siteId);
