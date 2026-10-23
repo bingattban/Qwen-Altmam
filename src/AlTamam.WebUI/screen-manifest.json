@@ -12,8 +12,8 @@
   "screens": [
     {
       "routeKey": "Dashboard",
-      "titleAr": "الشاشة الرئيسية",
-      "breadcrumbAr": "الشاشة الرئيسية",
+      "titleAr": "الرئيسية",
+      "breadcrumbAr": "الرئيسية",
       "relativeFolder": "Dashboard",
       "kind": "screen",
       "access": "All authenticated roles",
@@ -25,7 +25,7 @@
     {
       "routeKey": "UnpreparedPersonnel",
       "titleAr": "غير المحضرين",
-      "breadcrumbAr": "الشاشة الرئيسية > غير المحضرين",
+      "breadcrumbAr": "الرئيسية > غير المحضرين",
       "relativeFolder": "Dashboard/UnpreparedPersonnel",
       "kind": "screen",
       "access": "All authenticated roles; attendance permission required for write",
@@ -37,7 +37,7 @@
     {
       "routeKey": "SelectStatusAndConfirm",
       "titleAr": "اختيار الحالة والتأكيد",
-      "breadcrumbAr": "الشاشة الرئيسية > غير المحضرين > اختيار الحالة والتأكيد",
+      "breadcrumbAr": "الرئيسية > غير المحضرين > اختيار الحالة والتأكيد",
       "relativeFolder": "Dashboard/UnpreparedPersonnel/SelectStatusAndConfirm",
       "kind": "confirmation flow",
       "access": "Attendance-authorized authenticated users",
@@ -72,8 +72,8 @@
     },
     {
       "routeKey": "Administration",
-      "titleAr": "شاشة الإدارة",
-      "breadcrumbAr": "شاشة الإدارة",
+      "titleAr": "الإدارة",
+      "breadcrumbAr": "الإدارة",
       "relativeFolder": "Administration",
       "kind": "screen",
       "access": "All authenticated roles; hide/deny unauthorized sections",
@@ -85,7 +85,7 @@
     {
       "routeKey": "PersonnelManagement",
       "titleAr": "إدارة القوة",
-      "breadcrumbAr": "شاشة الإدارة > إدارة القوة",
+      "breadcrumbAr": "الإدارة > إدارة القوة",
       "relativeFolder": "Administration/PersonnelManagement",
       "kind": "screen",
       "access": "All authenticated users with role-specific mutations",
@@ -97,7 +97,7 @@
     {
       "routeKey": "Attendance",
       "titleAr": "التمام",
-      "breadcrumbAr": "شاشة الإدارة > إدارة القوة > التمام",
+      "breadcrumbAr": "الإدارة > إدارة القوة > التمام",
       "relativeFolder": "Administration/PersonnelManagement/Attendance",
       "kind": "screen",
       "access": "All authenticated roles with attendance permission",
@@ -109,7 +109,7 @@
     {
       "routeKey": "ConfirmAttendance",
       "titleAr": "تأكيد التحضير",
-      "breadcrumbAr": "شاشة الإدارة > إدارة القوة > التمام > تأكيد التحضير",
+      "breadcrumbAr": "الإدارة > إدارة القوة > التمام > تأكيد التحضير",
       "relativeFolder": "Administration/PersonnelManagement/Attendance/ConfirmAttendance",
       "kind": "confirmation flow",
       "access": "Authorized attendance operators",
@@ -121,7 +121,7 @@
     {
       "routeKey": "EditPersonnelNames",
       "titleAr": "تعديل الأسماء",
-      "breadcrumbAr": "شاشة الإدارة > إدارة القوة > تعديل الأسماء",
+      "breadcrumbAr": "الإدارة > إدارة القوة > تعديل الأسماء",
       "relativeFolder": "Administration/PersonnelManagement/EditPersonnelNames",
       "kind": "screen",
       "access": "All roles may edit under original hierarchy; roster removal only two admin roles",
@@ -157,7 +157,7 @@
     {
       "routeKey": "Transfers",
       "titleAr": "التنقلات",
-      "breadcrumbAr": "شاشة الإدارة > إدارة القوة > التنقلات",
+      "breadcrumbAr": "الإدارة > إدارة القوة > التنقلات",
       "relativeFolder": "Administration/PersonnelManagement/Transfers",
       "kind": "screen",
       "access": "All authenticated roles under movement permissions",
@@ -301,7 +301,7 @@
     {
       "routeKey": "PersonnelReport",
       "titleAr": "التقرير",
-      "breadcrumbAr": "شاشة الإدارة > إدارة القوة > التقرير",
+      "breadcrumbAr": "الإدارة > إدارة القوة > التقرير",
       "relativeFolder": "Administration/PersonnelManagement/PersonnelReport",
       "kind": "screen",
       "access": "All authenticated roles with person report read permission",
@@ -325,7 +325,7 @@
     {
       "routeKey": "StatusesAndSites",
       "titleAr": "الحالات والمواقع",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع",
       "relativeFolder": "Administration/StatusesAndSites",
       "kind": "screen",
       "access": "All authenticated users under administration feature policies",
@@ -337,7 +337,7 @@
     {
       "routeKey": "Statuses",
       "titleAr": "الحالات",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع > الحالات",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع > الحالات",
       "relativeFolder": "Administration/StatusesAndSites/Statuses",
       "kind": "screen",
       "access": "All authenticated management roles under original rights",
@@ -349,7 +349,7 @@
     {
       "routeKey": "AddStatus",
       "titleAr": "إضافة حالة",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع > الحالات > إضافة حالة",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع > الحالات > إضافة حالة",
       "relativeFolder": "Administration/StatusesAndSites/Statuses/AddStatus",
       "kind": "modal",
       "access": "Status-manager authorized users",
@@ -361,7 +361,7 @@
     {
       "routeKey": "EditStatus",
       "titleAr": "تعديل حالة",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع > الحالات > تعديل حالة",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع > الحالات > تعديل حالة",
       "relativeFolder": "Administration/StatusesAndSites/Statuses/EditStatus",
       "kind": "modal",
       "access": "Status-manager authorized users",
@@ -373,7 +373,7 @@
     {
       "routeKey": "DeleteStatus",
       "titleAr": "حذف حالة",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع > الحالات > حذف حالة",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع > الحالات > حذف حالة",
       "relativeFolder": "Administration/StatusesAndSites/Statuses/DeleteStatus",
       "kind": "modal",
       "access": "Status-manager authorized users",
@@ -385,7 +385,7 @@
     {
       "routeKey": "Sites",
       "titleAr": "المواقع",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع > المواقع",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع > المواقع",
       "relativeFolder": "Administration/StatusesAndSites/Sites",
       "kind": "screen",
       "access": "Site-manager authorized users",
@@ -397,7 +397,7 @@
     {
       "routeKey": "AddSite",
       "titleAr": "إضافة موقع",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع > المواقع > إضافة موقع",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع > المواقع > إضافة موقع",
       "relativeFolder": "Administration/StatusesAndSites/Sites/AddSite",
       "kind": "modal / confirmation",
       "access": "Site-manager authorized users",
@@ -409,7 +409,7 @@
     {
       "routeKey": "EditSite",
       "titleAr": "تعديل موقع",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع > المواقع > تعديل موقع",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع > المواقع > تعديل موقع",
       "relativeFolder": "Administration/StatusesAndSites/Sites/EditSite",
       "kind": "modal / confirmation",
       "access": "Site-manager authorized users",
@@ -421,7 +421,7 @@
     {
       "routeKey": "DeleteSite",
       "titleAr": "حذف موقع",
-      "breadcrumbAr": "شاشة الإدارة > الحالات والمواقع > المواقع > حذف موقع",
+      "breadcrumbAr": "الإدارة > الحالات والمواقع > المواقع > حذف موقع",
       "relativeFolder": "Administration/StatusesAndSites/Sites/DeleteSite",
       "kind": "modal / confirmation",
       "access": "Site-manager authorized users",
@@ -433,7 +433,7 @@
     {
       "routeKey": "Rosters",
       "titleAr": "الكشوفات",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات",
+      "breadcrumbAr": "الإدارة > الكشوفات",
       "relativeFolder": "Administration/Rosters",
       "kind": "screen",
       "access": "All users with import/export/schema permissions",
@@ -445,7 +445,7 @@
     {
       "routeKey": "Import",
       "titleAr": "استيراد",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > استيراد",
+      "breadcrumbAr": "الإدارة > الكشوفات > استيراد",
       "relativeFolder": "Administration/Rosters/Import",
       "kind": "screen",
       "access": "Import-authorized authenticated roles",
@@ -457,7 +457,7 @@
     {
       "routeKey": "SelectFile",
       "titleAr": "اختيار الملف",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > استيراد > اختيار الملف",
+      "breadcrumbAr": "الإدارة > الكشوفات > استيراد > اختيار الملف",
       "relativeFolder": "Administration/Rosters/Import/SelectFile",
       "kind": "wizard step",
       "access": "Import-authorized roles",
@@ -469,7 +469,7 @@
     {
       "routeKey": "PreviewAndValidate",
       "titleAr": "المعاينة والتحقق",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > استيراد > المعاينة والتحقق",
+      "breadcrumbAr": "الإدارة > الكشوفات > استيراد > المعاينة والتحقق",
       "relativeFolder": "Administration/Rosters/Import/PreviewAndValidate",
       "kind": "wizard step",
       "access": "Import-authorized roles",
@@ -481,7 +481,7 @@
     {
       "routeKey": "ImportResults",
       "titleAr": "نتيجة الاستيراد",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > استيراد > نتيجة الاستيراد",
+      "breadcrumbAr": "الإدارة > الكشوفات > استيراد > نتيجة الاستيراد",
       "relativeFolder": "Administration/Rosters/Import/ImportResults",
       "kind": "wizard step",
       "access": "Import-authorized roles",
@@ -493,7 +493,7 @@
     {
       "routeKey": "Export",
       "titleAr": "تصدير",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > تصدير",
+      "breadcrumbAr": "الإدارة > الكشوفات > تصدير",
       "relativeFolder": "Administration/Rosters/Export",
       "kind": "screen",
       "access": "Export-authorized authenticated roles",
@@ -505,7 +505,7 @@
     {
       "routeKey": "PreviewAndConfirmExport",
       "titleAr": "معاينة وتأكيد التصدير",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > تصدير > معاينة وتأكيد التصدير",
+      "breadcrumbAr": "الإدارة > الكشوفات > تصدير > معاينة وتأكيد التصدير",
       "relativeFolder": "Administration/Rosters/Export/PreviewAndConfirmExport",
       "kind": "confirmation flow",
       "access": "Export-authorized roles",
@@ -517,7 +517,7 @@
     {
       "routeKey": "ExportProgressAndResult",
       "titleAr": "تقدم ونتيجة التصدير",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > تصدير > تقدم ونتيجة التصدير",
+      "breadcrumbAr": "الإدارة > الكشوفات > تصدير > تقدم ونتيجة التصدير",
       "relativeFolder": "Administration/Rosters/Export/ExportProgressAndResult",
       "kind": "progress view",
       "access": "Export-authorized roles",
@@ -529,7 +529,7 @@
     {
       "routeKey": "RosterLayout",
       "titleAr": "تعديل الهيكل للكشف",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > تعديل الهيكل للكشف",
+      "breadcrumbAr": "الإدارة > الكشوفات > تعديل الهيكل للكشف",
       "relativeFolder": "Administration/Rosters/RosterLayout",
       "kind": "screen",
       "access": "Schema/custom-field authorized administrators under approved role matrix",
@@ -541,7 +541,7 @@
     {
       "routeKey": "AddOrEditColumn",
       "titleAr": "إضافة أو تعديل عمود",
-      "breadcrumbAr": "شاشة الإدارة > الكشوفات > تعديل الهيكل للكشف > إضافة أو تعديل عمود",
+      "breadcrumbAr": "الإدارة > الكشوفات > تعديل الهيكل للكشف > إضافة أو تعديل عمود",
       "relativeFolder": "Administration/Rosters/RosterLayout/AddOrEditColumn",
       "kind": "modal",
       "access": "Field-editor authorized roles",
@@ -553,7 +553,7 @@
     {
       "routeKey": "Users",
       "titleAr": "المستخدمين",
-      "breadcrumbAr": "شاشة الإدارة > المستخدمين",
+      "breadcrumbAr": "الإدارة > المستخدمين",
       "relativeFolder": "Administration/Users",
       "kind": "screen",
       "access": "GeneralAdministration and OrdinaryAdministration only. Supervisor: entirely forbidden",
@@ -565,7 +565,7 @@
     {
       "routeKey": "AddUser",
       "titleAr": "إضافة مستخدم",
-      "breadcrumbAr": "شاشة الإدارة > المستخدمين > إضافة مستخدم",
+      "breadcrumbAr": "الإدارة > المستخدمين > إضافة مستخدم",
       "relativeFolder": "Administration/Users/AddUser",
       "kind": "modal",
       "access": "General may add Ordinary/Supervisor; Ordinary may add Supervisor; Supervisor cannot",
@@ -577,7 +577,7 @@
     {
       "routeKey": "ChangePassword",
       "titleAr": "تعديل كلمة المرور",
-      "breadcrumbAr": "شاشة الإدارة > المستخدمين > تعديل كلمة المرور",
+      "breadcrumbAr": "الإدارة > المستخدمين > تعديل كلمة المرور",
       "relativeFolder": "Administration/Users/ChangePassword",
       "kind": "modal",
       "access": "Authorized account-admin roles according to target role",
@@ -589,7 +589,7 @@
     {
       "routeKey": "DeleteAccount",
       "titleAr": "حذف الحساب",
-      "breadcrumbAr": "شاشة الإدارة > المستخدمين > حذف الحساب",
+      "breadcrumbAr": "الإدارة > المستخدمين > حذف الحساب",
       "relativeFolder": "Administration/Users/DeleteAccount",
       "kind": "confirmation flow",
       "access": "General/Ordinary by target-role policy",
@@ -601,7 +601,7 @@
     {
       "routeKey": "AuditLog",
       "titleAr": "سجل العمليات",
-      "breadcrumbAr": "شاشة الإدارة > سجل العمليات",
+      "breadcrumbAr": "الإدارة > سجل العمليات",
       "relativeFolder": "Administration/AuditLog",
       "kind": "screen",
       "access": "All roles read; GeneralAdministration AND OrdinaryAdministration may edit/delete visible entries",
@@ -613,7 +613,7 @@
     {
       "routeKey": "EditAuditEntry",
       "titleAr": "تعديل قيد سجل العمليات",
-      "breadcrumbAr": "شاشة الإدارة > سجل العمليات > تعديل",
+      "breadcrumbAr": "الإدارة > سجل العمليات > تعديل",
       "relativeFolder": "Administration/AuditLog/EditAuditEntry",
       "kind": "modal",
       "access": "GeneralAdministration and OrdinaryAdministration ONLY",
@@ -625,7 +625,7 @@
     {
       "routeKey": "DeleteAuditEntry",
       "titleAr": "حذف قيد سجل العمليات",
-      "breadcrumbAr": "شاشة الإدارة > سجل العمليات > حذف",
+      "breadcrumbAr": "الإدارة > سجل العمليات > حذف",
       "relativeFolder": "Administration/AuditLog/DeleteAuditEntry",
       "kind": "confirmation flow",
       "access": "GeneralAdministration and OrdinaryAdministration ONLY",
@@ -637,7 +637,7 @@
     {
       "routeKey": "ModifiedDeletedAuditEntries",
       "titleAr": "سجل القيود المعدلة والمحذوفة",
-      "breadcrumbAr": "شاشة الإدارة > سجل العمليات > القيود المعدلة والمحذوفة",
+      "breadcrumbAr": "الإدارة > سجل العمليات > القيود المعدلة والمحذوفة",
       "relativeFolder": "Administration/AuditLog/ModifiedDeletedAuditEntries",
       "kind": "review view",
       "access": "GeneralAdministration and OrdinaryAdministration ONLY",

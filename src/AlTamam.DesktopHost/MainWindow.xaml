@@ -1,7 +1,11 @@
 <Window x:Class="AlTamam.DesktopHost.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="التمام اليومي">
+        Title="التمام اليومي"
+        WindowStyle="SingleBorderWindow"
+        ResizeMode="CanResize"
+        ShowInTaskbar="True"
+        WindowState="Normal">
     <!-- The WebView2 control is created in code-behind and fills the window. -->
     <Grid x:Name="webViewHost" />
 </Window>
