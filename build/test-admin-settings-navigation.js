@@ -50,7 +50,10 @@ const bridge = {
         backupDirectory:"E:\\AlTamamAlYawmi\\Backups", backupTime:"16:00",
         automaticBackupNote:"الجدولة غير نشطة", defaultDriveAvailable:false },
       GetApplicationVersion: { productNameAr:"التمام اليومي", version:"0.4.0" },
-      RunDatabaseIntegrityCheck: { integrity:"ok" }
+      RunDatabaseIntegrityCheck: { integrity:"ok" },
+      GetAllowedRoles: [{ role:"Supervisor",name:"مشرف" }],
+      ListUserAccounts: { items:[],total:0,hasNext:false },
+      QueryAuditLog: { items:[],total:0,hasNext:false }
     };
     if (!(name in responses)) throw Error("Unexpected bridge action " + name);
     return { data: responses[name] };
@@ -90,6 +93,24 @@ async function run() {
   controller.renderAdmin({ role:"Supervisor" });
   assert.equal(byDataset("adminSection").length,4,"supervisor cannot see users card");
   assert.ok(!byDataset("adminSection").some(x=>x.dataset.adminSection==="users"));
+
+  controller.renderAdmin(admin);
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="audit").handlers.click();
+  assert.equal(byDataset("adminScreen").length,0,
+    "audit must open the actual operations screen without a redundant submenu");
+  assert.ok(buttonNamed("بحث"),"audit filters visible directly");
+  assert.ok(buttonNamed("العودة إلى الإدارة"),"direct audit back action");
+  buttonNamed("العودة إلى الإدارة").handlers.click();
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="users").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(byDataset("adminScreen").length,0,
+    "users must open directly without an intermediate screen");
+  assert.ok(buttonNamed("إضافة حساب"),"real add-account action visible immediately");
+  assert.ok(calls.some(x=>x.name==="ListUserAccounts"),
+    "opening users must request server-side account list");
+  assert.ok(calls.some(x=>x.name==="QueryAuditLog"),
+    "opening audit must request actual operation records");
+  buttonNamed("العودة إلى الإدارة").handlers.click();
 
   await controller.renderSettings(admin,()=>{});
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
