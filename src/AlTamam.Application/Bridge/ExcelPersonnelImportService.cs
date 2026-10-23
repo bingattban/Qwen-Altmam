@@ -256,12 +256,13 @@ public sealed class ExcelPersonnelImportService
                 record.CommandText = """
                     INSERT INTO ImportIssues(ImportBatchId,WorksheetName,RowNumber,
                         RawServiceNumberA,RawPersonName,RawSiteName,IssueReasonArabic)
-                    VALUES($batch,'الورقة الأولى',$row,$number,$name,NULL,$reason);
+                    VALUES($batch,'الورقة الأولى',$row,$number,$name,$site,$reason);
                     """;
                 record.Parameters.AddWithValue("$batch", batchId);
                 record.Parameters.AddWithValue("$row", rejected["row"]!.GetValue<int>());
                 record.Parameters.AddWithValue("$number", rejected["serviceNumberA"]?.GetValue<string>() ?? "");
                 record.Parameters.AddWithValue("$name", rejected["name"]?.GetValue<string>() ?? "");
+                record.Parameters.AddWithValue("$site", rejected["siteName"]?.GetValue<string>() ?? "غير محدد");
                 record.Parameters.AddWithValue("$reason", rejected["reason"]!.GetValue<string>());
                 await record.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
@@ -476,9 +477,10 @@ public sealed class ExcelPersonnelImportService
                 string siteName = siteCell is null ? "غير محدد" : Value(siteCell);
                 if (string.IsNullOrWhiteSpace(siteName)) siteName = "غير محدد";
                 if (name.Length == 0 && number.Length == 0) continue;
-                records.Add(new PersonInput(rowIndex, name, number,
+                bool isValidNumber=ServiceNumberPolicy.TryCanonicalize(number,out string canonical);
+                records.Add(new PersonInput(rowIndex, name, isValidNumber ? canonical : number,
                     ArabicTextNormalizer.NormalizeForSearch(name),
-                    ArabicTextNormalizer.NormalizeForSearch(number), siteName));
+                    isValidNumber ? canonical : ArabicTextNormalizer.NormalizeForSearch(number), siteName));
                 if (records.Count > MaxRecords) throw new InvalidDataException("تجاوز عدد الأفراد الحد الآمن.");
             }
             return records;
