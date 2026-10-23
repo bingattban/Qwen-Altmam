@@ -227,7 +227,7 @@
     const page=start("الإدارة / الكشوفات / استيراد Excel");
     const shell=card("استيراد أسماء جديدة من ملف Excel");
     shell.appendChild(node("p","section-description",
-      "الصف الأول: الاسم | الرقم (ع). العدد الأقصى 500 فرد وحجم الملف 1 ميجابايت. " +
+      "الصف الأول: الاسم | الرقم (ع). العدد الأقصى 500 فرد وحجم الملف 160 كيلوبايت. " +
       "سيُضاف الأفراد الجدد فقط بتاريخ اليوم؛ الأرقام الموجودة أو المكررة لا تُستبدل. " +
       "يفضّل ضبط خلايا الرقم (ع) كنص للحفاظ على الأصفار."));
     const choose=node("input","form-control");choose.type="file";
@@ -256,8 +256,8 @@
       reset();
       const file=choose.files?.[0];
       if(!file||!file.name.toLowerCase().endsWith(".xlsx")||
-          file.size>1048576||file.size<=0)
-        return errors(status,new Error("اختر ملف xlsx لا يتجاوز حجمه 1 ميجابايت."));
+          file.size>163840||file.size<=0)
+        return errors(status,new Error("اختر ملف xlsx لا يتجاوز حجمه 160 كيلوبايت."));
       const current=serial;examine.disabled=true;
       try{
         status.replaceChildren(warning("جارٍ فحص ملف Excel واكتشاف التعارضات..."));
