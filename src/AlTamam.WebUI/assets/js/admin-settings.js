@@ -13,8 +13,8 @@
     {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
       ["export","تصدير Excel"],["layout","تعديل هيكل الكشف"]]},
-    {key:"users",title:"المستخدمون",children:[["accounts","إدارة الحسابات"]]},
-    {key:"audit",title:"سجل العمليات",children:[["log","العمليات المسجلة"]]}
+    {key:"users",title:"المستخدمون",children:[]},
+    {key:"audit",title:"سجل العمليات",children:[]}
   ];
   function node(tag,klass,value) {
     const x=document.createElement(tag);
@@ -97,7 +97,11 @@
     const icons={force:"♙",config:"◈",sheets:"▤",users:"♧",audit:"◷"};
     for(const section of sections) {
       if(section.key==="users" && session.role==="Supervisor")continue;
-      const tile=btn(section.title,()=>renderGroup(section.key),"admin-primary-tile");
+      const tile=btn(section.title,()=>{
+        if(section.key==="users")return navigate("accounts");
+        if(section.key==="audit")return navigate("log");
+        renderGroup(section.key);
+      },"admin-primary-tile");
       tile.textContent="";
       tile.dataset.adminSection=section.key;
       tile.setAttribute("aria-label","فتح "+section.title);
@@ -136,6 +140,7 @@
     page.appendChild(grid);
   }
   function renderDetail(screen) {
+    if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
     if(screen==="persons")return persons();
@@ -162,6 +167,158 @@
     });
     shell.append(grid,warning("هذه الشاشة لم تُربط بعد بخدمة معتمدة؛ لن يُعلن نجاح أي عملية غير منفّذة."));
     page.appendChild(shell);
+  }
+
+  // Users open directly from the administration home. No extra "إدارة الحسابات"
+  // intermediate screen. All mutations are performed by server-authorized C#.
+  async function accounts() {
+    const page=start("الإدارة / المستخدمون"),container=card("الحسابات المسجلة");
+    page.appendChild(container);
+    const notice=node("div","admin-note");
+    const tools=node("div","functional-toolbar");
+    const filter=field("بحث باسم المستخدم أو الاسم أو الرقم (ع)",state.term);
+    tools.append(filter.wrap,btn("بحث",()=>{
+      state.term=filter.input.value.trim();state.page=1;load();
+    },"btn btn-primary"),btn("إضافة حساب",()=>showAdd(),"btn btn-outline"));
+    container.append(tools,notice);
+    const rows=node("div","admin-users-list");container.appendChild(rows);
+    const token=++currentRequest;
+    let allowedRoles=[];
+    try {
+      const result=await api().invoke("GetAllowedRoles",{});
+      if(token!==currentRequest)return;
+      allowedRoles=Array.isArray(result.data)?result.data:[];
+    }catch(e){if(token===currentRequest)errors(notice,e);return;}
+
+    function showAdd() {
+      if(token!==currentRequest)return;
+      const form=card("إضافة حساب مرتبط بفرد من القوة");
+      form.classList.add("admin-user-form");
+      const personSearch=field("بحث عن فرد بالاسم أو الرقم (ع)");
+      const personPick=node("select","form-control");
+      personPick.setAttribute("aria-label","اختر فرداً من الكشف");
+      const initial=node("option","","ابحث أولاً ثم اختر الفرد");
+      initial.value="";personPick.appendChild(initial);
+      const selected=node("p","section-description","الرقم (ع): —");
+      const username=field("اسم المستخدم");
+      const password=field("كلمة المرور الجديدة","","password");
+      password.input.autocomplete="new-password";
+      const role=node("select","form-control");
+      role.setAttribute("aria-label","نوع الحساب");
+      for(const allowed of allowedRoles){
+        const opt=node("option","",allowed.name);opt.value=allowed.role;role.appendChild(opt);
+      }
+      const searchButton=btn("البحث في كشف القوة",async()=>{
+        const term=personSearch.input.value.trim();
+        if(!term){errors(message,new Error("أدخل الاسم أو الرقم (ع) للبحث."));return;}
+        searchButton.disabled=true;message.replaceChildren();
+        try {
+          const result=await api().invoke("SearchActivePersonsForAccount",{term,take:30});
+          const people=(result.data?.items||[]).filter(p=>p.organizationalStatus===1);
+          personPick.replaceChildren();
+          const head=node("option","","اختر الفرد");head.value="";personPick.appendChild(head);
+          for(const person of people){
+            const opt=node("option","",person.displayName+" — ع: "+person.serviceNumberA);
+            opt.value=person.personId;opt.dataset.serviceNumberA=person.serviceNumberA;
+            personPick.appendChild(opt);
+          }
+          if(people.length===0)errors(message,new Error("لم يوجد فرد نشط مطابق."));
+        }catch(e){errors(message,e);}finally{searchButton.disabled=false;}
+      });
+      personPick.addEventListener("change",()=>{
+        const option=personPick.children.find(o=>o.value===personPick.value);
+        selected.textContent="الرقم (ع): "+(option?.dataset.serviceNumberA||"—");
+      });
+      const message=node("div","admin-note");
+      const save=btn("تأكيد إضافة الحساب",async()=>{
+        if(!personPick.value||!username.input.value.trim()||!password.input.value)
+          return errors(message,new Error("اختر فرداً وأدخل اسم المستخدم وكلمة المرور."));
+        if(!confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
+        save.disabled=true;message.replaceChildren();
+        try {
+          await api().invoke("CreateUserAccount",{
+            personId:personPick.value,username:username.input.value.trim(),
+            role:role.value,password:password.input.value
+          });
+          password.input.value="";
+          form.remove();
+          notice.replaceChildren(node("p","settings-success","تم إنشاء الحساب بعد حفظه بنجاح."));
+          await load();
+        }catch(e){password.input.value="";errors(message,e);}
+        finally{save.disabled=false;}
+      },"btn btn-primary");
+      form.append(personSearch.wrap,searchButton,personPick,selected,
+        username.wrap,password.wrap,node("p","section-description",
+          "كلمة المرور: 10 خانات على الأقل، 3 أحرف إنجليزية، 3 أرقام ورمز خاص دون مسافات."),
+        node("label","","نوع الحساب"),role,save,
+        btn("إلغاء",()=>form.remove()),message);
+      page.appendChild(form);
+      form.scrollIntoView?.({block:"nearest"});
+    }
+
+    async function load() {
+      const serial=++currentRequest;
+      rows.replaceChildren(warning("جارٍ تحميل حسابات المستخدمين..."));
+      try {
+        const reply=await api().invoke("ListUserAccounts",{
+          page:state.page,pageSize:30,term:state.term
+        });
+        if(serial!==currentRequest)return;
+        const data=reply.data||{},listing=table(["الرقم (ع)","المستخدم","الاسم الكامل",
+          "نوع الحساب","أضافه","الحالة","الإجراءات"]);
+        (data.items||[]).forEach(account=>{
+          const row=node("tr");
+          const fields=[account.serviceNumberA,account.username,account.fullName,
+            account.roleLabelAr,account.createdBy,account.active?"نشط":"معطّل"];
+          fields.forEach(v=>row.appendChild(node("td","",v)));
+          const cell=node("td","admin-row-buttons");
+          if(account.canModify && account.active){
+            cell.appendChild(btn("تغيير كلمة المرور",()=>showPassword(account),"btn btn-outline"));
+            cell.appendChild(btn("تعطيل الحساب",async()=>{
+              if(!confirm("تأكيد تعطيل حساب «"+account.username+
+                "»؟ لن يتمكن من الدخول، وستلغى جلساته الحالية."))return;
+              try {
+                await api().invoke("DeactivateUserAccount",{
+                  userId:account.userId,expectedRevision:account.rowVersion
+                });
+                await load();
+              }catch(e){errors(notice,e);}
+            },"btn btn-danger"));
+          }else cell.textContent="—";
+          row.appendChild(cell);listing.body.appendChild(row);
+        });
+        empty(listing.body,7,"لا توجد حسابات مطابقة للبحث.");
+        const pager=node("div","functional-pager");
+        const prev=btn("السابق",()=>{state.page--;load();});
+        const next=btn("التالي",()=>{state.page++;load();});
+        prev.disabled=state.page<=1;next.disabled=!data.hasNext;
+        pager.append(node("span","","الإجمالي: "+(data.total||0)),prev,next);
+        rows.replaceChildren(listing.wrap,pager);
+      }catch(e){if(serial===currentRequest)errors(rows,e);}
+    }
+
+    function showPassword(account) {
+      const wrapper=card("تغيير كلمة مرور «"+account.username+"»");
+      const pwd=field("كلمة المرور الجديدة","","password");
+      pwd.input.autocomplete="new-password";
+      const result=node("div","admin-note");
+      const save=btn("تأكيد التغيير",async()=>{
+        if(!confirm("اعتماد كلمة المرور الجديدة وإلغاء جلسات هذا الحساب؟"))return;
+        save.disabled=true;
+        try {
+          await api().invoke("ChangeUserPassword",{
+            userId:account.userId,expectedRevision:account.rowVersion,password:pwd.input.value
+          });
+          pwd.input.value="";wrapper.remove();await load();
+        }catch(e){pwd.input.value="";errors(result,e);}
+        finally{save.disabled=false;}
+      },"btn btn-primary");
+      wrapper.append(pwd.wrap,save,btn("إلغاء",()=>{pwd.input.value="";wrapper.remove();}),
+        result);
+      page.appendChild(wrapper);
+      wrapper.scrollIntoView?.({block:"nearest"});
+    }
+    await load();
   }
 
   async function sites() {
