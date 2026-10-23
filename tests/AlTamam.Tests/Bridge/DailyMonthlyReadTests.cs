@@ -71,6 +71,58 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task UnpreparedCounter_ReturnsOnlyPeopleWithoutSavedAttendance()
+    {
+        using (var connection=_db.CreateOpenConnection())
+        using (var cmd=connection.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
+                    NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
+                    OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('TST-P-UNPREPARED','فرد غير محضر','فرد غير محضر','12345','12345',
+                    '2026-10-01','2026-10-01T07:00:00Z',1,1,1);
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                    ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-A-UNPREPARED','TST-P-UNPREPARED','SITE-UNSPECIFIED',
+                    '2026-10-01',NULL,NULL,'2026-10-01T07:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var service=new DailyMonthlyReadService(_db);
+        var date="2026-10-19";
+        var summary=await service.DashboardSummaryAsync(new JsonObject{
+            ["businessDate"]=date,["siteId"]="SITE-UNSPECIFIED"
+        },CancellationToken.None);
+        Assert.True(summary.Success,summary.UserMessage);
+        var totals=Assert.IsType<JsonObject>(summary.Data);
+        Assert.Equal(2L,totals["totalForce"]!.GetValue<long>());
+        Assert.Equal(1L,totals["unprepared"]!.GetValue<long>());
+        var unprepared=await service.DailyRosterAsync(new JsonObject{
+            ["businessDate"]=date,["siteId"]="SITE-UNSPECIFIED",
+            ["statusId"]="__UNPREPARED__",["page"]=1,["pageSize"]=10
+        },CancellationToken.None);
+        Assert.True(unprepared.Success,unprepared.UserMessage);
+        var rows=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(unprepared.Data)["items"]);
+        var row=Assert.Single(rows);
+        Assert.Equal("TST-P-UNPREPARED",row!["personId"]!.GetValue<string>());
+        Assert.Equal("غير محضر",row["statusName"]!.GetValue<string>());
+        var all=await service.DailyRosterAsync(new JsonObject{
+            ["businessDate"]=date,["statusId"]=""
+        },CancellationToken.None);
+        Assert.Equal(2L,Assert.IsType<JsonObject>(all.Data)["total"]!.GetValue<long>());
+        var absence=await service.DailyRosterAsync(new JsonObject{
+            ["businessDate"]=date,["statusId"]="STS-ABSENT"
+        },CancellationToken.None);
+        Assert.Equal(1L,Assert.IsType<JsonObject>(absence.Data)["total"]!.GetValue<long>());
+        var outside=await service.DailyRosterAsync(new JsonObject{
+            ["businessDate"]=date,["siteId"]="SITE-OTHER",
+            ["statusId"]="__UNPREPARED__"
+        },CancellationToken.None);
+        Assert.Equal(0L,Assert.IsType<JsonObject>(outside.Data)["total"]!.GetValue<long>());
+    }
+
+    [Fact]
     public async Task Monthly_IsReadOnlyAndRetainsSavedDailySnapshot()
     {
         var svc = new DailyMonthlyReadService(_db);

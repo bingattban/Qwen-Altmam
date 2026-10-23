@@ -154,9 +154,8 @@
     const controls=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
     const counters=el("div","functional-counters");
-    const chips=el("div","functional-status-filters");
     const tableHost=el("section","card");
-    append(container,controls,feedback,counters,chips,tableHost);
+    append(container,controls,feedback,counters,tableHost);
     const epoch=Symbol("dashboard-request"); STATE.dashboardEpoch=epoch;
     try {
       const sites=await loadSites();
@@ -171,25 +170,29 @@
       const counts=parseData(countsResponse), rows=parseData(rosterResponse);
       feedback.replaceChildren(el("p","section-description","التحضير ليوم "+STATE.date+
         " — البيانات من قاعدة التطبيق المحلية."));
-      const stats=[{name:"إجمالي القوة",count:counts.totalForce},
-        {name:"غير المحضرين",count:counts.unprepared}].concat(
-          (counts.statusCounts||[]).map(s=>({name:s.name,count:s.count,color:s.color})));
+      // The counters ARE the roster filters. No duplicate status chips below them.
+      const stats=[{name:"إجمالي القوة",count:counts.totalForce,statusId:""},
+        {name:"غير المحضرين",count:counts.unprepared,statusId:"__UNPREPARED__"}].concat(
+          (counts.statusCounts||[]).map(st=>({
+            name:st.name,count:st.count,statusId:st.statusId,color:st.color
+          })));
       for(const item of stats) {
-        const card=el("div","counter-card");
-        card.appendChild(el("div","counter-label",item.name));
-        card.appendChild(el("div","counter-value",item.count));
+        const isActive=STATE.statusId===item.statusId;
+        const card=button("",()=>{
+          if(STATE.statusId!==item.statusId){
+            STATE.statusId=item.statusId;
+            STATE.dayPage=1;
+            renderDashboard();
+          }
+        },"counter-card dashboard-filter-counter"+(isActive?" active":""));
+        card.dataset.statusFilter=item.statusId||"all";
+        card.setAttribute("aria-label","عرض كشف "+item.name+" ("+item.count+")");
+        card.setAttribute("aria-pressed",String(isActive));
+        card.appendChild(el("span","counter-label",item.name));
+        card.appendChild(el("span","counter-value",item.count));
         if(/^#[0-9a-fA-F]{6}$/.test(item.color||""))
           card.style.borderRight="4px solid "+item.color;
         counters.appendChild(card);
-      }
-      const all=button("الكل",()=>{STATE.statusId="";STATE.dayPage=1;renderDashboard();},
-        "btn filter-chip"+(!STATE.statusId?" active":""));
-      chips.appendChild(all);
-      for(const st of counts.statusCounts||[]) {
-        const b=button(st.name,()=>{STATE.statusId=st.statusId;STATE.dayPage=1;renderDashboard();},
-          "btn filter-chip"+(st.statusId===STATE.statusId?" active":""));
-        if(/^#[0-9a-fA-F]{6}$/.test(st.color||""))b.style.borderBottom="4px solid "+st.color;
-        chips.appendChild(b);
       }
       const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},{label:"الاسم"},
         {label:"الموقع"},{label:"الحالة"}]);

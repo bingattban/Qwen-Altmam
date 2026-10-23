@@ -806,3 +806,17 @@ body{min-width:0}
 }
 @media(max-width:1020px){.admin-site-form{grid-template-columns:repeat(2,minmax(0,1fr))}.app-sidebar{width:190px}}
 @media(max-width:670px){html,body{overflow:auto;height:auto}.app-body{max-height:none;overflow:visible}.app-main{overflow:visible}.admin-site-form{grid-template-columns:1fr}#appViewport{overflow:visible}.modal-box{max-height:85dvh}}
+
+/* Dashboard counters double as the only attendance-state filters. */
+.functional-counters .dashboard-filter-counter{
+  appearance:none;display:flex;flex-direction:column;align-items:stretch;justify-content:center;
+  width:100%;min-width:0;font:inherit;text-align:right;color:var(--text-main);
+  background:var(--bg-surface);border:1px solid var(--border-color);
+  border-right:5px solid var(--primary-navy);border-radius:var(--radius);
+  padding:12px 14px;cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s;
+}
+.functional-counters .dashboard-filter-counter:hover{background:var(--bg-subtle);border-color:var(--accent-teal);box-shadow:var(--shadow-sm)}
+.functional-counters .dashboard-filter-counter.active{background:var(--bg-subtle);border-color:var(--accent-teal);box-shadow:inset 0 0 0 2px var(--accent-teal)}
+.functional-counters .dashboard-filter-counter:focus-visible{outline:3px solid var(--accent-teal);outline-offset:3px}
+.functional-counters .dashboard-filter-counter .counter-label,.functional-counters .dashboard-filter-counter .counter-value{display:block;pointer-events:none}
+.attendance-confirm-action{min-width:190px;min-height:43px;font-weight:800}

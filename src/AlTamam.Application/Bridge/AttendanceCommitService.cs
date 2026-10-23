@@ -115,8 +115,13 @@ public sealed class AttendanceCommitService
             "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.");
         if(ids.Length==0||statusId.Length==0||mode is not("initial" or "revise"))
             return Fail(BridgeErrorCodes.ValidationError,"اختر الحالة وفرداً أو أكثر (حتى 100) ونوع العملية.");
+        // A routine same-day status change requires an explicit, user-bound preview
+        // and approval, but the operator must not be forced to type a reason.
+        // Preserve an audit explanation even when the UI supplies no reason.
+        if(mode=="revise" && reason.Length==0)
+            reason="تغيير حالة التمام بتأكيد المستخدم";
         if(mode=="revise" && reason.Length is <5 or >400)
-            return Fail(BridgeErrorCodes.ValidationError,"سبب تعديل التحضير مطلوب (5–400 حرف).");
+            return Fail(BridgeErrorCodes.ValidationError,"سبب التعديل المدخل غير صالح.");
         using var c=_db.CreateOpenConnection();
         if(await Closed(c,null,date,ct).ConfigureAwait(false))
             return Fail(BridgeErrorCodes.HistoricDayLocked,"اليوم أو الشهر مغلق، ولا يسمح بتعديل تحضيره.");

@@ -128,7 +128,8 @@ public sealed class DailyMonthlyReadService
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
-              AND ($status = '' OR ar.StatusId = $status)
+              AND ($status = '' OR ar.StatusId = $status
+                   OR ($status = '__UNPREPARED__' AND ar.StatusId IS NULL))
             """;
         using var connection = _db.CreateOpenConnection();
         using var count = connection.CreateCommand();

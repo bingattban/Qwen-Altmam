@@ -37,10 +37,7 @@
    mode.setAttribute("aria-label","نوع العملية");
    site.appendChild(option("","جميع المواقع"));
    status.appendChild(option("","اختر الحالة"));
-   mode.append(option("initial","تحضير جديد"),option("revise","تعديل تحضير اليوم"));
-   const reason=make("input");reason.placeholder="سبب تغيير التحضير (5 أحرف على الأقل)";
-   reason.setAttribute("aria-label","سبب تغيير التحضير");
-   reason.hidden=true;
+   mode.append(option("initial","تحضير جديد"),option("revise","تغيير حالة التحضير"));
    const list=make("div"),info=make("div"),review=make("div");
    const choice=make("span","لم يتم تحديد أسماء");
    const draftPanel=make("section",undefined,"card attendance-drafts");
@@ -53,12 +50,12 @@
    const clearReview=()=>{previewVersion++;review.replaceChildren();};
    const reset=()=>{selected.clear();activeDraftId=null;clearReview();summary();};
    mode.addEventListener("change",()=>{
-     reason.hidden=mode.value!=="revise";clearReview();
+     clearReview();
+     previewButton.textContent=mode.value==="revise"?"معاينة تغيير الحالة":"معاينة التحضير";
    });
    status.addEventListener("change",clearReview);
-   reason.addEventListener("input",clearReview);
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
-   filters.append(site,status,mode,reason);
+   filters.append(site,status,mode);
    header.append(filters,choice,info,list,review);
    host.appendChild(draftPanel);
    host.insertBefore(header,draftPanel);
@@ -135,14 +132,14 @@
            if(!availableStatus||!availableSite)
              return showError(info,new Error("حالة المسودة أو موقعها لم يعودا متاحين."));
            site.value=draft.siteId||"";status.value=draft.targetStatusId;
-           mode.value="initial";reason.hidden=true;reason.value="";
+           mode.value="initial";previewButton.textContent="معاينة التحضير";
            selected.clear();draft.selectedPersonIds.forEach(id=>selected.add(id));
            activeDraftId=draft.draftId;pageNo=1;clearReview();summary();
            await load();
            info.replaceChildren(make("p","استعيدت المسودة للمراجعة فقط؛ لم يُحفظ أي تحضير.","settings-success"));
          });
          const remove=button("حذف المسودة",async()=>{
-           if(!confirm("حذف المسودة المحفوظة دون حذف أي سجلات تحضير؟"))return;
+           if(!await modalConfirm("تأكيد حذف المسودة المحفوظة دون حذف سجلات التحضير؟"))return;
            remove.disabled=true;
            try{
              await bridge.invoke("DeleteAttendanceDraft",{draftId:draft.draftId});
@@ -177,22 +174,20 @@
    async function preview(){
      if(!status.value||selected.size===0)
        return showError(info,new Error("اختر الحالة والأفراد."));
-     if(mode.value==="revise"&&reason.value.trim().length<5)
-       return showError(info,new Error("أدخل سبب تغيير التحضير."));
      clearReview();info.replaceChildren();
      const expectedPreviewVersion=previewVersion;
      try{
        const r=await bridge.invoke("PreviewAttendanceChange",{
          businessDate:day,statusId:status.value,siteId:site.value,
-         personIds:Array.from(selected).sort(),mode:mode.value,
-         reason:mode.value==="revise"?reason.value.trim():""
+         personIds:Array.from(selected).sort(),mode:mode.value
        });
        if(!host.isConnected||previewVersion!==expectedPreviewVersion)return;
        const data=r.data||{};
        if(!data.previewToken||!Array.isArray(data.persons))
          throw Error("تعذر اعتماد المعاينة.");
        const c=make("section",undefined,"card");
-       c.appendChild(make("h3","مراجعة التحضير قبل التأكيد","section-title"));
+       c.appendChild(make("h3",data.mode==="revise"?"مراجعة تغيير الحالة قبل التأكيد":
+         "مراجعة التحضير قبل التأكيد","section-title"));
        const t=table(["الرقم (ع)","الاسم","الحالة السابقة","الحالة الجديدة"]);
        for(const p of data.persons){
          const row=make("tr");
@@ -201,14 +196,17 @@
          t.body.appendChild(row);
        }
        c.appendChild(t.outer);
-       const save=button("تأكيد وحفظ التحضير",async()=>{
-         if(!await modalConfirm("اعتماد "+data.count+" فرداً في حالة "+data.statusName+"؟"))return;
+       const changing=data.mode==="revise";
+       const save=button(changing?"تأكيد تغيير الحالة":"تأكيد وحفظ التحضير",async()=>{
+         if(!await modalConfirm("هل تؤكد "+(changing?"تغيير حالة":"تحضير")+
+           " "+data.count+" فرداً إلى «"+data.statusName+"»؟"))return;
          save.disabled=true;
          try{
            const action=data.mode==="revise"?"ReviseTodayAttendance":"SubmitAttendance";
            const result=await bridge.invoke(action,{previewToken:data.previewToken});
            reset();pageNo=1;await load();
-           info.replaceChildren(make("p","تم حفظ "+result.data.count+" فرداً.","settings-success"));
+           info.replaceChildren(make("p",changing?"تم تأكيد تغيير حالة "+result.data.count+" فرداً.":
+             "تم حفظ "+result.data.count+" فرداً.","settings-success"));
          }catch(e){showError(info,e);clearReview();}
          finally{save.disabled=false;}
        });
@@ -221,7 +219,9 @@
      }catch(e){showError(info,e);}
    }
    filters.appendChild(button("تحديث",()=>{reset();load();}));
-   header.insertBefore(button("معاينة التحضير",preview),choice);
+   const previewButton=button("معاينة التحضير",preview);
+   previewButton.className="btn btn-primary";
+   header.insertBefore(previewButton,choice);
    header.insertBefore(button("العودة إلى إدارة القوة",()=>{
      window.AltamamAdminSettings.renderGroup("force");
    }),filters);
