@@ -26,8 +26,16 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         Title = "التمام اليومي";
-        Width = 1280;
-        Height = 860;
+        // Keep the native Windows title bar visible on compact laptop displays.
+        // A fixed 860 px window could start above the screen when centered.
+        var workArea = SystemParameters.WorkArea;
+        Width = Math.Min(1280, Math.Max(480, workArea.Width - 24));
+        Height = Math.Min(860, Math.Max(360, workArea.Height - 24));
+        MinWidth = Math.Min(720, workArea.Width);
+        MinHeight = Math.Min(480, workArea.Height);
+        ResizeMode = ResizeMode.CanResize;
+        WindowStyle = WindowStyle.SingleBorderWindow;
+        ShowInTaskbar = true;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         InitializeComponent();
         webViewHost.Children.Add(_webView);
