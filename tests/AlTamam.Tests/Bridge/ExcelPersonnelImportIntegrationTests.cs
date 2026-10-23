@@ -119,7 +119,7 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         var saved=await Service.CommitAsync(new JsonObject{["previewToken"]=token2},Owner,"owner",CancellationToken.None);
         Assert.True(saved.Success,saved.UserMessage);
         Assert.Equal("2",Scalar("SELECT COUNT(*) FROM Persons"));
-        Assert.Equal("خالد سعيد الحضرمي",Scalar("SELECT CurrentVisibleName FROM Persons WHERE CurrentServiceNumberA='001'"));
+        Assert.Equal("خالد سعيد الحضرمي",Scalar("SELECT CurrentVisibleName FROM Persons WHERE CurrentServiceNumberA='00001'"));
     }
 
     [Fact]
