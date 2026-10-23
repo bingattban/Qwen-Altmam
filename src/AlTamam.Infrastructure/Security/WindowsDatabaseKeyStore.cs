@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -8,6 +9,7 @@ namespace AlTamam.Infrastructure.Security;
 /// (or its recovery material) exists without the original key.
 /// Compatible with the original UTF-8-hex DPAPI blobs written by LocalSecretStore.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class WindowsDatabaseKeyStore
 {
     private const string RecoveryRequired =
