@@ -133,6 +133,7 @@
           throw new Error("لم يرجع خادم المصادقة جلسة صالحة.");
         bridge().setSessionNonce(result.sessionNonce);
         STATE.session=result;
+        window.AltamamIdleGuard?.start(true,logout);
         pass.input.value="";
         document.querySelector(".app-sidebar").hidden=false;
         document.getElementById("headerRoleBadge").textContent=
@@ -444,9 +445,15 @@
       return;
     }
     try {
+      if(window.AltamamIdleGuard?.shouldLogout()){
+        try{await bridge().invoke("Logout",{});}catch{ /* already expired */ }
+        bridge().setSessionNonce(null);
+        return await loginGate();
+      }
       const state=parseData(await bridge().invoke("GetCurrentSession",{}));
       if(state && state.sessionNonce) {
         STATE.session=state;
+        window.AltamamIdleGuard?.start(false,logout);
         document.querySelector(".app-sidebar").hidden=false;
         document.getElementById("headerRoleBadge").textContent=
           state.username+" — "+(state.roleLabelAr||state.role);
@@ -461,6 +468,7 @@
     try { await bridge().invoke("Logout",{}); }
     catch(e) { /* Do not continue using a possibly expired session. */ }
     finally {
+      window.AltamamIdleGuard?.stop();
       bridge().setSessionNonce(null);
       STATE.session=null;
       await loginGate();
@@ -495,6 +503,6 @@
       // Administration refreshes its own nested screen after a write; keep its context.
      if(sections.has(section)&&section!=="admin"&&STATE.session)render(section);
     }
-    if(name==="SessionEnded"){STATE.session=null;bridge().setSessionNonce(null);loginGate();}
+    if(name==="SessionEnded"){window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);loginGate();}
   });
 })();
