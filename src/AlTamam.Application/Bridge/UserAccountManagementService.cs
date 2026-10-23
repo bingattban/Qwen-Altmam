@@ -133,7 +133,7 @@ public sealed class UserAccountManagementService
             return Error("اسم مستخدم من 3 إلى 64 حرفاً بلا مسافات واختيار فرد مسجل مطلوبان.");
         var policy=PasswordPolicyValidator.Validate(password);
         if(!policy.IsValid)return Error(policy.ArabicErrorMessage??"كلمة المرور غير صالحة.");
-        string normalized=username.ToUpperInvariant();
+        string normalized=BridgeSharedServices.NormalizeUsername(username);
         var (hash,salt)=PasswordSecurity.HashPassword(password);
         string id="USR-"+Guid.NewGuid().ToString("N"),now=_time.GetUtcNow().ToString("O");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
