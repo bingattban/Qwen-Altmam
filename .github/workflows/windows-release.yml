@@ -47,6 +47,15 @@ jobs:
         with: { python-version: '3.12' }
       - name: Action-manifest security guard (90 actions, CSP, RBAC drift)
         run: python build/manifest-guard.py
+      - name: Validate Arabic navigation and JavaScript syntax
+        shell: pwsh
+        run: |
+          python build/validate-ui-shell.py
+          if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
+          foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js')) {
+            node --check "src/AlTamam.WebUI/assets/js/$file"
+            if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
+          }
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
