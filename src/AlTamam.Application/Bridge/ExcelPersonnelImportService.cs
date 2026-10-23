@@ -20,7 +20,8 @@ namespace AlTamam.Application.Bridge;
 /// </summary>
 public sealed class ExcelPersonnelImportService
 {
-    private const int MaxWorkbookBytes = 1_048_576;
+    // Base64 stays below the canonical 256-KiB WebView2 request envelope limit.
+    private const int MaxWorkbookBytes = 160 * 1024;
     private const int MaxRecords = 500;
     private const string WorkbookOperation = "PERSONNEL-IMPORT-WORKBOOK";
     private const string PlanOperation = "PERSONNEL-IMPORT-PLAN";
@@ -44,14 +45,14 @@ public sealed class ExcelPersonnelImportService
         string base64 = Read(payload, "base64");
         string fileName = Read(payload, "fileName");
         if (!fileName.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
-            fileName.Length > 180 || base64.Length is < 10 or > 1_450_000)
-            return Invalid("اختر ملف Excel بصيغة xlsx وبحجم لا يتجاوز 1 ميجابايت.");
+            fileName.Length > 180 || base64.Length is < 10 or > 220_000)
+            return Invalid("اختر ملف Excel بصيغة xlsx وبحجم لا يتجاوز 160 كيلوبايت.");
         byte[] bytes;
         try { bytes = Convert.FromBase64String(base64); }
         catch (FormatException) { return Invalid("محتوى ملف Excel غير صالح."); }
         try
         {
-            if (bytes.Length > MaxWorkbookBytes) return Invalid("ملف Excel كبير جداً (الحد 1 ميجابايت).");
+            if (bytes.Length > MaxWorkbookBytes) return Invalid("ملف Excel كبير جداً (الحد 160 كيلوبايت).");
             var rows = ParseWorkbook(bytes);
             if (rows.Count == 0) return Invalid("الكشف لا يحتوي على صفوف أفراد صالحة للمعالجة.");
             var data = new JsonArray();
