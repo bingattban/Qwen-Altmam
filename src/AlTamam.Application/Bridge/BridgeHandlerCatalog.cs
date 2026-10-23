@@ -53,9 +53,13 @@ public static class BridgeHandlerCatalog
             return Done(req, SessionData(authPrincipal));
         },
         "GetCurrentSession" => async (req, principal, ct) =>
-            principal is null
-                ? Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.SessionExpired, "لا توجد جلسة نشطة."))
-                : Done(req, SessionData(principal)),
+        {
+            if(principal is null)
+                return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.SessionExpired,
+                    "لا توجد جلسة نشطة."));
+            await services.RefreshSessionIdleDeadlineAsync(req.SessionNonce,ct).ConfigureAwait(false);
+            return Done(req,SessionData(principal));
+        },
         "Logout" => async (req, principal, ct) =>
         {
             await services.RevokeSessionAsync(req.SessionNonce, ct).ConfigureAwait(false);
@@ -368,6 +372,25 @@ public static class BridgeHandlerCatalog
         },
         // Settings: read real configuration, audit manual encrypted backup.
         // No fake success for scheduled backups, restore or destructive reset.
+        "SetOutputDirectory" => async (req, principal, ct) =>
+        {
+            bool choose = req.Payload?["choose"]?.GetValue<bool>() == true;
+            string? selected = req.Payload?["directory"]?.GetValue<string>();
+            if (choose)
+            {
+                if (services.PickOutputDirectoryAsync is null)
+                    return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                        "منتقي مجلدات Windows غير متاح."));
+                selected = await services.PickOutputDirectoryAsync(
+                    await new OutputDirectorySettings(services.Db).GetAsync(ct).ConfigureAwait(false));
+                if (selected is null)
+                    return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                        "لم يتم اختيار مجلد؛ لم تتغير الإعدادات."));
+            }
+            var answer = await new OutputDirectorySettings(services.Db)
+                .SaveAsync(selected, principal!, ct).ConfigureAwait(false);
+            return answer.Success ? Done(req, answer.Data) : Fail(req, answer);
+        },
         "GetSettingsOverview" => async (req, principal, ct) =>
         {
             var svc = new SettingsReadBackupService(services.Db);
