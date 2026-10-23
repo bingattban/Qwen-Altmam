@@ -3,6 +3,12 @@
    The server verifies actor, preview, five-second delay and write transaction. */
 (function(){
   const api=()=>window.AltamamBridge;
+  const dialogs={
+    confirm:text=>window.AltamamDialog?.confirm(text,{danger:true,title:"تأكيد الفصل"}) ??
+      Promise.resolve(confirm(text)),
+    reason:text=>window.AltamamDialog?.reason(text,{danger:true,
+      minLength:5,title:"سبب الفصل"}) ?? Promise.resolve(prompt(text))
+  };
   const el=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=String(text);if(cls)e.className=cls;return e;};
   const button=(text,handler,cls)=>{const b=el("button",text,cls||"btn btn-outline");b.type="button";b.addEventListener("click",handler);return b;};
   const option=(value,name)=>{const e=el("option",name);e.value=value;return e;};
@@ -62,11 +68,12 @@
             person=entry;clear();feedback.replaceChildren();
             selected.replaceChildren(el("h3","الفرد المحدد","section-title"),
               el("p",entry.displayName+" — الرقم (ع): "+entry.serviceNumberA+" — "+entry.siteName));
-            const reason=el("textarea");reason.rows=3;
-            reason.placeholder="اكتب سبب الفصل (إجباري، خمسة أحرف على الأقل)";
-            reason.setAttribute("aria-label","سبب فصل الفرد");
-            reason.addEventListener("input",clear);
-            selected.append(reason,button("معاينة طلب الفصل",()=>requestPreview(entry,reason)));
+            selected.appendChild(button("تحديد سبب الفصل والمعاينة",async()=>{
+              const reason=await dialogs.reason("بيانات الفصل: "+entry.displayName+
+                " — الرقم (ع): "+entry.serviceNumberA+" — الموقع: "+entry.siteName);
+              if(reason===null)return;
+              await requestPreview(entry,reason);
+            },"btn btn-primary"));
           },"btn btn-outline"));
           tr.appendChild(td);
         }
@@ -83,7 +90,7 @@
       }catch(e){if(token===seq)error(results,e);}
     }
     async function requestPreview(entry,reason) {
-      const text=reason.value.trim();
+      const text=reason.trim();
       if(text.length<5)return error(feedback,new Error("اكتب سبب فصل لا يقل عن خمسة أحرف."));
       clear();feedback.replaceChildren();
       const expected=previewCounter;
@@ -102,7 +109,7 @@
           el("p","سيختفي من كشف القوة النشطة وتظل بياناته التاريخية محفوظة.","admin-warning"));
         const info=el("p","مهلة التأكيد: 5 ثوانٍ");
         const save=button("تأكيد الفصل",async()=>{
-          if(!confirm("تأكيد فصل «"+data.name+"»؟ هذه عملية مؤثرة على القوة والسجل التاريخي."))return;
+          if(!await dialogs.confirm("تأكيد فصل «"+data.name+"»؟ السبب: "+data.reason+" — ستبقى السجلات التاريخية محفوظة."))return;
           save.disabled=true;
           try{
             await api().invoke("CommitSeparation",{previewToken:data.previewToken});
