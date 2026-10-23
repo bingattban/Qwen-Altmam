@@ -188,6 +188,9 @@ jobs:
           retention-days: 30
 
   clean-windows-acceptance:
+    # PRs validate build + artifacts only, never assert final release acceptance.
+    # workflow_dispatch/tagged release candidates still MUST run this mandatory gate.
+    if: github.event_name != 'pull_request'
     name: Clean-machine acceptance matrix (15.06) — manual evidence gate
     needs: package
     runs-on: windows-latest
