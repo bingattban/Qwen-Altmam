@@ -30,6 +30,32 @@
       body.replaceChildren();
       const text=make("p","app-dialog-copy",options.message||"");
       body.appendChild(text);
+      if(options.review){
+        const detail=make("section","attendance-review");
+        const overview=make("p","attendance-review-summary",
+          "التاريخ: "+options.review.date+" — الحالة الجديدة: "+options.review.status+
+          " — إجمالي الأفراد: "+options.review.persons.length);
+        detail.appendChild(overview);
+        const scrolling=make("div","attendance-review-scroll");
+        const grid=make("table","data-table attendance-review-table");
+        const head=make("thead"),header=make("tr");
+        for(const column of ["الرقم (ع)","اسم الفرد","الحالة السابقة","الحالة الجديدة"]){
+          const th=make("th","",column);th.scope="col";header.appendChild(th);
+        }
+        head.appendChild(header);
+        const rows=make("tbody");
+        for(const person of options.review.persons){
+          const tr=make("tr");
+          for(const value of [person.serviceNumberA,person.name,
+            person.previousStatusName,options.review.status])
+            tr.appendChild(make("td","",value||"غير محضر"));
+          rows.appendChild(tr);
+        }
+        grid.append(head,rows);scrolling.appendChild(grid);
+        detail.appendChild(scrolling);body.appendChild(detail);
+        body.appendChild(make("p","attendance-review-warning",
+          "يراجع البرنامج حالة كل فرد مرة أخرى قبل الحفظ. لن يُعتمد أي تغيير قبل الضغط على زر التأكيد."));
+      }
       let field=null,feedback=null;
       if(options.input){
         const wrapper=make("label","app-dialog-field");
@@ -102,6 +128,17 @@
       confirmLabel:opts.confirmLabel||"معاينة العملية",input:{
         label:"سبب العملية",multiline:true,minLength:opts.minLength||5,maxLength:400
       }}),
+    attendanceReview:(review,opts={})=>{
+      if(!review||!Array.isArray(review.persons)||!review.persons.length||
+         review.persons.length>100||!review.persons.every(p=>
+         typeof p.name==="string"&&typeof p.serviceNumberA==="string"))
+        return Promise.resolve(false);
+      return show({title:opts.title||"معاينة التحضير وتأكيده",
+        message:opts.message||"راجع الأفراد وحالاتهم قبل الاعتماد.",
+        confirmLabel:opts.confirmLabel||"تأكيد وحفظ التحضير",
+        review:{date:review.businessDate||"",status:review.statusName||"",
+          persons:review.persons}}).then(result=>result===true);
+    },
     alert:(message,opts={})=>show({title:opts.title||"تنبيه",message,confirmLabel:"حسناً"})
   });
 })();

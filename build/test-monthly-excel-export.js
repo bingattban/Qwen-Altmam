@@ -67,6 +67,22 @@ async function main(){
     "today's column has an explicit sticky position");
   const previewButton=viewport.all().find(x=>x.tag==="button"&&x.textContent==="معاينة تصدير Excel");
   assert.ok(previewButton,"monthly Excel preview is visible");
+  const todayHeading=viewport.all().find(x=>x.tag==="th"&&
+    x.className.includes("fixed-today"));
+  assert.ok(todayHeading,"today is pinned beside the static identity/site columns");
+  assert.ok(todayHeading.textContent.includes("اليوم"),
+    "current-day header must be clearly labeled");
+  const visibleStatus=viewport.all().find(x=>x.tag==="td"&&
+    x.style.backgroundColor==="#EF4444");
+  assert.ok(visibleStatus,"committed attendance is color coded");
+  assert.equal(visibleStatus.style.color,"#17212B",
+    "colored cells choose contrasting text instead of possibly invisible default ink");
+  const css=fs.readFileSync(path.join(__dirname,
+    "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+  assert.ok(css.includes(".monthly-scroll td.fixed-today{font-size:17px"),
+    "pinned today has readable, enlarged attendance text");
+  assert.ok(css.includes(".monthly-scroll .fixed-three{"),
+    "identity text is allowed to wrap instead of being clipped");
   assert.equal(calls.some(x=>x.action==="ExportMonthlyWorkbookSet"),false,
     "initial display must not export");
   await previewButton.handlers.click();await tick();
