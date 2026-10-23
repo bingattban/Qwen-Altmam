@@ -129,7 +129,8 @@ public sealed class ExcelPersonnelImportService
             if (item.Name.Length is < 3 or > 180 || item.Number.Length is < 1 or > 70 ||
                 item.Name.Any(char.IsControl) || item.Number.Any(char.IsControl) ||
                 item.NormalizedName != ArabicTextNormalizer.NormalizeForSearch(item.Name) ||
-                item.NormalizedNumber != ArabicTextNormalizer.NormalizeForSearch(item.Number))
+                item.NormalizedNumber != ArabicTextNormalizer.NormalizeForSearch(item.Number) ||
+                item.NormalizedName.Length == 0 || item.NormalizedNumber.Length == 0)
                 reason = "بيانات اسم أو رقم غير صالحة.";
             else if (!seen.Add(item.NormalizedNumber))
                 reason = "«الرقم (ع)» مكرر داخل الملف.";
@@ -229,6 +230,9 @@ public sealed class ExcelPersonnelImportService
                     INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
                         ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
                     VALUES($id,$name,$number,$today,NULL,$actor,$now,'استيراد Excel معتمد');
+                    INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                        ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                    VALUES($assignment,$id,'SITE-UNSPECIFIED',$today,NULL,NULL,$now);
                     """;
                 insert.Parameters.AddWithValue("$id", personId);
                 insert.Parameters.AddWithValue("$name", item.Name);
@@ -238,6 +242,7 @@ public sealed class ExcelPersonnelImportService
                 insert.Parameters.AddWithValue("$today", today);
                 insert.Parameters.AddWithValue("$now", now);
                 insert.Parameters.AddWithValue("$actor", actor);
+                insert.Parameters.AddWithValue("$assignment", "ASG-" + Guid.NewGuid().ToString("N"));
                 await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 createdIds.Add(personId);
             }
