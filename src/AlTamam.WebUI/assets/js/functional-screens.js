@@ -350,6 +350,18 @@
     }
   }
   document.getElementById("logoutAction")?.addEventListener("click",logout);
+  function canSeeRoute(route) {
+    if(!STATE.session) return false;
+    const role=STATE.session.role;
+    if (route.path.startsWith("screens/Administration/Users/") ||
+        route.key==="Users" ||
+        route.key==="ArchivePersons" ||
+        route.key==="DeleteAuditEntry" || route.key==="EditAuditEntry")
+      return role==="GeneralAdministration" || role==="OrdinaryAdministration";
+    if(route.key==="ResetApplicationData")
+      return role==="GeneralAdministration";
+    return true;
+  }
   document.addEventListener("click",e=>{
     const control=e.target.closest("[data-action='navigateTop']");
     if(!control)return;
@@ -357,7 +369,7 @@
     render(control.dataset.section);
   },true);
   document.addEventListener("DOMContentLoaded",boot);
-  window.AltamamFunctional=Object.freeze({render});
+  window.AltamamFunctional=Object.freeze({render, canSeeRoute});
   bridge().onInvalidation(evt=>{
     const name=typeof evt==="string"?evt:(evt&&evt.eventName);
     if(["AttendanceCommitted","AttendanceRevised","PersonnelMoved","PersonnelArchived","SiteCreated",
