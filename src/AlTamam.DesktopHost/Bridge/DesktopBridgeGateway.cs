@@ -16,6 +16,8 @@ public sealed class DesktopBridgeGateway
     private readonly WebView2BridgeDispatcher _dispatcher;
     private readonly BridgeSharedServices _services;
     private CoreWebView2? _core;
+    public Func<string?,Task<string?>>? FolderPicker
+    { get => _services.PickOutputDirectoryAsync; set => _services.PickOutputDirectoryAsync = value; }
 
     public DesktopBridgeGateway(WebView2BridgeDispatcher dispatcher, BridgeSharedServices services)
     {

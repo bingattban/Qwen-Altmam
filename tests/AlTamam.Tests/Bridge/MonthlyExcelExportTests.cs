@@ -14,12 +14,14 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
 {
     private readonly string _file = SyntheticFixtures.CreateTempDatabasePath();
     private readonly List<string> _exports = new();
+    private readonly string _output = Path.Combine(Path.GetTempPath(),"altamam-monthly-output-"+Guid.NewGuid().ToString("N"));
     private AlTamamDbContext _db = null!;
 
     public async Task InitializeAsync()
     {
         _db = new AlTamamDbContext(_file, SyntheticFixtures.TestKeyHex);
         await _db.InitializeAsync();
+        Directory.CreateDirectory(_output);
         using var connection = _db.CreateOpenConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
@@ -40,6 +42,9 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
                 'TST-EX-A0','SITE-UNSPECIFIED','غير محدد','manual','TST-U',
                 '2026-10-19T07:00:00Z','TST-EX-ATT');
             """;
+        await command.ExecuteNonQueryAsync();
+        command.CommandText="UPDATE AppSettings SET SettingValue=$folder WHERE SettingKey='PreferredBackupDirectory';";
+        command.Parameters.AddWithValue("$folder",_output);
         await command.ExecuteNonQueryAsync();
         // 101 synthetic entries exercise the real 100-row SQLCipher paging boundary.
         for (int i = 1; i <= 101; i++)
@@ -132,5 +137,6 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         foreach (var path in _exports)
             try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         SyntheticFixtures.DeleteTempDatabase(_file);
+        try{Directory.Delete(_output,true);}catch(IOException){}catch(UnauthorizedAccessException){}
     }
 }

@@ -84,7 +84,9 @@
     append(bar, el("span", "", "عدد الأفراد: " + total + " — صفحة " + page));
     const prev = button("السابق", ()=>onPage(page-1)); prev.disabled=page<=1;
     const next = button("التالي", ()=>onPage(page+1)); next.disabled=page*pageSize>=total;
-    append(bar, prev, next); root.appendChild(bar);
+    append(bar, prev, next);
+    root.classList.add("functional-paged-area");
+    root.appendChild(bar);
   }
   function applyMainNav(section) {
     for(const key of sections) {
@@ -131,6 +133,7 @@
           throw new Error("لم يرجع خادم المصادقة جلسة صالحة.");
         bridge().setSessionNonce(result.sessionNonce);
         STATE.session=result;
+        window.AltamamIdleGuard?.start(true,logout);
         pass.input.value="";
         document.querySelector(".app-sidebar").hidden=false;
         document.getElementById("headerRoleBadge").textContent=
@@ -321,7 +324,7 @@
           const description=el("p","section-description",
             "سيتم حفظ "+preview.personCount+" فرد في ملف Excel لشهر "+
             year+"-"+String(month).padStart(2,"0")+
-            ". الحفظ في المستندات / AlTamam / Exports، دون تعديل سجلات التحضير.");
+            ". يتم حفظ ملف Excel في المجلد المحدد في الإعدادات، دون تعديل سجلات التحضير.");
           const confirmSave=button("حفظ ملف Excel",async()=>{
             confirmSave.disabled=true;
             exportPanel.replaceChildren(description,message("جارٍ إنشاء ملف Excel..."));
@@ -383,7 +386,13 @@
         {label:"الرقم (ع)",cls:"pinned fixed-two"},
         {label:"الاسم",cls:"pinned fixed-three"},
         {label:"الموقع",cls:"pinned fixed-four"}];
-      for(let day=1;day<=dayCount;day++)cols.push({label:day+"\n"+weekdayLabel(year,month,day)});
+      const currentDay=period===current?now.getDate():null;
+      // The current day is the fifth fixed column, immediately after the
+      // immutable identity/site columns. Historical months retain normal order.
+      const days=currentDay?[currentDay,...Array.from({length:dayCount},(_,i)=>i+1)
+        .filter(day=>day!==currentDay)]:Array.from({length:dayCount},(_,i)=>i+1);
+      for(const day of days)cols.push({label:day+"\n"+weekdayLabel(year,month,day),
+        cls:day===currentDay?"pinned fixed-today current-day-column":"day-column"});
       const tb=createTable(cols);
       tb.wrap.classList.add("monthly-scroll");
       tableHost.replaceChildren(tb.wrap);
@@ -391,10 +400,11 @@
         const tr=el("tr");
         [(STATE.monthPage-1)*50+index+1,person.serviceNumberA,person.name,person.siteName]
           .forEach((v,j)=>tr.appendChild(el("td","pinned fixed-"+["one","two","three","four"][j],v)));
-        for(let day=1;day<=dayCount;day++){
+        for(const day of days){
           const date=period+"-"+String(day).padStart(2,"0");
           const info=(person.days||{})[date];
-          const cell=el("td","day-cell");
+          const cell=el("td",day===currentDay?
+            "day-cell pinned fixed-today current-day-column":"day-cell");
           cell.title=info?info.name:"لا يوجد تحضير مسجل";
           if(info){
             const open=button(info.symbol||"تفاصيل",()=>showCellDetails(person.personId,date),
@@ -435,9 +445,15 @@
       return;
     }
     try {
+      if(window.AltamamIdleGuard?.shouldLogout()){
+        try{await bridge().invoke("Logout",{});}catch{ /* already expired */ }
+        bridge().setSessionNonce(null);
+        return await loginGate();
+      }
       const state=parseData(await bridge().invoke("GetCurrentSession",{}));
       if(state && state.sessionNonce) {
         STATE.session=state;
+        window.AltamamIdleGuard?.start(false,logout);
         document.querySelector(".app-sidebar").hidden=false;
         document.getElementById("headerRoleBadge").textContent=
           state.username+" — "+(state.roleLabelAr||state.role);
@@ -452,6 +468,7 @@
     try { await bridge().invoke("Logout",{}); }
     catch(e) { /* Do not continue using a possibly expired session. */ }
     finally {
+      window.AltamamIdleGuard?.stop();
       bridge().setSessionNonce(null);
       STATE.session=null;
       await loginGate();
@@ -486,6 +503,6 @@
       // Administration refreshes its own nested screen after a write; keep its context.
      if(sections.has(section)&&section!=="admin"&&STATE.session)render(section);
     }
-    if(name==="SessionEnded"){STATE.session=null;bridge().setSessionNonce(null);loginGate();}
+    if(name==="SessionEnded"){window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);loginGate();}
   });
 })();

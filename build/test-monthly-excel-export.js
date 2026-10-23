@@ -53,6 +53,18 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname,
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function main(){
   await events.DOMContentLoaded();await tick();await tick();
+  const headers=viewport.all().filter(x=>x.tag==="th");
+  assert.ok(headers.length>5,"monthly roster has fixed columns and calendar days");
+  assert.equal(Number.parseInt(String(headers[4].textContent),10),
+    new Date().getDate(),"today appears immediately after 4 fixed columns");
+  assert.ok(headers[4].className.includes("fixed-today"),
+    "today stays pinned while the other days scroll horizontally");
+  assert.ok(viewport.all().some(x=>x.className.includes("functional-paged-area")),
+    "pager lives in fixed table panel rather than below the whole screen");
+  const styles=fs.readFileSync(path.join(__dirname,
+    "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+  assert.ok(styles.includes(".monthly-scroll .fixed-today"),
+    "today's column has an explicit sticky position");
   const previewButton=viewport.all().find(x=>x.tag==="button"&&x.textContent==="معاينة تصدير Excel");
   assert.ok(previewButton,"monthly Excel preview is visible");
   assert.equal(calls.some(x=>x.action==="ExportMonthlyWorkbookSet"),false,

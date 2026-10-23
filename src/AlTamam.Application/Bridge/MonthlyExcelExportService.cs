@@ -19,8 +19,9 @@ public sealed class MonthlyExcelExportService
     private const string SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private const string OfficeRelNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private readonly DailyMonthlyReadService _read;
+    private readonly AlTamamDbContext _db;
 
-    public MonthlyExcelExportService(AlTamamDbContext db) => _read = new DailyMonthlyReadService(db);
+    public MonthlyExcelExportService(AlTamamDbContext db) { _db=db; _read = new DailyMonthlyReadService(db); }
 
     private static bool ValidPeriod(JsonObject? input, out int year, out int month, out string siteId)
     {
@@ -71,14 +72,11 @@ public sealed class MonthlyExcelExportService
         int month = previewData["month"]!.GetValue<int>();
         int days = previewData["daysInMonth"]!.GetValue<int>();
         string site = previewData["siteId"]!.GetValue<string>();
-        string root = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        if (string.IsNullOrWhiteSpace(root))
-            root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(root))
-            return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed, "تعذر تحديد مجلد حفظ التقارير على هذا الجهاز.");
-
-        // Fixed product-owned subfolder; the WebView client does not choose file paths.
-        string directory = Path.Combine(root, "AlTamam", "Exports");
+        // The same audited output folder is used by backups and all Excel reports.
+        string selected = await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
+        if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
+            return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
+                "مجلد النسخ والتصدير غير متاح؛ غيّره من الإعدادات.");
         string basename = $"AlTamam_Monthly_{year:D4}-{month:D2}_{Guid.NewGuid():N}.xlsx";
         string destination = Path.Combine(directory, basename);
         string partial = destination + ".part";
