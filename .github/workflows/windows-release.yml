@@ -65,6 +65,8 @@ jobs:
           node build/test-admin-settings-navigation.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings UI regression' }
           node build/test-attendance-ui.js
+          if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
+          node build/test-personnel-movements.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
       - uses: actions/setup-dotnet@v4
         with:
