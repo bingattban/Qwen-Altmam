@@ -700,5 +700,5 @@
         ()=>renderSettings(session,logout),"btn btn-outline"));
     }
   }
-  window.AltamamAdminSettings=Object.freeze({renderAdmin,renderSettings});
+  window.AltamamAdminSettings=Object.freeze({renderAdmin,renderGroup,renderSettings});
 })();
