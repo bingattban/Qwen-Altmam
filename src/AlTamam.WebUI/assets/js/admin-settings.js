@@ -183,6 +183,10 @@
       const page=start("الإدارة / التنقلات");
       return window.AltamamMovements.render(page,screen);
     }
+    if(["separatePerson","separatedArchive"].includes(screen) && window.AltamamSeparation){
+      const page=start("الإدارة / التقارير والفصل / الفصل");
+      return window.AltamamSeparation.render(page,screen);
+    }
     if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
