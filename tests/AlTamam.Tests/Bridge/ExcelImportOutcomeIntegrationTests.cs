@@ -94,7 +94,7 @@ public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDispos
         Assert.Equal("1", Scalar("SELECT COUNT(*) FROM ImportIssues"));
         Assert.Equal("2", Scalar("SELECT COUNT(*) FROM Persons"));
         Assert.Equal("خالد سعيد الحضرمي",
-            Scalar("SELECT CurrentVisibleName FROM Persons WHERE CurrentServiceNumberA='0001'"));
+            Scalar("SELECT CurrentVisibleName FROM Persons WHERE CurrentServiceNumberA='00001'"));
 
         var outcome = new ExcelImportOutcomeService(_db);
         var history = await outcome.QueryAsync(new JsonObject(), Actor, CancellationToken.None);
