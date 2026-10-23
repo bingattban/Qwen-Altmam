@@ -23,6 +23,7 @@
  }
  async function render(page){
    const bridge=window.AltamamBridge;
+  const modalConfirm=text=>window.AltamamDialog?.confirm(text,{title:"تأكيد التمام"}) ?? Promise.resolve(confirm(text));
    const day=localDate();
    const host=make("div",undefined,"admin-attendance-host");
    page.replaceChildren(host);
@@ -201,7 +202,7 @@
        }
        c.appendChild(t.outer);
        const save=button("تأكيد وحفظ التحضير",async()=>{
-         if(!confirm("اعتماد "+data.count+" فرداً في حالة "+data.statusName+"؟"))return;
+         if(!await modalConfirm("اعتماد "+data.count+" فرداً في حالة "+data.statusName+"؟"))return;
          save.disabled=true;
          try{
            const action=data.mode==="revise"?"ReviseTodayAttendance":"SubmitAttendance";
@@ -211,8 +212,10 @@
          }catch(e){showError(info,e);clearReview();}
          finally{save.disabled=false;}
        });
-       c.append(save,button("إلغاء",()=>{
-         if(confirm("إلغاء المعاينة دون حفظ أي تغيير؟"))clearReview();
+       save.classList.add("attendance-confirm-action");
+       c.insertBefore(save,t.outer); // keep explicit approval visible ABOVE long rosters
+       c.appendChild(button("إلغاء",async()=>{
+         if(await modalConfirm("إلغاء المعاينة دون حفظ أي تغيير؟"))clearReview();
        }));
        review.appendChild(c);
      }catch(e){showError(info,e);}
