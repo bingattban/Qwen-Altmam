@@ -90,6 +90,25 @@ async function run() {
   buttonNamed("العودة إلى الإدارة").handlers.click();
   assert.equal(byDataset("adminSection").length,5,"return to clean admin landing");
 
+  // Nested administration pages use the same isolated card pattern.
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="transfers").handlers.click();
+  assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
+    ["transferInternal","transferExternal","transferArchive"]);
+  byDataset("adminNested")[0].handlers.click();
+  assert.equal(byDataset("adminNested").length,0,"nested cards hidden after opening a leaf");
+  buttonNamed("العودة إلى التنقلات").handlers.click();
+  assert.equal(byDataset("adminNested").length,3,"back restores transfer choices");
+  buttonNamed("العودة إلى إدارة القوة").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="reports").handlers.click();
+  assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
+    ["personReport","separation"]);
+  byDataset("adminNested").find(x=>x.dataset.adminNested==="separation").handlers.click();
+  assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
+    ["separatePerson","separatedArchive"]);
+  buttonNamed("العودة إلى التقارير والفصل").handlers.click();
+  assert.equal(byDataset("adminNested").length,2,"back restores reports choices");
+
   controller.renderAdmin({ role:"Supervisor" });
   assert.equal(byDataset("adminSection").length,4,"supervisor cannot see users card");
   assert.ok(!byDataset("adminSection").some(x=>x.dataset.adminSection==="users"));
