@@ -64,6 +64,10 @@ jobs:
         run: |
           node build/test-admin-settings-navigation.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings UI regression' }
+          node build/test-monthly-cell-details.js
+          if ($LASTEXITCODE -ne 0) { throw 'Monthly cell details UI regression' }
+          node build/test-attendance-drafts.js
+          if ($LASTEXITCODE -ne 0) { throw 'Attendance draft UI regression' }
           node build/test-attendance-ui.js
           if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
           node build/test-personnel-movements.js
