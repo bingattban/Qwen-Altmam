@@ -75,7 +75,8 @@ public static class BridgeRequestParser
     /// <exception cref="BridgeProtocolException">On malformed input, wrong protocol version, oversized message or bad nonce format.</exception>
     public static BridgeRequest Parse(string rawJson)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(rawJson);
+        if (string.IsNullOrWhiteSpace(rawJson))
+            Throw(BridgeErrorCodes.ValidationError, "الطلب فارغ أو يحتوي على مسافات فقط.");
         if (System.Text.Encoding.UTF8.GetByteCount(rawJson) > BridgeProtocol.MaxRequestBytes)
             Throw(BridgeErrorCodes.ValidationError, "حجم الطلب يتجاوز الحد المسموح.");
 
