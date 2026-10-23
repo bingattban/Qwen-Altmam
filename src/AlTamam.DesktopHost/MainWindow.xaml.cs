@@ -1,5 +1,4 @@
 using System.IO;
-using System.Security.Cryptography;
 using System.Windows;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
@@ -116,7 +115,8 @@ public partial class MainWindow : Window
         {
             // --- Host data layer: encrypted local database, key materialized on first run. ---
             string databasePath = AppDataLayout.ResolveDatabasePath();
-            string key = LocalSecretStore.GetOrCreateDatabaseKey();
+            string key = new Infrastructure.Security.WindowsDatabaseKeyStore(
+                Path.Combine(AppDataLayout.DataRoot, "db.key.protected")).LoadOrCreate(databasePath);
             _dbContext = new AlTamamDbContext(databasePath, key);
             await _dbContext.InitializeAsync().ConfigureAwait(true);
 
@@ -259,28 +259,3 @@ public partial class MainWindow : Window
            && string.Equals(uri.Host, LocalWebUiOrigin.Host, StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>
-/// Minimal DPAPI-backed store for the SQLCipher key (per-user, never shipped in the repository).
-/// Full Windows-keystore hardening continues in the dedicated security stage.
-/// </summary>
-internal static class LocalSecretStore
-{
-    private const string KeyFile = "db.key.protected";
-
-    public static string GetOrCreateDatabaseKey()
-    {
-        string path = Path.Combine(AppDataLayout.DataRoot, KeyFile);
-        if (File.Exists(path))
-        {
-            byte[] protectedBlob = File.ReadAllBytes(path);
-            byte[] plain = ProtectedData.Unprotect(protectedBlob, optionalEntropy: null, DataProtectionScope.CurrentUser);
-            string hex = System.Text.Encoding.UTF8.GetString(plain);
-            CryptographicOperations.ZeroMemory(plain);
-            if (!string.IsNullOrWhiteSpace(hex)) return hex;
-        }
-        string fresh = Infrastructure.Security.DatabaseKeyGenerator.Generate();
-        byte[] blob = ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(fresh), null, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(path, blob);
-        return fresh;
-    }
-}
