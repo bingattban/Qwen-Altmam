@@ -200,11 +200,12 @@ public sealed class SqliteIndexPerformanceTests : IAsyncLifetime, IDisposable
         // Independent expectation: persons whose normalized name contains "تجريبي 0042".
         BridgeResponse response = await _services.SearchPersonsAsync("تجريبي 0042", take: 25, default);
         Assert.True(response.Success);
-        JsonArray items = (JsonArray)((JsonObject)response.Data!)["items"];
+        JsonArray items = Assert.IsType<JsonArray>(((JsonObject)response.Data!)["items"]);
         Assert.NotEmpty(items);
-        foreach (JsonNode item in items)
+        foreach (JsonNode? item in items)
         {
-            string displayName = item["displayName"]!.GetValue<string>();
+            string displayName = Assert.IsType<JsonObject>(item)["displayName"]?.GetValue<string>()
+                ?? throw new InvalidOperationException("Person displayName is missing.");
             Assert.Contains("تجريبي 0042", displayName, StringComparison.Ordinal);
         }
         // Exact total from raw SQL over the same predicate.
@@ -263,7 +264,7 @@ public sealed class SqliteIndexPerformanceTests : IAsyncLifetime, IDisposable
         const string newDay = "2025-07-01";
 
         var tasks = new List<Task>();
-        for (int r = 0; r < readers; r)
+        for (int r = 0; r < readers; r++)
             tasks.Add(Task.Run(async () =>
             {
                 for (int i = 0; i < 5; i++)
