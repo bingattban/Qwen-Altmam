@@ -37,7 +37,8 @@ public sealed class BridgeRbacMatrixTests
         // Handlers are pure probes: they record that execution reached the handler and echo success.
         // RBAC must be decided entirely BEFORE this point; if a denied case ever records an entry,
         // the assertion fails with concrete evidence of the bypass.
-        executedActions = new List<string>();
+        var executed = new List<string>();
+        executedActions = executed;
         var registrations = ActionManifest.All.Select(meta => new BridgeActionRegistration(
             meta.Action,
             meta.OwningService,
@@ -46,7 +47,7 @@ public sealed class BridgeRbacMatrixTests
             meta.AllowedRoles.Contains("Unauthenticated", StringComparer.Ordinal),
             Handler: (req, principal, ct) =>
             {
-                lock (executedActions) { executedActions.Add(req.Action); }
+                lock (executed) { executed.Add(req.Action); }
                 return Task.FromResult(new BridgeResponse(req.RequestId, true, new JsonObject { ["rbacProbe"] = true }));
             })).ToList();
         return new WebView2BridgeDispatcher(registrations);
