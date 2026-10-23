@@ -191,7 +191,7 @@
     }catch(e){if(token===currentRequest)errors(notice,e);return;}
 
     function showAdd() {
-      if(token!==currentRequest)return;
+      if(state.active!=="accounts")return;
       const form=card("إضافة حساب مرتبط بفرد من القوة");
       form.classList.add("admin-user-form");
       const personSearch=field("بحث عن فرد بالاسم أو الرقم (ع)");
@@ -226,7 +226,7 @@
         }catch(e){errors(message,e);}finally{searchButton.disabled=false;}
       });
       personPick.addEventListener("change",()=>{
-        const option=personPick.children.find(o=>o.value===personPick.value);
+        const option=Array.from(personPick.children).find(o=>o.value===personPick.value);
         selected.textContent="الرقم (ع): "+(option?.dataset.serviceNumberA||"—");
       });
       const message=node("div","admin-note");
