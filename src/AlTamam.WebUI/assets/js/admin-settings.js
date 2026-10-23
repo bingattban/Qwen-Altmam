@@ -971,22 +971,57 @@
       // The stored 16:00 schedule is explicitly NOT an operational scheduler.
       const backup=settingsCard("النسخ الاحتياطي","▣");
       backup.append(
-        node("p","settings-copy","حفظ نسخة مشفرة من قاعدة البيانات على القرص E مع فحص سلامتها قبل اعتمادها.")
+        node("p","settings-copy","اختر مجلداً مشتركاً للنسخ الاحتياطي المشفر وجميع ملفات Excel، مع التحقق من سلامة كل نسخة.")
       );
       const backupInfo=node("div","settings-properties");
       backupInfo.append(
-        settingsValue("مسار الحفظ",info.backupDirectory),
+        settingsValue("مجلد النسخ الاحتياطي والتصدير",info.backupDirectory),
         settingsValue("الوقت المسجل للنسخ التلقائي",info.backupTime||"16:00"),
-        settingsValue("حالة القرص E",info.defaultDriveAvailable?"متصل":"غير متصل")
+        settingsValue("حالة المجلد",info.defaultDriveAvailable?"متاح":"غير متاح")
       );
       backup.appendChild(backupInfo);
+      const folder=field("مسار مجلد الحفظ المشترك",info.backupDirectory);
+      folder.input.setAttribute("aria-label","مجلد النسخ والتصدير");
+      const folderNote=node("div","settings-feedback");
+      folderNote.setAttribute("aria-live","polite");
+      const choose=btn("اختيار مجلد من Windows",async()=>{
+        choose.disabled=true;
+        try{
+          const reply=await api().invoke("SetOutputDirectory",{choose:true});
+          if(token!==currentRequest)return;
+          folder.input.value=reply.data?.directory||folder.input.value;
+          folderNote.replaceChildren(node("p","settings-success",
+            "تم اعتماد المجلد للنسخ والتصدير: "+folder.input.value));
+          info.backupDirectory=folder.input.value;info.defaultDriveAvailable=true;
+          save.disabled=false;
+          backupInfo.firstChild?.remove?.();
+          backupInfo.prepend(settingsValue("مجلد النسخ والتصدير",folder.input.value));
+        }catch(e){if(token===currentRequest)errors(folderNote,e);}
+        finally{choose.disabled=false;}
+      },"btn btn-outline settings-action");
+      const updateFolder=btn("تأكيد تغيير مسار الحفظ",async()=>{
+        if(!await dialogs.confirm("هل تؤكد استخدام هذا المجلد للنسخ الاحتياطي وكل ملفات Excel؟"))return;
+        updateFolder.disabled=true;
+        try{
+          const reply=await api().invoke("SetOutputDirectory",{directory:folder.input.value});
+          if(token!==currentRequest)return;
+          folder.input.value=reply.data?.directory||folder.input.value;
+          info.backupDirectory=folder.input.value;info.defaultDriveAvailable=true;
+          save.disabled=false;
+          folderNote.replaceChildren(node("p","settings-success","تم اعتماد مجلد الحفظ: "+folder.input.value));
+          backupInfo.firstChild?.remove?.();
+          backupInfo.prepend(settingsValue("مجلد النسخ والتصدير",folder.input.value));
+        }catch(e){if(token===currentRequest)errors(folderNote,e);}
+        finally{updateFolder.disabled=false;}
+      },"btn btn-primary settings-action");
+      backup.append(folder.wrap,choose,updateFolder,folderNote);
       const scheduleNote=warning(info.automaticBackupNote||
         "النسخ الاحتياطي التلقائي غير مفعل بعد، حتى لو كان وقت الجدولة محفوظاً.");
       backup.appendChild(scheduleNote);
       const backupResult=node("div","settings-feedback");
       backupResult.setAttribute("aria-live","polite");
       const save=btn("إنشاء نسخة احتياطية الآن",async()=>{
-        if(!await dialogs.confirm("إنشاء نسخة احتياطية مشفرة على القرص E والتحقق من سلامتها؟"))return;
+        if(!await dialogs.confirm("إنشاء نسخة احتياطية مشفرة في المجلد المختار والتحقق من سلامتها؟"))return;
         save.disabled=true;
         backupResult.replaceChildren(warning("جارٍ إنشاء النسخة والتحقق من سلامتها..."));
         try {
@@ -1005,7 +1040,7 @@
       save.disabled=!info.defaultDriveAvailable;
       backup.append(save,backupResult);
       if(!info.defaultDriveAvailable)backup.appendChild(warning(
-        "القرص E غير متصل، لذا لا يمكن إنشاء النسخة الاحتياطية الآن."));
+        "المجلد الحالي غير متاح؛ اختر مجلداً محلياً قابلاً للكتابة."));
       grid.appendChild(backup);
 
       const integrity=settingsCard("سلامة قاعدة البيانات","◇");
