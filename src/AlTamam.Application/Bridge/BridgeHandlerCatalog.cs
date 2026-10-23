@@ -220,6 +220,36 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.DeactivateStatusAsync(req.Payload, principal!, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.StatusDefinitionChanged)) : Fail(req, inner);
         },
+        "PreviewInternalTransfer" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelMovementService(services.Db,services.Time);
+            BridgeResponse result=await service.PreviewAsync(req.Payload,principal!,false,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "CommitInternalTransfer" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelMovementService(services.Db,services.Time);
+            BridgeResponse result=await service.CommitAsync(req.Payload,principal!,false,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "PreviewExternalTransfer" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelMovementService(services.Db,services.Time);
+            BridgeResponse result=await service.PreviewAsync(req.Payload,principal!,true,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "CommitExternalTransfer" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelMovementService(services.Db,services.Time);
+            BridgeResponse result=await service.CommitAsync(req.Payload,principal!,true,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "QueryMovementArchive" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelMovementService(services.Db,services.Time);
+            BridgeResponse result=await service.ArchiveAsync(req.Payload,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         // Settings: read real configuration, audit manual encrypted backup.
         // No fake success for scheduled backups, restore or destructive reset.
         "GetSettingsOverview" => async (req, principal, ct) =>
