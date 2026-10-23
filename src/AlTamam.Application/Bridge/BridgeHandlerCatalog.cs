@@ -96,7 +96,7 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await services.ListActiveStatusesAsync(ct).ConfigureAwait(false);
             return Done(req, inner.Data);
         },
-        "SearchPersons" or "QueryPersons" or "SearchActivePersonsForAccount" => async (req, principal, ct) =>
+        "SearchPersons" or "SearchActivePersonsForAccount" => async (req, principal, ct) =>
         {
             string term = req.Payload?["term"]?.GetValue<string>() ?? "";
             int take = TryInt(req.Payload?["take"], 25);
@@ -130,6 +130,46 @@ public static class BridgeHandlerCatalog
                 ["offline"] = true,
                 ["bridgeProtocol"] = BridgeProtocol.ProtocolVersion
             })),
+        // Phase 05 already contains real person CRUD; expose its canonical bridge
+        // contracts instead of accidentally routing QueryPersons to a 25-row search.
+        "QueryPersons" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.QueryPersonsAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "GetPersonSummary" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.GetPersonSummaryAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "PreviewPersonIdentityUpdate" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.PreviewPersonIdentityUpdateAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "UpdatePersonIdentity" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.UpdatePersonIdentityAsync(principal!.UserId, principal.Username,
+                req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "PreviewArchivePersons" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.PreviewArchivePersonsAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
+        "ArchivePersons" => async (req, principal, ct) =>
+        {
+            var svc = new PersonRosterService(services.Db);
+            BridgeResponse inner = await svc.ArchivePersonsAsync(principal!.UserId, principal.Username,
+                req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            return inner with { RequestId = req.RequestId };
+        },
         // Configuration writes are registered with server-side role checks and
         // audit/identity-history updates in the same encrypted transaction.
         "CreateSite" => async (req, principal, ct) =>
