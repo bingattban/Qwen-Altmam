@@ -1999,6 +1999,31 @@
       }
     },
     {
+      "action": "SetOutputDirectory",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
       "action": "CreateVerifiedBackup",
       "owningService": "SettingsBackupService",
       "allowedRoles": [
