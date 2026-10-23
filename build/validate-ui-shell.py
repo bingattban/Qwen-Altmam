@@ -48,8 +48,16 @@ def main() -> None:
     check("WindowStyle=\"SingleBorderWindow\"" in xaml, "WPF title-bar style missing")
     check("ResizeMode=\"CanResize\"" in xaml, "WPF resize controls missing")
     check("SystemParameters.WorkArea" in window, "screen-sized initial window missing")
-    check("AppName=التمام الشهري" in iss, "Arabic installer app name missing")
-    check("DefaultGroupName=التمام الشهري" in iss, "Arabic Start Menu name missing")
+    check("AppName=التمام اليومي" in iss, "Arabic installer app name missing")
+    check("DefaultGroupName=التمام اليومي" in iss, "Arabic Start Menu name missing")
+    check('Name: "{autodesktop}\\التمام اليومي"' in iss,
+          "Arabic desktop shortcut missing")
+    check("التمام الشهري" not in iss, "obsolete monthly app name remains in installer")
+    check("Task.Run(PrepareServicesAsync)" in window,
+          "database startup no longer overlaps WebView2 initialization")
+    check("startupPanel.Visibility = Visibility.Collapsed" in window,
+          "loading placeholder must close after verified UI navigation")
+    check('x:Name="startupMessage"' in xaml, "Arabic native startup feedback missing")
     missing = [r["localAssetPath"] for r in manifest["screens"]
                if not (UI / r["localAssetPath"]).is_file()]
     check(not missing, f"missing route files: {missing[:5]}")
@@ -58,7 +66,7 @@ def main() -> None:
         in (UI / r["localAssetPath"]).read_text(encoding="utf-8")
         for r in manifest["screens"]
     )
-    print(f"UI SHELL GUARD PASS: 4 Arabic sections, 69 paths, 90 bridge contracts.")
+    print(f"UI SHELL GUARD PASS: 4 Arabic sections, 69 paths, 93 bridge contracts.")
     print(f"FUNCTIONAL COMPLETENESS: {scaffolded}/69 pages still show a placeholder.")
     print("Passing this guard does NOT count as completed user-facing integration.")
 
