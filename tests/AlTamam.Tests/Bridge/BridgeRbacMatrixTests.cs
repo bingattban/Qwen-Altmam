@@ -180,18 +180,26 @@ public sealed class BridgeRbacMatrixTests
     [InlineData("CommitExternalTransfer")]
     [InlineData("RemoveSiteAndReassignCurrentPersons")]
     [InlineData("UpdateBackupSchedule")]
-    public async Task DangerousActions_SupervisorAndUnauthenticated_AlwaysDeniedBeforeHandler(string action)
+    public async Task DangerousActions_SupervisorFollowsCanonicalRoles_UnauthenticatedAlwaysDenied(string action)
     {
         var dispatcher = BuildAuditedDispatcher(out List<string> executed);
+        var manifestAction = ActionManifest.All.Single(a => a.Action == action);
+        bool supervisorAllowed = manifestAction.AllowedRoles.Contains("Supervisor", StringComparer.Ordinal);
 
-        foreach (string nonce in new[] { NonceSv, NonceUnknown })
-        {
-            BridgeDispatchResult result = await dispatcher.DispatchAsync(
-                Envelope(action, nonce, $"DNG-{action}-{nonce[..4]}"),
-                ValidOrigin, isMainFrame: true, Authenticate);
-            Assert.Equal(nonce == NonceUnknown ? BridgeOutcomeKind.Unauthorized : BridgeOutcomeKind.Forbidden, result.Kind);
-        }
-        Assert.Empty(executed);
+        BridgeDispatchResult supervisor = await dispatcher.DispatchAsync(
+            Envelope(action, NonceSv, $"DNG-{action}-SV"),
+            ValidOrigin, isMainFrame: true, Authenticate);
+        Assert.Equal(supervisorAllowed ? BridgeOutcomeKind.Success : BridgeOutcomeKind.Forbidden, supervisor.Kind);
+        Assert.Equal(supervisorAllowed, supervisor.Response.Success);
+        Assert.Equal(supervisorAllowed ? new[] { action } : Array.Empty<string>(), executed);
+
+        BridgeDispatchResult unknownSession = await dispatcher.DispatchAsync(
+            Envelope(action, NonceUnknown, $"DNG-{action}-UNKNOWN"),
+            ValidOrigin, isMainFrame: true, Authenticate);
+        Assert.Equal(BridgeOutcomeKind.Unauthorized, unknownSession.Kind);
+        Assert.Equal(BridgeErrorCodes.SessionExpired, unknownSession.Response.ErrorCode);
+        Assert.False(unknownSession.Response.Success);
+        Assert.Equal(supervisorAllowed ? new[] { action } : Array.Empty<string>(), executed);
     }
 
     [Fact]
