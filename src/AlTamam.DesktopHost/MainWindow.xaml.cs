@@ -167,7 +167,9 @@ public partial class MainWindow : Window
                 PreparedServices ready = await preparing.ConfigureAwait(true);
                 _dbContext = ready.Database;
                 _gateway = ready.Gateway;
-                _gateway.FolderPicker = current =>
+                // A bridge handler may run on a worker thread. Marshal the native
+                // WPF directory picker to its owning STA Dispatcher, never a pool thread.
+                _gateway.FolderPicker = current => Dispatcher.InvokeAsync(() =>
                 {
                     var dialog = new Microsoft.Win32.OpenFolderDialog
                     {
@@ -175,9 +177,8 @@ public partial class MainWindow : Window
                         InitialDirectory = Directory.Exists(current) ? current :
                             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
                     };
-                    string? result = dialog.ShowDialog(this) == true ? dialog.FolderName : null;
-                    return Task.FromResult(result);
-                };
+                    return dialog.ShowDialog(this) == true ? dialog.FolderName : null;
+                }).Task;
                 _scheduler = ready.Scheduler;
             }
         }
