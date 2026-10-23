@@ -340,7 +340,7 @@ public sealed class BridgeRbacMatrixTests
             "{\"requestId\":\"X\",\"protocolVersion\":1,\"action\":\"CommitFullReset\",\"sessionNonce\":\"short\",\"payload\":{}}",           // bad nonce format
             "{\"requestId\":\"" + new string('R', 65) + "\",\"protocolVersion\":1,\"action\":\"GetCurrentSession\",\"sessionNonce\":\"" + NonceGa + "\",\"payload\":{}}", // oversized id
             "{\"requestId\":\"X\",\"protocolVersion\":1,\"action\":\"GetCurrentSession\",\"sessionNonce\":\"" + NonceGa + "\",\"payload\":" + new string('[', 40) + "{}" + new string(']', 40) + "}", // deep nesting probe
-            "\0\1\2 binary garbage \u0000",
+            "\0\u0001\u0002 binary garbage \u0000",
         };
         foreach (string raw in hostile)
         {
