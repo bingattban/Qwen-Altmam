@@ -352,6 +352,154 @@ public sealed class DailyMonthlyReadService
         });
     }
 
+    /// <summary>
+    /// Explains one historical monthly cell without mutating effective dates or records.
+    /// Attendance and movement details come from committed snapshots, not today's catalogs.
+    /// </summary>
+    public async Task<BridgeResponse> MonthlyCellDetailsAsync(JsonObject? payload, CancellationToken ct)
+    {
+        string personId = ReadString(payload, "personId");
+        string requestedSite = ReadString(payload, "siteId");
+        if (personId.Length is < 1 or > 128 || !TryBusinessDate(payload, out var date))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "اختر فرداً وتاريخاً صالحين لعرض تفاصيل اليوم.");
+        string dateIso = Iso(date);
+        using var connection = _db.CreateOpenConnection();
+        using var person = connection.CreateCommand();
+        person.CommandText = """
+            SELECT COALESCE((SELECT h.NameSnapshot FROM PersonIdentityHistory h
+                   WHERE h.PersonId=p.PersonId AND h.ValidFromLocalDate <= $date
+                     AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $date)
+                   ORDER BY h.ValidFromLocalDate DESC LIMIT 1),p.CurrentVisibleName),
+                   COALESCE((SELECT h.ServiceNumberASnapshot FROM PersonIdentityHistory h
+                   WHERE h.PersonId=p.PersonId AND h.ValidFromLocalDate <= $date
+                     AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $date)
+                   ORDER BY h.ValidFromLocalDate DESC LIMIT 1),p.CurrentServiceNumberA)
+            FROM Persons p WHERE p.PersonId=$person AND p.FirstRecordedLocalDate <= $date;
+            """;
+        person.Parameters.AddWithValue("$person", personId);
+        person.Parameters.AddWithValue("$date", dateIso);
+        string name, serviceNumber;
+        using (var r = await person.ExecuteReaderAsync(ct).ConfigureAwait(false))
+        {
+            if (!await r.ReadAsync(ct).ConfigureAwait(false))
+                return BridgeHelpers.Error(BridgeErrorCodes.MissingData, "لا يوجد فرد بهذا المعرف في التاريخ المحدد.");
+            name = r.GetString(0);
+            serviceNumber = r.GetString(1);
+        }
+
+        string? assignedSiteId = null;
+        string siteName = "غير محدد";
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT a.SiteId, COALESCE((SELECT h.VisibleNameSnapshot FROM SiteNameHistory h
+                       WHERE h.SiteId=a.SiteId AND h.ValidFromLocalDate <= $date
+                         AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $date)
+                       ORDER BY h.ValidFromLocalDate DESC LIMIT 1),s.VisibleName)
+                FROM PersonAssignments a JOIN Sites s ON s.SiteId=a.SiteId
+                WHERE a.PersonId=$person AND a.ValidFromLocalDate <= $date
+                  AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
+                ORDER BY a.ValidFromLocalDate DESC LIMIT 1;
+                """;
+            cmd.Parameters.AddWithValue("$person", personId);
+            cmd.Parameters.AddWithValue("$date", dateIso);
+            using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await r.ReadAsync(ct).ConfigureAwait(false))
+            {
+                assignedSiteId = r.GetString(0);
+                siteName = r.GetString(1);
+            }
+        }
+
+        JsonObject? attendance = null;
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT StatusId,StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                       SiteIdAtEffectiveDate,SiteNameSnapshot,Source,CreatedByUserId,
+                       CommittedAtUtc,RevisionNumber
+                FROM AttendanceRecords WHERE PersonId=$person AND AttendanceLocalDate=$date;
+                """;
+            cmd.Parameters.AddWithValue("$person", personId);
+            cmd.Parameters.AddWithValue("$date", dateIso);
+            using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await r.ReadAsync(ct).ConfigureAwait(false))
+                attendance = new JsonObject
+                {
+                    ["statusId"] = r.GetString(0), ["statusName"] = r.GetString(1),
+                    ["symbol"] = r.GetString(2), ["color"] = r.GetString(3),
+                    ["siteId"] = r.GetString(4), ["siteName"] = r.GetString(5),
+                    ["source"] = r.GetString(6), ["actorUserId"] = r.GetString(7),
+                    ["committedAtUtc"] = r.GetString(8), ["revisionNumber"] = r.GetInt32(9)
+                };
+        }
+
+        JsonObject? movement = null;
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                SELECT MovementId,MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                       DestinationSiteId,DestinationSiteNameSnapshot,DestinationExternalName,
+                       SeparationReason,CommittedAtUtc,ActorUserId
+                FROM PersonnelMovements WHERE PersonId=$person AND EffectiveLocalDate=$date
+                ORDER BY CommittedAtUtc DESC LIMIT 1;
+                """;
+            cmd.Parameters.AddWithValue("$person", personId);
+            cmd.Parameters.AddWithValue("$date", dateIso);
+            using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await r.ReadAsync(ct).ConfigureAwait(false))
+                movement = new JsonObject
+                {
+                    ["movementId"] = r.GetString(0), ["type"] = r.GetInt32(1),
+                    ["sourceSiteId"] = r.GetString(2), ["sourceSiteName"] = r.GetString(3),
+                    ["destinationSiteId"] = r.IsDBNull(4) ? null : r.GetString(4),
+                    ["destinationSiteName"] = r.IsDBNull(5) ? null : r.GetString(5),
+                    ["destinationExternalName"] = r.IsDBNull(6) ? null : r.GetString(6),
+                    ["separationReason"] = r.IsDBNull(7) ? null : r.GetString(7),
+                    ["committedAtUtc"] = r.GetString(8), ["actorUserId"] = r.GetString(9)
+                };
+        }
+
+        // The UI's site filter is a security-sensitive historical perspective.
+        // Do not return a record merely because a PersonId from another site was submitted.
+        bool matchesSite = requestedSite.Length == 0 || assignedSiteId == requestedSite ||
+            attendance?["siteId"]?.GetValue<string>() == requestedSite ||
+            movement?["sourceSiteId"]?.GetValue<string>() == requestedSite ||
+            movement?["destinationSiteId"]?.GetValue<string>() == requestedSite;
+        if ((!matchesSite) || (assignedSiteId is null && attendance is null && movement is null))
+            return BridgeHelpers.Error(BridgeErrorCodes.MissingData, "لا توجد واقعة لهذا الفرد في الموقع والتاريخ المحددين.");
+
+        var revisions = new JsonArray();
+        if (attendance is not null)
+        {
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                SELECT BeforeStatusNameSnapshot,AfterStatusNameSnapshot,Reason,ActorUserId,
+                       ExecutedAtUtc,AuthorizationMethod
+                FROM AttendanceRevisions WHERE PersonId=$person AND TargetLocalDate=$date
+                ORDER BY RevisionId LIMIT 100;
+                """;
+            cmd.Parameters.AddWithValue("$person", personId);
+            cmd.Parameters.AddWithValue("$date", dateIso);
+            using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await r.ReadAsync(ct).ConfigureAwait(false))
+                revisions.Add(new JsonObject
+                {
+                    ["beforeStatus"] = r.GetString(0), ["afterStatus"] = r.GetString(1),
+                    ["reason"] = r.GetString(2), ["actorUserId"] = r.GetString(3),
+                    ["executedAtUtc"] = r.GetString(4), ["authorizationMethod"] = r.GetString(5)
+                });
+        }
+        return BridgeHelpers.Ok(new JsonObject
+        {
+            ["personId"] = personId, ["businessDate"] = dateIso,
+            ["personName"] = name, ["serviceNumberA"] = serviceNumber,
+            ["siteId"] = assignedSiteId, ["siteName"] = siteName,
+            ["attendance"] = attendance, ["movement"] = movement,
+            ["revisions"] = revisions
+        });
+    }
+
     private static void BindPeriod(SqliteCommand cmd, string start, string next, string site)
     {
         cmd.Parameters.AddWithValue("$start", start);

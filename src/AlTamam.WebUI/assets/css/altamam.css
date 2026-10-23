@@ -667,6 +667,16 @@ table.monthly-table thead .sticky-col-4 {
 .monthly-scroll{max-height:64vh}
 .monthly-scroll .functional-table{width:max-content;min-width:100%}
 .monthly-scroll .day-cell{min-width:47px;text-align:center;white-space:nowrap}
+.monthly-day-detail{font:inherit;cursor:pointer;color:inherit;background:transparent;border:0;
+ padding:5px 8px;min-width:100%;font-weight:700}
+.monthly-day-detail:focus-visible{outline:2px solid var(--accent-teal);outline-offset:2px}
+.monthly-cell-details{margin-block:10px;line-height:1.75}
+.monthly-detail-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.monthly-detail-content{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:10px}
+.monthly-detail-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.monthly-detail-row span{overflow-wrap:anywhere}
+.monthly-detail-revisions{grid-column:1/-1;border-top:1px solid var(--border-color);padding-top:12px}
+.monthly-detail-revision{padding:10px 0;border-bottom:1px solid var(--border-color)}
 .monthly-scroll .fixed-one{right:0;width:62px;min-width:62px}
 .monthly-scroll .fixed-two{right:62px;width:118px;min-width:118px}
 .monthly-scroll .fixed-three{right:180px;width:190px;min-width:190px;max-width:190px;overflow:hidden;text-overflow:ellipsis}

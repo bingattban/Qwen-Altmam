@@ -227,9 +227,69 @@
     const tool=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
     const tableHost=el("section","card");
+    const detailsBox=el("section","card monthly-cell-details");
+    detailsBox.hidden=true;
     const bottom=el("form","card functional-archive");
-    append(container,tool,feedback,tableHost,bottom);
+    append(container,tool,feedback,detailsBox,tableHost,bottom);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
+    let detailsRequest=0;
+    const item=(label,value)=>{
+      const row=el("div","monthly-detail-row");
+      append(row,el("strong","",label+"："),el("span","",value==null||value===""?"—":value));
+      return row;
+    };
+    async function showCellDetails(personId,date){
+      const request=++detailsRequest;
+      detailsBox.hidden=false;
+      detailsBox.replaceChildren(message("جارٍ قراءة الواقعة المحفوظة..."));
+      try{
+        const response=await bridge().invoke("GetMonthlyCellDetails",{
+          personId,businessDate:date,siteId:STATE.siteId
+        });
+        if(STATE.monthEpoch!==epoch||request!==detailsRequest)return;
+        const data=parseData(response);
+        if(!data||data.personId!==personId||data.businessDate!==date)
+          throw new Error("لم تتطابق البيانات التاريخية مع اليوم المختار.");
+        const top=el("div","monthly-detail-heading");
+        const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailsBox.hidden=true;
+          detailsBox.replaceChildren();});
+        append(top,el("h3","section-title","تفاصيل التمام — "+date),close);
+        const content=el("div","monthly-detail-content");
+        append(content,item("الاسم",data.personName),item("الرقم (ع)",data.serviceNumberA),
+          item("الموقع في هذا اليوم",data.attendance?.siteName||data.siteName));
+        if(data.attendance){
+          append(content,item("التحضير المعتمد",data.attendance.statusName),
+            item("رمز التحضير",data.attendance.symbol),
+            item("تاريخ ووقت الاعتماد UTC",data.attendance.committedAtUtc),
+            item("منفّذ التحضير",data.attendance.actorUserId),
+            item("عدد نسخ التحضير",data.attendance.revisionNumber));
+        }else content.appendChild(item("التحضير","لا يوجد تحضير معتمد لهذا اليوم"));
+        if(data.movement){
+          const m=data.movement;
+          const kind=m.type===3?"فصل":m.type===2?"نقل خارجي":"نقل داخلي";
+          append(content,item("الواقعة الإدارية",kind),
+            item("من الموقع",m.sourceSiteName),
+            item("إلى",m.destinationSiteName||m.destinationExternalName),
+            item("سبب الفصل",m.separationReason),
+            item("وقت الاعتماد UTC",m.committedAtUtc));
+        }
+        if(Array.isArray(data.revisions)&&data.revisions.length){
+          const list=el("div","monthly-detail-revisions");
+          list.appendChild(el("h4","section-title","تاريخ تعديل التحضير"));
+          for(const revision of data.revisions){
+            const entry=el("div","monthly-detail-revision");
+            append(entry,item("التغيير",revision.beforeStatus+" ← "+revision.afterStatus),
+              item("السبب",revision.reason),item("المنفذ",revision.actorUserId),
+              item("الوقت UTC",revision.executedAtUtc));
+            list.appendChild(entry);
+          }
+          content.appendChild(list);
+        }
+        detailsBox.replaceChildren(top,content);
+      }catch(e){
+        if(STATE.monthEpoch===epoch&&request===detailsRequest)showError(detailsBox,e);
+      }
+    }
     const showMonth=async()=>{
       STATE.monthPage=1;await renderMonthly();
     };
@@ -289,8 +349,14 @@
         for(let day=1;day<=dayCount;day++){
           const date=period+"-"+String(day).padStart(2,"0");
           const info=(person.days||{})[date];
-          const cell=el("td","day-cell",info?info.symbol:"");
+          const cell=el("td","day-cell");
           cell.title=info?info.name:"لا يوجد تحضير مسجل";
+          if(info){
+            const open=button(info.symbol||"تفاصيل",()=>showCellDetails(person.personId,date),
+              "monthly-day-detail");
+            open.setAttribute("aria-label","عرض تفاصيل "+person.name+" في "+date);
+            cell.appendChild(open);
+          }
           if(info && /^#[0-9a-fA-F]{6}$/.test(info.color||""))
             cell.style.backgroundColor=info.color;
           tr.appendChild(cell);
