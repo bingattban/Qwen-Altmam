@@ -29,12 +29,12 @@ public sealed class SecretHygieneAndFailureTests : IDisposable
     // -------------------------------------------------- SQLCipher/native failure behaviour
 
     [Fact]
-    public void WrongKey_FailsToOpen_AndFailureMessageLeaksNothing()
+    public async Task WrongKey_FailsToOpen_AndFailureMessageLeaksNothing()
     {
         string correctKey = SyntheticFixtures.TestKeyHex;
         using (var context = new AlTamamDbContext(_dbPath, correctKey))
         {
-            context.InitializeAsync().GetAwaiter().GetResult();
+            await context.InitializeAsync();
         }
 
         string wrongKey = Convert.ToHexString(Encoding.UTF8.GetBytes("0123456789abcdef0123456789abcdef")).ToLowerInvariant();
@@ -105,7 +105,7 @@ public sealed class SecretHygieneAndFailureTests : IDisposable
                     || text.Contains("Trace.Write", StringComparison.Ordinal)
                     || text.Contains("EventLog.WriteEntry", StringComparison.Ordinal);
             })
-            .Select(Path.GetFileName)
+            .Select(file => Path.GetFileName(file) ?? throw new InvalidOperationException("Source file name is missing."))
             .ToArray();
         Assert.Empty(offenders);
     }
@@ -130,7 +130,7 @@ public sealed class SecretHygieneAndFailureTests : IDisposable
                     || text.Contains("-----BEGIN RSA PRIVATE KEY", StringComparison.Ordinal)
                     || Regex_LikeProtectedBlob(text);
             })
-            .Select(Path.GetRelativePath)
+            .Select(file => Path.GetRelativePath(repo, file))
             .ToArray();
         Assert.Empty(suspicious);
     }
