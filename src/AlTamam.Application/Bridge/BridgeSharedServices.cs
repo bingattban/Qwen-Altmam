@@ -17,6 +17,7 @@ public sealed class BridgeSharedServices
 {
     private readonly AlTamamDbContext _db;
     private readonly TimeProvider _time;
+    public Func<string?,Task<string?>>? PickOutputDirectoryAsync { get; set; }
 
     public BridgeSharedServices(AlTamamDbContext database, TimeProvider? timeProvider = null)
     {
@@ -133,7 +134,7 @@ public sealed class BridgeSharedServices
             }
 
             string nonce = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
-            DateTimeOffset expiry = nowUtc.AddMinutes(480);
+            DateTimeOffset expiry = nowUtc.AddMinutes(10);
             using var session = connection.CreateCommand();
             session.Transaction = tx;
             session.CommandText = @"INSERT INTO UserSessions (SessionNonce, UserId, Role, IssuedAtUtc, ExpiresAtUtc, RevokedFlag)
@@ -165,6 +166,26 @@ public sealed class BridgeSharedServices
         if (!await reader.ReadAsync(ct).ConfigureAwait(false)) return null;
         var principal = new BridgePrincipal(reader.GetString(0), reader.GetString(1), (UserRole)reader.GetInt32(2), sessionNonce);
         return principal;
+    }
+
+    /// <summary>
+    /// Renew the server-side ten-minute idle deadline only after a real UI activity
+    /// heartbeat. Ordinary background queries do not extend the session.
+    /// Expired sessions cannot be revived by reusing an old nonce.
+    /// </summary>
+    public async Task RefreshSessionIdleDeadlineAsync(string nonce,CancellationToken ct=default)
+    {
+        if(!BridgeProtocol.IsValidSessionNonceFormat(nonce))return;
+        using var c=_db.CreateOpenConnection();
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="""
+            UPDATE UserSessions SET ExpiresAtUtc=$newExpiry
+            WHERE SessionNonce=$nonce AND RevokedFlag=0 AND ExpiresAtUtc>$now;
+            """;
+        cmd.Parameters.AddWithValue("$nonce",nonce);
+        cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
+        cmd.Parameters.AddWithValue("$newExpiry",_time.GetUtcNow().AddMinutes(10).ToString("O"));
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Revokes the presenting session (Logout / SessionEnded).</summary>
