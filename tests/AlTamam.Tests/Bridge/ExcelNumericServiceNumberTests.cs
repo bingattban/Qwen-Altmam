@@ -95,7 +95,7 @@ public sealed class ExcelNumericServiceNumberTests : IAsyncLifetime, IDisposable
         using var reader = await command.ExecuteReaderAsync();
         var numbers = new List<string>();
         while (await reader.ReadAsync()) numbers.Add(reader.GetString(0));
-        Assert.Equal(new[] { "00007", "12345", "123000", "123456789012345" }, numbers);
+        Assert.Equal(new[] { "00007", "123000", "12345", "123456789012345" }, numbers);
     }
 
     [Fact]
