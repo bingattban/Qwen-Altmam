@@ -385,6 +385,24 @@ public sealed class PersonRosterService
                 return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
                     $"«الرقم (ع)» المطبَّع مطابق للفرد النشط «{clash}» بعد التدقيق داخل المعاملة.");
 
+            // A single calendar day cannot hold two identity snapshots: refuse a
+            // same-day/backdated edit before any write, rather than relying on a
+            // database constraint exception that would become an opaque UI error.
+            using (var existing = connection.CreateCommand())
+            {
+                existing.Transaction = tx;
+                existing.CommandText = """
+                    SELECT ValidFromLocalDate FROM PersonIdentityHistory
+                    WHERE PersonId = $id AND ValidToLocalDate IS NULL
+                    ORDER BY ValidFromLocalDate DESC, HistoryId DESC LIMIT 1;
+                    """;
+                existing.Parameters.AddWithValue("$id", personId);
+                string? from = await existing.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+                if (from is not null && string.CompareOrdinal(effectiveDate, from) <= 0)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                        "لا يمكن تغيير هوية الفرد مرتين في اليوم نفسه أو بتاريخ يسبق هويته الحالية.");
+            }
+
             // Close the open identity snapshot exactly at the effective date (exclusive end).
             using var close = connection.CreateCommand();
             close.Transaction = tx;
