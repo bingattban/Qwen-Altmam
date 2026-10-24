@@ -59,7 +59,7 @@ const document={createElement:tag=>new El(tag),
   querySelector:selector=>selector===".app-sidebar"?sidebar:null,
   addEventListener:(name,fn)=>{events[name]=fn;}};
 const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
-  requestAnimationFrame:fn=>fn()}},
+  requestAnimationFrame:fn=>fn()},
   document,location:{hash:"#monthly"},history:{replaceState:()=>{}},Date,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/js/functional-screens.js"),"utf8"),context);
