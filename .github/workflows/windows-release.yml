@@ -1,6 +1,6 @@
 name: Windows Release Packages (Phase 15)
 
-# On EVERY push to main, builds the genuine WPF executable, validates the publish layout, produces BOTH
+# On EVERY PR and every push to main, test BEFORE publishing the genuine WPF executable and producing BOTH
 # release artifacts (Portable ZIP + Inno Setup installer), verifies runtime
 # dependencies and emits SHA-256 checksums + build metadata.
 # Publishing a GitHub Release is intentionally NOT done here: 15.08 requires the
@@ -19,16 +19,9 @@ on:
   push:
     branches: ['main']
     tags: ['v*']
+  # No path filtering: documentation, domain, auth, workflow and test changes
+  # all require the exact same full pre-merge Release test + packaging gate.
   pull_request:
-    paths:
-      - '.github/workflows/windows-release.yml'
-      - 'build/**'
-      - 'src/AlTamam.DesktopHost/**'
-      - 'src/AlTamam.Contracts/Bridge/LocalWebUiOrigin.cs'
-      - 'src/AlTamam.WebUI/**'
-      - 'src/AlTamam.Application/**'
-      - 'src/AlTamam.Infrastructure/**'
-      - 'tests/**'
 
 # Only the newest revision of a branch needs a build. Avoid CI overload when
 # successive implementation commits land; the final commit still builds fully.
@@ -144,6 +137,7 @@ jobs:
           if-no-files-found: error
 
   package:
+    # HARD DEPENDENCY: no test success => no Portable/Installer output.
     name: Publish, validate, portable ZIP + installer (15.02-15.07)
     needs: build-test
     runs-on: windows-latest
