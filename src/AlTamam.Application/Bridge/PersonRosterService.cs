@@ -474,8 +474,13 @@ public sealed class PersonRosterService
     {
         IReadOnlyList<string> ids = ReadStringArray(payload, "personIds");
         string effectiveDate = ReadEffectiveDate(payload);
-        if (ids.Count == 0)
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "اختر فرداً واحداً على الأقل للتمهيد.");
+        if (effectiveDate != Today())
+            return BridgeHelpers.Error(BridgeErrorCodes.HistoricDayLocked,
+                "لا يمكن إجراء أرشفة بأثر رجعي أو تغيير اليوم المغلق؛ اختر التاريخ المحلي الحالي.");
+        if (ids.Count == 0 || ids.Any(string.IsNullOrWhiteSpace) ||
+            ids.Distinct(StringComparer.Ordinal).Count() != ids.Count)
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "اختر أفراداً موجودين دون تكرار للمعاينة.");
 
         using var connection = _db.CreateOpenConnection();
         var candidates = new JsonArray();
