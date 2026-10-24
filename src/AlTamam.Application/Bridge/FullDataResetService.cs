@@ -180,8 +180,13 @@ public sealed class FullDataResetService
             // password-confirmed FULL reset. Every original trigger is recreated before commit.
             // All tables are deleted with deferred foreign-key checks; no partial reset may commit.
             using(var defer=c.CreateCommand())
-            { defer.Transaction=t;defer.CommandText="PRAGMA defer_foreign_keys=ON;";
-              await defer.ExecuteNonQueryAsync(ct).ConfigureAwait(false); }
+            {
+                defer.Transaction=t;
+                // secure_delete overwrites freed SQLite payload pages instead of
+                // leaving old encrypted-but-decryptable records on the freelist.
+                defer.CommandText="PRAGMA secure_delete=ON; PRAGMA defer_foreign_keys=ON;";
+                await defer.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
             foreach(var trigger in triggers)
                 await Execute(c,t,$"DROP TRIGGER \"{trigger.Name.Replace("\"","\"\"")}\";",ct).ConfigureAwait(false);
             foreach(string table in tables)
