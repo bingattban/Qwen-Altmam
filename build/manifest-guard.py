@@ -22,7 +22,7 @@ PATH = "src/AlTamam.WebUI/action-manifest.json"
 CODE_PATH = "src/AlTamam.Application/Bridge/ActionManifest.cs"
 ROLES = {"Unauthenticated", "GeneralAdministration", "OrdinaryAdministration", "Supervisor"}
 GA_ONLY_RESET = {"PreviewFullReset", "CommitFullReset"}
-GA_ONLY_CORRECTION = {"SetClosedDayCorrectionPolicy","PreviewClosedDayCorrection","CommitClosedDayCorrection"}
+ADMIN_CORRECTION = {"SetClosedDayCorrectionPolicy","PreviewClosedDayCorrection","CommitClosedDayCorrection"}
 MUTATING_DANGEROUS = {"CommitFullReset", "RestoreDatabaseAtomically"}
 
 def main() -> int:
@@ -51,8 +51,8 @@ def main() -> int:
         name = a["action"]
         if name in GA_ONLY_RESET and set(a["allowedRoles"]) != {"GeneralAdministration"}:
             errors.append(f"{name}: full-reset family must be GeneralAdministration-only")
-        if name in GA_ONLY_CORRECTION and set(a["allowedRoles"]) != {"GeneralAdministration"}:
-            errors.append(f"{name}: historical correction must be GA-only")
+        if name in ADMIN_CORRECTION and set(a["allowedRoles"]) != {"GeneralAdministration", "OrdinaryAdministration"}:
+            errors.append(f"{name}: closed-day correction must allow both administrations and forbid supervisors")
         if name in MUTATING_DANGEROUS and "GeneralAdministration" not in a["allowedRoles"]:
             errors.append(f"{name}: dangerous mutating action lost GA authorization")
         if a.get("isMutating") and not a.get("idempotentByRequestId"):
