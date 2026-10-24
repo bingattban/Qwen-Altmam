@@ -186,7 +186,7 @@ public sealed class PersonRosterService
         string normalizedName = ArabicTextNormalizer.NormalizeForSearch(visibleName);
         if (!ServiceNumberPolicy.TryCanonicalize(serviceNumber, out serviceNumber))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "الرقم (ع) يجب أن يتكون من خمسة أرقام على الأقل؛ لا تستخدم الرقم التسلسلي العادي.");
+                "الرقم (ع) يجب أن يتكون من أربعة أرقام على الأقل؛ لا تستخدم الرقم التسلسلي العادي.");
         string normalizedNumber = serviceNumber;
         string siteName = ReadString(payload, "siteName").Trim();
         if (siteName.Length == 0) siteName = "غير محدد";
