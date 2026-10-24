@@ -35,7 +35,7 @@ public sealed class SettingsReadBackupService
         {
             ["username"]=person.Username,["role"]=person.Role.ToString(),
             ["roleLabelAr"]=person.Role.ToArabicLabel(),
-            ["backupDirectory"]=backupPath,["defaultDriveAvailable"]=Directory.Exists(backupPath),
+            ["backupDirectory"]=backupPath,["defaultDriveAvailable"]=OutputDirectorySettings.IsUsableDirectory(backupPath,_db.DatabasePath),
             ["backupTime"]=schedule,
             ["automaticBackupOperational"]=false,
             ["automaticBackupNote"]="الجدولة اليومية ليست نشطة بعد؛ لا تعتمد عليها قبل إكمال اختبار تشغيلها.",
