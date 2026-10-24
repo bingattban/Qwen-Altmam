@@ -3,7 +3,7 @@ using AlTamam.Domain.Policies;
 namespace AlTamam.Application.Bridge;
 
 /// <summary>
-/// الرقم (ع) is an identifier of at least five numeric digits, not the
+/// الرقم (ع) is an identifier of at least four numeric digits, not the
 /// ordinary row serial number in printed attendance rosters.
 /// Store ASCII digits in SQLCipher to keep duplicate checks unambiguous.
 /// </summary>
@@ -14,7 +14,7 @@ internal static class ServiceNumberPolicy
         value = "";
         if (string.IsNullOrWhiteSpace(input)) return false;
         input = input.Trim();
-        if (input.Length is < 5 or > 70) return false;
+        if (input.Length is < 4 or > 70) return false;
         var chars = new char[input.Length];
         for (int i = 0; i < input.Length; i++)
         {
