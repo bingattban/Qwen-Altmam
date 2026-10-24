@@ -1020,6 +1020,18 @@
         finally{updateFolder.disabled=false;}
       },"btn btn-primary settings-action");
       backup.append(folder.wrap,choose,updateFolder,folderNote);
+      if(!info.defaultDriveAvailable){
+        saveFolderNotice();
+      }
+      function saveFolderNotice(){
+        const message="هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح: "+
+          info.backupDirectory+"\nهل تريد تحديد مجلد جديد الآن؟";
+        folderNote.replaceChildren(warning("مسار النسخ والتصدير غير متاح؛ لن تُحفظ الملفات فيه."));
+        save.disabled=true;
+        void dialogs.confirm(message).then(confirmed=>{
+          if(confirmed && token===currentRequest)choose.click();
+        });
+      }
       const scheduleNote=warning(info.automaticBackupNote||
         "النسخ الاحتياطي التلقائي غير مفعل بعد، حتى لو كان وقت الجدولة محفوظاً.");
       backup.appendChild(scheduleNote);
