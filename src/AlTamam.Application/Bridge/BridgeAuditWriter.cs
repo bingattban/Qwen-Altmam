@@ -50,11 +50,45 @@ public static class BridgeAuditWriter
 
         using var priorCmd = connection.CreateCommand();
         priorCmd.Transaction = transaction;
-        priorCmd.CommandText = "SELECT EventHash FROM AuditEvents ORDER BY ExecutedAtUtc DESC, AuditEventId DESC LIMIT 1;";
+        priorCmd.CommandText = "SELECT EventHash FROM AuditEvents ORDER BY rowid DESC LIMIT 1;";
         string priorHash = await priorCmd.ExecuteScalarAsync(ct).ConfigureAwait(false) as string ?? "GENESIS";
 
+        // Never trust caller-supplied display names: a roster service may pass the TARGET
+        // person's name, while the audit actor must be the ACCOUNT OWNER at event time.
+        // Resolve from the database inside the SAME transaction as the mutation.
+        string? actorPersonId = null;
+        string? actorRosterFullName = null;
+        using (var actor = connection.CreateCommand())
+        {
+            actor.Transaction = transaction;
+            actor.CommandText = """
+                SELECT u.Username, u.LinkedPersonId,
+                       COALESCE((SELECT h.NameSnapshot FROM PersonIdentityHistory h
+                                 WHERE h.PersonId = u.LinkedPersonId
+                                   AND h.ValidFromLocalDate <= $date
+                                   AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $date)
+                                 ORDER BY h.ValidFromLocalDate DESC, h.HistoryId DESC LIMIT 1),
+                                p.CurrentVisibleName)
+                FROM Users u LEFT JOIN Persons p ON p.PersonId = u.LinkedPersonId
+                WHERE u.UserId = $userId;
+                """;
+            actor.Parameters.AddWithValue("$userId", actorUserId);
+            actor.Parameters.AddWithValue("$date", time.GetLocalNow().ToString("yyyy-MM-dd"));
+            using var row = await actor.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await row.ReadAsync(ct).ConfigureAwait(false))
+            {
+                actorUsername = row.GetString(0);
+                actorPersonId = row.IsDBNull(1) ? null : row.GetString(1);
+                actorRosterFullName = row.IsDBNull(2) ? null : row.GetString(2);
+            }
+            // An unlinked founding administrator must remain unlinked, not borrow
+            // a name from the target. Its setup full name is handled by the
+            // first-use-account implementation, not fabricated here.
+        }
+        _ = actorDisplayName; // kept only for compatibility with existing service signatures.
+
         string body = string.Join('\n',
-            operationCode, operationArabicName, actorUserId, actorUsername, actorDisplayName ?? "",
+            operationCode, operationArabicName, actorUserId, actorUsername, actorRosterFullName ?? "",
             targetEntityType, targetEntityId, targetDisplay, oldValueJson ?? "", newValueJson ?? "",
             description, reason ?? "", effectiveLocalDate, nowUtc.ToString("O"), correlationId, priorHash);
         string eventHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(body))).ToLowerInvariant();
@@ -66,15 +100,16 @@ public static class BridgeAuditWriter
                                      ActorUsernameSnapshot, ActorRosterFullNameSnapshot, TargetEntityType, TargetEntityId,
                                      TargetDisplaySnapshot, OldValueJson, NewValueJson, DefaultArabicDescription, Reason,
                                      EffectiveLocalDate, ExecutedAtUtc, CorrelationId, EventHash, PriorEventHash)
-            VALUES ($id, $code, $arName, $actor, NULL, $username, $display, $tType, $tId, $tDisplay,
+            VALUES ($id, $code, $arName, $actor, $actorPerson, $username, $display, $tType, $tId, $tDisplay,
                     $old, $new, $desc, $reason, $eff, $now, $corr, $hash, $prior);
             """;
         insert.Parameters.AddWithValue("$id", auditEventId);
         insert.Parameters.AddWithValue("$code", operationCode);
         insert.Parameters.AddWithValue("$arName", operationArabicName);
         insert.Parameters.AddWithValue("$actor", actorUserId);
+        insert.Parameters.AddWithValue("$actorPerson", (object?)actorPersonId ?? DBNull.Value);
         insert.Parameters.AddWithValue("$username", actorUsername);
-        insert.Parameters.AddWithValue("$display", (object?)actorDisplayName ?? DBNull.Value);
+        insert.Parameters.AddWithValue("$display", (object?)actorRosterFullName ?? DBNull.Value);
         insert.Parameters.AddWithValue("$tType", targetEntityType);
         insert.Parameters.AddWithValue("$tId", targetEntityId);
         insert.Parameters.AddWithValue("$tDisplay", targetDisplay);
