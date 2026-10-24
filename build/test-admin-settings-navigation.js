@@ -146,7 +146,12 @@ async function run() {
   byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="reports").handlers.click();
 
-  controller.renderAdmin({ role:"Supervisor" });
+  controller.renderAdmin({role:"OrdinaryAdministration",username:"test-admin"});
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="reports").handlers.click();
+  assert.ok(byDataset("adminNested").some(x=>x.dataset.adminNested==="closedCorrection"),
+    "ordinary admin has permission to open closed-day correction");
+    controller.renderAdmin({ role:"Supervisor" });
   assert.equal(byDataset("adminSection").length,4,"supervisor cannot see users card");
   assert.ok(!byDataset("adminSection").some(x=>x.dataset.adminSection==="users"));
 
