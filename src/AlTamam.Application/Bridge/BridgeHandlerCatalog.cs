@@ -275,7 +275,7 @@ public static class BridgeHandlerCatalog
         "PreviewArchivePersons" => async (req, principal, ct) =>
         {
             var svc = new PersonRosterService(services.Db);
-            BridgeResponse inner = await svc.PreviewArchivePersonsAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            BridgeResponse inner = await svc.PreviewArchivePersonsAsync(req.Payload ?? new JsonObject(), principal!.UserId, ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
         "ArchivePersons" => async (req, principal, ct) =>
