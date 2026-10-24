@@ -137,7 +137,7 @@ public sealed class ExcelPersonnelImportService
                 item.NormalizedName != ArabicTextNormalizer.NormalizeForSearch(item.Name) ||
                 !ServiceNumberPolicy.TryCanonicalize(item.Number, out string canonical) ||
                 item.NormalizedNumber != canonical)
-                reason = "الرقم (ع) يجب أن يتكون من خمسة أرقام على الأقل، وهو غير الرقم التسلسلي العادي.";
+                reason = "الرقم (ع) يجب أن يتكون من أربعة أرقام على الأقل، وهو غير الرقم التسلسلي العادي.";
             else if (item.SiteName.Length is < 2 or > 100 || item.SiteName.Any(char.IsControl))
                 reason = "اسم الموقع غير صالح.";
             else if (!seen.Add(item.NormalizedNumber))
