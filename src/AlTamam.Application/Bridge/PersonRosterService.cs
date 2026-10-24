@@ -198,6 +198,9 @@ public sealed class PersonRosterService
         DateTimeOffset nowUtc = _time.GetUtcNow();
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                connection,tx,"CreatePerson",userId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var dup = connection.CreateCommand();
             dup.Transaction = tx;
             dup.CommandText = "SELECT EXISTS(SELECT 1 FROM Persons WHERE NormalizedServiceNumberA = $n AND ActiveFlag = 1);";
@@ -300,8 +303,10 @@ public sealed class PersonRosterService
                 description: $"أُنشئ سجل الفرد «{visibleName}» بالمعرف الثابت {personId}.",
                 reason: null, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
 
+            var outcome=new JsonObject { ["personId"] = personId, ["siteId"] = siteId, ["revision"] = 1L };
+            await MutationIdempotency.StoreAsync(connection,tx,receipt,outcome,_time,ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(
-                new JsonObject { ["personId"] = personId, ["siteId"] = siteId, ["revision"] = 1L },
+                outcome,
                 revision: 1,
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.AttendanceCommitted, effectiveDate, [personId]));
         }, ct).ConfigureAwait(false);

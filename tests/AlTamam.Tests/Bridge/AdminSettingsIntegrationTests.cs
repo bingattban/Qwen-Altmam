@@ -47,6 +47,78 @@ public sealed class AdminSettingsIntegrationTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task CreateSite_RetrySameOperation_ReusesOriginalIdWithoutSecondAudit()
+    {
+        var svc=new AdminConfigurationService(_db);
+        var payload=new JsonObject{["name"]="المحطة التجريبية",["operationId"]="OPERATION-SITE-000001"};
+        var first=await svc.CreateSiteAsync(payload,Actor,CancellationToken.None);
+        var replay=await svc.CreateSiteAsync((JsonObject)payload.DeepClone(),Actor,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        Assert.True(replay.Success,replay.UserMessage);
+        string original=Assert.IsType<JsonObject>(first.Data)["siteId"]!.GetValue<string>();
+        Assert.Equal(original,Assert.IsType<JsonObject>(replay.Data)["siteId"]!.GetValue<string>());
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM SiteNameHistory WHERE SiteId=$id;";
+        q.Parameters.AddWithValue("$id",original);
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE TargetEntityId=$id AND OperationCode='SITE_CREATE';";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText="SELECT COUNT(*) FROM MutationReceipts WHERE ActorUserId=$actor AND OperationId=$op;";
+        q.Parameters.AddWithValue("$actor",Actor.UserId);
+        q.Parameters.AddWithValue("$op","OPERATION-SITE-000001");
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task StatusCreation_DifferentPayloadWithReusedOperationId_IsConflict()
+    {
+        var svc=new AdminConfigurationService(_db);
+        var payload=new JsonObject{["name"]="حالة مؤقتة",["symbol"]="ح",
+            ["color"]="#2277DD",["operationId"]="OPERATION-STATUS-000001"};
+        var first=await svc.CreateStatusAsync(payload,Actor,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var replay=await svc.CreateStatusAsync((JsonObject)payload.DeepClone(),Actor,CancellationToken.None);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data)["statusId"]!.GetValue<string>(),
+            Assert.IsType<JsonObject>(replay.Data)["statusId"]!.GetValue<string>());
+        var changed=(JsonObject)payload.DeepClone();
+        changed["color"]="#BB5511";
+        var conflict=await svc.CreateStatusAsync(changed,Actor,CancellationToken.None);
+        Assert.False(conflict.Success);
+        Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.ConflictStale,conflict.ErrorCode);
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='STATUS_CREATE';";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task CreatePerson_ExactRetry_LeavesOnePermanentIdentifierAndAssignment()
+    {
+        var svc=new PersonRosterService(_db);
+        var payload=new JsonObject{["visibleName"]="فرد تجريبي للتزامن",
+            ["serviceNumberA"]="4782",["siteName"]="غير محدد",
+            ["operationId"]="OPERATION-PERSON-000001"};
+        var first=await svc.CreatePersonAsync(Actor.UserId,Actor.Username,payload,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var replay=await svc.CreatePersonAsync(Actor.UserId,Actor.Username,
+            (JsonObject)payload.DeepClone(),CancellationToken.None);
+        Assert.True(replay.Success,replay.UserMessage);
+        string original=Assert.IsType<JsonObject>(first.Data)["personId"]!.GetValue<string>();
+        Assert.Equal(original,Assert.IsType<JsonObject>(replay.Data)["personId"]!.GetValue<string>());
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM Persons WHERE PersonId=$id;";
+        q.Parameters.AddWithValue("$id",original);
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText="SELECT COUNT(*) FROM PersonAssignments WHERE PersonId=$id;";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_CREATE' AND TargetEntityId=$id;";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
     public async Task CustomStatus_RemainsSafeToDeactivateWithAudit()
     {
         var svc = new AdminConfigurationService(_db);

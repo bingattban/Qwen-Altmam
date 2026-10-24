@@ -151,6 +151,9 @@ public sealed class UserAccountManagementService
         string id="USR-"+Guid.NewGuid().ToString("N"),now=_time.GetUtcNow().ToString("O");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"CreateUserAccount",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var person=c.CreateCommand();person.Transaction=t;
             person.CommandText="""
                 SELECT CurrentVisibleName,CurrentServiceNumberA FROM Persons
@@ -196,8 +199,10 @@ public sealed class UserAccountManagementService
             await Audit(c,t,actor,"USER_CREATE","إضافة حساب",id,username,null,
                 new JsonObject{["role"]=role.ToString(),["personId"]=personId,
                     ["name"]=personName,["serviceNumberA"]=number}.ToJsonString(),ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject{["userId"]=id,["username"]=username,
-                ["role"]=role.ToString(),["linkedPersonId"]=personId});
+            var outcome=new JsonObject{["userId"]=id,["username"]=username,
+                ["role"]=role.ToString(),["linkedPersonId"]=personId};
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
         },ct).ConfigureAwait(false);
     }
 
