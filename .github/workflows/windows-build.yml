@@ -91,6 +91,26 @@ jobs:
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
           --configuration Release --no-restore --logger "trx;LogFileName=core-tests.trx"
           --results-directory TestResults
+      - name: Capture measured ten-thousand-person search benchmark and Windows runner metadata
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path PerformanceEvidence -Force | Out-Null
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release --no-restore `
+            --filter "FullyQualifiedName~TenThousandSearchDiagnostics" `
+            --logger "console;verbosity=detailed" 2>&1 |
+            Tee-Object -FilePath PerformanceEvidence/ten-thousand-person-search.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic performance measurement failed' }
+          $measure=Get-Content PerformanceEvidence/ten-thousand-person-search.txt |
+            Select-String -Pattern 'SECTION01_PERF|SECTION01_HW'
+          if (-not $measure) { throw 'No measured performance or hardware characteristics recorded' }
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Section 01 hardware measurements"
+          foreach ($line in $measure) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- " + $line.Line) }
+      - name: Upload synthetic search performance evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: section01-search-10k-perf-windows
+          path: PerformanceEvidence/ten-thousand-person-search.txt
+          if-no-files-found: error
       - name: Upload test results artifact
         if: always()
         uses: actions/upload-artifact@v4
