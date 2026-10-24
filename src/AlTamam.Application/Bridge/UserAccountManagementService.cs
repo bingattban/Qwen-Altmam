@@ -41,7 +41,11 @@ public sealed class UserAccountManagementService
     private static long ReadLong(JsonObject? data, string key)
     {
         try { return data?[key]?.GetValue<long>() ?? 0; }
-        catch { return 0; }
+        catch
+        {
+            try { return data?[key]?.GetValue<int>() ?? 0; }
+            catch { return 0; }
+        }
     }
     private static BridgeResponse Error(string explanation, string code = BridgeErrorCodes.ValidationError)
         => BridgeHelpers.Error(code, explanation);
