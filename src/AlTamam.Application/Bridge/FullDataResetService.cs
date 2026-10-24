@@ -28,18 +28,57 @@ public sealed class FullDataResetService
 
     private static BridgeResponse Refuse(string code,string message)=>BridgeHelpers.Error(code,message);
 
+    // Full-content fingerprint rather than SUM(RowVersion) or row counts:
+    // the latter can falsely match when two records change in opposite ways.
+    // PreviewTokens and idle-only UserSessions are excluded because issuing a
+    // preview or extending a session must not make that preview stale.
     private static async Task<long> Revision(SqliteConnection c, SqliteTransaction? t, CancellationToken ct)
     {
-        using var cmd=c.CreateCommand();
-        cmd.Transaction=t;
-        cmd.CommandText="""
-            SELECT (SELECT COUNT(*) FROM AuditEvents)
-                   + (SELECT COUNT(*) FROM Users) * 1000003
-                   + (SELECT COUNT(*) FROM Persons) * 1000033
-                   + (SELECT COUNT(*) FROM AttendanceRecords) * 1000211
-                   + (SELECT COUNT(*) FROM PersonnelMovements) * 1000249;
-            """;
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
+        using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var tables=new List<string>();
+        using(var q=c.CreateCommand())
+        {
+            q.Transaction=t;
+            q.CommandText="""
+                SELECT name FROM sqlite_master WHERE type='table'
+                AND name NOT LIKE 'sqlite_%'
+                AND name NOT IN ('SchemaVersions','PreviewTokens','UserSessions')
+                ORDER BY name;
+                """;
+            using var reader=await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false)) tables.Add(reader.GetString(0));
+        }
+        foreach(string table in tables)
+        {
+            Feed(hash,table);
+            using var q=c.CreateCommand();
+            q.Transaction=t;
+            q.CommandText=$"SELECT * FROM \"{table.Replace("\"","\"\"")}\" ORDER BY rowid;";
+            using var reader=await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                for(int i=0;i<reader.FieldCount;i++)
+                {
+                    if(await reader.IsDBNullAsync(i,ct).ConfigureAwait(false))
+                        Feed(hash,"<NULL>");
+                    else if(reader.GetValue(i) is byte[] bytes)
+                    {
+                        Feed(hash,"<BLOB>"); Feed(hash,Convert.ToHexString(bytes));
+                    }
+                    else Feed(hash,Convert.ToString(reader.GetValue(i),
+                        System.Globalization.CultureInfo.InvariantCulture)??"");
+                }
+                Feed(hash,"<ROW>");
+            }
+        }
+        return BitConverter.ToInt64(hash.GetHashAndReset(),0)&long.MaxValue;
+    }
+
+    private static void Feed(IncrementalHash hash,string text)
+    {
+        byte[] bytes=Encoding.UTF8.GetBytes(text);
+        hash.AppendData(BitConverter.GetBytes(bytes.Length));
+        hash.AppendData(bytes);
     }
 
     private static async Task<long> Count(SqliteConnection c,string table,CancellationToken ct)
