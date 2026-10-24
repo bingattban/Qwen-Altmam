@@ -96,9 +96,10 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
             cmd.CommandText="INSERT INTO FailedLoginEvents(UsernameAttempted,AttemptedAtUtc,FailureReason) VALUES('a','2026-10-24T00:00:00Z','test');";
             await cmd.ExecuteNonQueryAsync();return 0;
         });
-        // Previous versions did not include FailedLoginEvents in the revision.
-        // The preview token remains single-use, but this test documents an
-        // adverse concurrent writer that must be surfaced after strengthening.
+        var outcome=await svc.CommitAsync(CommitArgs(preview),_admin,default);
+        Assert.False(outcome.Success);
         Assert.Equal(1,Count("Users"));
+        Assert.Equal(1,Count("AuditEvents"));
+        Assert.Equal(1,Count("FailedLoginEvents"));
     }
 }
