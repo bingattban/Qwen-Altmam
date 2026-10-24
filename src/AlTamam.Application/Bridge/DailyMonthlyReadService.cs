@@ -234,13 +234,19 @@ public sealed class DailyMonthlyReadService
             SELECT p.PersonId, COALESCE((
                       SELECT h.ServiceNumberASnapshot FROM PersonIdentityHistory h
                       WHERE h.PersonId = p.PersonId AND h.ValidFromLocalDate <= $end
-                      ORDER BY h.ValidFromLocalDate DESC LIMIT 1), p.CurrentServiceNumberA),
+                        AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $end)
+                      ORDER BY h.ValidFromLocalDate DESC LIMIT 1), 'غير موثق تاريخياً'),
                    COALESCE((
                       SELECT h.NameSnapshot FROM PersonIdentityHistory h
                       WHERE h.PersonId = p.PersonId AND h.ValidFromLocalDate <= $end
-                      ORDER BY h.ValidFromLocalDate DESC LIMIT 1), p.CurrentVisibleName),
+                        AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $end)
+                      ORDER BY h.ValidFromLocalDate DESC LIMIT 1), 'غير موثق تاريخياً'),
                    COALESCE((
-                      SELECT s.VisibleName FROM PersonAssignments a JOIN Sites s ON s.SiteId = a.SiteId
+                      SELECT COALESCE((SELECT hn.VisibleNameSnapshot FROM SiteNameHistory hn
+                                   WHERE hn.SiteId = a.SiteId AND hn.ValidFromLocalDate <= $end
+                                     AND (hn.ValidToLocalDate IS NULL OR hn.ValidToLocalDate > $end)
+                                   ORDER BY hn.ValidFromLocalDate DESC LIMIT 1), 'غير موثق تاريخياً')
+                      FROM PersonAssignments a
                       WHERE a.PersonId = p.PersonId AND a.ValidFromLocalDate < $next
                         AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $start)
                         AND ($site = '' OR a.SiteId = $site)
@@ -282,7 +288,16 @@ public sealed class DailyMonthlyReadService
             }
             cells.CommandText = """
                 SELECT ar.PersonId, ar.AttendanceLocalDate, ar.StatusNameSnapshot,
-                       ar.StatusSymbolSnapshot, ar.StatusColorSnapshot, ar.SiteIdAtEffectiveDate
+                       ar.StatusSymbolSnapshot, ar.StatusColorSnapshot, ar.SiteIdAtEffectiveDate,
+                       (SELECT h.NameSnapshot FROM PersonIdentityHistory h
+                        WHERE h.PersonId=ar.PersonId AND h.ValidFromLocalDate<=ar.AttendanceLocalDate
+                          AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate>ar.AttendanceLocalDate)
+                        ORDER BY h.ValidFromLocalDate DESC LIMIT 1),
+                       (SELECT h.ServiceNumberASnapshot FROM PersonIdentityHistory h
+                        WHERE h.PersonId=ar.PersonId AND h.ValidFromLocalDate<=ar.AttendanceLocalDate
+                          AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate>ar.AttendanceLocalDate)
+                        ORDER BY h.ValidFromLocalDate DESC LIMIT 1),
+                       ar.SiteNameSnapshot
                 FROM AttendanceRecords ar
                 WHERE ar.AttendanceLocalDate >= $start AND ar.AttendanceLocalDate < $next
                   AND ar.PersonId IN (
@@ -298,7 +313,12 @@ public sealed class DailyMonthlyReadService
                 {
                     ["name"] = reader.GetString(2),
                     ["symbol"] = reader.GetString(3),
-                    ["color"] = reader.GetString(4)
+                    ["color"] = reader.GetString(4),
+                    // A month may contain more than one identity/site version.
+                    // Render each dated cell from its own historical identity and site snapshot.
+                    ["personName"] = reader.IsDBNull(6) ? null : reader.GetString(6),
+                    ["serviceNumberA"] = reader.IsDBNull(7) ? null : reader.GetString(7),
+                    ["siteName"] = reader.GetString(8)
                 };
             }
             reader.Close();
