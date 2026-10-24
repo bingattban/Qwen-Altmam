@@ -1,6 +1,9 @@
 name: Windows Core Build
 on:
+  # Validate proposed code on its PR BEFORE promotion to main.
+  # Main is validated again after a successful PR merge.
   push:
+    branches: ['main']
   pull_request:
   workflow_dispatch:
 # Only the newest revision of a branch needs a build. Avoid CI overload when
