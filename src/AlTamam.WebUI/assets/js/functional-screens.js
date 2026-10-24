@@ -118,7 +118,11 @@
     const form=el("form","card auth-form");
     const name=field("text","اسم المستخدم",true);
     const pass=field("password","كلمة المرور",true);
-    pass.input.minLength=8;
+    // Existing users may have historical credentials; only NEW founders must
+    // satisfy the current strong-password policy during initialization.
+    const confirmation=field("password","تأكيد كلمة المرور",true);
+    const foundingName=field("text","الاسم الكامل لصاحب الحساب",false);
+    let firstUse=false;
     const note=el("p","section-description","يعمل البرنامج على هذا الجهاز دون اتصال بالإنترنت.");
     const status=el("div","auth-status");
     const submit=el("button","btn btn-primary","دخول"); submit.type="submit";
@@ -127,24 +131,40 @@
     try {
       const provisioning=parseData(await bridge().invoke("GetProvisioningState",{}));
       if (provisioning && provisioning.provisioned===false) {
-        note.textContent="التهيئة الأولى: سيُنشأ حساب الإدارة العامة بكلمة مرور لا تقل عن ثمانية أحرف. احتفظ بها في مكان آمن.";
+        firstUse=true;
+        container.replaceChildren(header("التهيئة الأولى"),form);
+        note.textContent="أنشئ اسم المستخدم وكلمة مرور قوية مع تأكيدها. لا توجد بيانات دخول افتراضية.";
         submit.textContent="إنشاء الإدارة العامة والدخول";
+        pass.input.minLength=10;
         pass.input.autocomplete="new-password";
+        confirmation.input.minLength=10;
+        confirmation.input.autocomplete="new-password";
+        foundingName.input.maxLength=200;
+        form.replaceChildren(name.wrapper,foundingName.wrapper,pass.wrapper,
+          confirmation.wrapper,note,status,submit);
       }
     } catch(e) { showError(status,e); }
     form.addEventListener("submit",async event=>{
       event.preventDefault(); submit.disabled=true;
       status.replaceChildren(message("جارٍ التحقق من الحساب…"));
       try {
-        const result=parseData(await bridge().invoke("AuthenticateLocalUser",{
-          username:name.input.value.trim(), password:pass.input.value
-        }));
+        const payload={username:name.input.value.trim(),password:pass.input.value};
+        if(firstUse){
+          if(pass.input.value!==confirmation.input.value)
+            throw new Error("تأكيد كلمة المرور غير مطابق لكلمة المرور.");
+          payload.setupIntent="firstTimeSetup";
+          payload.passwordConfirmation=confirmation.input.value;
+          payload.fullName=foundingName.input.value.trim();
+        }
+        const result=parseData(await bridge().invoke("AuthenticateLocalUser",payload));
         if (!result || !result.sessionNonce)
           throw new Error("لم يرجع خادم المصادقة جلسة صالحة.");
         bridge().setSessionNonce(result.sessionNonce);
         STATE.session=result;
         window.AltamamIdleGuard?.start(true,logout);
         pass.input.value="";
+        confirmation.input.value="";
+        foundingName.input.value="";
         document.querySelector(".app-sidebar").hidden=false;
         document.getElementById("headerRoleBadge").textContent=
           result.username+" — "+(result.roleLabelAr||result.role);
