@@ -119,10 +119,10 @@ public sealed class BridgeRbacMatrixTests
     }
 
     [Fact]
-    public void ManifestMirror_ContainsExactlyTheDeclaredNinetyThreeActions()
+    public void ManifestMirror_ContainsAll96DeclaredActions()
     {
-        Assert.Equal(95, ActionManifest.All.Length);
-        Assert.Equal(95, ActionManifest.All.Select(a => a.Action).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(96, ActionManifest.All.Length);
+        Assert.Equal(96, ActionManifest.All.Select(a => a.Action).Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]
