@@ -402,14 +402,14 @@ public sealed class AuditOverlayService
     /// exact day + actor + reason hash. Step 2 (execute): re-validates closure and permission and
     /// writes ONLY the structured audit evidence row; the attendance mutation itself belongs to the
     /// AttendanceService commit path which consumes the returned challenge token. This keeps the
-    /// correction strictly GeneralAdministration-gated, reason-bound and atomically audited.
+    /// correction strictly General/Ordinary Administration-gated, reason-bound and atomically audited.
     /// </summary>
     public async Task<BridgeResponse> RequestClosedDayCorrectionAsync(
         JsonObject payload, BridgePrincipal principal, CancellationToken ct)
     {
-        if (principal.Role != UserRole.GeneralAdministration)
+        if (principal.Role is not (UserRole.GeneralAdministration or UserRole.OrdinaryAdministration))
             return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
-                "التصحيح الاستثنائي لليوم المغلق متاح لمدير الإدارة العامة فقط.");
+                "التصحيح الاستثنائي لليوم المغلق متاح للإدارة العامة والإدارة العادية فقط.");
         string day = ReadString(payload, "businessDate");
         string reason = ReadString(payload, "reason");
         if (!IsValidDate(day))
