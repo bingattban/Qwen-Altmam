@@ -8,7 +8,7 @@ using Xunit;
 
 namespace AlTamam.Tests.Bridge;
 
-public sealed class PersonnelFiveDigitsAndSitesTests : IAsyncLifetime, IDisposable
+public sealed class PersonnelFourDigitsAndSitesTests : IAsyncLifetime, IDisposable
 {
     private readonly string _path = SyntheticFixtures.CreateTempDatabasePath();
     private AlTamamDbContext _db = null!;
@@ -34,22 +34,22 @@ public sealed class PersonnelFiveDigitsAndSitesTests : IAsyncLifetime, IDisposab
     }
 
     [Fact]
-    public async Task SinglePerson_RequiresFiveDigitsAndAutoCreatesOrReusesSiteWithHistory()
+    public async Task SinglePerson_RequiresFourDigitsAndAutoCreatesOrReusesSiteWithHistory()
     {
         var service = new PersonRosterService(_db);
         var invalid=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
-            ["visibleName"]="محمد صالح باصالح",["serviceNumberA"]="1234",["siteName"]="قطاع الشمال"
+            ["visibleName"]="محمد صالح باصالح",["serviceNumberA"]="123",["siteName"]="قطاع الشمال"
         },CancellationToken.None);
         Assert.False(invalid.Success);
         Assert.Equal(0,Count("SELECT COUNT(*) FROM Persons"));
         Assert.Equal(0,Count("SELECT COUNT(*) FROM Sites WHERE NormalizedName<>'غير محدد'"));
 
         var first=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
-            ["visibleName"]="محمد صالح باصالح",["serviceNumberA"]="١٢٣٤٥",["siteName"]="قطاع الشمال"
+            ["visibleName"]="محمد صالح باصالح",["serviceNumberA"]="١٢٣٤",["siteName"]="قطاع الشمال"
         },CancellationToken.None);
         Assert.True(first.Success,first.UserMessage);
         Assert.Equal(1,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='قطاع الشمال'"));
-        Assert.Equal("12345",Read("SELECT CurrentServiceNumberA FROM Persons WHERE NormalizedServiceNumberA='12345'"));
+        Assert.Equal("1234",Read("SELECT CurrentServiceNumberA FROM Persons WHERE NormalizedServiceNumberA='1234'"));
         Assert.Equal(1,Count("SELECT COUNT(*) FROM SiteNameHistory WHERE SiteId IN (SELECT SiteId FROM Sites WHERE VisibleName='قطاع الشمال')"));
         Assert.Equal(1,Count("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId IN (SELECT SiteId FROM Sites WHERE VisibleName='قطاع الشمال')"));
 
