@@ -725,11 +725,17 @@
       const frm=card("إضافة حالة جديدة");
       const name=field("اسم الحالة"), symbol=field("الرمز"),color=field("اللون","#38BDF8","color");
       const note=node("div","admin-note");
+      let statusPayload=null,statusOperation=null;
       const save=btn("إضافة حالة",async()=>{
         if(!await dialogs.confirm("تأكيد إضافة حالة التحضير «"+name.input.value.trim()+"»؟"))return;
         note.replaceChildren();save.disabled=true;
-        try {await api().invoke("CreateAttendanceStatus",{
-          name:name.input.value,symbol:symbol.input.value,color:color.input.value});
+        try {
+          const identity=JSON.stringify([name.input.value.trim(),symbol.input.value.trim(),color.input.value]);
+          if(statusPayload!==identity){statusPayload=identity;statusOperation=makeOperationId();}
+          await api().invoke("CreateAttendanceStatus",{
+            name:name.input.value,symbol:symbol.input.value,color:color.input.value,
+            operationId:statusOperation});
+          statusPayload=null;statusOperation=null;
           await statuses();}
         catch(e){errors(note,e);}finally{save.disabled=false;}
       },"btn btn-primary");
@@ -786,8 +792,8 @@
         String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0)));
     });
     const addMessage=node("div","admin-note");
-          let lastPersonPayload=null,lastPersonOperation=null;
-const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
+    let lastPersonPayload=null,lastPersonOperation=null;
+    const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
       const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
         siteName=siteField.input.value.trim()||"غير محدد";
       if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || siteName.length<2)
