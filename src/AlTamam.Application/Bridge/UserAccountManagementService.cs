@@ -74,7 +74,9 @@ public sealed class UserAccountManagementService
         using var cmd=c.CreateCommand();
         cmd.CommandText=$"""
             SELECT u.UserId, u.Username, u.Role, u.ActiveFlag, u.RowVersion,
-                COALESCE(p.CurrentVisibleName,'غير مرتبط بكشف القوة'),
+                CASE WHEN u.LinkedPersonId IS NULL AND u.Role = 1
+                     THEN 'الإدارة العامة - ' || u.Username
+                     ELSE COALESCE(p.CurrentVisibleName,'غير مرتبط بكشف القوة') END,
                 COALESCE(p.CurrentServiceNumberA,''),
                 u.LinkedPersonId, u.CreatedByDisplaySnapshot, u.CreatedAtUtc
             FROM Users u LEFT JOIN Persons p ON p.PersonId=u.LinkedPersonId
