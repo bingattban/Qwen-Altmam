@@ -21,6 +21,8 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
         UserRole.GeneralAdministration,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     private static readonly BridgePrincipal OtherGa = new("TST-CLOSED-GA-OTHER","tst-ga-other",
         UserRole.GeneralAdministration,"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    private static readonly BridgePrincipal Admin = new("TST-CLOSED-ADMIN","tst-admin",
+        UserRole.OrdinaryAdministration,"dddddddddddddddddddddddddddddddd");
     private static readonly BridgePrincipal Supervisor = new("TST-CLOSED-SV","tst-sv",
         UserRole.Supervisor,"cccccccccccccccccccccccccccccccc");
 
@@ -124,6 +126,39 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
         Assert.False(replay.Success);
         Assert.Equal(BridgeErrorCodes.ConflictStale,replay.ErrorCode);
         Assert.Equal("1",Stored("SELECT COUNT(*) FROM AttendanceRevisions"));
+    }
+
+    [Fact]
+    public async Task OrdinaryAdmin_CanCorrectWithReason_AndAuditRetainsOriginal()
+    {
+        var svc = new ClosedDayCorrectionService(_db);
+        var enabled = await svc.SetPolicyAsync(new JsonObject { ["enabled"] = true },
+            Admin, CancellationToken.None);
+        Assert.True(enabled.Success, enabled.UserMessage);
+        var missingReason = Request();
+        missingReason["reason"] = "";
+        var denied = await svc.PreviewAsync(missingReason, Admin, CancellationToken.None);
+        Assert.False(denied.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError, denied.ErrorCode);
+        Assert.Equal("موجود", Stored("SELECT StatusNameSnapshot FROM AttendanceRecords"));
+        var preview = await svc.PreviewAsync(Request(), Admin, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        var token = Assert.IsType<JsonObject>(preview.Data)["previewToken"]!.GetValue<string>();
+        var done = await svc.CommitAsync(new JsonObject { ["previewToken"] = token },
+            Admin, CancellationToken.None);
+        Assert.True(done.Success, done.UserMessage);
+        Assert.Equal("غياب", Stored("SELECT StatusNameSnapshot FROM AttendanceRecords"));
+        Assert.Equal("ordinary-admin-enabled-one-time-preview",
+            Stored("SELECT AuthorizationMethod FROM AttendanceRevisions"));
+        Assert.Equal("تصحيح معتمد بعد مراجعة المستندات الرسمية",
+            Stored("SELECT Reason FROM AttendanceRevisions"));
+        Assert.Equal("تصحيح معتمد بعد مراجعة المستندات الرسمية",
+            Stored("SELECT Reason FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTED'"));
+        Assert.Equal(OriginalTime, Stored("SELECT CommittedAtUtc FROM AttendanceRecords"));
+        Assert.Equal("1", Stored("SELECT IsClosed FROM PeriodClosures WHERE PeriodKey='2026-10-10'"));
+        var forbidden = await svc.PreviewAsync(Request(), Supervisor, CancellationToken.None);
+        Assert.False(forbidden.Success);
+        Assert.Equal(BridgeErrorCodes.Unauthorized, forbidden.ErrorCode);
     }
 
     [Fact]
