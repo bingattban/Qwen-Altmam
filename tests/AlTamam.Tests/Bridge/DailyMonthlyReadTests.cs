@@ -24,6 +24,10 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
                                 OrganizationalStatus, ActiveFlag, RowVersion)
             VALUES ('TST-P-1','شخص اختباري','شخص اختباري','X001','X001',
                     '2026-10-01','2026-10-01T07:00:00Z',1,1,1);
+            INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+            VALUES('TST-P-1','شخص اختباري','X001','2026-10-01',NULL,'TST-U',
+                '2026-10-01T07:00:00Z','هوية اختبار محفوظة');
             INSERT INTO PersonAssignments (AssignmentId, PersonId, SiteId, ValidFromLocalDate,
                                            ValidToLocalDate, SourceMovementId, CreatedAtUtc)
             VALUES ('TST-A-1','TST-P-1','SITE-UNSPECIFIED','2026-10-01',
