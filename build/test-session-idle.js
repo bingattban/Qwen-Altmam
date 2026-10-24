@@ -31,18 +31,18 @@ async function main(){
  assert.equal(guard.shouldLogout(),true,"old persisted session without last activity must reauthenticate");
  guard.start(true,async()=>{expired++;});
  assert.equal(guard.shouldLogout(),false);
- clock+=9*60*1000;
+ clock+=4*60*1000+59*1000;
  docListeners.get("keydown")({isTrusted:true});
  assert.equal(guard.shouldLogout(),false,"trusted activity updates last user time");
  assert.equal(heartbeats,1,"trusted activity sends the server refresh");
- clock+=11*60*1000;
+ clock+=5*60*1000;
  winListeners.get("focus")();
  await tick();
- assert.equal(expired,1,"resume after ten idle minutes locks the session");
+ assert.equal(expired,1,"resume at exactly five idle minutes locks the session");
  assert.equal(timer,null);
  assert.equal(saved.size,0,"lock clears persisted last activity");
  guard.start(true,async()=>{expired++;});
- clock+=10*60*1000+1;
+ clock+=5*60*1000+1;
  docListeners.get("pointerdown")({isTrusted:true});
  await tick();
  assert.equal(expired,2,"input AFTER timeout must not reactivate expired session");
@@ -53,6 +53,6 @@ async function main(){
  guard.start(false,async()=>{expired++;});
  assert.equal(guard.shouldLogout(),false,"boot can restore an already valid active session");
  guard.stop();
- console.log("IDLE GUARD UI PASS: 10-minute lock, server renewal on user activity, sleep/resume, persisted session gate");
+ console.log("IDLE GUARD UI PASS: 5-minute lock, server renewal on user activity, sleep/resume, persisted session gate");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
