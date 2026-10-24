@@ -57,7 +57,9 @@ public static class BridgeHandlerCatalog
             if(principal is null)
                 return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.SessionExpired,
                     "لا توجد جلسة نشطة."));
-            await services.RefreshSessionIdleDeadlineAsync(req.SessionNonce,ct).ConfigureAwait(false);
+            // Background session queries cannot extend genuine user inactivity.
+            if (req.Payload?["userActivity"]?.GetValue<bool>() == true)
+                await services.RefreshSessionIdleDeadlineAsync(req.SessionNonce,ct).ConfigureAwait(false);
             return Done(req,SessionData(principal));
         },
         "Logout" => async (req, principal, ct) =>
