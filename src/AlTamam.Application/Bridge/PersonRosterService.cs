@@ -536,6 +536,9 @@ public sealed class PersonRosterService
     {
         IReadOnlyList<string> ids = ReadStringArray(payload, "personIds");
         string effectiveDate = ReadEffectiveDate(payload);
+        if (effectiveDate != Today())
+            return BridgeHelpers.Error(BridgeErrorCodes.HistoricDayLocked,
+                "إزالة فرد من القوة تتم لليوم المحلي الحالي فقط، ولا تغيّر الأشهر المغلقة.");
         string reason = ReadString(payload, "reason") is { Length: > 0 } r ? r : "إخراج من القوة الفعالة بقرار محفوظ.";
         string token = ReadString(payload, "previewToken");
         if (ids.Count == 0 || ids.Any(string.IsNullOrWhiteSpace) ||
@@ -689,6 +692,9 @@ public sealed class PersonRosterService
     {
         string personId = ReadRequiredString(payload, "personId");
         string effectiveDate = ReadEffectiveDate(payload);
+        if (effectiveDate != Today())
+            return BridgeHelpers.Error(BridgeErrorCodes.HistoricDayLocked,
+                "العودة إلى القوة تبدأ من تاريخ اليوم المحلي فقط، دون إعادة كتابة التحضير السابق.");
         long expectedVersion = ReadLong(payload, "expectedRevision", -1);
         if (expectedVersion < 1)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
@@ -809,7 +815,7 @@ public sealed class PersonRosterService
         return (row, null);
     }
 
-    private string Today() => DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime).ToString("yyyy-MM-dd");
+    private string Today() => DateOnly.FromDateTime(_time.GetLocalNow().DateTime).ToString("yyyy-MM-dd");
 
     private string ReadEffectiveDate(JsonObject payload)
     {
