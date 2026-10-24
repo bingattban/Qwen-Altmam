@@ -12,7 +12,7 @@ namespace AlTamam.Tests.Performance;
 /// <summary>
 /// PHASE 14 step 14.05 — SQLite performance-index exercise with SYNTHETIC large personnel/month
 /// periods and concurrent-operation simulation, under a strict output-parity contract:
-///   * the benchmark runs against the REAL production schema (V001–V003) and the REAL production
+///   * the benchmark runs against the REAL production schema (V001–V004) and the REAL production
 ///     read path (<see cref="BridgeSharedServices.SearchPersonsAsync"/>) plus the canonical monthly
 ///     grid / daily roster SQL shapes used by the dashboard services;
 ///   * every measured query has an EXACT expected result computed independently of the query plan
@@ -307,10 +307,14 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
                         StatusNameSnapshot, StatusSymbolSnapshot, StatusColorSnapshot, AssignmentIdAtEffectiveDate,
                         SiteIdAtEffectiveDate, SiteNameSnapshot, Source, CreatedByUserId, CommittedAtUtc,
                         RevisionNumber, IdempotencyKey)
-                        VALUES ($pid,$d,'STS-PRESENT','موجود','م','#38BDF8',$aid,'SITE-UNSPECIFIED','موقع','manual','TST-USER-GA',$utc,1,$key);";
+                        VALUES ($pid,$d,'STS-PRESENT','موجود','م','#38BDF8',$aid,$site,'موقع','manual','TST-USER-GA',$utc,1,$key);";
                     cmd.Parameters.AddWithValue("$pid", $"TST-P-{personIdx:D6}");
                     cmd.Parameters.AddWithValue("$d", newDay);
                     cmd.Parameters.AddWithValue("$aid", $"TST-A-{personIdx:D6}");
+                    // Historical assignment/site must match: even synthetic concurrency
+                    // writes are subject to the same production database invariant.
+                    cmd.Parameters.AddWithValue("$site", personIdx % 2 == 0
+                        ? "SITE-TST-B" : SyntheticFixtures.SiteId);
                     cmd.Parameters.AddWithValue("$utc", DateTime.UtcNow.ToString("O"));
                     cmd.Parameters.AddWithValue("$key", $"CONC-{personIdx}");
                     await cmd.ExecuteNonQueryAsync();
