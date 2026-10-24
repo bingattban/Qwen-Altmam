@@ -121,7 +121,7 @@
     // Existing users may have historical credentials; only NEW founders must
     // satisfy the current strong-password policy during initialization.
     const confirmation=field("password","تأكيد كلمة المرور",true);
-    const foundingName=field("text","الاسم الكامل لصاحب الحساب",false);
+    const foundingName=field("text","الاسم الكامل لصاحب الحساب (اختياري)",false);
     let firstUse=false;
     const note=el("p","section-description","يعمل البرنامج على هذا الجهاز دون اتصال بالإنترنت.");
     const status=el("div","auth-status");
@@ -133,7 +133,7 @@
       if (provisioning && provisioning.provisioned===false) {
         firstUse=true;
         container.replaceChildren(header("التهيئة الأولى"),form);
-        note.textContent="أنشئ اسم المستخدم وكلمة مرور قوية مع تأكيدها. لا توجد بيانات دخول افتراضية.";
+        note.textContent="أنشئ اسم المستخدم وكلمة مرور قوية مع تأكيدها. الاسم الكامل اختياري؛ سيظهر الحساب «الإدارة العامة - اسم المستخدم» ويُضاف الاسم إن أدخلته. لا توجد بيانات دخول افتراضية.";
         submit.textContent="إنشاء الإدارة العامة والدخول";
         pass.input.minLength=10;
         pass.input.autocomplete="new-password";
