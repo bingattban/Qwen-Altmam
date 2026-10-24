@@ -197,6 +197,78 @@ public sealed class UserAccountManagementService
         },ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Only the unlinked founding GeneralAdmin may bind their existing account to a
+    /// REAL active roster PersonId. Retains UserId, role, credentials and every
+    /// historic audit snapshot. No synthetic service number or person is created.
+    /// </summary>
+    public async Task<BridgeResponse> LinkFoundingAccountAsync(
+        JsonObject? payload, BridgePrincipal actor, CancellationToken ct)
+    {
+        if (actor.Role != UserRole.GeneralAdministration)
+            return Error("ربط حساب التأسيس بفرد حقيقي محصور بالإدارة العامة.", BridgeErrorCodes.Unauthorized);
+        string personId = Read(payload, "personId");
+        long expected = ReadLong(payload,"expectedRevision");
+        if (string.IsNullOrWhiteSpace(personId) || expected < 1)
+            return Error("يجب تحديد فرد حقيقي وإصدار الحساب الحالي.");
+        return await _db.ExecuteInWriteTransactionAsync(async(c,t) =>
+        {
+            using var founding = c.CreateCommand();
+            founding.Transaction = t;
+            founding.CommandText = """
+                SELECT Role,LinkedPersonId,RowVersion,Username,FoundingFullName
+                FROM Users WHERE UserId=$actor AND ActiveFlag=1;
+                """;
+            founding.Parameters.AddWithValue("$actor",actor.UserId);
+            using(var reader = await founding.ExecuteReaderAsync(ct).ConfigureAwait(false))
+            {
+                if (!await reader.ReadAsync(ct).ConfigureAwait(false)
+                    || reader.GetInt32(0)!= (int)UserRole.GeneralAdministration)
+                    return Error("حساب الإدارة العامة غير متاح للربط.",BridgeErrorCodes.Unauthorized);
+                if (!reader.IsDBNull(1) || reader.GetInt64(2)!=expected)
+                    return Error("حساب التأسيس مرتبط مسبقًا أو تغير إصداره.",BridgeErrorCodes.ConflictStale);
+            }
+            using var person = c.CreateCommand();
+            person.Transaction=t;
+            person.CommandText = """
+                SELECT CurrentVisibleName FROM Persons
+                WHERE PersonId=$id AND ActiveFlag=1 AND OrganizationalStatus=1
+                  AND NOT EXISTS (SELECT 1 FROM Users u
+                                  WHERE u.LinkedPersonId=$id AND u.ActiveFlag=1);
+                """;
+            person.Parameters.AddWithValue("$id",personId);
+            string? name=await person.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+            if(name is null)
+                return Error("اختر فردًا نشطًا من الكشف الكلي غير مرتبط بحساب آخر.",
+                    BridgeErrorCodes.ValidationError);
+            using(var update=c.CreateCommand())
+            {
+                update.Transaction=t;
+                update.CommandText = """
+                    UPDATE Users SET LinkedPersonId=$person,RowVersion=RowVersion+1
+                    WHERE UserId=$actor AND Role=1 AND LinkedPersonId IS NULL
+                        AND RowVersion=$expected AND ActiveFlag=1;
+                    """;
+                update.Parameters.AddWithValue("$actor",actor.UserId);
+                update.Parameters.AddWithValue("$person",personId);
+                update.Parameters.AddWithValue("$expected",expected);
+                if(await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
+                    return Error("تغيرت بيانات الحساب أثناء عملية الربط.",BridgeErrorCodes.ConflictStale);
+            }
+            await BridgeAuditWriter.WriteAsync(c,t,_time,
+                "FOUNDING_ACCOUNT_LINKED","ربط حساب الإدارة العامة بالكشف الكلي",
+                actor.UserId,actor.Username,null,"User",actor.UserId,actor.Username,
+                new JsonObject{["linkedPersonId"]=(string?)null}.ToJsonString(),
+                new JsonObject{["linkedPersonId"]=personId}.ToJsonString(),
+                $"ربط حساب التأسيس بالفرد «{name}» دون تغيير المعرفات أو أدلة العمليات السابقة.",
+                Read(payload,"reason"),_time.GetLocalNow().ToString("yyyy-MM-dd"),
+                ct.CorrelationId(),ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(new JsonObject{
+                ["userId"]=actor.UserId,["personId"]=personId,["rowVersion"]=expected+1
+            });
+        },ct).ConfigureAwait(false);
+    }
+
     private async Task<BridgeResponse> ChangeAsync(JsonObject? payload,BridgePrincipal actor,
         bool deactivate,CancellationToken ct)
     {
