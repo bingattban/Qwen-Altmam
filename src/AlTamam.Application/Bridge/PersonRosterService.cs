@@ -596,56 +596,111 @@ public sealed class PersonRosterService
         }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Reverses an archive decision: restores Active status and reopens the latest assignment window.</summary>
+    /// <summary>
+    /// Re-activates a roster member without reopening a CLOSED historical assignment.
+    /// The new assignment begins at the requested effective date and preserves the
+    /// archived period as an actual gap in the person's immutable timeline.
+    /// </summary>
     public async Task<BridgeResponse> RestoreArchivedPersonAsync(string userId, string username, JsonObject payload, CancellationToken ct)
     {
         string personId = ReadRequiredString(payload, "personId");
         string effectiveDate = ReadEffectiveDate(payload);
-        DateTimeOffset nowUtc = _time.GetUtcNow();
+        long expectedVersion = ReadLong(payload, "expectedRevision", -1);
+        if (expectedVersion < 1)
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "إصدار الفرد السابق مطلوب للاسترجاع؛ حدّث بيانات الفرد أولاً.");
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
             using var find = connection.CreateCommand();
             find.Transaction = tx;
-            find.CommandText = "SELECT CurrentVisibleName, OrganizationalStatus FROM Persons WHERE PersonId = $id;";
-            find.Parameters.Add("$id", SqliteType.Text).Value = personId;
+            find.CommandText = """
+                SELECT CurrentVisibleName, OrganizationalStatus, ActiveFlag, RowVersion
+                FROM Persons WHERE PersonId=$id;
+                """;
+            find.Parameters.AddWithValue("$id", personId);
             using var reader = await find.ExecuteReaderAsync(ct).ConfigureAwait(false);
             if (!await reader.ReadAsync(ct).ConfigureAwait(false))
                 return BridgeHelpers.Error(BridgeErrorCodes.MissingData, "الفرد غير موجود.");
             string name = reader.GetString(0);
             int org = reader.GetInt32(1);
+            bool active = reader.GetInt32(2) == 1;
+            long revision = reader.GetInt64(3);
             reader.Close();
-            if (org != 4)
-                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "الفرد ليس في حالة أرشفة ليُسترجع.");
+            if (org != 4 || active || revision != expectedVersion)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                    "الفرد ليس مؤرشفاً بهذا الإصدار؛ حدّث الشاشة وأعد المحاولة.");
 
-            using var restore = connection.CreateCommand();
-            restore.Transaction = tx;
-            restore.CommandText = "UPDATE Persons SET OrganizationalStatus = 1, ActiveFlag = 1, RowVersion = RowVersion + 1 WHERE PersonId = $id;";
-            restore.Parameters.Add("$id", SqliteType.Text).Value = personId;
-            await restore.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            // Validate the entire history before mutating anything. A return must be
+            // after the most recent exclusive end, not a rewrite of an earlier interval.
+            string destinationSite = "SITE-UNSPECIFIED";
+            using (var latest = connection.CreateCommand())
+            {
+                latest.Transaction = tx;
+                latest.CommandText = """
+                    SELECT a.SiteId, a.ValidToLocalDate, s.ActiveFlag
+                    FROM PersonAssignments a JOIN Sites s ON s.SiteId=a.SiteId
+                    WHERE a.PersonId=$id
+                    ORDER BY a.ValidFromLocalDate DESC LIMIT 1;
+                    """;
+                latest.Parameters.AddWithValue("$id", personId);
+                using var prior = await latest.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if (await prior.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    string? lastEnd = prior.IsDBNull(1) ? null : prior.GetString(1);
+                    if (lastEnd is null || string.CompareOrdinal(effectiveDate, lastEnd) < 0)
+                        return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                            "تاريخ العودة يتداخل مع انتساب سابق أو لم تُغلق الفترة القديمة.");
+                    if (prior.GetInt32(2) == 1)
+                        destinationSite = prior.GetString(0);
+                }
+            }
 
-            using var reopen = connection.CreateCommand();
-            reopen.Transaction = tx;
-            reopen.CommandText = """
-                UPDATE PersonAssignments SET ValidToLocalDate = NULL
-                WHERE AssignmentId = (SELECT AssignmentId FROM PersonAssignments
-                                      WHERE PersonId = $id ORDER BY ValidFromLocalDate DESC LIMIT 1)
-                  AND ValidFromLocalDate < $date;
-                """;
-            reopen.Parameters.Add("$id", SqliteType.Text).Value = personId;
-            reopen.Parameters.Add("$date", SqliteType.Text).Value = effectiveDate;
-            await reopen.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-
+            string assignmentId = "ASG-" + Guid.NewGuid().ToString("N");
+            string now = _time.GetUtcNow().ToString("O");
+            using (var update = connection.CreateCommand())
+            {
+                update.Transaction = tx;
+                update.CommandText = """
+                    UPDATE Persons SET OrganizationalStatus=1, ActiveFlag=1,
+                        RowVersion=RowVersion+1
+                    WHERE PersonId=$id AND RowVersion=$expected
+                        AND OrganizationalStatus=4 AND ActiveFlag=0;
+                    """;
+                update.Parameters.AddWithValue("$id", personId);
+                update.Parameters.AddWithValue("$expected", expectedVersion);
+                if (await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale, "تغيّر إصدار الفرد أثناء الاسترجاع.");
+            }
+            using (var newAssignment = connection.CreateCommand())
+            {
+                newAssignment.Transaction = tx;
+                newAssignment.CommandText = """
+                    INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                        ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                    VALUES($assignment,$person,$site,$day,NULL,NULL,$now);
+                    """;
+                newAssignment.Parameters.AddWithValue("$assignment", assignmentId);
+                newAssignment.Parameters.AddWithValue("$person", personId);
+                newAssignment.Parameters.AddWithValue("$site", destinationSite);
+                newAssignment.Parameters.AddWithValue("$day", effectiveDate);
+                newAssignment.Parameters.AddWithValue("$now", now);
+                await newAssignment.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
             await BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 operationCode: "PERSON_RESTORE", operationArabicName: "استرجاع فرد مؤرشف",
                 actorUserId: userId, actorUsername: username, actorDisplayName: name,
                 targetEntityType: "Person", targetEntityId: personId, targetDisplay: name,
-                oldValueJson: new JsonObject { ["organizationalStatus"] = 4 }.ToJsonString(),
-                newValueJson: new JsonObject { ["organizationalStatus"] = 1 }.ToJsonString(),
-                description: $"استُرجع «{name}» إلى القوة الفعالة اعتباراً من {effectiveDate} (أرشفة عكسية تاريخية).",
+                oldValueJson: new JsonObject { ["organizationalStatus"] = 4, ["rowVersion"] = revision }.ToJsonString(),
+                newValueJson: new JsonObject { ["organizationalStatus"] = 1,
+                    ["rowVersion"] = revision + 1, ["newAssignmentId"] = assignmentId,
+                    ["siteId"] = destinationSite }.ToJsonString(),
+                description: $"استُرجع «{name}» إلى القوة الفعالة اعتباراً من {effectiveDate} بفترة انتساب جديدة تحفظ فجوة الأرشفة.",
                 reason: ReadString(payload, "reason"), effectiveLocalDate: effectiveDate,
                 correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
 
-            return BridgeHelpers.Ok(new JsonObject { ["personId"] = personId, ["restored"] = true },
+            return BridgeHelpers.Ok(new JsonObject { ["personId"] = personId, ["restored"] = true,
+                ["assignmentId"] = assignmentId, ["siteId"] = destinationSite,
+                ["revision"] = revision + 1 },
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelArchived, effectiveDate, [personId]));
         }, ct).ConfigureAwait(false);
     }
