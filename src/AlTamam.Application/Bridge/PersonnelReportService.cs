@@ -92,9 +92,17 @@ public sealed class PersonnelReportService
         long totalDays=Convert.ToInt64(await attendanceCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var attendance=conn.CreateCommand();
         attendance.CommandText="""
-            SELECT AttendanceLocalDate,StatusNameSnapshot,StatusSymbolSnapshot,
-                   SiteNameSnapshot,Source,RevisionNumber,CommittedAtUtc
-            FROM AttendanceRecords WHERE PersonId=$id
+            SELECT ar.AttendanceLocalDate,ar.StatusNameSnapshot,ar.StatusSymbolSnapshot,
+                   ar.SiteNameSnapshot,ar.Source,ar.RevisionNumber,ar.CommittedAtUtc,
+                   (SELECT h.NameSnapshot FROM PersonIdentityHistory h
+                    WHERE h.PersonId=ar.PersonId AND h.ValidFromLocalDate<=ar.AttendanceLocalDate
+                      AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate>ar.AttendanceLocalDate)
+                    ORDER BY h.ValidFromLocalDate DESC LIMIT 1),
+                   (SELECT h.ServiceNumberASnapshot FROM PersonIdentityHistory h
+                    WHERE h.PersonId=ar.PersonId AND h.ValidFromLocalDate<=ar.AttendanceLocalDate
+                      AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate>ar.AttendanceLocalDate)
+                    ORDER BY h.ValidFromLocalDate DESC LIMIT 1)
+            FROM AttendanceRecords ar WHERE ar.PersonId=$id
             ORDER BY AttendanceLocalDate DESC LIMIT $size OFFSET $offset;
             """;
         attendance.Parameters.AddWithValue("$id",personId);
@@ -108,7 +116,11 @@ public sealed class PersonnelReportService
                     ["date"]=r.GetString(0),["statusName"]=r.GetString(1),
                     ["symbol"]=r.GetString(2),["site"]=r.GetString(3),
                     ["source"]=r.GetString(4),["revision"]=r.GetInt64(5),
-                    ["committedAtUtc"]=r.GetString(6)
+                    ["committedAtUtc"]=r.GetString(6),
+                    // Null explicitly means the historic identity was not recorded.
+                    // Never substitute today's display name/number for missing evidence.
+                    ["name"]=r.IsDBNull(7)?null:r.GetString(7),
+                    ["serviceNumberA"]=r.IsDBNull(8)?null:r.GetString(8)
                 });
 
         using var identityCount=conn.CreateCommand();
