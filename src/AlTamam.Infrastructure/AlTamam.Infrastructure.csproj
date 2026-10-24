@@ -10,5 +10,6 @@
     <EmbeddedResource Include="Persistence/Migrations/V003_PersonnelMasterData.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V004_HistoricalIntegrity.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V005_AuditPresentationEvidence.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/V006_FoundingAccount.sql" />
   </ItemGroup>
 </Project>
