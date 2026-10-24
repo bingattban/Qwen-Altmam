@@ -68,7 +68,7 @@ public static class BridgeAuditWriter
                                    AND h.ValidFromLocalDate <= $date
                                    AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $date)
                                  ORDER BY h.ValidFromLocalDate DESC, h.HistoryId DESC LIMIT 1),
-                                p.CurrentVisibleName)
+                                p.CurrentVisibleName), u.Role
                 FROM Users u LEFT JOIN Persons p ON p.PersonId = u.LinkedPersonId
                 WHERE u.UserId = $userId;
                 """;
@@ -79,11 +79,12 @@ public static class BridgeAuditWriter
             {
                 actorUsername = row.GetString(0);
                 actorPersonId = row.IsDBNull(1) ? null : row.GetString(1);
-                actorRosterFullName = row.IsDBNull(2) ? null : row.GetString(2);
+                actorRosterFullName = row.IsDBNull(2)
+                    ? (row.GetInt32(3) == 1 && actorPersonId is null ? "الإدارة العامة" : null)
+                    : row.GetString(2);
             }
-            // An unlinked founding administrator must remain unlinked, not borrow
-            // a name from the target. Its setup full name is handled by the
-            // first-use-account implementation, not fabricated here.
+            // The founding GeneralAdmin is explicitly exempt from a roster full name;
+            // audit displays the username plus the title الإدارة العامة without inventing PersonId.
         }
         _ = actorDisplayName; // kept only for compatibility with existing service signatures.
 
