@@ -10,9 +10,14 @@
     <Product>التمام اليومي</Product>
     <AssemblyTitle>التمام اليومي</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/AlTamam.ico</ApplicationIcon>
     <!-- The offline UI is bundled content, never a web project build input. -->
     <AddRazorSupportForMvc>false</AddRazorSupportForMvc>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets/AlTamam.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" />
