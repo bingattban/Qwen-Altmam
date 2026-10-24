@@ -1,6 +1,6 @@
 name: Windows Release Packages (Phase 15)
 
-# Builds the genuine WPF executable, validates the publish layout, produces BOTH
+# On EVERY push to main, builds the genuine WPF executable, validates the publish layout, produces BOTH
 # release artifacts (Portable ZIP + Inno Setup installer), verifies runtime
 # dependencies and emits SHA-256 checksums + build metadata.
 # Publishing a GitHub Release is intentionally NOT done here: 15.08 requires the
@@ -17,6 +17,7 @@ on:
         required: true
         default: '0.15.0'
   push:
+    branches: ['main']
     tags: ['v*']
   pull_request:
     paths:
@@ -38,7 +39,7 @@ env:
   PUBLISH_DIR: publish/AlTamam-win-x64
   CONFIGURATION: Release
   RUNTIME: win-x64
-  RELEASE_VERSION: ${{ github.event_name == 'pull_request' && '0.15.0-ci' || (github.event.inputs.version || github.ref_name) }}
+  RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.0.{0}-ci', github.run_number)) }}
 
 jobs:
   preflight:
@@ -48,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-      - name: Action-manifest security guard (93 actions, CSP, RBAC drift)
+      - name: Action-manifest security guard (CSP, RBAC drift)
         run: python build/manifest-guard.py
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
@@ -79,7 +80,7 @@ jobs:
           node build/test-personnel-movements.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
           node build/test-session-idle.js
-          if ($LASTEXITCODE -ne 0) { throw '10-minute session inactivity regression' }
+          if ($LASTEXITCODE -ne 0) { throw '5-minute session inactivity regression' }
           node build/test-operation-dialogs.js
           if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
           node build/test-personnel-separation.js
@@ -250,9 +251,10 @@ jobs:
           retention-days: 30
 
   clean-windows-acceptance:
-    # PRs validate build + artifacts only, never assert final release acceptance.
-    # workflow_dispatch/tagged release candidates still MUST run this mandatory gate.
-    if: github.event_name != 'pull_request'
+    # The main branch automatically packages TESTED CANDIDATES. It is not a claim
+    # of completed clean-machine acceptance; manual/tagged candidates retain that gate.
+    # NEVER mark nightly/main artifacts as final released deliverables.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     name: Clean-machine acceptance matrix (15.06) — manual evidence gate
     needs: package
     runs-on: windows-latest
