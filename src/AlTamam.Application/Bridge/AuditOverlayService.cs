@@ -265,6 +265,11 @@ public sealed class AuditOverlayService
     private async Task<BridgeResponse> WriteOverlayAsync(
         JsonObject payload, BridgePrincipal principal, bool tombstone, CancellationToken ct)
     {
+        // Defense in depth: the Application service owns authorization. A caller
+        // bypassing the WebView dispatcher must not edit visible evidence.
+        if (principal.Role is not (UserRole.GeneralAdministration or UserRole.OrdinaryAdministration))
+            return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
+                "تعديل أو إخفاء عرض قيود العمليات مسموح للإدارة العامة والعادية فقط.");
         string auditEventId = ReadString(payload, "auditEventId");
         string reason = ReadString(payload, "reason");
         string corrected = ReadString(payload, "correctedDescription");
