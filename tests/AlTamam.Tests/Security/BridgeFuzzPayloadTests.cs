@@ -42,8 +42,9 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
     public async Task InitializeAsync()
     {
         // Provision the first administrator through the real handler path, then log in for a live nonce.
-        await _services.ProvisionFirstAdministratorAsync("tst-fuzz-admin", "Synthetic#Pass1", default);
-        var (principal, failure) = await _services.AuthenticateAsync("tst-fuzz-admin", "Synthetic#Pass1", default);
+        var provision=await _services.ProvisionFirstAdministratorAsync("tst-fuzz-admin", "Synthetic#Pass123", default);
+        Assert.True(provision.Success,provision.UserMessage);
+        var (principal, failure) = await _services.AuthenticateAsync("tst-fuzz-admin", "Synthetic#Pass123", default);
         Assert.NotNull(principal);
         _gaNonce = principal!.SessionNonce;
     }
