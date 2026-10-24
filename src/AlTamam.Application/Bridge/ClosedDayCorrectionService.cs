@@ -33,7 +33,8 @@ public sealed class ClosedDayCorrectionService
         DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
             DateTimeStyles.None, out var parsed) &&
         parsed < DateOnly.FromDateTime(_time.GetLocalNow().DateTime);
-    private static bool IsGa(BridgePrincipal actor) => actor.Role == UserRole.GeneralAdministration;
+    private static bool CanCorrectClosedDay(BridgePrincipal actor) =>
+        actor.Role is UserRole.GeneralAdministration or UserRole.OrdinaryAdministration;
     private static bool ValidReason(string reason) =>
         reason.Length is >= 10 and <= 400 && !reason.Any(char.IsControl);
 
@@ -107,7 +108,7 @@ public sealed class ClosedDayCorrectionService
 
     public async Task<BridgeResponse> PreviewAsync(JsonObject? payload, BridgePrincipal actor, CancellationToken ct)
     {
-        if (!IsGa(actor)) return Deny(BridgeErrorCodes.Unauthorized, "التصحيح الاستثنائي للإدارة العامة فقط.");
+        if (!CanCorrectClosedDay(actor)) return Deny(BridgeErrorCodes.Unauthorized, "تصحيح الأيام المغلقة للإدارة العامة والإدارة العادية فقط.");
         string person = Read(payload, "personId"), day = Read(payload, "businessDate"),
             status = Read(payload, "statusId"), reason = Read(payload, "reason");
         if (person.Length is < 1 or > 128 || status.Length is < 1 or > 128 ||
@@ -144,7 +145,7 @@ public sealed class ClosedDayCorrectionService
 
     public async Task<BridgeResponse> CommitAsync(JsonObject? payload, BridgePrincipal actor, CancellationToken ct)
     {
-        if (!IsGa(actor)) return Deny(BridgeErrorCodes.Unauthorized, "التصحيح الاستثنائي للإدارة العامة فقط.");
+        if (!CanCorrectClosedDay(actor)) return Deny(BridgeErrorCodes.Unauthorized, "تصحيح الأيام المغلقة للإدارة العامة والإدارة العادية فقط.");
         string token = Read(payload, "previewToken");
         if (token.Length != 64 || token.Any(c => !Uri.IsHexDigit(c)))
             return Deny(BridgeErrorCodes.ValidationError, "رمز المعاينة غير صالح.");
@@ -217,8 +218,10 @@ public sealed class ClosedDayCorrectionService
                     BeforeStatusNameSnapshot,AfterStatusId,AfterStatusNameSnapshot,Reason,
                     ActorUserId,ExecutedAtUtc,AuthorizationMethod)
                 VALUES($person,$day,$before,$beforeName,$after,$afterName,$reason,
-                    $actor,$now,'general-admin-enabled-one-time-preview');
+                    $actor,$now,$authorization);
                 """;
+            history.Parameters.AddWithValue("$authorization", actor.Role == UserRole.GeneralAdministration
+                ? "general-admin-enabled-one-time-preview" : "ordinary-admin-enabled-one-time-preview");
             history.Parameters.AddWithValue("$person", person);
             history.Parameters.AddWithValue("$day", day);
             history.Parameters.AddWithValue("$before", current.BeforeId);
@@ -249,13 +252,13 @@ public sealed class ClosedDayCorrectionService
 
     public async Task<BridgeResponse> SetPolicyAsync(JsonObject? payload, BridgePrincipal actor, CancellationToken ct)
     {
-        if (!IsGa(actor)) return Deny(BridgeErrorCodes.Unauthorized, "الإعداد محصور بالإدارة العامة.");
+        if (!CanCorrectClosedDay(actor)) return Deny(BridgeErrorCodes.Unauthorized, "الإعداد محصور بالإدارة العامة والإدارة العادية.");
         bool enabled;
         try { enabled = payload?["enabled"]?.GetValue<bool>() ?? throw new FormatException(); }
         catch { return Deny(BridgeErrorCodes.ValidationError, "قيمة تفعيل التصحيح مطلوبة."); }
         string reason = Read(payload, "reason");
-        if (!ValidReason(reason))
-            return Deny(BridgeErrorCodes.ValidationError, "يجب كتابة سبب للتفعيل أو الإيقاف (10 إلى 400 حرف).");
+        if (reason.Length > 0 && !ValidReason(reason))
+            return Deny(BridgeErrorCodes.ValidationError, "عند إدخال ملاحظة للتفعيل أو الإيقاف يجب أن تكون 10 إلى 400 حرف.");
         return await _db.ExecuteInWriteTransactionAsync(async (c, tx) =>
         {
             bool previous = await Enabled(c, tx, ct).ConfigureAwait(false);
@@ -277,7 +280,7 @@ public sealed class ClosedDayCorrectionService
                 "AllowClosedDayEmergencyOverride", "السماح بتصحيح يوم مغلق",
                 new JsonObject { ["enabled"] = previous }.ToJsonString(),
                 new JsonObject { ["enabled"] = enabled }.ToJsonString(),
-                "تغيير إذن التصحيح الاستثنائي بواسطة الإدارة العامة", reason,
+                "تغيير إذن التصحيح الاستثنائي بواسطة مسؤول مصرح له", string.IsNullOrWhiteSpace(reason) ? null : reason,
                 DateOnly.FromDateTime(_time.GetLocalNow().DateTime).ToString("yyyy-MM-dd"),
                 ct.CorrelationId(), ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(new JsonObject { ["enabled"] = enabled });
