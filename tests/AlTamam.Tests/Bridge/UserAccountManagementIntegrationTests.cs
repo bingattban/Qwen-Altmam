@@ -73,6 +73,36 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     }
 
     [Fact]
+    public async Task CreateAccount_RepeatedOperation_ReturnsSameUserWithoutExtraAuditOrRoleHistory()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var payload=new JsonObject {
+            ["username"]="same-intent",["password"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor",
+            ["operationId"]="OPERATION-USER-000001"
+        };
+        var first=await svc.CreateAsync(payload,_general,CancellationToken.None);
+        var replay=await svc.CreateAsync((JsonObject)payload.DeepClone(),_general,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data)["userId"]!.GetValue<string>(),
+            Assert.IsType<JsonObject>(replay.Data)["userId"]!.GetValue<string>());
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM Users WHERE Username='same-intent';";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText="SELECT COUNT(*) FROM UserRoleHistory;";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_CREATE';";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        var changed=(JsonObject)payload.DeepClone();
+        changed["personId"]="TST-ACTIVE-2";
+        var conflict=await svc.CreateAsync(changed,_general,CancellationToken.None);
+        Assert.False(conflict.Success);
+        Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.ConflictStale,conflict.ErrorCode);
+    }
+
+    [Fact]
     public async Task OrdinaryAdministration_CanOnlyCreateSupervisorNotOrdinary()
     {
         var svc=new UserAccountManagementService(_db);
