@@ -44,14 +44,41 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     {
         var initial=await _services.ResolveSessionAsync(_actor.SessionNonce);
         Assert.NotNull(initial);
-        _time.Forward(TimeSpan.FromMinutes(9));
-        await _services.RefreshSessionIdleDeadlineAsync(_actor.SessionNonce);
-        _time.Forward(TimeSpan.FromMinutes(9));
+        _time.Forward(TimeSpan.FromSeconds(299));
         Assert.NotNull(await _services.ResolveSessionAsync(_actor.SessionNonce));
-        _time.Forward(TimeSpan.FromMinutes(2));
+        await _services.RefreshSessionIdleDeadlineAsync(_actor.SessionNonce);
+        _time.Forward(TimeSpan.FromSeconds(299));
+        Assert.NotNull(await _services.ResolveSessionAsync(_actor.SessionNonce));
+        _time.Forward(TimeSpan.FromSeconds(1));
         Assert.Null(await _services.ResolveSessionAsync(_actor.SessionNonce));
         await _services.RefreshSessionIdleDeadlineAsync(_actor.SessionNonce);
         Assert.Null(await _services.ResolveSessionAsync(_actor.SessionNonce));
+    }
+
+    [Fact]
+    public async Task FoundingAdmin_UsesRoleLabelAndCannotBeRecreatedAfterDisable()
+    {
+        using(var c=_db.CreateOpenConnection())
+        {
+            using var cmd=c.CreateCommand();
+            cmd.CommandText="""
+                SELECT ActorRosterFullNameSnapshot FROM AuditEvents
+                WHERE OperationCode='FOUNDING_ADMIN_CREATED' LIMIT 1;
+                """;
+            Assert.Equal("الإدارة العامة", Convert.ToString(cmd.ExecuteScalar()));
+        }
+        Assert.False((await _services.ProvisionFirstAdministratorAsync(
+            "second-founder","test-password-123",CancellationToken.None)).Success);
+        using(var c=_db.CreateOpenConnection())
+        {
+            using var cmd=c.CreateCommand();
+            cmd.CommandText="UPDATE Users SET ActiveFlag=0 WHERE UserId=$id;";
+            cmd.Parameters.AddWithValue("$id",_actor.UserId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        Assert.True(await _services.IsProvisionedAsync());
+        Assert.False((await _services.ProvisionFirstAdministratorAsync(
+            "reopened-founder","test-password-123",CancellationToken.None)).Success);
     }
 
     [Fact]
