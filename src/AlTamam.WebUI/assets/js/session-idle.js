@@ -1,8 +1,8 @@
 "use strict";
-/* Real human activity, not background polling, renews the 10-minute SQLCipher session.
+/* Real human activity, not background polling, renews the 5-minute SQLCipher session.
    On sleep/resume we compare wall-clock time before accepting an input as activity. */
 (function(){
-  const LIMIT=10*60*1000,HEARTBEAT=60*1000,KEY="altamam.lastUserActivity.v1";
+  const LIMIT=5*60*1000,HEARTBEAT=60*1000,KEY="altamam.lastUserActivity.v1";
   let active=false,last=0,lastHeartbeat=0,interval=null,onExpire=null,expiring=false;
   function saved(){
     try{return Number(localStorage.getItem(KEY))||0;}catch{return 0;}
@@ -34,7 +34,7 @@
       lastHeartbeat=last;
       const bridge=window.AltamamBridge;
       if(bridge?.hasBridge?.()){
-        void bridge.invoke("GetCurrentSession",{}).catch(()=>{if(active)void expire();});
+        void bridge.invoke("GetCurrentSession",{userActivity:true}).catch(()=>{if(active)void expire();});
       }
     }
   }
