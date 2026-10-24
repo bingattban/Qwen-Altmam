@@ -81,7 +81,7 @@
       ["transferArchive","أرشيف التنقلات"]
     ],
     reports: [
-      ["personReport","التقارير الفردية"],
+      ["personReport","التقرير"],
       ["separation","الفصل"],
       ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]
     ],
