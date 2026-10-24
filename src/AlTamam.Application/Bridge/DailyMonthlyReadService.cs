@@ -394,11 +394,11 @@ public sealed class DailyMonthlyReadService
             SELECT COALESCE((SELECT h.NameSnapshot FROM PersonIdentityHistory h
                    WHERE h.PersonId=p.PersonId AND h.ValidFromLocalDate <= $date
                      AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $date)
-                   ORDER BY h.ValidFromLocalDate DESC LIMIT 1),p.CurrentVisibleName),
+                   ORDER BY h.ValidFromLocalDate DESC LIMIT 1),'غير موثق تاريخياً'),
                    COALESCE((SELECT h.ServiceNumberASnapshot FROM PersonIdentityHistory h
                    WHERE h.PersonId=p.PersonId AND h.ValidFromLocalDate <= $date
                      AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $date)
-                   ORDER BY h.ValidFromLocalDate DESC LIMIT 1),p.CurrentServiceNumberA)
+                   ORDER BY h.ValidFromLocalDate DESC LIMIT 1),'غير موثق تاريخياً')
             FROM Persons p WHERE p.PersonId=$person AND p.FirstRecordedLocalDate <= $date;
             """;
         person.Parameters.AddWithValue("$person", personId);
@@ -420,7 +420,9 @@ public sealed class DailyMonthlyReadService
                 SELECT a.SiteId, COALESCE((SELECT h.VisibleNameSnapshot FROM SiteNameHistory h
                        WHERE h.SiteId=a.SiteId AND h.ValidFromLocalDate <= $date
                          AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $date)
-                       ORDER BY h.ValidFromLocalDate DESC LIMIT 1),s.VisibleName)
+                       ORDER BY h.ValidFromLocalDate DESC LIMIT 1),
+                    CASE WHEN a.SiteId='SITE-UNSPECIFIED' THEN 'غير محدد'
+                         ELSE 'غير موثق تاريخياً' END)
                 FROM PersonAssignments a JOIN Sites s ON s.SiteId=a.SiteId
                 WHERE a.PersonId=$person AND a.ValidFromLocalDate <= $date
                   AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
