@@ -270,7 +270,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@v4
-        with: { pattern: "AlTamam-win-*-rc-*", merge-multiple: true, path: rc }
+        with: { pattern: "AlTamam-win-x64-rc-*", merge-multiple: true, path: rc }
       - name: Stage installer next to cwd
         shell: pwsh
         run: Copy-Item rc/AlTamam-Installer-win-x64.exe .
