@@ -481,9 +481,12 @@
         document.getElementById("headerRoleBadge").textContent=
           state.username+" — "+(state.roleLabelAr||state.role);
         document.getElementById("logoutAction").hidden=false;
-        render(["dashboard","monthly","admin","settings"].includes(location.hash.slice(1))
-          ?location.hash.slice(1):"dashboard");
-        void checkOutputAfterLogin();
+        const initialSection=["dashboard","monthly","admin","settings"].includes(location.hash.slice(1))
+          ?location.hash.slice(1):"dashboard";
+        render(initialSection);
+        // A restored monthly/report page is read-only; check the output-drive
+        // on fresh dashboard login and whenever Settings is opened instead.
+        if(initialSection==="dashboard")void checkOutputAfterLogin();
       } else await loginGate();
     } catch { await loginGate(); }
   }
