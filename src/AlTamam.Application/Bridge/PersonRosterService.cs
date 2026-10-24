@@ -470,7 +470,7 @@ public sealed class PersonRosterService
     // ------------------------------------------------------------------ 05.03 archive from active force
 
     /// <summary>Preview of archiving persons out of the active force: impacts, assignments, blockers.</summary>
-    public async Task<BridgeResponse> PreviewArchivePersonsAsync(JsonObject payload, CancellationToken ct)
+    public async Task<BridgeResponse> PreviewArchivePersonsAsync(JsonObject payload, string actorUserId, CancellationToken ct)
     {
         IReadOnlyList<string> ids = ReadStringArray(payload, "personIds");
         string effectiveDate = ReadEffectiveDate(payload);
@@ -516,82 +516,142 @@ public sealed class PersonRosterService
             ["baseRevision"] = baseRevisionSum,
             ["reversible"] = true,
             ["previewToken"] = BridgePreviewTokens.Issue(_db, _time, "ArchivePersons",
-                actorUserId: ReadString(payload, "actorHint"), payload, baseRevisionSum, ct)
+                actorUserId: actorUserId, payload, baseRevisionSum, ct)
         });
     }
 
-    /// <summary>Authorized archive: closes open assignments, flips to ArchivedFromForce, keeps full history.</summary>
+    /// <summary>
+    /// Preview-token-bound atomic removal from the CURRENT roster. It closes
+    /// memberships prospectively; all attendance, movement and audit history survives.
+    /// Preflight checks every member before the first database mutation.
+    /// </summary>
     public async Task<BridgeResponse> ArchivePersonsAsync(string userId, string username, JsonObject payload, CancellationToken ct)
     {
         IReadOnlyList<string> ids = ReadStringArray(payload, "personIds");
         string effectiveDate = ReadEffectiveDate(payload);
         string reason = ReadString(payload, "reason") is { Length: > 0 } r ? r : "إخراج من القوة الفعالة بقرار محفوظ.";
-        if (ids.Count == 0)
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "لم تُحدَّد أي أفراد.");
-
-        long expected = ReadLong(payload, "expectedRevision", 0);
-        long baseRevision = ReadLong(payload, "baseRevision", 0);
-        if (expected != baseRevision)
-            return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale, "نسخة المعاينة قديمة؛ أعد التمهيد قبل التنفيذ.");
+        string token = ReadString(payload, "previewToken");
+        if (ids.Count == 0 || ids.Any(string.IsNullOrWhiteSpace) ||
+            ids.Distinct(StringComparer.Ordinal).Count() != ids.Count)
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "اختر قائمة أفراد صحيحة دون تكرار.");
+        if (token.Length != 64 || token.Any(c => !Uri.IsHexDigit(c)))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "معاينة حديثة صادرة لنفس المستخدم مطلوبة قبل الأرشفة.");
+        long expected = ReadLong(payload, "expectedRevision", -1);
+        long baseRevision = ReadLong(payload, "baseRevision", -1);
+        if (expected < 1 || expected != baseRevision)
+            return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                "نسخة المعاينة قديمة؛ أعد معاينة جميع الأفراد قبل التنفيذ.");
 
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
-            var archived = new JsonArray();
+            // Do not trust the client-supplied ID list: it must match the immutable
+            // preview issued to the SAME authenticated actor.
+            using (var preview = connection.CreateCommand())
+            {
+                preview.Transaction = tx;
+                preview.CommandText = """
+                    SELECT PayloadCanonicalJson FROM PreviewTokens
+                    WHERE Token=$token AND Operation='ArchivePersons' AND ActorUserId=$actor;
+                    """;
+                preview.Parameters.AddWithValue("$token", token);
+                preview.Parameters.AddWithValue("$actor", userId);
+                var raw = await preview.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+                if (raw is null)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                        "انتهت المعاينة أو لم تصدر لهذا الحساب.");
+                var canonical = JsonNode.Parse(raw) as JsonObject;
+                if (canonical is null ||
+                    ReadEffectiveDate(canonical) != effectiveDate ||
+                    !ReadStringArray(canonical, "personIds").SequenceEqual(ids, StringComparer.Ordinal))
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                        "تغيّرت قائمة الأفراد أو تاريخ العملية بعد المعاينة.");
+            }
+
+            var people = new List<(string Id,string Name,int Org,int Active,long Revision)>();
             long sum = 0;
             foreach (string id in ids)
             {
                 using var find = connection.CreateCommand();
                 find.Transaction = tx;
-                find.CommandText = "SELECT CurrentVisibleName, OrganizationalStatus, ActiveFlag, RowVersion FROM Persons WHERE PersonId = $id;";
-                find.Parameters.Add("$id", SqliteType.Text).Value = id;
+                find.CommandText = """
+                    SELECT CurrentVisibleName,OrganizationalStatus,ActiveFlag,RowVersion,
+                      EXISTS(SELECT 1 FROM PersonAssignments a
+                        WHERE a.PersonId=Persons.PersonId AND a.ValidToLocalDate IS NULL
+                          AND a.ValidFromLocalDate < $date)
+                    FROM Persons WHERE PersonId=$id;
+                    """;
+                find.Parameters.AddWithValue("$id", id);
+                find.Parameters.AddWithValue("$date", effectiveDate);
                 using var reader = await find.ExecuteReaderAsync(ct).ConfigureAwait(false);
                 if (!await reader.ReadAsync(ct).ConfigureAwait(false))
-                    return BridgeHelpers.Error(BridgeErrorCodes.MissingData, $"الفرد {id} لم يعد موجوداً — أُلغيت العملية كاملة.");
+                    return BridgeHelpers.Error(BridgeErrorCodes.MissingData, "أحد الأفراد لم يعد موجودًا؛ أُلغيت الدفعة كاملة.");
                 string name = reader.GetString(0);
-                int org = reader.GetInt32(1);
-                int active = Convert.ToInt32(reader.GetValue(2));
-                long rowVersion = reader.GetInt64(3);
+                int org = reader.GetInt32(1), active = reader.GetInt32(2);
+                long version = reader.GetInt64(3);
+                bool eligible = reader.GetInt32(4) == 1;
                 reader.Close();
-                if (org == 4 || active == 0)
-                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale, $"الفرد «{name}» مؤرشف بالفعل؛ أعد التمهيد.");
-                sum += rowVersion;
+                if (org != 1 || active != 1 || !eligible)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                        $"الفرد «{name}» ليس ضمن انتساب حالي مؤهل للتاريخ؛ لم تُجرَ أي تغييرات.");
+                people.Add((id,name,org,active,version));
+                sum += version;
+            }
+            if (sum != baseRevision)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                    "تغيّرت إصدارات الأفراد بعد المعاينة؛ لم تُجرَ أي تغييرات.");
+            long? used = await BridgePreviewTokens.ConsumeAsync(_db, _time, connection, tx,
+                token, "ArchivePersons", userId, baseRevision, ct).ConfigureAwait(false);
+            if (used != baseRevision)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                    "المعاينة منتهية أو سبق اعتمادها؛ لا يمكن تطبيق العملية مرتين.");
 
-                using var close = connection.CreateCommand();
-                close.Transaction = tx;
-                close.CommandText = """
-                    UPDATE PersonAssignments SET ValidToLocalDate = $date
-                    WHERE PersonId = $id AND ValidToLocalDate IS NULL AND ValidFromLocalDate < $date;
-                    """;
-                close.Parameters.Add("$date", SqliteType.Text).Value = effectiveDate;
-                close.Parameters.Add("$id", SqliteType.Text).Value = id;
-                await close.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-
-                using var flip = connection.CreateCommand();
-                flip.Transaction = tx;
-                flip.CommandText = """
-                    UPDATE Persons SET OrganizationalStatus = 4, ActiveFlag = 0, RowVersion = RowVersion + 1
-                    WHERE PersonId = $id;
-                    """;
-                flip.Parameters.Add("$id", SqliteType.Text).Value = id;
-                await flip.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-
-                archived.Add(id);
+            var archived = new JsonArray();
+            foreach (var person in people)
+            {
+                using (var close = connection.CreateCommand())
+                {
+                    close.Transaction = tx;
+                    close.CommandText = """
+                        UPDATE PersonAssignments SET ValidToLocalDate=$date
+                        WHERE PersonId=$id AND ValidToLocalDate IS NULL
+                          AND ValidFromLocalDate < $date;
+                        """;
+                    close.Parameters.AddWithValue("$date", effectiveDate);
+                    close.Parameters.AddWithValue("$id", person.Id);
+                    if (await close.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
+                        throw new InvalidOperationException("Concurrent archive assignment change.");
+                }
+                using (var flip = connection.CreateCommand())
+                {
+                    flip.Transaction = tx;
+                    flip.CommandText = """
+                        UPDATE Persons SET OrganizationalStatus=4,ActiveFlag=0,RowVersion=RowVersion+1
+                        WHERE PersonId=$id AND RowVersion=$rev
+                          AND OrganizationalStatus=1 AND ActiveFlag=1;
+                        """;
+                    flip.Parameters.AddWithValue("$id", person.Id);
+                    flip.Parameters.AddWithValue("$rev", person.Revision);
+                    if (await flip.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
+                        throw new InvalidOperationException("Concurrent archive personnel change.");
+                }
+                archived.Add(person.Id);
                 await BridgeAuditWriter.WriteAsync(connection, tx, _time,
                     operationCode: "PERSON_ARCHIVE", operationArabicName: "أرشفة فرد من القوة",
-                    actorUserId: userId, actorUsername: username, actorDisplayName: name,
-                    targetEntityType: "Person", targetEntityId: id, targetDisplay: name,
-                    oldValueJson: new JsonObject { ["organizationalStatus"] = org, ["active"] = active == 1 }.ToJsonString(),
-                    newValueJson: new JsonObject { ["organizationalStatus"] = 4, ["active"] = false }.ToJsonString(),
-                    description: $"أُخرج «{name}» من القوة الفعالة اعتباراً من {effectiveDate} مع إبقاء السجل قابلاً للاسترجاع.",
-                    reason: reason, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
+                    actorUserId: userId, actorUsername: username, actorDisplayName: null,
+                    targetEntityType: "Person", targetEntityId: person.Id, targetDisplay: person.Name,
+                    oldValueJson: new JsonObject { ["organizationalStatus"] = person.Org,
+                        ["active"] = true, ["rowVersion"] = person.Revision }.ToJsonString(),
+                    newValueJson: new JsonObject { ["organizationalStatus"] = 4,
+                        ["active"] = false, ["rowVersion"] = person.Revision + 1 }.ToJsonString(),
+                    description: $"أُخرج «{person.Name}» من القوة الفعالة اعتباراً من {effectiveDate} مع حفظ التاريخ.",
+                    reason: reason, effectiveLocalDate: effectiveDate,
+                    correlationId: token, ct).ConfigureAwait(false);
             }
-
-            if (sum != baseRevision)
-                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale, "تغيّرت نسخة البيانات أثناء التنفيذ؛ لُفّظت المعاملة كاملة.");
-
             return BridgeHelpers.Ok(
-                new JsonObject { ["archivedPersonIds"] = archived, ["effectiveLocalDate"] = effectiveDate },
-                revision: baseRevision + archived.Count,
+                new JsonObject { ["archivedPersonIds"] = archived,
+                    ["effectiveLocalDate"] = effectiveDate, ["operationId"] = token },
+                revision: baseRevision + people.Count,
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelArchived, effectiveDate, ids));
         }, ct).ConfigureAwait(false);
     }
