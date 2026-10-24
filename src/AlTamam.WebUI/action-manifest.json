@@ -1807,6 +1807,31 @@
       }
     },
     {
+      "action": "LinkFoundingAdministrator",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError",
+        "ConflictStale",
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
       "action": "ChangeUserPassword",
       "owningService": "UserAuditService",
       "allowedRoles": [
