@@ -71,7 +71,9 @@ public sealed class FullDataResetService
                 Feed(hash,"<ROW>");
             }
         }
-        return BitConverter.ToInt64(hash.GetHashAndReset(),0)&long.MaxValue;
+        // JSON transports through JavaScript; keep the fingerprint within
+        // Number.MAX_SAFE_INTEGER so the confirmation returns the exact value.
+        return BitConverter.ToInt64(hash.GetHashAndReset(),0)&((1L<<53)-1);
     }
 
     private static void Feed(IncrementalHash hash,string text)
