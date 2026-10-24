@@ -7,7 +7,7 @@ namespace AlTamam.Infrastructure.Persistence;
 /// <summary>Encrypted SQLite connection management and atomic initialization of schema V001.</summary>
 public sealed class AlTamamDbContext : IDisposable
 {
-    /// <summary>Highest schema version this build understands (V005 protects display-audit revision evidence).</summary>
+    /// <summary>Highest schema version this build understands (V008 adds immutable mutation receipts).</summary>
     public const int CurrentSchemaVersion = 8;
 
     /// <summary>The canonical, ordered migration set shipped with this build.</summary>
