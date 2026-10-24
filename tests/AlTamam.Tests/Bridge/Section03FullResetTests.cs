@@ -82,6 +82,60 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         Assert.True(newOwner.Success,newOwner.UserMessage);
     }
     [Fact]
+    public async Task ResetPreservesSchemaAndClearsRealisticPersonnelAssignmentsAttendanceAndMovements()
+    {
+        using(var c=_db.CreateOpenConnection())
+        using(var tx=c.BeginTransaction())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.Transaction=tx;
+            cmd.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                    CurrentServiceNumberA,NormalizedServiceNumberA,
+                    FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('PER-RESET-TST','فرد افتراضي','فرد افتراضي','4832','4832',
+                    '2026-01-01','2026-01-01T00:00:00Z',1,1,1);
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('ASSIGN-RESET-TST','PER-RESET-TST','SITE-UNSPECIFIED',
+                    '2026-01-01',NULL,NULL,'2026-01-01T00:00:00Z');
+                INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
+                    StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                    AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                    Source,CreatedByUserId,CommittedAtUtc,RevisionNumber,IdempotencyKey)
+                VALUES('PER-RESET-TST','2026-10-21','STS-PRESENT','موجود','م','#38BDF8',
+                    'ASSIGN-RESET-TST','SITE-UNSPECIFIED','غير محدد',
+                    'manual','TST-USER','2026-10-21T08:00:00Z',1,'IDEM-RESET-TST');
+                INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
+                    ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                    DestinationSiteId,DestinationSiteNameSnapshot,DestinationExternalName,
+                    SeparationReason,EffectiveLocalDate,CommittedAtUtc,ActorUserId,IdempotencyKey)
+                VALUES('MOVE-RESET-TST','PER-RESET-TST','فرد افتراضي','4832',
+                    1,'SITE-UNSPECIFIED','غير محدد','SITE-UNSPECIFIED',
+                    'غير محدد',NULL,NULL,'2026-10-22','2026-10-22T08:00:00Z',
+                    'TST-USER','MOVE-IDEM-RESET-TST');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+            tx.Commit();
+        }
+        Assert.Equal(1,Count("Persons"));
+        Assert.Equal(1,Count("AttendanceRecords"));
+        Assert.Equal(1,Count("PersonnelMovements"));
+        var svc=new FullDataResetService(_db);
+        var preview=Assert.IsType<JsonObject>((await svc.PreviewAsync(_admin,default)).Data);
+        var done=await svc.CommitAsync(CommitArgs(preview),_admin,default);
+        Assert.True(done.Success,done.UserMessage);
+        Assert.Equal(0,Count("Persons"));
+        Assert.Equal(0,Count("PersonAssignments"));
+        Assert.Equal(0,Count("AttendanceRecords"));
+        Assert.Equal(0,Count("PersonnelMovements"));
+        Assert.Equal(0,Count("AuditEvents"));
+        Assert.Equal(1,Count("Sites"));
+        Assert.Equal(4,Count("AttendanceStatusDefinitions"));
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
     public async Task StalePreview_IsRejectedWithoutChangingPersonsOrAudit()
     {
         var svc=new FullDataResetService(_db);
