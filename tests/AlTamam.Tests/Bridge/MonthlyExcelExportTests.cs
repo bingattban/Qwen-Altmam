@@ -30,6 +30,10 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
                 FirstRecordedAtUtc, OrganizationalStatus, ActiveFlag, RowVersion)
             VALUES ('TST-EX-0','=HYPERLINK("https://example.invalid")',
                 'اسم اختبار','EX000','EX000','2026-10-01','2026-10-01T07:00:00Z',1,1,1);
+            INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+            VALUES('TST-EX-0','=HYPERLINK("https://example.invalid")','EX000',
+                '2026-10-01',NULL,'TST-U','2026-10-01T07:00:00Z','سجل تجريبي');
             INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
                 ValidToLocalDate,SourceMovementId,CreatedAtUtc)
             VALUES('TST-EX-A0','TST-EX-0','SITE-UNSPECIFIED',
@@ -55,6 +59,10 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
                     CurrentServiceNumberA,NormalizedServiceNumberA,
                     FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
                 VALUES($id,$name,$name,$number,$number,'2026-10-01','2026-10-01T07:00:00Z',1,1,1);
+                INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                    ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+                VALUES($id,$name,$number,'2026-10-01',NULL,'TST-U',
+                    '2026-10-01T07:00:00Z','سجل تجريبي');
                 INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
                     ValidToLocalDate,SourceMovementId,CreatedAtUtc)
                 VALUES($assignment,$id,'SITE-UNSPECIFIED','2026-10-01',NULL,NULL,'2026-10-01T07:00:00Z');
