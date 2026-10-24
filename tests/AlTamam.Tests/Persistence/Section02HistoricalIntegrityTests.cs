@@ -170,4 +170,28 @@ public sealed class Section02HistoricalIntegrityTests : IAsyncLifetime, IDisposa
                 "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='TST_ACTION';"));
         }
     }
+
+    [Fact]
+    public async Task V004_ForwardMigration_PreservesExistingV003Personnel()
+    {
+        string upgradePath = SyntheticFixtures.CreateTempDatabasePath();
+        try
+        {
+            using var db = new AlTamamDbContext(upgradePath, SyntheticFixtures.TestKeyHex);
+            using (var old = db.CreateOpenConnection())
+            {
+                var legacyRunner = new SchemaMigrationRunner(AlTamamDbContext.CanonicalMigrations.Take(3).ToArray());
+                await legacyRunner.UpgradeAsync(old);
+                Assert.Equal(3, SchemaMigrationRunner.GetCurrentVersion(old));
+                SeedPerson(old);
+            }
+            await db.InitializeAsync();
+            using var upgraded = db.CreateOpenConnection();
+            Assert.Equal(4, SchemaMigrationRunner.GetCurrentVersion(upgraded));
+            Assert.Equal("منفذ تجريبي", Scalar(upgraded,
+                "SELECT CurrentVisibleName FROM Persons WHERE PersonId='TST-SECTION02-PERSON';"));
+            Assert.Equal("ok", Scalar(upgraded, "PRAGMA integrity_check;"));
+        }
+        finally { SyntheticFixtures.DeleteTempDatabase(upgradePath); }
+    }
 }
