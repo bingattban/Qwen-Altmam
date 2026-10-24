@@ -7,7 +7,7 @@
   // The real WebView always loads operation-dialogs.js. Native fallbacks are
   // reserved for legacy isolated Node UI stubs that do not load the HTML shell.
   const dialogs = {
-    confirm: message => window.AltamamDialog?.confirm(message) ?? Promise.resolve(confirm(message)),
+    confirm: (message,options) => window.AltamamDialog?.confirm(message,options) ?? Promise.resolve(confirm(message)),
     prompt: (message,value="") => window.AltamamDialog?.prompt(message,value) ?? Promise.resolve(prompt(message,value)),
     alert: message => window.AltamamDialog?.alert(message) ?? Promise.resolve(alert(message))
   };
@@ -1028,7 +1028,8 @@
           info.backupDirectory+"\nهل تريد تحديد مجلد جديد الآن؟";
         folderNote.replaceChildren(warning("مسار النسخ والتصدير غير متاح؛ لن تُحفظ الملفات فيه."));
         save.disabled=true;
-        void dialogs.confirm(message).then(confirmed=>{
+        void dialogs.confirm(message,{title:"مسار النسخ الاحتياطي غير متاح",
+          confirmLabel:"اختيار مسار جديد"}).then(confirmed=>{
           if(confirmed && token===currentRequest)choose.click();
         });
       }
