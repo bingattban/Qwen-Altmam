@@ -2322,7 +2322,8 @@
       "action": "SetClosedDayCorrectionPolicy",
       "owningService": "AttendanceService",
       "allowedRoles": [
-        "GeneralAdministration"
+        "GeneralAdministration",
+        "OrdinaryAdministration"
       ],
       "isMutating": true,
       "idempotentByRequestId": true,
@@ -2348,7 +2349,8 @@
       "action": "PreviewClosedDayCorrection",
       "owningService": "AttendanceService",
       "allowedRoles": [
-        "GeneralAdministration"
+        "GeneralAdministration",
+        "OrdinaryAdministration"
       ],
       "isMutating": false,
       "idempotentByRequestId": false,
@@ -2374,7 +2376,8 @@
       "action": "CommitClosedDayCorrection",
       "owningService": "AttendanceService",
       "allowedRoles": [
-        "GeneralAdministration"
+        "GeneralAdministration",
+        "OrdinaryAdministration"
       ],
       "isMutating": true,
       "idempotentByRequestId": true,
