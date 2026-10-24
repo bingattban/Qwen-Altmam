@@ -76,6 +76,9 @@ def main() -> int:
         errors.append("no native SQLCipher library found under runtimes/ (encrypted DB would fail at startup)")
 
     if portable:
+        runtime_installer=os.path.join(root,"Prerequisites","MicrosoftEdgeWebView2RuntimeInstaller.exe")
+        if not os.path.isfile(runtime_installer) or os.path.getsize(runtime_installer)<50000000:
+            errors.append("missing Microsoft WebView2 OFFLINE standalone runtime (portable and installer)")
         webui = os.path.join(root, "webui", "index.html")
         if not os.path.isfile(webui):
             errors.append("portable ZIP must bundle webui/index.html content")
