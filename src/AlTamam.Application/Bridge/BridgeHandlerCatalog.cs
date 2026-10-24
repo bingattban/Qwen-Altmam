@@ -426,6 +426,18 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.BackupAsync(principal!, ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
+        "PreviewFullReset" => async(req,principal,ct) =>
+        {
+            var svc=new FullDataResetService(services.Db,services.Time);
+            var response=await svc.PreviewAsync(principal!,ct).ConfigureAwait(false);
+            return response with {RequestId=req.RequestId};
+        },
+        "CommitFullReset" => async(req,principal,ct) =>
+        {
+            var svc=new FullDataResetService(services.Db,services.Time);
+            var response=await svc.CommitAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return response with {RequestId=req.RequestId};
+        },
         // Phase 11: secure user administration, not the older "not implemented" fallback.
         "GetAllowedRoles" => (req, principal, ct) =>
         {
