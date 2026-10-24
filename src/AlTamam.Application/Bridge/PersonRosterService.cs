@@ -821,7 +821,13 @@ public sealed class PersonRosterService
     internal static long ReadLong(JsonObject payload, string key, long fallback)
     {
         if (!payload.TryGetPropertyValue(key, out JsonNode? node) || node is null) return fallback;
-        try { return node.GetValue<long>(); } catch { return fallback; }
+        try { return node.GetValue<long>(); }
+        catch
+        {
+            // In-memory JSON tests can hold Int32 even though WebView JSON numbers
+            // deserialize as Int64. Both must represent the same expected revision.
+            try { return node.GetValue<int>(); } catch { return fallback; }
+        }
     }
 
     internal static bool ReadBool(JsonObject payload, string key, bool fallback)
