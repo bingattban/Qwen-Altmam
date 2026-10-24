@@ -1,7 +1,7 @@
 name: Windows Release Packages (Phase 15)
 
 # On EVERY PR and every push to main, test BEFORE publishing the genuine WPF executable and producing BOTH
-# release artifacts (Portable ZIP + Inno Setup installer), verifies runtime
+# artifacts for EACH architecture (Portable ZIP + Inno Setup installer), verifies runtime
 # dependencies and emits SHA-256 checksums + build metadata.
 # Publishing a GitHub Release is intentionally NOT done here: 15.08 requires the
 # Phase 16 gate plus explicit owner approval; this workflow only uploads CI
@@ -35,9 +35,7 @@ permissions:
 env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-  PUBLISH_DIR: publish/AlTamam-win-x64
   CONFIGURATION: Release
-  RUNTIME: win-x64
   RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.0.{0}-ci', github.run_number)) }}
 
 jobs:
@@ -138,9 +136,16 @@ jobs:
 
   package:
     # HARD DEPENDENCY: no test success => no Portable/Installer output.
-    name: Publish, validate, portable ZIP + installer (15.02-15.07)
+    name: Publish and package (${{ matrix.arch }}) after tests
     needs: build-test
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [win-x64, win-x86]
+    env:
+      RUNTIME: ${{ matrix.arch }}
+      PUBLISH_DIR: publish/AlTamam-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -155,7 +160,7 @@ jobs:
         run: |
           ./build/prepare-offline-fonts.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Offline font preparation failed' }
-      - name: Publish genuine WPF executable (self-contained, win-x64)
+      - name: Publish genuine WPF executable (self-contained, ${{ matrix.arch }})
         run: >
           dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj
           -c $env:CONFIGURATION -r $env:RUNTIME --self-contained true
@@ -169,7 +174,7 @@ jobs:
           Get-ChildItem -LiteralPath $env:PUBLISH_DIR -File -Filter 'Microsoft.Web.WebView2.*.xml' |
             Remove-Item -Force
       - name: Validate publish layout (real PE, WebView2 loader, SQLCipher native)
-        run: python build/validate-layout.py $env:PUBLISH_DIR --portable
+        run: python build/validate-layout.py $env:PUBLISH_DIR --portable --arch $env:RUNTIME
       - name: Optional signing (ONLY with owner-provisioned approved certificate)
         shell: pwsh
         env:
@@ -212,7 +217,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
           Compress-Archive -Path "$env:PUBLISH_DIR\*" `
-            -DestinationPath artifacts/AlTamam-Portable-win-x64.zip -Force
+            -DestinationPath "artifacts/AlTamam-Portable-$env:RUNTIME.zip" -Force
         shell: pwsh
         env: { }
       - name: Install Inno Setup 6 (approved tool) and compile installer
@@ -225,28 +230,30 @@ jobs:
           }
           if (-not (Test-Path -LiteralPath $iscc)) { throw "Inno Setup compiler not found: $iscc" }
           $publishDirAbsolute = (Resolve-Path $env:PUBLISH_DIR).Path
-          & $iscc `
+          $architectureOption = if ($env:RUNTIME -eq 'win-x86') { '/DBuildX86' } else { '/DBuildX64' }
+          & $iscc $architectureOption `
             /DAppVersion=$env:RELEASE_VERSION `
             /DPublishDir=$publishDirAbsolute `
+            /DTargetArch=$env:RUNTIME `
             build/AlTamam-installer.iss
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compiler failed' }
-          Move-Item artifacts/AlTamam-Installer-win-x64-setup.exe artifacts/AlTamam-Installer-win-x64.exe -Force
+          Move-Item "artifacts/AlTamam-Installer-$env:RUNTIME-setup.exe" "artifacts/AlTamam-Installer-$env:RUNTIME.exe" -Force
       - name: Generate SHA-256 checksums + build metadata (15.07)
-        run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION"
-      - name: Upload BOTH release-candidate artifacts
+        run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:RUNTIME
+      - name: Upload BOTH release-candidate artifacts for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
-          name: AlTamam-win-x64-rc-${{ env.RELEASE_VERSION }}
+          name: AlTamam-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
           path: |
-            artifacts/AlTamam-Portable-win-x64.zip
-            artifacts/AlTamam-Installer-win-x64.exe
+            artifacts/AlTamam-Portable-${{ matrix.arch }}.zip
+            artifacts/AlTamam-Installer-${{ matrix.arch }}.exe
             artifacts/SHA256SUMS.txt
             artifacts/BUILD_METADATA.json
           retention-days: 90
       - name: Retain raw publish dir for acceptance testing
         uses: actions/upload-artifact@v4
         with:
-          name: AlTamam-publish-dir
+          name: AlTamam-publish-dir-${{ matrix.arch }}
           path: ${{ env.PUBLISH_DIR }}
           retention-days: 30
 

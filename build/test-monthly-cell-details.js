@@ -3,11 +3,25 @@ const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("n
 class El{
   constructor(tag){this.tag=tag;this.children=[];this.handlers={};this.attrs={};
     this.className="";this.textContent="";this.style={};this.value="";this.hidden=false;
-    this.dataset={};this.disabled=false;}
+    this.dataset={};this.disabled=false;this.isConnected=true;this.lastScroll=null;}
   get classList(){return{add:(...names)=>{this.className+=" "+names.join(" ")},
     toggle:(name,on)=>{const parts=this.className.split(/\s+/).filter(Boolean).filter(x=>x!==name);
       if(on)parts.push(name);this.className=parts.join(" ");}};}
   get tBodies(){return this.children.filter(x=>x.tag==="tbody");}
+  getBoundingClientRect(){
+    if(this.className.includes("monthly-scroll"))return{left:0,right:1180,width:1180};
+    if(this.className.includes("pinned"))return{left:0,right:0,width:120};
+    if(this.className.includes("current-day-column"))return{left:140,right:200,width:60};
+    return{left:0,right:60,width:60};
+  }
+  querySelector(selector){return this.all().find(x=>x!==this &&
+    x.className.split(/\s+/).includes(selector.slice(1)))||null;}
+  querySelectorAll(selector){
+    if(selector==="thead .pinned")return this.all().filter(x=>x.tag==="th"&&
+      x.className.split(/\s+/).includes("pinned"));
+    return [];
+  }
+  scrollBy(options){this.lastScroll=options;}
   append(...nodes){this.children.push(...nodes);}
   appendChild(node){this.children.push(node);return node;}
   replaceChildren(...nodes){this.children=nodes;}
@@ -44,13 +58,29 @@ const document={createElement:tag=>new El(tag),
     "navBtn-admin":new El("button"),"navBtn-settings":new El("button")})[id]||null,
   querySelector:selector=>selector===".app-sidebar"?sidebar:null,
   addEventListener:(name,fn)=>{events[name]=fn;}};
-const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}}},
+const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
+  requestAnimationFrame:fn=>fn()},
   document,location:{hash:"#monthly"},history:{replaceState:()=>{}},Date,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/js/functional-screens.js"),"utf8"),context);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function main(){
   await events.DOMContentLoaded();await tick();await tick();
+  const scroller=viewport.all().find(x=>x.className.includes("monthly-scroll"));
+  assert.ok(scroller,"monthly scroll region must exist");
+  const dayHeaders=viewport.all().filter(x=>x.tag==="th" &&
+    x.className.split(/\s+/).includes("day-column"));
+  const numberOfDays=new Date(year,month,0).getDate();
+  assert.equal(dayHeaders.length,numberOfDays);
+  dayHeaders.forEach((head,i)=>assert.equal(parseInt(head.textContent,10),i+1,
+    "day columns must stay in actual chronological order"));
+  const marked=dayHeaders.filter(x=>x.className.includes("current-day-column"));
+  assert.equal(marked.length,1,"exactly one column marks today");
+  assert.equal(parseInt(marked[0].textContent,10),today.getDate());
+  assert.ok(!marked[0].className.includes("pinned"),
+    "today must travel with its chronological day, not be fixed");
+  assert.ok(scroller.lastScroll && Number.isFinite(scroller.lastScroll.left),
+    "today must be centered at initial render, without blocking manual scrolling");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
   assert.ok(open,"one committed cell has a detail button");
   assert.ok(open.attrs["aria-label"]?.includes(firstDay),"accessible date label");

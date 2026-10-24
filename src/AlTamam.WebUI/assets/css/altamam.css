@@ -773,7 +773,10 @@ body{min-width:0}
 #appViewport{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .card{min-width:0}
 .functional-table-wrap{max-height:min(56dvh,620px);overscroll-behavior:contain}
-.monthly-scroll{max-height:min(58dvh,680px)}
+.monthly-scroll{max-height:min(58dvh,680px);overflow-x:auto;scrollbar-gutter:stable}
+.monthly-scroll .current-day-column{box-shadow:inset 0 0 0 2px var(--accent-teal);font-weight:800}
+.monthly-scroll th.current-day-column{background:var(--accent-teal);color:#fff}
+.monthly-scroll td.current-day-column{border-inline:2px solid var(--accent-teal)}
 .admin-card .functional-toolbar{gap:8px}
 .admin-card .functional-toolbar>*{min-width:0}
 .admin-site-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:end}
@@ -838,15 +841,6 @@ body{min-width:0}
   z-index:12;min-height:48px;
 }
 .functional-paged-area>.monthly-scroll{max-height:min(48dvh,520px)}
-.monthly-scroll .fixed-today{
-  position:sticky;right:505px;min-width:61px;width:61px;
-  z-index:3;border-inline-start:2px solid var(--accent-teal);
-  background:var(--bg-surface);font-weight:800;text-align:center;
-}
-.monthly-scroll th.fixed-today{
-  z-index:9;background:var(--bg-subtle);
-}
-.monthly-scroll .current-day-column{box-shadow:inset 0 0 0 1px var(--accent-teal)}
 @media(max-height:760px){
  .functional-paged-area,
  :is(.admin-note,.admin-card,.card,div):has(> .functional-table-wrap):has(> .functional-pager){
@@ -855,7 +849,7 @@ body{min-width:0}
  .functional-paged-area>.functional-pager{min-height:45px;padding:6px 8px}
 }
 
-/* Monthly roster: legible Arabic, unclipped identity/site fields, stronger pinned today. */
+/* Monthly roster: legible Arabic, unclipped identity/site fields, moving date highlight. */
 .monthly-scroll .functional-table{
   font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;
   font-size:14px;line-height:1.6;
@@ -876,24 +870,12 @@ body{min-width:0}
 }
 .monthly-scroll .fixed-four{right:385px;width:145px;min-width:145px;
   white-space:normal;overflow-wrap:anywhere}
-.monthly-scroll .fixed-today{
-  right:530px;width:82px;min-width:82px;max-width:82px;
-  font-weight:900;text-align:center;
-  box-shadow:inset 2px 0 0 var(--accent-teal),
-             inset -2px 0 0 var(--accent-teal);
-}
-.monthly-scroll th.fixed-today{
-  z-index:9;background:var(--bg-subtle);color:var(--text-main);
-  font-size:15px;font-weight:900;line-height:1.45;
-  white-space:pre-line;
-}
-.monthly-scroll td.fixed-today{font-size:17px;font-weight:900}
+.monthly-scroll td.current-day-column .monthly-day-detail{font-size:18px}
 .monthly-scroll .monthly-day-detail{
   display:block;font-family:inherit;color:inherit;
   font-size:15px;line-height:1.5;font-weight:900;
   padding:8px 5px;min-height:40px;
 }
-.monthly-scroll td.fixed-today .monthly-day-detail{font-size:18px}
 .monthly-scroll th.pinned{box-shadow:inset 0 -2px 0 var(--border-color)}
 .monthly-scroll .monthly-day-detail:hover{
   outline:2px solid currentColor;outline-offset:-3px;border-radius:5px;

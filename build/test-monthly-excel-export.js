@@ -56,21 +56,24 @@ async function main(){
   await events.DOMContentLoaded();await tick();await tick();
   const headers=viewport.all().filter(x=>x.tag==="th");
   assert.ok(headers.length>5,"monthly roster has fixed columns and calendar days");
-  assert.equal(Number.parseInt(String(headers[4].textContent),10),
-    new Date().getDate(),"today appears immediately after 4 fixed columns");
-  assert.ok(headers[4].className.includes("fixed-today"),
-    "today stays pinned while the other days scroll horizontally");
+  const dayCount=new Date(year,month,0).getDate();
+  assert.equal(headers.length,4+dayCount,"four identity columns and all natural calendar days");
+  for(let day=1;day<=dayCount;day++)
+    assert.equal(Number.parseInt(String(headers[3+day].textContent),10),day,
+      "day cells preserve chronological month order");
   assert.ok(viewport.all().some(x=>x.className.includes("functional-paged-area")),
     "pager lives in fixed table panel rather than below the whole screen");
   const styles=fs.readFileSync(path.join(__dirname,
     "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
-  assert.ok(styles.includes(".monthly-scroll .fixed-today"),
-    "today's column has an explicit sticky position");
+  assert.ok(styles.includes(".monthly-scroll .current-day-column"),
+    "today's non-sticky chronological column remains highlighted");
   const previewButton=viewport.all().find(x=>x.tag==="button"&&x.textContent==="معاينة تصدير Excel");
   assert.ok(previewButton,"monthly Excel preview is visible");
   const todayHeading=viewport.all().find(x=>x.tag==="th"&&
-    x.className.includes("fixed-today"));
-  assert.ok(todayHeading,"today is pinned beside the static identity/site columns");
+    x.className.includes("current-day-column"));
+  assert.ok(todayHeading,"today stays at its actual month position");
+  assert.ok(!todayHeading.className.includes("pinned"),
+    "today is not fixed and must scroll both directions");
   assert.ok(todayHeading.textContent.includes("اليوم"),
     "current-day header must be clearly labeled");
   const visibleStatus=viewport.all().find(x=>x.tag==="td"&&
@@ -80,8 +83,8 @@ async function main(){
     "colored cells choose contrasting text instead of possibly invisible default ink");
   const css=fs.readFileSync(path.join(__dirname,
     "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
-  assert.ok(css.includes(".monthly-scroll td.fixed-today{font-size:17px"),
-    "pinned today has readable, enlarged attendance text");
+  assert.ok(css.includes(".monthly-scroll td.current-day-column"),
+    "today is prominent without a sticky position");
   assert.ok(css.includes(".monthly-scroll .fixed-three{"),
     "identity text is allowed to wrap instead of being clipped");
   assert.equal(calls.some(x=>x.action==="ExportMonthlyWorkbookSet"),false,

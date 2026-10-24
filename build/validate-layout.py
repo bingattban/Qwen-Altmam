@@ -10,25 +10,35 @@ Exit codes: 0 = pass, 1 = layout violation, 2 = directory missing.
 """
 import os, struct, sys
 
-def is_pe(path: str) -> bool:
+def pe_machine(path: str) -> int | None:
     """Genuine Windows PE check: MZ header + e_lfanew -> 'PE\\0\\0' signature."""
     try:
         with open(path, "rb") as f:
             if f.read(2) != b"MZ":
-                return False
+                return None
             f.seek(0)
             head = f.read(0x40)
             if len(head) < 0x40:
-                return False
+                return None
             off = struct.unpack("<I", head[0x3C:0x40])[0]
             f.seek(off)
-            return f.read(4) == b"PE\x00\x00"
-    except OSError:
-        return False
+            if f.read(4) != b"PE\x00\x00":
+                return None
+            return struct.unpack("<H",f.read(2))[0]
+    except (OSError, struct.error):
+        return None
 
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if "--arch" in sys.argv and len(args)>1:
+        args.remove(sys.argv[sys.argv.index("--arch")+1])
     portable = "--portable" in sys.argv
+    arch = None
+    if "--arch" in sys.argv:
+        at = sys.argv.index("--arch")
+        if at+1 >= len(sys.argv) or sys.argv[at+1] not in ("win-x64","win-x86"):
+            print("Expected --arch win-x64 or --arch win-x86"); return 2
+        arch = sys.argv[at+1]
     if not args:
         print("usage: validate-layout.py <publish-dir> [--portable]")
         return 2
@@ -41,8 +51,12 @@ def main() -> int:
     exe = os.path.join(root, "AlTamam.DesktopHost.exe")
     if not os.path.isfile(exe):
         errors.append("missing real executable AlTamam.DesktopHost.exe")
-    elif not is_pe(exe):
-        errors.append("AlTamam.DesktopHost.exe is NOT a valid Windows PE binary (fake exe?)")
+    else:
+        machine=pe_machine(exe)
+        if machine is None:
+            errors.append("AlTamam.DesktopHost.exe is NOT a valid Windows PE binary")
+        elif arch is not None and machine != {"win-x64":0x8664,"win-x86":0x14c}[arch]:
+            errors.append(f"Wrong Windows PE architecture: expected {arch}, machine=0x{machine:04x}")
 
     for name in ("AlTamam.DesktopHost.dll", "AlTamam.DesktopHost.runtimeconfig.json",
                  "AlTamam.DesktopHost.deps.json"):
@@ -100,7 +114,7 @@ def main() -> int:
             print("  -", e)
         return 1
     mode = "portable" if portable else "publish"
-    print(f"LAYOUT VALIDATION PASS ({mode}): real PE exe, WebView2 loader, native SQLCipher, config present.")
+    print(f"LAYOUT VALIDATION PASS ({mode}/{arch or 'unspecified'}): real PE exe, WebView2 loader, native SQLCipher, config present.")
     return 0
 
 if __name__ == "__main__":
