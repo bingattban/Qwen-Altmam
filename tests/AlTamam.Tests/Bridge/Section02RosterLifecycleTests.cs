@@ -109,6 +109,27 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task EqualAggregateRevisionCannotHideOneStaleMember()
+    {
+        Execute("UPDATE Persons SET RowVersion=2 WHERE PersonId IN ('TST-LIFE-P1','TST-LIFE-P2');");
+        var svc = new PersonRosterService(_db);
+        var preview = await svc.PreviewArchivePersonsAsync(Selected(),Actor,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        Execute("""
+            UPDATE Persons SET RowVersion=3 WHERE PersonId='TST-LIFE-P1';
+            UPDATE Persons SET RowVersion=1 WHERE PersonId='TST-LIFE-P2';
+            """);
+        // Total revision stays 4; each individual version MUST still match.
+        Assert.Equal(4,Number("SELECT SUM(RowVersion) FROM Persons;"));
+        var result = await svc.ArchivePersonsAsync(Actor,"test-admin",
+            Commit(Assert.IsType<JsonObject>(preview.Data),(JsonArray)Selected()["personIds"]!),
+            CancellationToken.None);
+        Assert.False(result.Success);
+        Assert.Equal(2,Number("SELECT COUNT(*) FROM Persons WHERE ActiveFlag=1;"));
+        Assert.Equal(2,Number("SELECT COUNT(*) FROM PersonAssignments WHERE ValidToLocalDate IS NULL;"));
+    }
+
+    [Fact]
     public async Task Reactivation_CreatesNewWindowAndPreservesArchiveGap()
     {
         Execute("""
