@@ -61,6 +61,14 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;"));
         Assert.Equal("صاحب البرنامج", Scalar(
             "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
+        var admin = new BridgePrincipal(Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>(),
+            "chosenOwner",UserRole.GeneralAdministration,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var accounts = await new UserAccountManagementService(_db).ListAsync(
+            new JsonObject(),admin,CancellationToken.None);
+        Assert.True(accounts.Success,accounts.UserMessage);
+        var visible = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
+        Assert.Equal("الإدارة العامة - chosenOwner (صاحب البرنامج)",
+            visible[0]!["fullName"]!.GetValue<string>());
 
         var duplicate = await _service.ProvisionFirstAdministratorAsync(
             "anotherOwner", "test-password-123", CancellationToken.None);
@@ -77,6 +85,26 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
             VALUES('TST-EVIL-GA',NULL,'second-ga','second-ga',1,'synthetic','salt',0,1,
                    0,'TST','TST','2026-01-01T00:00:00Z',1);
             """));
+    }
+
+    [Fact]
+    public async Task FounderNameMayBeOmitted_AndRoleUsernameRemainVisible()
+    {
+        var setup = await _service.ProvisionFirstAdministratorAsync(
+            "founderOptional", "test-password-123", CancellationToken.None);
+        Assert.True(setup.Success,setup.UserMessage);
+        Assert.Equal("", Scalar("SELECT FoundingFullName FROM Users WHERE Role=1;"));
+        Assert.Equal("الإدارة العامة",Scalar(
+            "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
+        var actor = new BridgePrincipal(Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>(),
+            "founderOptional",UserRole.GeneralAdministration,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        var accounts = await new UserAccountManagementService(_db).ListAsync(
+            new JsonObject(),actor,CancellationToken.None);
+        Assert.True(accounts.Success,accounts.UserMessage);
+        var visible = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
+        Assert.Equal("الإدارة العامة - founderOptional",
+            visible[0]!["fullName"]!.GetValue<string>());
+        Assert.Null(visible[0]!["personId"]);
     }
 
     [Fact]
@@ -137,6 +165,11 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         Assert.True(link.Success,link.UserMessage);
         Assert.Equal("PER-FOUNDER-TEST",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
         Assert.Equal(userId,Scalar("SELECT UserId FROM Users WHERE Role=1;"));
+        var accounts = await svc.ListAsync(new JsonObject(), actor, CancellationToken.None);
+        Assert.True(accounts.Success,accounts.UserMessage);
+        var visible = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
+        Assert.Equal("الإدارة العامة - realOwner (صاحب الحساب المؤسس)",
+            visible[0]!["fullName"]!.GetValue<string>());
         Assert.Equal("صاحب الحساب المؤسس",Scalar(
             "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ACCOUNT_LINKED';"));
