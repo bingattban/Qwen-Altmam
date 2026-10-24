@@ -45,16 +45,19 @@
 - Archival, separation and external movement **never** assign a previous `PersonId` to another person. Database migration V007 prevents normal physical person deletion or ID mutation.
 - Historic reports resolve identity by effective date; the row-header presentation when an identity changes mid-month remains a display question for the dedicated screen phase.
 
-## 7. Section 03 conflict awaiting owner decision (do NOT invent a policy)
+## 7. Section 03 final OWNER decision — optional founding account full name
 
-- Former approved instruction: the founding GeneralAdmin is **exempt** from providing a full name on first launch.
-- Later Section 03.02 and 03.04: the founder **must enter** a full name at first launch.
-- Until the owner explicitly chooses, the first-launch form prompts for a real name but does **not require** it. If supplied it is saved in the encrypted Users record as `FoundingFullName` and immutable audit snapshots; if omitted the previously approved `الإدارة العامة` role label is retained.
-- No fabricated PersonId/service number may be created in either variant.
+- **Resolved by owner, 2026-10-24:** The founding GeneralAdmin owner's full name is **optional** at first startup; this explicitly overrides the incompatible mandatory-name wording in Section 03.02 / 03.04. Username, strong password, and matching confirmation are mandatory.
+- In the user accounts display, ALWAYS show `الإدارة العامة - username` for the GeneralAdmin. When an optional real founder name was entered, append ` (الاسم الكامل)`. This display remains recognizable after linking the account to a roster person; the `PersonId` and the original historical evidence remain unchanged.
+- The optional supplied founder name is stored in the encrypted database as `FoundingFullName`; the creation audit takes an immutable name snapshot. Without it, the audit snapshot uses `الإدارة العامة` and the actual username remains preserved separately.
+- Do not invent a fictitious personnel number, real roster person or second founding account.
 
-## 8. Automatic Windows build and distribution candidates
+## 8. OWNER-APPROVED TEST-FIRST GITHUB PR AND MERGE POLICY
 
-- Both Core Build and Portable+Installer candidate workflows run automatically on every push to `main`. New commits cancel obsolete same-workflow runs to avoid running obsolete code.
-- Candidate artifacts are uploaded only after successful Windows tests and publish packaging; *automatic packaging is not final release approval*.
-- Production icon `src/AlTamam.DesktopHost/Assets/AlTamam.ico` is a resized Windows icon extracted from the exact owner-selected previously generated image, not a replacement design.
-- Manual/tagged acceptance runs retain their separate mandatory acceptance criteria.
+- **Never implement and directly push ordinary work to `main`.** Create a feature branch and an open pull request targeting `main`. All subsequent changes remain on the PR branch.
+- On `pull_request` open / synchronize, start the two independent **Windows Core Build** and **Windows Release Packages** workflows concurrently for the candidate branch. Neither workflow waits for the other to begin.
+- Within **Core**, execute UI/manifest guards → production compile → full C# tests. Within **Release**, execute independent UI/manifest/dependency preflight → production compile and full tests → only after all Release tests pass, publish and package **both** Portable ZIP and Installer EXE with validation and SHA-256 evidence.
+- **Never merge until BOTH workflows have conclusively succeeded on the current PR head SHA AND the Release run has uploaded the Portable and Installer artifacts.** On failures, skips, cancellation, missing builds or differing SHAs: do not merge. Fix the feature branch and rerun both workflows. After verified success, merge the PR into `main`. The main branch also runs both workflows post-merge to verify the integrated commit.
+- The existing GitHub `main` branch was checked and was **not protected** as of this change. GitHub branch protection / repository rulesets requiring the two checks are **not writable through the active connector**, so they must be configured by the repository owner in GitHub Settings to forbid bypass by other push-capable users. A documented policy by itself is not an enforced branch protection rule.
+- Candidate artifacts are **not** final release approval. Manual/tagged acceptance gates and owner-approved signing remain separate.
+- Production icon `src/AlTamam.DesktopHost/Assets/AlTamam.ico` is the owner-selected previously generated picture, not a replacement design.
