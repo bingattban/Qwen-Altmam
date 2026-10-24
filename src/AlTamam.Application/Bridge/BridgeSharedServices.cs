@@ -26,12 +26,12 @@ public sealed class BridgeSharedServices
         _time = timeProvider ?? TimeProvider.System;
     }
 
-    /// <summary>True when no active privileged user exists yet (first-run provisioning required).</summary>
+    /// <summary>True if the database has EVER had an account: disabling users cannot reopen first-run setup.</summary>
     public async Task<bool> IsProvisionedAsync(CancellationToken cancellationToken = default)
     {
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM Users WHERE ActiveFlag = 1);";
+        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM Users);";
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) == 1;
     }
 
@@ -57,6 +57,17 @@ public sealed class BridgeSharedServices
         DateTimeOffset nowUtc = _time.GetUtcNow();
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            // The first administrator can only ever be created on a truly empty
+            // account table, checked inside the same serialized write transaction.
+            if (role == UserRole.GeneralAdministration && !requiresSetup)
+            {
+                using var initialized = connection.CreateCommand();
+                initialized.Transaction = tx;
+                initialized.CommandText = "SELECT EXISTS(SELECT 1 FROM Users);";
+                if (Convert.ToInt32(await initialized.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
+                    return Error(BridgeErrorCodes.ConflictStale,
+                        "تمت تهيئة البرنامج مسبقاً؛ لا يمكن إنشاء مدير عام آخر.");
+            }
             using var dup = connection.CreateCommand();
             dup.Transaction = tx;
             dup.CommandText = "SELECT EXISTS(SELECT 1 FROM Users WHERE NormalizedUsername = $u);";
@@ -78,6 +89,14 @@ public sealed class BridgeSharedServices
             insert.Parameters.AddWithValue("$setup", requiresSetup ? 1 : 0);
             insert.Parameters.AddWithValue("$now", nowUtc.ToString("O"));
             await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            if (role == UserRole.GeneralAdministration && !requiresSetup)
+                await BridgeAuditWriter.WriteAsync(connection, tx, _time,
+                    "FOUNDING_ADMIN_CREATED", "إنشاء الإدارة العامة عند التهيئة الأولى",
+                    userId, username, null, "User", userId, username,
+                    null, new JsonObject { ["role"] = "GeneralAdministration" }.ToJsonString(),
+                    "تهيئة الحساب المؤسس دون اشتراط اسم كامل أو رقم (ع)",
+                    null, _time.GetLocalNow().ToString("yyyy-MM-dd"),
+                    Guid.NewGuid().ToString("N"), ct).ConfigureAwait(false);
             return Ok(new JsonObject { ["userId"] = userId, ["username"] = username, ["role"] = role.ToString() });
         }, ct).ConfigureAwait(false);
     }
