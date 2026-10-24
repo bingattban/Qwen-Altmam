@@ -114,7 +114,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         var setup = await _service.ProvisionFirstAdministratorAsync(
             "realOwner", "test-password-123", CancellationToken.None, "صاحب الحساب المؤسس");
         Assert.True(setup.Success, setup.UserMessage);
-        string userId = setup.Data!["userId"]!.GetValue<string>();
+        string userId = Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>();
         var actor = new BridgePrincipal(userId,"realOwner",UserRole.GeneralAdministration,
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         Exec("""
