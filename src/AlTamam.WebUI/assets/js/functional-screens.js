@@ -104,8 +104,8 @@
       const reply=parseData(await bridge().invoke("GetSettingsOverview",{}));
       // Show the settings screen (and its native-styled modal) immediately after
       // login if E: or the user's previously selected folder is unavailable.
-      if(STATE.session && reply?.defaultDriveAvailable===false &&
-          location.hash==="#dashboard")render("settings");
+      if(STATE.session && reply?.defaultDriveAvailable===false)
+        render("settings");
     } catch { /* A storage-status check never invalidates a valid login. */ }
   }
 
