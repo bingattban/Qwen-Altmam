@@ -10,7 +10,7 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
 {
     private readonly string _path = SyntheticFixtures.CreateTempDatabasePath();
     private AlTamamDbContext _db = null!;
-    private const string Day = "2026-10-24";
+    private static readonly string Day = DateTime.Today.ToString("yyyy-MM-dd");
     private const string Actor = "TST-LIFECYCLE-ADMIN";
 
     public async Task InitializeAsync()
@@ -85,7 +85,7 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
         var saved = await service.ArchivePersonsAsync(Actor, "test-admin", approved, CancellationToken.None);
         Assert.True(saved.Success, saved.UserMessage);
         Assert.Equal(2,Number("SELECT COUNT(*) FROM Persons WHERE OrganizationalStatus=4 AND ActiveFlag=0;"));
-        Assert.Equal(2,Number("SELECT COUNT(*) FROM PersonAssignments WHERE ValidToLocalDate='2026-10-24';"));
+        Assert.Equal(2,Number($"SELECT COUNT(*) FROM PersonAssignments WHERE ValidToLocalDate='{Day}';"));
         Assert.Equal(2,Number("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_ARCHIVE';"));
         var replay = await service.ArchivePersonsAsync(Actor, "test-admin", approved, CancellationToken.None);
         Assert.False(replay.Success);
@@ -141,7 +141,7 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
         var service = new PersonRosterService(_db);
         var payload = new JsonObject
         {
-            ["personId"]="TST-LIFE-P1",["effectiveLocalDate"]="2026-03-01",
+            ["personId"]="TST-LIFE-P1",["effectiveLocalDate"]=Day,
             ["expectedRevision"]=2,["reason"]="عودة مثبتة"
         };
         var result = await service.RestoreArchivedPersonAsync(Actor, "test-admin",
@@ -149,7 +149,7 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
         Assert.True(result.Success, result.UserMessage);
         Assert.Equal(2,Number("SELECT COUNT(*) FROM PersonAssignments WHERE PersonId='TST-LIFE-P1';"));
         Assert.Equal("2026-02-01",Text("SELECT ValidToLocalDate FROM PersonAssignments WHERE AssignmentId='TST-LIFE-A1';"));
-        Assert.Equal("2026-03-01",Text("SELECT ValidFromLocalDate FROM PersonAssignments WHERE PersonId='TST-LIFE-P1' AND ValidToLocalDate IS NULL;"));
+        Assert.Equal(Day,Text("SELECT ValidFromLocalDate FROM PersonAssignments WHERE PersonId='TST-LIFE-P1' AND ValidToLocalDate IS NULL;"));
         Assert.Equal(0,Number("SELECT COUNT(*) FROM PersonAssignments WHERE PersonId='TST-LIFE-P1' AND ValidFromLocalDate<='2026-02-15' AND (ValidToLocalDate IS NULL OR ValidToLocalDate>'2026-02-15');"));
         Assert.Equal(3,Number("SELECT RowVersion FROM Persons WHERE PersonId='TST-LIFE-P1';"));
         var again = await service.RestoreArchivedPersonAsync(Actor,"test-admin",payload,CancellationToken.None);
