@@ -21,7 +21,11 @@ AppName=التمام اليومي
 UninstallDisplayName=التمام اليومي
 AppVersion={#AppVersion}
 AppPublisher=AlTamam
-DefaultDirName={autopf}\AlTamam\{#TargetArch}
+#if CompareText(TargetArch, "win-x86") == 0
+DefaultDirName={autopf}\AlTamam-x86
+#else
+DefaultDirName={autopf}\AlTamam
+#endif
 DefaultGroupName=التمام اليومي
 #if CompareText(TargetArch, "win-x86") == 0
 ArchitecturesAllowed=x86compatible
