@@ -76,6 +76,24 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
     };
 
     [Fact]
+    public async Task HistoricalDateCannotAlterCurrentRosterMembership()
+    {
+        var service = new PersonRosterService(_db);
+        var backdated = Selected();
+        backdated["effectiveLocalDate"] = "2026-01-02";
+        var preview = await service.PreviewArchivePersonsAsync(backdated,Actor,CancellationToken.None);
+        Assert.False(preview.Success);
+        Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.HistoricDayLocked,preview.ErrorCode);
+        var restore = await service.RestoreArchivedPersonAsync(Actor,"test-admin",new JsonObject {
+            ["personId"]="TST-LIFE-P1", ["effectiveLocalDate"]="2026-01-02",
+            ["expectedRevision"]=1
+        },CancellationToken.None);
+        Assert.False(restore.Success);
+        Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.HistoricDayLocked,restore.ErrorCode);
+        Assert.Equal(2,Number("SELECT COUNT(*) FROM PersonAssignments WHERE ValidToLocalDate IS NULL;"));
+    }
+
+    [Fact]
     public async Task ArchiveBatch_ClosesButNeverErasesHistory_RejectsReplay()
     {
         var service = new PersonRosterService(_db);
