@@ -989,7 +989,7 @@
       folder.input.setAttribute("aria-label","مجلد النسخ والتصدير");
       const folderNote=node("div","settings-feedback");
       folderNote.setAttribute("aria-live","polite");
-      const choose=btn("اختيار مجلد من Windows",async()=>{
+      const pickOutputFolder=async()=>{
         choose.disabled=true;
         try{
           const reply=await api().invoke("SetOutputDirectory",{choose:true});
@@ -1003,7 +1003,8 @@
           backupInfo.prepend(settingsValue("مجلد النسخ والتصدير",folder.input.value));
         }catch(e){if(token===currentRequest)errors(folderNote,e);}
         finally{choose.disabled=false;}
-      },"btn btn-outline settings-action");
+      };
+      const choose=btn("اختيار مجلد من Windows",pickOutputFolder,"btn btn-outline settings-action");
       const updateFolder=btn("تأكيد تغيير مسار الحفظ",async()=>{
         if(!await dialogs.confirm("هل تؤكد استخدام هذا المجلد للنسخ الاحتياطي وكل ملفات Excel؟"))return;
         updateFolder.disabled=true;
@@ -1030,7 +1031,7 @@
         save.disabled=true;
         void dialogs.confirm(message,{title:"مسار النسخ الاحتياطي غير متاح",
           confirmLabel:"اختيار مسار جديد"}).then(confirmed=>{
-          if(confirmed && token===currentRequest)choose.click();
+          if(confirmed && token===currentRequest)void pickOutputFolder();
         });
       }
       const scheduleNote=warning(info.automaticBackupNote||
