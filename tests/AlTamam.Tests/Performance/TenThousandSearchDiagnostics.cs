@@ -67,7 +67,11 @@ public sealed class TenThousandSearchDiagnostics : IAsyncLifetime, IDisposable
         _output.WriteLine(hardware);
         string? reportFile=Environment.GetEnvironmentVariable("ALTAMAM_PERF_REPORT");
         if(!string.IsNullOrWhiteSpace(reportFile))
-            File.WriteAllText(reportFile,perf+Environment.NewLine+hardware+Environment.NewLine);
+        {
+            string destination=Path.GetFullPath(reportFile);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.WriteAllText(destination,perf+Environment.NewLine+hardware+Environment.NewLine);
+        }
         // No CI hardware-specific hard time threshold: the requirement says target, not guarantee.
         Assert.Contains("TEST-P-008000",result.Data!.ToString());
     }
