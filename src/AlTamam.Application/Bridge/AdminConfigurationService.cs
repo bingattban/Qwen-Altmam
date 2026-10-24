@@ -29,7 +29,11 @@ public sealed class AdminConfigurationService
     private static long ReadVersion(JsonObject? p)
     {
         try { return p?["expectedRevision"]?.GetValue<long>() ?? 0; }
-        catch { return 0; }
+        catch
+        {
+            try { return p?["expectedRevision"]?.GetValue<int>() ?? 0; }
+            catch { return 0; }
+        }
     }
     private static bool ColorValid(string color) => Regex.IsMatch(color, "^#[0-9a-fA-F]{6}$");
     private string LocalDate() => _time.GetLocalNow().ToString("yyyy-MM-dd");
@@ -55,6 +59,9 @@ public sealed class AdminConfigurationService
         string id = "SITE-" + Guid.NewGuid().ToString("N");
         return await _db.ExecuteInWriteTransactionAsync(async (c,t) =>
         {
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"CreateSite",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var check = c.CreateCommand();
             check.Transaction = t;
             check.CommandText = "SELECT COUNT(*) FROM Sites WHERE NormalizedName=$n AND ActiveFlag=1;";
@@ -79,7 +86,9 @@ public sealed class AdminConfigurationService
             await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             await Audit(c,t,actor,"SITE_CREATE","إنشاء موقع","Site",id,name,null,
                 new JsonObject{["name"]=name}.ToJsonString(),ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject{["siteId"]=id,["name"]=name,["rowVersion"]=1L});
+            var outcome=new JsonObject{["siteId"]=id,["name"]=name,["rowVersion"]=1L};
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
         },ct).ConfigureAwait(false);
     }
 
@@ -142,6 +151,9 @@ public sealed class AdminConfigurationService
             return Fail("اسم الحالة (2–75) والرمز (1–5) ولون HEX (#RRGGBB) مطلوبة.");
         string id="STS-"+Guid.NewGuid().ToString("N"), norm=ArabicTextNormalizer.NormalizeForSearch(name);
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"CreateAttendanceStatus",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var dup=c.CreateCommand();dup.Transaction=t;
             dup.CommandText="SELECT COUNT(*) FROM AttendanceStatusDefinitions WHERE NormalizedName=$name AND ActiveFlag=1;";
             dup.Parameters.AddWithValue("$name",norm);
@@ -162,7 +174,9 @@ public sealed class AdminConfigurationService
             await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             await Audit(c,t,actor,"STATUS_CREATE","إضافة حالة","Status",id,name,null,
                 new JsonObject{["name"]=name,["symbol"]=symbol,["color"]=color}.ToJsonString(),ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject{["statusId"]=id,["rowVersion"]=1L});
+            var outcome=new JsonObject{["statusId"]=id,["rowVersion"]=1L};
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
         },ct).ConfigureAwait(false);
     }
 
