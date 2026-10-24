@@ -68,7 +68,7 @@ public sealed class UserAccountManagementService
         string term = Read(payload,"term");
         string pattern = "%" + term.Replace("\\","\\\\").Replace("%","\\%").Replace("_","\\_") + "%";
         string where = principal.Role == UserRole.OrdinaryAdministration
-            ? "WHERE u.Role = 3 AND (u.Username LIKE $term ESCAPE '\\' OR p.CurrentVisibleName LIKE $term ESCAPE '\\' OR p.CurrentServiceNumberA LIKE $term ESCAPE '\\')"
+            ? "WHERE u.Role = 3 AND (u.Username LIKE $term ESCAPE '\\' OR u.FoundingFullName LIKE $term ESCAPE '\\' OR p.CurrentVisibleName LIKE $term ESCAPE '\\' OR p.CurrentServiceNumberA LIKE $term ESCAPE '\\')"
             : "WHERE (u.Username LIKE $term ESCAPE '\\' OR p.CurrentVisibleName LIKE $term ESCAPE '\\' OR p.CurrentServiceNumberA LIKE $term ESCAPE '\\')";
         using var c=_db.CreateOpenConnection();
         using var count=c.CreateCommand();
@@ -78,7 +78,7 @@ public sealed class UserAccountManagementService
         using var cmd=c.CreateCommand();
         cmd.CommandText=$"""
             SELECT u.UserId, u.Username, u.Role, u.ActiveFlag, u.RowVersion,
-                CASE WHEN u.LinkedPersonId IS NULL AND u.Role = 1
+                CASE WHEN u.Role = 1
                      THEN 'الإدارة العامة - ' || u.Username ||
                        CASE WHEN u.FoundingFullName IS NOT NULL AND trim(u.FoundingFullName)<>''
                             THEN ' (' || u.FoundingFullName || ')' ELSE '' END
