@@ -235,7 +235,7 @@
     const shell=card("استيراد أسماء جديدة من ملف Excel");
     shell.appendChild(node("p","section-description",
       "أعمدة الكشف: الاسم، الرقم (ع)، الموقع (اختياري)، والرقم العادي للتسلسل فقط. " +
-      "الرقم (ع) لا يقل عن خمس خانات، ويختلف عن رقم ترتيب الصف. الحد 500 فرد و160 كيلوبايت. " +
+      "الرقم (ع) لا يقل عن أربع خانات، ويختلف عن رقم ترتيب الصف. الحد 500 فرد و160 كيلوبايت. " +
       "سيُنشئ البرنامج المواقع غير الموجودة تلقائياً عند التأكيد، ولن يغير هوية أو تحضير فرد موجود."));
     const choose=node("input","form-control");choose.type="file";
     choose.accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -762,20 +762,25 @@
     const creation=node("details","admin-create-person card");
     const toggle=node("summary","btn btn-primary","إضافة فرد واحد للكشف");
     const creationFields=node("div","admin-site-form");
-    const nameField=field("الاسم الكامل"), numberField=field("الرقم (ع) — خمس خانات فأكثر"),
+    const nameField=field("الاسم الكامل"), numberField=field("الرقم (ع) — أربع خانات فأكثر"),
       siteField=field("الموقع (اختر الموجود أو اكتب موقعاً جديداً)","غير محدد");
     const siteSuggestions=node("datalist");
     siteSuggestions.id="person-site-options";
     siteField.input.setAttribute("list","person-site-options");
     numberField.input.inputMode="numeric";
-    numberField.input.minLength=5;
+    numberField.input.minLength=4;
     numberField.input.maxLength=70;
+    // Recognize Arabic-Indic and Persian numerals automatically while typing/pasting.
+    numberField.input.addEventListener("input",()=>{
+      numberField.input.value=numberField.input.value.replace(/[٠-٩۰-۹]/g,c=>
+        String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0)));
+    });
     const addMessage=node("div","admin-note");
     const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
       const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
         siteName=siteField.input.value.trim()||"غير محدد";
-      if(name.length<3 || !/^[0-9٠-٩۰-۹]{5,70}$/.test(number) || siteName.length<2)
-        return errors(addMessage,new Error("أدخل الاسم والرقم (ع) بخمس خانات رقمية على الأقل والموقع."));
+      if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || siteName.length<2)
+        return errors(addMessage,new Error("أدخل الاسم والرقم (ع) بأربع خانات رقمية على الأقل والموقع."));
       if(!await dialogs.confirm("تأكيد إضافة «"+name+"» بالرقم (ع) «"+number+
         "» في الموقع «"+siteName+"»؟ سيُسجَّل الموقع تلقائياً إذا لم يكن موجوداً."))return;
       saveNew.disabled=true;
