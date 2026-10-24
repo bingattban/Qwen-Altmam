@@ -7,8 +7,8 @@ namespace AlTamam.Infrastructure.Persistence;
 /// <summary>Encrypted SQLite connection management and atomic initialization of schema V001.</summary>
 public sealed class AlTamamDbContext : IDisposable
 {
-    /// <summary>Highest schema version this build understands (V003 adds the Phase-05 preview-token store).</summary>
-    public const int CurrentSchemaVersion = 3;
+    /// <summary>Highest schema version this build understands (V004 hardens temporal and append-only evidence).</summary>
+    public const int CurrentSchemaVersion = 4;
 
     /// <summary>The canonical, ordered migration set shipped with this build.</summary>
     public static readonly SchemaMigration[] CanonicalMigrations =
@@ -16,6 +16,7 @@ public sealed class AlTamamDbContext : IDisposable
         new(1, "V001_InitialSchema", "AlTamam.Infrastructure.Persistence.Migrations.V001_InitialSchema.sql", RecordsHash: false),
         new(2, "V002_MigrationHardening", "AlTamam.Infrastructure.Persistence.Migrations.V002_MigrationHardening.sql"),
         new(3, "V003_PersonnelMasterData", "AlTamam.Infrastructure.Persistence.Migrations.V003_PersonnelMasterData.sql"),
+        new(4, "V004_HistoricalIntegrity", "AlTamam.Infrastructure.Persistence.Migrations.V004_HistoricalIntegrity.sql"),
     ];
     private readonly string _databasePath;
     private readonly string _databaseKey;
