@@ -179,7 +179,7 @@
     const grid=node("div","admin-subsection-grid");
     grid.setAttribute("aria-label","خيارات "+title);
     for(const [key,label] of nestedOptions[section]) {
-      if(key==="closedCorrection" && state.session?.role!=="GeneralAdministration")continue;
+      if(key==="closedCorrection" && !["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))continue;
       const tile=btn(label,()=>navigate(key),"admin-subsection-tile");
       tile.dataset.adminNested=key;
       grid.appendChild(tile);
@@ -418,13 +418,13 @@
 
   // Emergency historical changes are always gated in C#, never merely by hiding UI.
   async function closedCorrection(){
-    if(state.session?.role!=="GeneralAdministration"){
+    if(!["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role)){
       start("الإدارة / التصحيح الاستثنائي");
-      target().appendChild(warning("هذه العملية مخصصة للإدارة العامة فقط."));
+      target().appendChild(warning("هذه العملية مخصصة للإدارة العامة والإدارة العادية فقط."));
       return;
     }
     const page=start("الإدارة / التقارير والفصل / التصحيح الاستثنائي");
-    const box=card("تصحيح تحضير يوم مغلق — الإدارة العامة");
+    const box=card("تصحيح تحضير يوم مغلق — الإدارة العامة والإدارة العادية");
     const notice=node("div","admin-note");
     box.appendChild(warning("عملية استثنائية وخاضعة للتدقيق. يجب تفعيل السياسة صراحة، ومعاينة حالة قديمة محفوظة، ولا يمكن تصحيح يوم نقل أو فصل. لا يُفتح اليوم ولا يُغيَّر وقت التحضير الأصلي."));
     const date=field("التاريخ المغلق","","date");
@@ -460,7 +460,7 @@
     const setPolicy=enabled=>async()=>{
       clearPreview();
       const verb=enabled?"تفعيل":"إيقاف";
-      if(!await dialogs.confirm("هل تؤكد "+verb+" التصحيح الاستثنائي وتسجيل السبب في سجل العمليات؟"))return;
+      if(!await dialogs.confirm("هل تؤكد "+verb+" إذن التصحيح الاستثنائي؟ سيتم تسجيل تغيير الإعداد في سجل العمليات، والسبب إلزامي عند تصحيح التحضير نفسه فقط."))return;
       try{
         const result=await api().invoke("SetClosedDayCorrectionPolicy",{
           enabled,reason:reason.input.value});
