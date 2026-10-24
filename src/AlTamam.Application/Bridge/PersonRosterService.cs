@@ -479,6 +479,7 @@ public sealed class PersonRosterService
 
         using var connection = _db.CreateOpenConnection();
         var candidates = new JsonArray();
+        var expectedVersions = new JsonArray();
         long baseRevisionSum = 0;
         foreach (string id in ids)
         {
@@ -496,7 +497,9 @@ public sealed class PersonRosterService
                 return BridgeHelpers.Error(BridgeErrorCodes.MissingData, $"الفرد {id} غير موجود — التمهيد غير صالح.");
             var org = reader.GetInt32(2);
             var active = Convert.ToInt32(reader.GetValue(3)) == 1;
-            baseRevisionSum += reader.GetInt64(4);
+            long memberRevision = reader.GetInt64(4);
+            baseRevisionSum += memberRevision;
+            expectedVersions.Add(new JsonObject { ["personId"] = id, ["rowVersion"] = memberRevision });
             candidates.Add(new JsonObject
             {
                 ["personId"] = id,
@@ -515,8 +518,12 @@ public sealed class PersonRosterService
             ["effectiveLocalDate"] = effectiveDate,
             ["baseRevision"] = baseRevisionSum,
             ["reversible"] = true,
+            ["expectedVersions"] = expectedVersions.DeepClone(),
             ["previewToken"] = BridgePreviewTokens.Issue(_db, _time, "ArchivePersons",
-                actorUserId: actorUserId, payload, baseRevisionSum, ct)
+                actorUserId: actorUserId,
+                new JsonObject { ["personIds"] = payload["personIds"]?.DeepClone(),
+                    ["effectiveLocalDate"] = effectiveDate,
+                    ["expectedVersions"] = expectedVersions.DeepClone() }, baseRevisionSum, ct)
         });
     }
 
@@ -547,6 +554,7 @@ public sealed class PersonRosterService
         {
             // Do not trust the client-supplied ID list: it must match the immutable
             // preview issued to the SAME authenticated actor.
+            var memberExpectedVersions = new Dictionary<string,long>(StringComparer.Ordinal);
             using (var preview = connection.CreateCommand())
             {
                 preview.Transaction = tx;
@@ -566,6 +574,20 @@ public sealed class PersonRosterService
                     !ReadStringArray(canonical, "personIds").SequenceEqual(ids, StringComparer.Ordinal))
                     return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                         "تغيّرت قائمة الأفراد أو تاريخ العملية بعد المعاينة.");
+                if (canonical["expectedVersions"] is not JsonArray versions ||
+                    versions.Count != ids.Count)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                        "لا تتضمن المعاينة إصدارات جميع الأفراد.");
+                foreach (JsonNode? entry in versions)
+                {
+                    var item = entry as JsonObject;
+                    string memberId = item is null ? "" : ReadString(item, "personId");
+                    long memberVersion = item is null ? -1 : ReadLong(item, "rowVersion", -1);
+                    if (!ids.Contains(memberId) || memberVersion < 1 ||
+                        !memberExpectedVersions.TryAdd(memberId, memberVersion))
+                        return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                            "قائمة إصدارات الأفراد في المعاينة غير صالحة.");
+                }
             }
 
             var people = new List<(string Id,string Name,int Org,int Active,long Revision)>();
@@ -591,9 +613,11 @@ public sealed class PersonRosterService
                 long version = reader.GetInt64(3);
                 bool eligible = reader.GetInt32(4) == 1;
                 reader.Close();
-                if (org != 1 || active != 1 || !eligible)
+                if (org != 1 || active != 1 || !eligible ||
+                    !memberExpectedVersions.TryGetValue(id, out long memberExpected) ||
+                    version != memberExpected)
                     return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
-                        $"الفرد «{name}» ليس ضمن انتساب حالي مؤهل للتاريخ؛ لم تُجرَ أي تغييرات.");
+                        $"تغير انتساب أو إصدار الفرد «{name}» بعد المعاينة؛ لم تُجرَ أي تغييرات.");
                 people.Add((id,name,org,active,version));
                 sum += version;
             }
