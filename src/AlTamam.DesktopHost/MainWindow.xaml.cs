@@ -26,6 +26,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         Title = "التمام اليومي";
+        Icon = new System.Windows.Media.Imaging.BitmapImage(
+            new Uri("pack://application:,,,/Assets/AlTamam.ico", UriKind.Absolute));
         // Keep the native Windows title bar visible on compact laptop displays.
         // A fixed 860 px window could start above the screen when centered.
         var workArea = SystemParameters.WorkArea;
