@@ -153,7 +153,7 @@ public sealed class BridgeSharedServices
             }
 
             string nonce = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
-            DateTimeOffset expiry = nowUtc.AddMinutes(10);
+            DateTimeOffset expiry = nowUtc.AddMinutes(5);
             using var session = connection.CreateCommand();
             session.Transaction = tx;
             session.CommandText = @"INSERT INTO UserSessions (SessionNonce, UserId, Role, IssuedAtUtc, ExpiresAtUtc, RevokedFlag)
@@ -188,7 +188,7 @@ public sealed class BridgeSharedServices
     }
 
     /// <summary>
-    /// Renew the server-side ten-minute idle deadline only after a real UI activity
+    /// Renew the server-side five-minute idle deadline only after a real UI activity
     /// heartbeat. Ordinary background queries do not extend the session.
     /// Expired sessions cannot be revived by reusing an old nonce.
     /// </summary>
@@ -203,7 +203,7 @@ public sealed class BridgeSharedServices
             """;
         cmd.Parameters.AddWithValue("$nonce",nonce);
         cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
-        cmd.Parameters.AddWithValue("$newExpiry",_time.GetUtcNow().AddMinutes(10).ToString("O"));
+        cmd.Parameters.AddWithValue("$newExpiry",_time.GetUtcNow().AddMinutes(5).ToString("O"));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
