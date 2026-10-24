@@ -93,12 +93,13 @@ jobs:
           --results-directory TestResults
       - name: Capture measured ten-thousand-person search benchmark and Windows runner metadata
         shell: pwsh
+        env:
+          ALTAMAM_PERF_REPORT: PerformanceEvidence/ten-thousand-person-search.txt
         run: |
           New-Item -ItemType Directory -Path PerformanceEvidence -Force | Out-Null
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release --no-restore `
             --filter "FullyQualifiedName~TenThousandSearchDiagnostics" `
-            --logger "console;verbosity=detailed" 2>&1 |
-            Tee-Object -FilePath PerformanceEvidence/ten-thousand-person-search.txt
+            --logger "console;verbosity=normal"
           if ($LASTEXITCODE -ne 0) { throw 'Synthetic performance measurement failed' }
           $measure=Get-Content PerformanceEvidence/ten-thousand-person-search.txt |
             Select-String -Pattern 'SECTION01_PERF|SECTION01_HW'
