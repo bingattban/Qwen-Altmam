@@ -8,7 +8,7 @@ namespace AlTamam.Infrastructure.Persistence;
 public sealed class AlTamamDbContext : IDisposable
 {
     /// <summary>Highest schema version this build understands (V005 protects display-audit revision evidence).</summary>
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     /// <summary>The canonical, ordered migration set shipped with this build.</summary>
     public static readonly SchemaMigration[] CanonicalMigrations =
@@ -20,6 +20,7 @@ public sealed class AlTamamDbContext : IDisposable
         new(5, "V005_AuditPresentationEvidence", "AlTamam.Infrastructure.Persistence.Migrations.V005_AuditPresentationEvidence.sql"),
         new(6, "V006_FoundingAccount", "AlTamam.Infrastructure.Persistence.Migrations.V006_FoundingAccount.sql"),
         new(7, "V007_PermanentIdentifiers", "AlTamam.Infrastructure.Persistence.Migrations.V007_PermanentIdentifiers.sql"),
+        new(8, "V008_MutationReceipts", "AlTamam.Infrastructure.Persistence.Migrations.V008_MutationReceipts.sql"),
     ];
     private readonly string _databasePath;
     private readonly string _databaseKey;
