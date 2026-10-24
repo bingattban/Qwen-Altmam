@@ -80,6 +80,35 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task PermanentIDs_CannotBeReassignedAndHistoricalPersonsCannotBeDeleted()
+    {
+        var setup = await _service.ProvisionFirstAdministratorAsync(
+            "immutableOwner", "test-password-123", CancellationToken.None);
+        Assert.True(setup.Success, setup.UserMessage);
+        Exec("""
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,
+                FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                ActiveFlag,RowVersion)
+            VALUES('PER-ORIGINAL','اسم قديم','اسم قديم','7777','7777',
+                '2026-01-01','2026-01-01T00:00:00Z',1,1,1);
+            """);
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Persons SET PersonId='PER-REPLACEMENT' WHERE PersonId='PER-ORIGINAL';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "DELETE FROM Persons WHERE PersonId='PER-ORIGINAL';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Sites SET SiteId='SITE-CHANGED' WHERE SiteId='SITE-UNSPECIFIED';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE AttendanceStatusDefinitions SET StatusId='STS-CHANGED' WHERE StatusId='STS-PRESENT';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "DELETE FROM AttendanceStatusDefinitions WHERE StatusId='STS-PRESENT';"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Users SET UserId='USR-REPLACED' WHERE Role=1;"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons WHERE PersonId='PER-ORIGINAL';"));
+    }
+
+    [Fact]
     public async Task FounderCanBindOnlyToRealActivePerson_WithoutReassigningIDsOrHistoricalAudit()
     {
         var setup = await _service.ProvisionFirstAdministratorAsync(
