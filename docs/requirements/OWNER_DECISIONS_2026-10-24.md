@@ -37,3 +37,24 @@
 ## 5. حالة التحقق
 
 هذه الوثيقة **توثق قرارات المالك** ولا تشكل دليلًا على أن البناء أو اختبارات Windows نجحت. لا يُعد التنفيذ مقبولًا إلا بعد فحص النتائج من آخر مصدر وCommit.
+
+## 6. Permanent surrogate identifiers (owner clarification)
+
+- Every person has a non-transferable permanent `PersonId`; sites, statuses and accounts each have distinct stable identifiers (`SiteId`, `StatusId`, `UserId`).
+- Do not expose technical surrogate identifiers in printed attendance, historical reports, or Excel exports. Continue showing effective-dated name, personnel number and site instead.
+- Archival, separation and external movement **never** assign a previous `PersonId` to another person. Database migration V007 prevents normal physical person deletion or ID mutation.
+- Historic reports resolve identity by effective date; the row-header presentation when an identity changes mid-month remains a display question for the dedicated screen phase.
+
+## 7. Section 03 conflict awaiting owner decision (do NOT invent a policy)
+
+- Former approved instruction: the founding GeneralAdmin is **exempt** from providing a full name on first launch.
+- Later Section 03.02 and 03.04: the founder **must enter** a full name at first launch.
+- Until the owner explicitly chooses, the first-launch form prompts for a real name but does **not require** it. If supplied it is saved in the encrypted Users record as `FoundingFullName` and immutable audit snapshots; if omitted the previously approved `الإدارة العامة` role label is retained.
+- No fabricated PersonId/service number may be created in either variant.
+
+## 8. Automatic Windows build and distribution candidates
+
+- Both Core Build and Portable+Installer candidate workflows run automatically on every push to `main`. New commits cancel obsolete same-workflow runs to avoid running obsolete code.
+- Candidate artifacts are uploaded only after successful Windows tests and publish packaging; *automatic packaging is not final release approval*.
+- Production icon `src/AlTamam.DesktopHost/Assets/AlTamam.ico` is a resized Windows icon extracted from the exact owner-selected previously generated image, not a replacement design.
+- Manual/tagged acceptance runs retain their separate mandatory acceptance criteria.
