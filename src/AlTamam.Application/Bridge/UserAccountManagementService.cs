@@ -75,7 +75,9 @@ public sealed class UserAccountManagementService
         cmd.CommandText=$"""
             SELECT u.UserId, u.Username, u.Role, u.ActiveFlag, u.RowVersion,
                 CASE WHEN u.LinkedPersonId IS NULL AND u.Role = 1
-                     THEN 'الإدارة العامة - ' || u.Username
+                     THEN 'الإدارة العامة - ' || u.Username ||
+                       CASE WHEN u.FoundingFullName IS NOT NULL AND trim(u.FoundingFullName)<>''
+                            THEN ' (' || u.FoundingFullName || ')' ELSE '' END
                      ELSE COALESCE(p.CurrentVisibleName,'غير مرتبط بكشف القوة') END,
                 COALESCE(p.CurrentServiceNumberA,''),
                 u.LinkedPersonId, u.CreatedByDisplaySnapshot, u.CreatedAtUtc
