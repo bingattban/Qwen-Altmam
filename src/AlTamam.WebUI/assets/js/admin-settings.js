@@ -576,16 +576,21 @@
         selected.textContent="الرقم (ع): "+(option?.dataset.serviceNumberA||"—");
       });
       const message=node("div","admin-note");
+      let accountPayload=null,accountOperation=null;
       const save=btn("تأكيد إضافة الحساب",async()=>{
         if(!personPick.value||!username.input.value.trim()||!password.input.value)
           return errors(message,new Error("اختر فرداً وأدخل اسم المستخدم وكلمة المرور."));
         if(!await dialogs.confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
         save.disabled=true;message.replaceChildren();
         try {
+          const fields=[personPick.value,username.input.value.trim(),role.value,password.input.value];
+          const signature=JSON.stringify(fields);
+          if(accountPayload!==signature){accountPayload=signature;accountOperation=makeOperationId();}
           await api().invoke("CreateUserAccount",{
             personId:personPick.value,username:username.input.value.trim(),
-            role:role.value,password:password.input.value
+            role:role.value,password:password.input.value,operationId:accountOperation
           });
+          accountPayload=null;accountOperation=null;
           password.input.value="";
           form.remove();
           notice.replaceChildren(node("p","settings-success","تم إنشاء الحساب بعد حفظه بنجاح."));
@@ -678,10 +683,15 @@
       const form=card("إنشاء موقع جديد");
       const name=field("اسم الموقع");
       const note=node("div","admin-note");
+      let sitePayload=null,siteOperation=null;
       const send=btn("إضافة الموقع",async()=>{
         if(!await dialogs.confirm("تأكيد إنشاء الموقع «"+name.input.value.trim()+"»؟"))return;
         send.disabled=true;note.replaceChildren();
-        try {await api().invoke("CreateSite",{name:name.input.value});
+        try {
+          const current=JSON.stringify([name.input.value.trim()]);
+          if(sitePayload!==current){sitePayload=current;siteOperation=makeOperationId();}
+          await api().invoke("CreateSite",{name:name.input.value,operationId:siteOperation});
+          sitePayload=null;siteOperation=null;
           name.input.value="";await sites();}
         catch(e){errors(note,e);}finally{send.disabled=false;}
       },"btn btn-primary");
@@ -776,7 +786,8 @@
         String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0)));
     });
     const addMessage=node("div","admin-note");
-    const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
+          let lastPersonPayload=null,lastPersonOperation=null;
+const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
       const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
         siteName=siteField.input.value.trim()||"غير محدد";
       if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || siteName.length<2)
@@ -785,8 +796,13 @@
         "» في الموقع «"+siteName+"»؟ سيُسجَّل الموقع تلقائياً إذا لم يكن موجوداً."))return;
       saveNew.disabled=true;
       try{
+        const createKey=JSON.stringify([name,number,siteName]);
+        if(lastPersonPayload!==createKey){
+          lastPersonPayload=createKey;lastPersonOperation=makeOperationId();
+        }
         const response=await api().invoke("CreatePerson",{visibleName:name,
-          serviceNumberA:number,siteName});
+          serviceNumberA:number,siteName,operationId:lastPersonOperation});
+        lastPersonPayload=null;lastPersonOperation=null;
         if(!response.data?.personId)throw Error("لم يتم تأكيد إنشاء السجل.");
         nameField.input.value="";numberField.input.value="";
         addMessage.replaceChildren(node("p","settings-success",
@@ -939,6 +955,12 @@
     heading.classList.add("settings-panel-title");
     heading.prepend(node("span","settings-panel-icon",mark));
     return box;
+  }
+  function makeOperationId(){
+    if(window.crypto && typeof window.crypto.randomUUID==="function")
+      return window.crypto.randomUUID().replace(/-/g,"");
+    // Host-agnostic fallback is a correlation token, never a credential.
+    return Date.now().toString(36)+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
   }
   async function renderSettings(session,logout) {
     state.session=session;
