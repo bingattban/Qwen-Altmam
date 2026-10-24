@@ -155,7 +155,8 @@ public sealed class PersonnelReportService
         movements.CommandText="""
             SELECT MovementType,SourceSiteNameSnapshot,
                    COALESCE(DestinationSiteNameSnapshot,DestinationExternalName,''),
-                   SeparationReason,EffectiveLocalDate,CommittedAtUtc,ActorUserId
+                   SeparationReason,EffectiveLocalDate,CommittedAtUtc,ActorUserId,
+                   PersonNameSnapshot,ServiceNumberASnapshot
             FROM PersonnelMovements WHERE PersonId=$id
             ORDER BY EffectiveLocalDate DESC,CommittedAtUtc DESC LIMIT $size OFFSET $offset;
             """;
@@ -172,7 +173,8 @@ public sealed class PersonnelReportService
                     ["source"]=r.GetString(1),["destination"]=r.GetString(2),
                     ["reason"]=r.IsDBNull(3)?null:r.GetString(3),
                     ["date"]=r.GetString(4),["committedAtUtc"]=r.GetString(5),
-                    ["actorUserId"]=r.GetString(6)
+                    ["actorUserId"]=r.GetString(6),
+                    ["name"]=r.GetString(7),["serviceNumberA"]=r.GetString(8)
                 });
 
         using var auditCount=conn.CreateCommand();
