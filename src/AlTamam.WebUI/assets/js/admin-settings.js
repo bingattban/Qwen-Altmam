@@ -1094,9 +1094,56 @@
         ["استيراد نسخة احتياطية","غير متاح حتى اكتمال فحص الاستعادة"],
         ["النسخ التلقائي اليومي","الجدولة غير نشطة حالياً"],
         ["تغيير وقت النسخ","غير متاح حتى تشغيل الجدولة"],
-        ["حذف جميع البيانات","موقوف لحماية قاعدة البيانات والنسخ"]
       ]) forthcoming.appendChild(settingsValue(name,detail));
       planned.appendChild(forthcoming);
+      if(session.role==="GeneralAdministration"){
+        const resetBox=node("section","settings-danger-zone");
+        const notice=node("p","settings-copy",
+          "التصفير النهائي يمسح الحسابات والأفراد والتحضير والتاريخ وسجل العمليات. لا يمكن التراجع عنه.");
+        const resetStatus=node("div","settings-feedback");
+        const previewButton=btn("معاينة التصفير الكامل",async()=>{
+          previewButton.disabled=true;
+          resetStatus.replaceChildren(warning("جارٍ إعداد معاينة البيانات التي سيتم حذفها..."));
+          try{
+            const response=await api().invoke("PreviewFullReset",{});
+            if(token!==currentRequest)return;
+            const data=response.data||{};
+            if(!data.previewToken || !data.requiredConfirmation)throw Error("معاينة التصفير غير موثقة.");
+            const summary=node("p","settings-copy",
+              "أفراد: "+data.people+"، تحضير: "+data.attendance+
+              "، نسخ مسجلة: "+data.backupEntries+". "+data.warning);
+            const passwordWrap=field("كلمة المرور الحالية للإدارة العامة","","password");
+            passwordWrap.input.autocomplete="current-password";
+            const phraseWrap=field("اكتب عبارة التأكيد حرفياً","","text");
+            phraseWrap.input.autocomplete="off";
+            const approve=btn("تأكيد تصفير البرنامج نهائياً",async()=>{
+              if(!passwordWrap.input.value || phraseWrap.input.value!==data.requiredConfirmation){
+                resetStatus.appendChild(warning("كلمة المرور وعبارة التأكيد مطلوبة حرفياً."));
+                return;
+              }
+              if(!await dialogs.confirm("هذه العملية نهائية وتمسح جميع الحسابات والتحضير وسجل العمليات. هل تؤكد؟"))
+                return;
+              approve.disabled=true;
+              try{
+                const result=await api().invoke("CommitFullReset",{
+                  previewToken:data.previewToken,expectedRevision:data.expectedRevision,
+                  confirmation:phraseWrap.input.value,password:passwordWrap.input.value
+                },{timeoutMs:180000});
+                passwordWrap.input.value="";
+                if(!result.data?.reset)throw Error("لم يؤكد الخادم إتمام التصفير.");
+                await dialogs.alert("تم تصفير قاعدة البيانات. أعد التهيئة الأولى."+
+                  (result.data.backupFilesNotDeleted
+                    ?" تنبيه: توجد ملفات نسخ لم يمكن حذفها؛ راجع مجلدات النسخ السابقة.":""));
+                await logout();
+              }catch(e){passwordWrap.input.value="";errors(resetStatus,e);approve.disabled=false;}
+            },"btn btn-primary settings-action");
+            const cancel=btn("إلغاء",()=>{passwordWrap.input.value="";resetStatus.replaceChildren();previewButton.disabled=false;});
+            resetStatus.replaceChildren(summary,passwordWrap.wrap,phraseWrap.wrap,approve,cancel);
+          }catch(e){errors(resetStatus,e);previewButton.disabled=false;}
+        },"btn btn-outline settings-action");
+        resetBox.append(notice,previewButton,resetStatus);
+        planned.appendChild(resetBox);
+      }
       grid.appendChild(planned);
     }catch(e) {
       if(token!==currentRequest)return;
