@@ -30,6 +30,12 @@ on:
       - 'src/AlTamam.Infrastructure/**'
       - 'tests/**'
 
+# Only the newest revision of a branch needs a build. Avoid CI overload when
+# successive implementation commits land; the final commit still builds fully.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
