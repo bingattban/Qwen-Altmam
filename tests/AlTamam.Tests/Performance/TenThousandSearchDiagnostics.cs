@@ -61,8 +61,13 @@ public sealed class TenThousandSearchDiagnostics : IAsyncLifetime, IDisposable
         var result=await svc.SearchPersonsAsync("اختبار بحث 008000",25,default);
         sw.Stop();
         Assert.True(result.Success,result.UserMessage);
-        _output.WriteLine($"SECTION01_PERF personCount={size} elapsedMs={sw.Elapsed.TotalMilliseconds:F2} targetMs=200");
-        _output.WriteLine($"SECTION01_HW os={Environment.OSVersion} x64Process={Environment.Is64BitProcess} cpus={Environment.ProcessorCount} arch={System.Runtime.InteropServices.RuntimeInformation.OSArchitecture} machine={Environment.MachineName}");
+        string perf=$"SECTION01_PERF personCount={size} elapsedMs={sw.Elapsed.TotalMilliseconds:F2} targetMs=200";
+        string hardware=$"SECTION01_HW os={Environment.OSVersion} x64Process={Environment.Is64BitProcess} cpus={Environment.ProcessorCount} arch={System.Runtime.InteropServices.RuntimeInformation.OSArchitecture} machine={Environment.MachineName}";
+        _output.WriteLine(perf);
+        _output.WriteLine(hardware);
+        string? reportFile=Environment.GetEnvironmentVariable("ALTAMAM_PERF_REPORT");
+        if(!string.IsNullOrWhiteSpace(reportFile))
+            File.WriteAllText(reportFile,perf+Environment.NewLine+hardware+Environment.NewLine);
         // No CI hardware-specific hard time threshold: the requirement says target, not guarantee.
         Assert.Contains("TEST-P-008000",result.Data!.ToString());
     }
