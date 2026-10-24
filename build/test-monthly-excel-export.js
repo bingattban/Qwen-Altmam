@@ -24,6 +24,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
   invoke:async(action,payload)=>{
     calls.push({action,payload});
     if(action==="GetCurrentSession")return{data:{sessionNonce:"A".repeat(32),username:"test",role:"Supervisor"}};
+    if(action==="GetSettingsOverview")return{data:{backupDirectory:"E:\\\\AlTamamAlYawmi",defaultDriveAvailable:true}};
     if(action==="QuerySites")return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
     if(action==="GetAvailableArchivePeriods")return{data:[firstDay.slice(0,7)]};
     if(action==="QueryMonthlyGrid")return{data:{total:1,page:1,items:[
@@ -117,7 +118,8 @@ async function main(){
   close.handlers.click();
   assert.equal(details.hidden,true,"close hides details without touching attendance");
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
-    "QueryMonthlyGrid","GetMonthlyCellDetails","PreviewMonthlyExport","ExportMonthlyWorkbookSet"].includes(x.action)).length,0,
+    "QueryMonthlyGrid","GetMonthlyCellDetails","PreviewMonthlyExport","ExportMonthlyWorkbookSet",
+    "GetSettingsOverview"].includes(x.action)).length,0,
     "read-only click must never commit attendance or modify history");
   console.log("MONTHLY EXCEL + MONTHLY CELL UI PASS: guarded preview, native export response, date-bound read-only details");
 }
