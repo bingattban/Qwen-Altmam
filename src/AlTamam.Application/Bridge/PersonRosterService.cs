@@ -403,6 +403,27 @@ public sealed class PersonRosterService
                         "لا يمكن تغيير هوية الفرد مرتين في اليوم نفسه أو بتاريخ يسبق هويته الحالية.");
             }
 
+            // Update the concurrency-guarded person row FIRST, so a stale revision
+            // cannot leave a committed history closure or orphaned identity snapshot.
+            using var update = connection.CreateCommand();
+            update.Transaction = tx;
+            update.CommandText = """
+                UPDATE Persons SET CurrentVisibleName = $name, NormalizedName = $normName,
+                                   CurrentServiceNumberA = $num, NormalizedServiceNumberA = $normNum,
+                                   RowVersion = RowVersion + 1
+                WHERE PersonId = $id AND RowVersion = $rev;
+                """;
+            update.Parameters.Add("$name", SqliteType.Text).Value = newName;
+            update.Parameters.Add("$normName", SqliteType.Text).Value = ArabicTextNormalizer.NormalizeForSearch(newName);
+            update.Parameters.Add("$num", SqliteType.Text).Value = newNumber;
+            update.Parameters.Add("$normNum", SqliteType.Text).Value = normalizedNumber;
+            update.Parameters.Add("$id", SqliteType.Text).Value = personId;
+            update.Parameters.Add("$rev", SqliteType.Integer).Value = expectedRevision;
+            int touched = await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            if (touched == 0)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale, "تعذر التحديث: نسخة الصف لم تعد مطابقة.");
+
+
             // Close the open identity snapshot exactly at the effective date (exclusive end).
             using var close = connection.CreateCommand();
             close.Transaction = tx;
@@ -429,24 +450,6 @@ public sealed class PersonRosterService
             snapshot.Parameters.Add("$now", SqliteType.Text).Value = nowUtc.ToString("O");
             snapshot.Parameters.Add("$reason", SqliteType.Text).Value = reason;
             await snapshot.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-
-            using var update = connection.CreateCommand();
-            update.Transaction = tx;
-            update.CommandText = """
-                UPDATE Persons SET CurrentVisibleName = $name, NormalizedName = $normName,
-                                   CurrentServiceNumberA = $num, NormalizedServiceNumberA = $normNum,
-                                   RowVersion = RowVersion + 1
-                WHERE PersonId = $id AND RowVersion = $rev;
-                """;
-            update.Parameters.Add("$name", SqliteType.Text).Value = newName;
-            update.Parameters.Add("$normName", SqliteType.Text).Value = ArabicTextNormalizer.NormalizeForSearch(newName);
-            update.Parameters.Add("$num", SqliteType.Text).Value = newNumber;
-            update.Parameters.Add("$normNum", SqliteType.Text).Value = normalizedNumber;
-            update.Parameters.Add("$id", SqliteType.Text).Value = personId;
-            update.Parameters.Add("$rev", SqliteType.Integer).Value = expectedRevision;
-            int touched = await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-            if (touched == 0)
-                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale, "تعذر التحديث: نسخة الصف لم تعد مطابقة.");
 
             await BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 operationCode: "PERSON_IDENTITY_UPDATE", operationArabicName: "تعديل هوية فرد",
