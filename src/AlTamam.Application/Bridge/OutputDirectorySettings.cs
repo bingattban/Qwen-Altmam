@@ -18,7 +18,32 @@ public sealed class OutputDirectorySettings
         using var c=_db.CreateOpenConnection();
         using var q=c.CreateCommand();
         q.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='PreferredBackupDirectory';";
-        return (await q.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString() ?? DefaultDirectory;
+        string? configured=(await q.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
+        if(!string.IsNullOrWhiteSpace(configured))return configured;
+        // E: is preferred only when mounted. Never substitute an undisclosed
+        // alternate drive when E: is absent; the UI must request a valid folder.
+        if(Directory.Exists(@"E:\"))
+        {
+            try { Directory.CreateDirectory(DefaultDirectory); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { /* The settings view will report the unavailable destination. */ }
+        }
+        return DefaultDirectory;
+    }
+
+    public static bool IsUsableDirectory(string? input, string databasePath)
+    {
+        if(!IsSafeDirectory(input,databasePath,out string folder))return false;
+        try
+        {
+            string probe=Path.Combine(folder,".altamam-probe-"+Guid.NewGuid().ToString("N"));
+            using var file=new FileStream(probe,FileMode.CreateNew,FileAccess.Write,FileShare.None,
+                4096,FileOptions.DeleteOnClose);
+            file.WriteByte(1);
+            return true;
+        }
+        catch (Exception ex) when(ex is IOException or UnauthorizedAccessException)
+        { return false; }
     }
 
     public static bool IsSafeDirectory(string? input, string databasePath, out string folder)
