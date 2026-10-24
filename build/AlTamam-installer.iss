@@ -11,7 +11,7 @@
 #endif
 
 [Setup]
-#if CompareText(TargetArch, "win-x86") == 0
+#ifdef BuildX86
 ; Separate installer registrations preserve the x64 upgrade identity.
 AppId={{B94D3F15-6C24-4585-87F6-8A93D3A18532}
 #else
@@ -21,13 +21,13 @@ AppName=التمام اليومي
 UninstallDisplayName=التمام اليومي
 AppVersion={#AppVersion}
 AppPublisher=AlTamam
-#if CompareText(TargetArch, "win-x86") == 0
+#ifdef BuildX86
 DefaultDirName={autopf}\AlTamam-x86
 #else
 DefaultDirName={autopf}\AlTamam
 #endif
 DefaultGroupName=التمام اليومي
-#if CompareText(TargetArch, "win-x86") == 0
+#ifdef BuildX86
 ArchitecturesAllowed=x86compatible
 #else
 ArchitecturesAllowed=x64compatible
