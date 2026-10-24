@@ -173,6 +173,28 @@ jobs:
           # Keep DLLs, native loaders, application XML assets, and all other files.
           Get-ChildItem -LiteralPath $env:PUBLISH_DIR -File -Filter 'Microsoft.Web.WebView2.*.xml' |
             Remove-Item -Force
+      - name: Bundle Microsoft's genuine WebView2 standalone OFFLINE installer
+        shell: pwsh
+        run: |
+          $uri = if ($env:RUNTIME -eq 'win-x86') {
+            'https://go.microsoft.com/fwlink/?linkid=2099617'
+          } else {
+            'https://go.microsoft.com/fwlink/?linkid=2124701'
+          }
+          $dir = Join-Path $env:PUBLISH_DIR 'Prerequisites'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          $file = Join-Path $dir 'MicrosoftEdgeWebView2RuntimeInstaller.exe'
+          Invoke-WebRequest -Uri $uri -OutFile $file -MaximumRedirection 10
+          if ((Get-Item $file).Length -lt 50000000) {
+            throw 'Offline WebView2 installer is missing or unexpectedly small'
+          }
+          $sig = Get-AuthenticodeSignature -FilePath $file
+          if ($sig.Status -ne 'Valid' -or
+              $sig.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+            throw "WebView2 Microsoft Authenticode verification failed: $($sig.Status)"
+          }
+          $digest=(Get-FileHash $file -Algorithm SHA256).Hash
+          Write-Host "MICROSOFT OFFLINE WEBVIEW2: verified $env:RUNTIME SHA256=$digest"
       - name: Validate publish layout (real PE, WebView2 loader, SQLCipher native)
         run: python build/validate-layout.py $env:PUBLISH_DIR --portable --arch $env:RUNTIME
       - name: Optional signing (ONLY with owner-provisioned approved certificate)
