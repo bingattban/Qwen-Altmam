@@ -1021,7 +1021,7 @@
       },"btn btn-primary settings-action");
       backup.append(folder.wrap,choose,updateFolder,folderNote);
       if(!info.defaultDriveAvailable){
-        saveFolderNotice();
+        void Promise.resolve().then(saveFolderNotice);
       }
       function saveFolderNotice(){
         const message="هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح: "+
