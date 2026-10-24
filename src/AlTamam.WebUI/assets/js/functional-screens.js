@@ -418,17 +418,40 @@
         {label:"الاسم",cls:"pinned fixed-three"},
         {label:"الموقع",cls:"pinned fixed-four"}];
       const currentDay=period===current?now.getDate():null;
-      // The current day is the fifth fixed column, immediately after the
-      // immutable identity/site columns. Historical months retain normal order.
-      const days=currentDay?[currentDay,...Array.from({length:dayCount},(_,i)=>i+1)
-        .filter(day=>day!==currentDay)]:Array.from({length:dayCount},(_,i)=>i+1);
+      // Always keep real calendar order. A highlighted current day is NOT sticky:
+      // it scrolls naturally between earlier and later days.
+      const days=Array.from({length:dayCount},(_,i)=>i+1);
       for(const day of days)cols.push({
         label:day+"\n"+weekdayLabel(year,month,day)+(day===currentDay?"\nاليوم":""),
-        cls:day===currentDay?"pinned fixed-today current-day-column":"day-column"
+        cls:day===currentDay?"day-column current-day-column":"day-column"
       });
       const tb=createTable(cols);
       tb.wrap.classList.add("monthly-scroll");
       tableHost.replaceChildren(tb.wrap);
+      // The first four identity/site columns are sticky at the RIGHT edge.
+      // Center today's header in the remaining scrollable date viewport,
+      // allowing two earlier dates to stay visible where width permits.
+      // Only set the initial scroll: thereafter the user can freely scroll
+      // backward or forward through the true day-of-month order.
+      const revealCurrentDay=()=>{
+        if(STATE.monthEpoch!==epoch || !currentDay || !tb.wrap.isConnected)return;
+        const header=tb.wrap.querySelector(".current-day-column");
+        if(!header || typeof header.getBoundingClientRect!=="function")return;
+        const viewport=tb.wrap.getBoundingClientRect();
+        const target=header.getBoundingClientRect();
+        const stickyColumns=tb.wrap.querySelectorAll("thead .pinned");
+        const fixedWidth=Array.from(stickyColumns)
+          .reduce((sum,col)=>sum+col.getBoundingClientRect().width,0);
+        const available=Math.max(0,viewport.width-fixedWidth);
+        if(available<=0)return;
+        // RTL: pinned columns cover the RIGHT of the viewport.
+        const desiredCenter=viewport.left+available/2;
+        const currentCenter=(target.left+target.right)/2;
+        const delta=currentCenter-desiredCenter;
+        if(Math.abs(delta)>1)tb.wrap.scrollBy({left:delta,behavior:"instant"});
+      };
+      if(currentDay && typeof window.requestAnimationFrame==="function")
+        window.requestAnimationFrame(revealCurrentDay);
       for(const [index,person] of (grid.items||[]).entries()){
         const tr=el("tr");
         [(STATE.monthPage-1)*50+index+1,person.serviceNumberA,person.name,person.siteName]
@@ -441,7 +464,7 @@
           const date=period+"-"+String(day).padStart(2,"0");
           const info=(person.days||{})[date];
           const cell=el("td",day===currentDay?
-            "day-cell pinned fixed-today current-day-column":"day-cell");
+            "day-cell current-day-column":"day-cell");
           cell.title=info?info.name:"لا يوجد تحضير مسجل";
           if(info){
             const open=button(info.symbol||"تفاصيل",()=>showCellDetails(person.personId,date),
