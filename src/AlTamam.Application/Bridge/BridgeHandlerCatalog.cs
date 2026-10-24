@@ -39,11 +39,21 @@ public static class BridgeHandlerCatalog
         "AuthenticateLocalUser" => async (req, principal, ct) =>
         {
             string username = req.Payload?["username"]?.GetValue<string>() ?? "";
-            // Provisioning bootstrap: when no account exists yet, the first call creates the administrator.
+            // Authentication alone must NEVER silently create a privileged account.
+            // First-use setup requires an explicit owner-intent marker AND matching
+            // confirmation; C# validates the strong password and persists atomically.
             if (!await services.IsProvisionedAsync(ct).ConfigureAwait(false))
             {
+                string intent = req.Payload?["setupIntent"]?.GetValue<string>() ?? "";
                 string password0 = req.Payload?["password"]?.GetValue<string>() ?? "";
-                BridgeResponse created = await services.ProvisionFirstAdministratorAsync(username, password0, ct).ConfigureAwait(false);
+                string confirmation = req.Payload?["passwordConfirmation"]?.GetValue<string>() ?? "";
+                string fullName = req.Payload?["fullName"]?.GetValue<string>()?.Trim() ?? "";
+                if (intent != "firstTimeSetup" || password0.Length == 0 ||
+                    !string.Equals(password0,confirmation,StringComparison.Ordinal))
+                    return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                        "يجب إكمال التهيئة الأولى وتأكيد كلمة المرور المطابقة قبل إنشاء الإدارة العامة."));
+                BridgeResponse created = await services.ProvisionFirstAdministratorAsync(
+                    username, password0, ct, fullName).ConfigureAwait(false);
                 if (!created.Success) return Fail(req, created);
             }
             string password = req.Payload?["password"]?.GetValue<string>() ?? "";
