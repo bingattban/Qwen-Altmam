@@ -99,6 +99,16 @@
     }
   }
 
+  async function checkOutputAfterLogin() {
+    try {
+      const reply=parseData(await bridge().invoke("GetSettingsOverview",{}));
+      // Show the settings screen (and its native-styled modal) immediately after
+      // login if E: or the user's previously selected folder is unavailable.
+      if(STATE.session && reply?.defaultDriveAvailable===false &&
+          location.hash==="#dashboard")render("settings");
+    } catch { /* A storage-status check never invalidates a valid login. */ }
+  }
+
   async function loginGate() {
     const container=view(); if(!container)return;
     document.querySelector(".app-sidebar").hidden=true;
@@ -140,6 +150,7 @@
           result.username+" — "+(result.roleLabelAr||result.role);
         document.getElementById("logoutAction").hidden=false;
         render("dashboard");
+        void checkOutputAfterLogin();
       } catch(e) { showError(status,e); }
       finally { submit.disabled=false; }
     });
@@ -472,6 +483,7 @@
         document.getElementById("logoutAction").hidden=false;
         render(["dashboard","monthly","admin","settings"].includes(location.hash.slice(1))
           ?location.hash.slice(1):"dashboard");
+        void checkOutputAfterLogin();
       } else await loginGate();
     } catch { await loginGate(); }
   }
