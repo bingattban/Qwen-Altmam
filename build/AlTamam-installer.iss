@@ -25,6 +25,7 @@ OutputBaseFilename=AlTamam-Installer-win-x64-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\src\AlTamam.DesktopHost\Assets\AlTamam.ico
 UninstallDisplayIcon={app}\AlTamam.DesktopHost.exe
 ; 15.04 uninstall policy: NEVER delete the encrypted DB or backups — user data
 ; survives uninstall/reinstall by design (data lives in %LOCALAPPDATA%\AlTamam).
