@@ -6,22 +6,34 @@
 #ifndef PublishDir
   #define PublishDir "..\publish\AlTamam-win-x64"
 #endif
+#ifndef TargetArch
+  #define TargetArch "win-x64"
+#endif
 
 [Setup]
+#if CompareText(TargetArch, "win-x86") == 0
+; Separate installer registrations preserve the x64 upgrade identity.
+AppId={{B94D3F15-6C24-4585-87F6-8A93D3A18532}
+#else
 AppId={{3A156EF1-176E-45DD-A570-8224D739A454}
+#endif
 AppName=التمام اليومي
 UninstallDisplayName=التمام اليومي
 AppVersion={#AppVersion}
 AppPublisher=AlTamam
-DefaultDirName={autopf}\AlTamam
+DefaultDirName={autopf}\AlTamam\{#TargetArch}
 DefaultGroupName=التمام اليومي
+#if CompareText(TargetArch, "win-x86") == 0
+ArchitecturesAllowed=x86compatible
+#else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 MinVersion=10.0
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\artifacts
-OutputBaseFilename=AlTamam-Installer-win-x64-setup
+OutputBaseFilename=AlTamam-Installer-{#TargetArch}-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
