@@ -144,6 +144,40 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Offline-first WebView2 installation: the signed Microsoft standalone
+    /// installer ships in BOTH the portable ZIP and the installed directory.
+    /// No CDN or online bootstrapper runs on customer computers.
+    /// </summary>
+    private static async Task EnsureBundledWebView2Async()
+    {
+        try
+        {
+            if(!string.IsNullOrWhiteSpace(CoreWebView2Environment.GetAvailableBrowserVersionString()))
+                return;
+        }
+        catch (WebView2RuntimeNotFoundException) { /* offline installer below */ }
+
+        string installer=Path.Combine(AppContext.BaseDirectory,"Prerequisites",
+            "MicrosoftEdgeWebView2RuntimeInstaller.exe");
+        if(!File.Exists(installer))
+            throw new FileNotFoundException(
+                "مكون WebView2 غير مثبت وملف تثبيته المحلي غير موجود في حزمة التطبيق.",installer);
+        using var process=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName=installer,
+            Arguments="/silent /install",
+            UseShellExecute=false,
+            CreateNoWindow=true
+        })??throw new InvalidOperationException("تعذر بدء تثبيت WebView2 المحلي.");
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        if(process.ExitCode is not (0 or 3010))
+            throw new InvalidOperationException(
+                "فشل تثبيت WebView2 المحلي؛ رمز الخروج: "+process.ExitCode);
+        if(string.IsNullOrWhiteSpace(CoreWebView2Environment.GetAvailableBrowserVersionString()))
+            throw new InvalidOperationException("لم يتوفر WebView2 بعد التثبيت المحلي.");
+    }
+
     private async Task InitializeAsync()
     {
         bool webViewSelfCheck = Environment.GetCommandLineArgs()
@@ -153,6 +187,9 @@ public partial class MainWindow : Window
             ? null : Task.Run(PrepareServicesAsync);
         try
         {
+            // The WebView2 runtime is included and installed locally if missing.
+            // Do not touch the network from installed production code.
+            if(!webViewSelfCheck)await EnsureBundledWebView2Async().ConfigureAwait(true);
             // WebView2 profile creation and SQLCipher initialization overlap.
             string userDataFolder = Path.Combine(AppDataLayout.DataRoot, "WebView2");
             Directory.CreateDirectory(userDataFolder);
