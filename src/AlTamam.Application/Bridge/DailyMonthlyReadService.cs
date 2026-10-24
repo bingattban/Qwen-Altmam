@@ -328,7 +328,8 @@ public sealed class DailyMonthlyReadService
             movements.CommandText = """
                 SELECT PersonId,EffectiveLocalDate,MovementType,SourceSiteId,
                        SourceSiteNameSnapshot,DestinationSiteId,
-                       COALESCE(DestinationSiteNameSnapshot,DestinationExternalName,'')
+                       COALESCE(DestinationSiteNameSnapshot,DestinationExternalName,''),
+                       PersonNameSnapshot,ServiceNumberASnapshot
                 FROM PersonnelMovements
                 WHERE EffectiveLocalDate >= $start AND EffectiveLocalDate < $next
                   AND PersonId IN (
@@ -358,7 +359,10 @@ public sealed class DailyMonthlyReadService
                         ["name"]=label,
                         ["symbol"]=movementType==3?"ف":"نقل",
                         ["color"]=movementType==3?"#64748B":"#D8B4FE",
-                        ["kind"]=movementType==3?"separation":"movement"
+                        ["kind"]=movementType==3?"separation":"movement",
+                        ["personName"]=movementReader.GetString(7),
+                        ["serviceNumberA"]=movementReader.GetString(8),
+                        ["siteName"]=siteId.Length>0 && siteId==targetId ? after : before
                     };
             }
         }
