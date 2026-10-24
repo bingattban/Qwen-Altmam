@@ -131,6 +131,18 @@
       "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html"
     },
     {
+      "routeKey": "AddPerson",
+      "titleAr": "إضافة فرد",
+      "breadcrumbAr": "الإدارة > إدارة القوة > تعديل الأسماء > إضافة فرد",
+      "relativeFolder": "Administration/PersonnelManagement/EditPersonnelNames/AddPerson",
+      "kind": "embedded panel",
+      "access": "Roster mutation permissions enforced by C#; single person only",
+      "sources": "Latest master specification §04.03/05; owner decisions 2026-10-24",
+      "implementationPhase": "05",
+      "uiAvailability": "INTEGRATED_HTML_CSS_JS",
+      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html"
+    },
+    {
       "routeKey": "EditPersonDetails",
       "titleAr": "تعديل بيانات الفرد",
       "breadcrumbAr": "إدارة القوة > تعديل الأسماء > تعديل بيانات الفرد",
@@ -239,18 +251,6 @@
       "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/index.html"
     },
     {
-      "routeKey": "Reports",
-      "titleAr": "التقارير",
-      "breadcrumbAr": "إدارة القوة > التقارير والفصل > التقارير",
-      "relativeFolder": "Administration/PersonnelManagement/ReportsAndDismissal/Reports",
-      "kind": "screen",
-      "access": "All users with reporting permission",
-      "sources": "Merged: original project document + approved enhanced prompt",
-      "implementationPhase": "09",
-      "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Reports/index.html"
-    },
-    {
       "routeKey": "Dismissal",
       "titleAr": "الفصل",
       "breadcrumbAr": "إدارة القوة > التقارير والفصل > الفصل",
@@ -301,7 +301,7 @@
     {
       "routeKey": "PersonnelReport",
       "titleAr": "التقرير",
-      "breadcrumbAr": "الإدارة > إدارة القوة > التقرير",
+      "breadcrumbAr": "الإدارة > إدارة القوة > التقارير والفصل > التقرير",
       "relativeFolder": "Administration/PersonnelManagement/PersonnelReport",
       "kind": "screen",
       "access": "All authenticated roles with person report read permission",
@@ -313,7 +313,7 @@
     {
       "routeKey": "ExportPersonReport",
       "titleAr": "تصدير تقرير الفرد",
-      "breadcrumbAr": "إدارة القوة > التقرير > تصدير إلى Excel",
+      "breadcrumbAr": "الإدارة > إدارة القوة > التقارير والفصل > التقرير > تصدير Excel",
       "relativeFolder": "Administration/PersonnelManagement/PersonnelReport/ExportPersonReport",
       "kind": "export flow",
       "access": "Report-read/export authorized users",
