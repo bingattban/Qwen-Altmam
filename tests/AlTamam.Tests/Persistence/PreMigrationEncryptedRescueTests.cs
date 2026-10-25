@@ -98,9 +98,18 @@ public sealed class PreMigrationEncryptedRescueTests : IDisposable
 
     public void Dispose()
     {
+        // Windows can retain the rescue DB's handle in the native SQLCipher
+        // provider briefly after all managed readers are closed. Cleanup of
+        // SYNTHETIC test fixtures is best-effort (same as SyntheticFixtures),
+        // not a product assertion that rescue archives should be removable.
         SqliteConnection.ClearAllPools();
-        if (Directory.Exists(RescueFolder)) Directory.Delete(RescueFolder, recursive: true);
-        else if (File.Exists(RescueFolder)) File.Delete(RescueFolder);
+        try
+        {
+            if (Directory.Exists(RescueFolder)) Directory.Delete(RescueFolder, recursive: true);
+            else if (File.Exists(RescueFolder)) File.Delete(RescueFolder);
+        }
+        catch (IOException) { /* ephemeral Windows test runner directory */ }
+        catch (UnauthorizedAccessException) { /* ephemeral Windows test runner directory */ }
         SyntheticFixtures.DeleteTempDatabase(_path);
     }
 }
