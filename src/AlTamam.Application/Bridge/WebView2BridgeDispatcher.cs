@@ -10,7 +10,12 @@ public sealed record BridgePrincipal(
     string UserId,
     string Username,
     UserRole Role,
-    string SessionNonce);
+    string SessionNonce)
+{
+    // Set by the server's live-session resolver; not supplied by WebView2.
+    // Logout cancels long-running handlers without trusting JS claims.
+    public CancellationToken SessionRevocation { get; init; }
+}
 
 /// <summary>Result of a validated bridge dispatch: canonical response plus the outcome category.</summary>
 public enum BridgeOutcomeKind { Success, ProtocolError, Unauthorized, Forbidden, NotFound, Conflict, Canceled, HandlerError }
@@ -131,14 +136,30 @@ public sealed class WebView2BridgeDispatcher
                 "نسخة البيانات قديمة، أعد التحميل قبل الحفظ.", BridgeOutcomeKind.Conflict);
         }
 
-        // 8) Execute the owning handler with cancellation support.
+        // 8) Tie the request's lifetime to the SERVER's nonce revocation.
+        // A Logout action is itself exempt so it can persist the revocation.
+        using var linked = principal is not null && request.Action != "Logout" &&
+                           principal.SessionRevocation.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken, principal.SessionRevocation)
+            : null;
+        CancellationToken executionToken = linked?.Token ?? cancellationToken;
         try
         {
-            BridgeResponse response = await registration.Handler(request, principal, cancellationToken).ConfigureAwait(false);
+            executionToken.ThrowIfCancellationRequested();
+            BridgeResponse response = await registration.Handler(
+                request, principal, executionToken).ConfigureAwait(false);
+            // A deferred read or handler that ignored cancellation must NOT
+            // return the old user's sensitive response after logout/expiry.
+            if (requiresAuth && request.Action != "Logout" &&
+                (principal!.SessionRevocation.IsCancellationRequested ||
+                 await authenticate(request.SessionNonce).ConfigureAwait(false) is null))
+                return Fail(request.RequestId, BridgeErrorCodes.SessionExpired,
+                    "انتهت صلاحية الجلسة، يجب تسجيل الدخول من جديد.", BridgeOutcomeKind.Unauthorized);
             var shaped = response with { RequestId = request.RequestId };
             return new BridgeDispatchResult(shaped, shaped.Success ? BridgeOutcomeKind.Success : BridgeOutcomeKind.HandlerError);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (executionToken.IsCancellationRequested)
         {
             // A canceled mutating call must release its replay slot so the user can retry safely.
             if (registration.IsMutating)
@@ -147,6 +168,9 @@ public sealed class WebView2BridgeDispatcher
                 try { _seenMutatingRequestIds.Remove(request.RequestId); }
                 finally { _gate.Release(); }
             }
+            if (principal?.SessionRevocation.IsCancellationRequested == true)
+                return Fail(request.RequestId, BridgeErrorCodes.SessionExpired,
+                    "أُلغيت العملية لانتهاء صلاحية الجلسة.", BridgeOutcomeKind.Unauthorized);
             return Fail(request.RequestId, BridgeErrorCodes.StorageBusy,
                 "أُلغي الطلب قبل اكتماله.", BridgeOutcomeKind.Canceled);
         }
