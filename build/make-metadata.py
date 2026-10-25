@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phase 15 (15.07): SHA-256 checksums + build metadata for BOTH artifacts.
 
-Usage: python3 build/make-metadata.py <artifacts-dir> <publish-dir> <version> <win-x64|win-x86>
+Usage: python3 build/make-metadata.py <artifacts-dir> <publish-dir> <version> <Windows-32bit|Windows-64bit>
 Writes SHA256SUMS.txt and BUILD_METADATA.json into <artifacts-dir>. Fails if
 either required artifact is missing — CI must not mint metadata for partial runs.
 """
@@ -24,8 +24,9 @@ def main() -> int:
     if len(sys.argv) != 5:
         print(__doc__); return 2
     art, pub, version, arch = sys.argv[1:5]
-    if arch not in ("win-x64", "win-x86"):
+    if arch not in ("Windows-64bit", "Windows-32bit"):
         print("METADATA FAIL: invalid target architecture:", arch); return 2
+    runtime = "win-x86" if arch == "Windows-32bit" else "win-x64"
     wanted = [f"AlTamam-Portable-{arch}.zip", f"AlTamam-Installer-{arch}.exe"]
     missing = [w for w in wanted if not os.path.isfile(os.path.join(art, w))]
     if missing:
@@ -45,8 +46,10 @@ def main() -> int:
         "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
         "builtUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "runnerOs": "windows-latest / x64",
-        "targetFramework": f"net10.0-windows (WPF), self-contained {arch}",
+        "targetFramework": f"net10.0-windows (WPF), self-contained {runtime}",
         "targetArchitecture": arch,
+        "runtimeIdentifier": runtime,
+        "architectureBitness": 32 if arch == "Windows-32bit" else 64,
         "signing": os.environ.get("ALNAMAM_SIGNED", "false"),
         "signingNote": "unsigned unless owner-provisioned approved certificate was applied; do NOT describe unsigned builds as 'secure'",
         "publishValidation": "build/validate-layout.py PASS recorded earlier in same job",
