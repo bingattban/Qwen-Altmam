@@ -116,7 +116,7 @@ def main() -> int:
             if missing_routes:
                 errors.append(f"packaged route assets missing: {sorted(missing_routes)[:5]}")
             actual = {
-                os.path.relpath(os.path.join(directory, name), os.path.join(root, "webui")).replace("\\\\", "/")
+                os.path.relpath(os.path.join(directory, name), os.path.join(root, "webui")).replace("\\", "/")
                 for directory, _, files in os.walk(screens)
                 for name in files if name.lower() == "index.html"
             }
