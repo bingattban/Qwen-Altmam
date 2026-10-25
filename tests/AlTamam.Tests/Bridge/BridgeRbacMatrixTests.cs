@@ -106,7 +106,7 @@ public sealed class BridgeRbacMatrixTests
         }
     }
 
-    /// <summary>97 actions × 4 caller identities (GA/OA/SV/unauthenticated) = 380 cases.</summary>
+    /// <summary>97 actions × 4 caller identities (GA/OA/SV/unauthenticated) = 388 cases.</summary>
     public static IEnumerable<object[]> AllActionsByRole()
     {
         foreach (var meta in ActionManifest.All)
