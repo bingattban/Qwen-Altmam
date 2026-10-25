@@ -16,8 +16,9 @@
   const sections = [
     {key:"force",title:"إدارة القوة",children:[
       ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
-      ["reports","التقارير والفصل"]]},
-    {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
+      ["separation","الفصل"],["archives","الأرشيف"],["personReport","التقرير"]]},
+    {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"],
+      ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
       ["export","تصدير Excel"],["layout","تعديل هيكل الكشف"]]},
     {key:"users",title:"المستخدمون",children:[]},
@@ -77,24 +78,20 @@
   const nestedOptions = Object.freeze({
     transfers: [
       ["transferInternal","النقل الداخلي"],
-      ["transferExternal","النقل الخارجي"],
-      ["transferArchive","أرشيف التنقلات"]
-    ],
-    reports: [
-      ["personReport","التقرير"],
-      ["separation","الفصل"],
-      ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]
+      ["transferExternal","النقل الخارجي"]
     ],
     separation: [
-      ["separatePerson","فصل فرد"],
+      ["separatePerson","فصل فرد"]
+    ],
+    archives: [
+      ["transferArchive","أرشيف التنقلات"],
       ["separatedArchive","أرشيف المفصولين"]
     ]
   });
   const nestedParents = Object.freeze({
-    transferInternal:"transfers",transferExternal:"transfers",transferArchive:"transfers",
-    personReport:"reports",separation:"reports",
-    separatePerson:"separation",separatedArchive:"separation",
-    closedCorrection:"reports"
+    transferInternal:"transfers",transferExternal:"transfers",
+    transferArchive:"archives",separatedArchive:"archives",
+    separatePerson:"separation"
   });
   function parentOf(screen) {
     return sections.find(section => section.children.some(child => child[0] === screen));
@@ -104,7 +101,7 @@
     const parent=parentOf(state.active);
     const parentKey=nestedParents[state.active];
     const parentLabel=parentKey==="transfers"?"التنقلات":
-      parentKey==="reports"?"التقارير والفصل":
+      parentKey==="archives"?"الأرشيف":
       parentKey==="separation"?"الفصل":null;
     const head=card(title);
     head.classList.add("admin-subpage-heading");
@@ -167,6 +164,7 @@
     const grid=node("div","admin-subsection-grid");
     grid.setAttribute("aria-label","شاشات "+section.title);
     for(const [key,title] of section.children) {
+      if(key==="closedCorrection" && !["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))continue;
       const item=btn(title,()=>navigate(key),"admin-subsection-tile");
       item.dataset.adminScreen=key;
       item.setAttribute("aria-label","فتح شاشة "+title);
@@ -198,7 +196,7 @@
       return window.AltamamSeparation.render(page,screen);
     }
     if(screen==="personReport" && window.AltamamReports)
-      return window.AltamamReports.render(target(),()=>navigate("reports"));
+      return window.AltamamReports.render(target(),()=>renderGroup("force"));
     if(screen==="import")return importExcel();
     if(screen==="export" && window.AltamamFunctional)
       return window.AltamamFunctional.render("monthly");
@@ -209,7 +207,7 @@
     if(screen==="persons")return persons();
     if(screen==="log")return audit();
     if(screen==="transfers")return renderNested(screen,"التنقلات");
-    if(screen==="reports")return renderNested(screen,"التقارير والفصل");
+    if(screen==="archives")return renderNested(screen,"الأرشيف");
     if(screen==="separation")return renderNested(screen,"الفصل");
 
     const labels={
