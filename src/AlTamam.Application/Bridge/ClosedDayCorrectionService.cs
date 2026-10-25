@@ -151,6 +151,13 @@ public sealed class ClosedDayCorrectionService
             return Deny(BridgeErrorCodes.ValidationError, "رمز المعاينة غير صالح.");
         return await _db.ExecuteInWriteTransactionAsync(async (c, tx) =>
         {
+            // Persist success and the immutable historical revision together.
+            // A lost response is replayable only with the same actor, token,
+            // action, and payload; a different request is never accepted.
+            var (replay, receipt) = await MutationIdempotency.StartAsync(
+                c, tx, "CommitClosedDayCorrection", actor.UserId, payload, ct)
+                .ConfigureAwait(false);
+            if (replay is not null) return replay;
             using var find = c.CreateCommand();
             find.Transaction = tx;
             find.CommandText = """
@@ -243,8 +250,11 @@ public sealed class ClosedDayCorrectionService
                 "تصحيح استثنائي موثّق دون تغيير وقت التحضير الأصلي", reason, day,
                 ct.CorrelationId(), ct).ConfigureAwait(false);
 
-            return BridgeHelpers.Ok(new JsonObject { ["businessDate"] = day,
-                ["personId"] = person, ["revisionNumber"] = revision + 1 },
+            var result = new JsonObject { ["businessDate"] = day,
+                ["personId"] = person, ["revisionNumber"] = revision + 1 };
+            await MutationIdempotency.StoreAsync(c, tx, receipt, result, _time, ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(result,
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.AttendanceRevised,
                     day, new[] { person }));
         }, ct).ConfigureAwait(false);
@@ -261,6 +271,10 @@ public sealed class ClosedDayCorrectionService
             return Deny(BridgeErrorCodes.ValidationError, "عند إدخال ملاحظة للتفعيل أو الإيقاف يجب أن تكون 10 إلى 400 حرف.");
         return await _db.ExecuteInWriteTransactionAsync(async (c, tx) =>
         {
+            var (replay, receipt) = await MutationIdempotency.StartAsync(
+                c, tx, "SetClosedDayCorrectionPolicy", actor.UserId, payload, ct)
+                .ConfigureAwait(false);
+            if (replay is not null) return replay;
             bool previous = await Enabled(c, tx, ct).ConfigureAwait(false);
             string now = _time.GetUtcNow().ToString("O");
             using var cmd = c.CreateCommand();
@@ -283,7 +297,10 @@ public sealed class ClosedDayCorrectionService
                 "تغيير إذن التصحيح الاستثنائي بواسطة مسؤول مصرح له", string.IsNullOrWhiteSpace(reason) ? null : reason,
                 DateOnly.FromDateTime(_time.GetLocalNow().DateTime).ToString("yyyy-MM-dd"),
                 ct.CorrelationId(), ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject { ["enabled"] = enabled });
+            var result = new JsonObject { ["enabled"] = enabled };
+            await MutationIdempotency.StoreAsync(c, tx, receipt, result, _time, ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(result);
         }, ct).ConfigureAwait(false);
     }
 }
