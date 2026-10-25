@@ -26,7 +26,7 @@
     if(active&&shouldLogout())void expire();
   }
   function activity(event){
-    if(!active||expiring||event?.isTrusted===false)return;
+    if(!active||expiring||event?.isTrusted!==true)return;
     // A first input after a suspended timer must NOT resurrect an idle session.
     if(shouldLogout()){void expire();return;}
     last=Date.now();persist(last);
