@@ -47,7 +47,7 @@ public static class RoleAuthorizationPolicy
         role == UserRole.GeneralAdministration;
 
     public static bool CanExecuteClosedDayEmergencyOverride(UserRole role) =>
-        role == UserRole.GeneralAdministration;
+        role is UserRole.GeneralAdministration or UserRole.OrdinaryAdministration;
 
     public static bool CanPerformStandardOperations(UserRole role) =>
         role is UserRole.GeneralAdministration or UserRole.OrdinaryAdministration or UserRole.Supervisor;
