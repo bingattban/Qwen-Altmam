@@ -204,6 +204,14 @@
       const counts=parseData(countsResponse), rows=parseData(rosterResponse);
       feedback.replaceChildren(el("p","section-description","التحضير ليوم "+STATE.date+
         " — البيانات من قاعدة التطبيق المحلية."));
+      // Keep the completion ratio read-only; the count chips still filter the roster.
+      const percent=Number.isFinite(Number(counts.completionPercentage))?
+        Math.max(0,Math.min(100,Math.round(Number(counts.completionPercentage)))):0;
+      const completion=el("section","counter-card dashboard-completion");
+      completion.setAttribute("aria-label","نسبة اكتمال التحضير "+percent+" بالمئة");
+      append(completion,el("span","counter-label","اكتمال التحضير"),
+        el("span","counter-value",percent+"%"));
+      counters.appendChild(completion);
       // The counters ARE the roster filters. No duplicate status chips below them.
       const stats=[{name:"إجمالي القوة",count:counts.totalForce,statusId:""},
         {name:"غير المحضرين",count:counts.unprepared,statusId:"__UNPREPARED__"}].concat(
@@ -429,10 +437,8 @@
       tb.wrap.classList.add("monthly-scroll");
       tableHost.replaceChildren(tb.wrap);
       // The first four identity/site columns are sticky at the RIGHT edge.
-      // Center today's header in the remaining scrollable date viewport,
-      // allowing two earlier dates to stay visible where width permits.
-      // Only set the initial scroll: thereafter the user can freely scroll
-      // backward or forward through the true day-of-month order.
+      // Initial position: today's date immediately LEFT of the last pinned
+      // identity/site column, without reordering the chronological dates.
       const revealCurrentDay=()=>{
         if(STATE.monthEpoch!==epoch || !currentDay || !tb.wrap.isConnected)return;
         const header=tb.wrap.querySelector(".current-day-column");
@@ -445,7 +451,7 @@
         const available=Math.max(0,viewport.width-fixedWidth);
         if(available<=0)return;
         // RTL: pinned columns cover the RIGHT of the viewport.
-        const desiredCenter=viewport.left+available/2;
+        const desiredCenter=viewport.right-fixedWidth-target.width/2;
         const currentCenter=(target.left+target.right)/2;
         const delta=currentCenter-desiredCenter;
         if(Math.abs(delta)>1)tb.wrap.scrollBy({left:delta,behavior:"instant"});

@@ -104,6 +104,8 @@ public sealed class DailyMonthlyReadService
             ["siteId"] = siteId,
             ["totalForce"] = force,
             ["unprepared"] = unprepared,
+            ["completionPercentage"] = force == 0 ? 0 :
+                (int)Math.Round(100m * (force - unprepared) / force, MidpointRounding.AwayFromZero),
             ["statusCounts"] = statuses
         });
     }

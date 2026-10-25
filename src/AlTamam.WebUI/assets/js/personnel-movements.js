@@ -107,19 +107,31 @@ async function transfer(host,external){
 }
 async function archive(host){
  const card=el("section",undefined,"card"),bar=el("div",undefined,"functional-toolbar");
- const kind=el("select"),search=el("input"),result=el("div");
+ const kind=el("select"),site=el("select"),search=el("input"),
+    dateFrom=el("input"),dateTo=el("input"),result=el("div");
+  dateFrom.type="date";dateTo.type="date";
+  dateFrom.setAttribute("aria-label","من تاريخ");
+  dateTo.setAttribute("aria-label","إلى تاريخ");
+  site.setAttribute("aria-label","فلتر الموقع");
+  site.appendChild(opt("","جميع المواقع"));
  kind.setAttribute("aria-label","نوع النقل");
  kind.append(opt("","الكل"),opt("internal","داخلي"),opt("external","خارجي"));
  search.placeholder="بحث بالاسم أو الرقم (ع)";
  card.appendChild(el("h2","أرشيف التنقلات","section-title"));
  let page=1;
- bar.append(kind,search,btn("بحث",()=>{page=1;load();}));
- kind.addEventListener("change",()=>{page=1;load();});
+ bar.append(kind,site,dateFrom,dateTo,search,btn("بحث",()=>{page=1;load();}));
+  try {
+    const response=await api().invoke("QuerySites",{});
+    for(const entry of response.data||[])site.appendChild(opt(entry.siteId,entry.name));
+  }catch(e){err(result,e);}
+ for(const selector of [kind,site,dateFrom,dateTo])
+    selector.addEventListener("change",()=>{page=1;load();});
  card.append(bar,result);host.appendChild(card);
  async function load(){
    try{
      const data=(await api().invoke("QueryMovementArchive",{page,pageSize:50,
-       type:kind.value,term:search.value.trim()})).data||{};
+       type:kind.value,term:search.value.trim(),siteId:site.value,
+        dateFrom:dateFrom.value,dateTo:dateTo.value})).data||{};
      if(!card.isConnected)return;
      const t=table(["الرقم (ع)","الاسم","النوع","الموقع السابق","الجهة الجديدة","التاريخ"]);
      for(const m of data.items||[])row(t.body,[m.serviceNumberA,m.name,m.type,m.sourceSite,m.destination,m.date]);

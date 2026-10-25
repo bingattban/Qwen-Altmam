@@ -80,7 +80,9 @@ async function main(){
   assert.ok(!marked[0].className.includes("pinned"),
     "today must travel with its chronological day, not be fixed");
   assert.ok(scroller.lastScroll && Number.isFinite(scroller.lastScroll.left),
-    "today must be centered at initial render, without blocking manual scrolling");
+    "today must be adjacent to the last pinned core column at initial render");
+  assert.equal(scroller.lastScroll.left,-500,
+    "today must align beside fixed columns (right 1180 - fixed 480 - half day 30), not centered");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
   assert.ok(open,"one committed cell has a detail button");
   assert.ok(open.attrs["aria-label"]?.includes(firstDay),"accessible date label");

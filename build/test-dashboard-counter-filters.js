@@ -24,7 +24,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
    if(action==="QuerySites")
      return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
    if(action==="GetDashboardSummary")
-     return{data:{totalForce:3,unprepared:1,statusCounts:[
+     return{data:{totalForce:3,unprepared:1,completionPercentage:67,statusCounts:[
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
    if(action==="QueryDailyRoster"){
