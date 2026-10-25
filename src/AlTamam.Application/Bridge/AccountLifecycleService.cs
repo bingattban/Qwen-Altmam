@@ -34,7 +34,7 @@ internal static class AccountLifecycleService
 
     internal static async Task<int> SuspendAccountsForPersonnelExitAsync(
         SqliteConnection c,SqliteTransaction tx,string personId,string reasonCode,
-        BridgePrincipal actor,TimeProvider clock,string effectiveDate,CancellationToken ct)
+        string actorUserId,string actorUsername,TimeProvider clock,string effectiveDate,CancellationToken ct)
     {
         var accounts=new List<(string Id,string Username,long Revision)>();
         using(var find=c.CreateCommand())
@@ -75,7 +75,7 @@ internal static class AccountLifecycleService
             }
             await BridgeAuditWriter.WriteAsync(c,tx,clock,"USER_LIFECYCLE_SUSPEND",
                 "تعطيل حساب مرتبط بفرد خرج من القوة",
-                actor.UserId,actor.Username,actor.Username,"User",account.Id,account.Username,
+                actorUserId,actorUsername,actorUsername,"User",account.Id,account.Username,
                 new JsonObject{["active"]=true,["personId"]=personId}.ToJsonString(),
                 new JsonObject{["active"]=false,["personId"]=personId,
                     ["reasonCode"]=reasonCode}.ToJsonString(),
