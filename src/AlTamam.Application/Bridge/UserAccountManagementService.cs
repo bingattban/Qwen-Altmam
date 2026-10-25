@@ -236,6 +236,10 @@ public sealed class UserAccountManagementService
            payload.Any(field=>field.Key is not
              ("userId" or "expectedRevision" or "password" or "operationId")))
             return Error("تعديل كلمة المرور لا يسمح بتغيير اسم المستخدم أو الصلاحية أو ربط الفرد.");
+        if(deactivate && payload is not null &&
+           payload.Any(field=>field.Key is not
+             ("userId" or "expectedRevision" or "operationId")))
+            return Error("تعطيل الحساب لا يسمح بتعديل بياناته أو صلاحياته.");
         if(id==actor.UserId)return Error("لا يمكن تعديل أو تعطيل الحساب المستخدم حالياً.");
         if(!deactivate)
         {
@@ -256,6 +260,13 @@ public sealed class UserAccountManagementService
             }
             if(!RoleAuthorizationPolicy.CanModifyAccount(actor.Role,role))
                 return Error("صلاحية تعديل هذا النوع من الحسابات غير متاحة.",BridgeErrorCodes.Unauthorized);
+            // Authorization is revalidated on EVERY retry, while the receipt
+            // precedes stale version checks. A lost successful response can be
+            // replayed safely even though the first commit incremented RowVersion.
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,deactivate?"DeactivateUserAccount":"ChangeUserPassword",
+                actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             if(revision!=expected)return Error("بيانات الحساب تغيرت؛ أعد تحديث القائمة.",BridgeErrorCodes.ConflictStale);
             if(active==0)return Error("الحساب معطل بالفعل.");
             if(deactivate)
@@ -294,8 +305,11 @@ public sealed class UserAccountManagementService
                 await Audit(c,t,actor,"USER_PASSWORD_CHANGE","تغيير كلمة مرور حساب",id,username,
                     null,new JsonObject{["credentialRotated"]=true}.ToJsonString(),ct).ConfigureAwait(false);
             }
-            return BridgeHelpers.Ok(new JsonObject{["userId"]=id,
-                ["active"]=!deactivate,["rowVersion"]=expected+1});
+            var outcome=new JsonObject{["userId"]=id,
+                ["active"]=!deactivate,["rowVersion"]=expected+1};
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
         },ct).ConfigureAwait(false);
     }
 
@@ -346,6 +360,10 @@ public sealed class UserAccountManagementService
             if(!RoleAuthorizationPolicy.CanModifyAccount(actor.Role,targetRole))
                 return Error("لا تملك صلاحية إعادة تفعيل هذا النوع من الحسابات.",
                     BridgeErrorCodes.Unauthorized);
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"ReactivateUserAccount",actor.UserId,payload,ct)
+                .ConfigureAwait(false);
+            if(replay is not null)return replay;
             if(active!=0 || revision!=expected)
                 return Error("الحساب مفعل أو تغير إصداره؛ أعد تحميل القائمة.",
                     BridgeErrorCodes.ConflictStale);
@@ -378,9 +396,12 @@ public sealed class UserAccountManagementService
                 new JsonObject{["active"]=false}.ToJsonString(),
                 new JsonObject{["active"]=true,["reason"]=reason,
                     ["personId"]=personId}.ToJsonString(),ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject{
+            var outcome=new JsonObject{
                 ["userId"]=id,["active"]=true,["rowVersion"]=expected+1
-            });
+            };
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
         },ct).ConfigureAwait(false);
     }
 

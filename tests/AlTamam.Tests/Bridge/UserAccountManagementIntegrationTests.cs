@@ -342,6 +342,120 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         Assert.Equal(1L,reader.GetInt64(3));
     }
 
+    [Fact]
+    public async Task PasswordRotationAndDisabling_ExactRetryMustNotDuplicateAuditOrAlterCredential()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var created=await svc.CreateAsync(new JsonObject{
+            ["username"]="supervisor-retry",["password"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
+        },_ordinary,default);
+        Assert.True(created.Success,created.UserMessage);
+        var id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        var rotation=new JsonObject{
+            ["userId"]=id,["expectedRevision"]=1L,["password"]="Rot123!valid",
+            ["operationId"]="password-retry-20261025"
+        };
+        var first=await svc.ChangePasswordAsync(rotation,_ordinary,default);
+        Assert.True(first.Success,first.UserMessage);
+        using var connection=_db.CreateOpenConnection();
+        using var q=connection.CreateCommand();
+        q.CommandText="SELECT CredentialHash FROM Users WHERE UserId=$id;";
+        q.Parameters.AddWithValue("$id",id);
+        string firstHash=Convert.ToString(q.ExecuteScalar())!;
+        Assert.True(PasswordSecurity.VerifyPassword("Rot123!valid",firstHash,
+            GetSalt(connection,id)));
+        var replay=await svc.ChangePasswordAsync((JsonObject)rotation.DeepClone(),_ordinary,default);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(replay.Data).ToJsonString());
+        Assert.Equal(firstHash,Convert.ToString(q.ExecuteScalar()));
+        Assert.Equal(1L,Count(connection,"USER_PASSWORD_CHANGE"));
+        var tamper=(JsonObject)rotation.DeepClone();
+        tamper["password"]="Alt123!valid";
+        Assert.False((await svc.ChangePasswordAsync(tamper,_ordinary,default)).Success);
+        Assert.Equal(1L,Count(connection,"USER_PASSWORD_CHANGE"));
+
+        var disable=new JsonObject{
+            ["userId"]=id,["expectedRevision"]=2L,
+            ["operationId"]="disable-retry-20261025"
+        };
+        var done=await svc.DeactivateAsync(disable,_ordinary,default);
+        Assert.True(done.Success,done.UserMessage);
+        var again=await svc.DeactivateAsync((JsonObject)disable.DeepClone(),_ordinary,default);
+        Assert.True(again.Success,again.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(done.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(again.Data).ToJsonString());
+        Assert.Equal(1L,Count(connection,"USER_DEACTIVATE"));
+        Assert.False((await svc.DeactivateAsync(new JsonObject{
+            ["userId"]=id,["expectedRevision"]=2L,
+            ["operationId"]="disable-retry-20261025",["role"]="GeneralAdministration"
+        },_ordinary,default)).Success);
+        q.CommandText="SELECT RowVersion FROM Users WHERE UserId=$id;";
+        Assert.Equal(3L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task ExplicitReactivation_ExactRetryCannotBypassRoleAndProducesOneAuditEvent()
+    {
+        using(var setupConnection=_db.CreateOpenConnection())
+        using(var assign=setupConnection.CreateCommand())
+        {
+            assign.CommandText="""
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-RETRY-ASSIGN','TST-ACTIVE-2','SITE-UNSPECIFIED',
+                    '2026-10-01',NULL,NULL,'2026-10-01T10:00:00Z');
+                """;
+            await assign.ExecuteNonQueryAsync();
+        }
+        var svc=new UserAccountManagementService(_db);
+        var created=await svc.CreateAsync(new JsonObject{
+            ["username"]="reactivation-retry",["password"]=SafePassword,
+            ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
+        },_ordinary,default);
+        Assert.True(created.Success,created.UserMessage);
+        var id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        Assert.True((await svc.DeactivateAsync(new JsonObject{
+            ["userId"]=id,["expectedRevision"]=1L
+        },_ordinary,default)).Success);
+        var request=new JsonObject{
+            ["userId"]=id,["expectedRevision"]=2L,
+            ["reason"]="إعادة اعتماد الشخص في كشف القوة بعد التحقق",
+            ["operationId"]="reactivation-retry-20261025"
+        };
+        var first=await svc.ReactivateAsync(request,_ordinary,default);
+        Assert.True(first.Success,first.UserMessage);
+        var replay=await svc.ReactivateAsync((JsonObject)request.DeepClone(),_ordinary,default);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(replay.Data).ToJsonString());
+        using var c=_db.CreateOpenConnection();
+        Assert.Equal(1L,Count(c,"USER_REACTIVATE"));
+        Assert.False((await svc.ReactivateAsync(request,new BridgePrincipal(
+            "fake-supervisor","supervisor",UserRole.Supervisor,"00000000000000000000000000000000"),
+            default)).Success);
+        var tampered=(JsonObject)request.DeepClone();
+        tampered["reason"]="سبب جديد لا يطابق السبب المعتمد سابقاً";
+        Assert.False((await svc.ReactivateAsync(tampered,_ordinary,default)).Success);
+        Assert.Equal(1L,Count(c,"USER_REACTIVATE"));
+    }
+
+    private static long Count(Microsoft.Data.Sqlite.SqliteConnection c,string operation)
+    {
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode=$code;";
+        cmd.Parameters.AddWithValue("$code",operation);
+        return Convert.ToInt64(cmd.ExecuteScalar());
+    }
+    private static string GetSalt(Microsoft.Data.Sqlite.SqliteConnection c,string id)
+    {
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="SELECT PasswordSalt FROM Users WHERE UserId=$id;";
+        cmd.Parameters.AddWithValue("$id",id);
+        return (string)cmd.ExecuteScalar()!;
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose() {
         _db?.Dispose();

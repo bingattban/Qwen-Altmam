@@ -7,7 +7,7 @@
   #define PublishDir "..\publish\AlTamam-win-x64"
 #endif
 #ifndef TargetArch
-  #define TargetArch "win-x64"
+  #define TargetArch "Windows-64bit"
 #endif
 
 [Setup]
@@ -57,9 +57,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; WebView2 Evergreen bootstrapper (15.05): installs runtime only if absent;
-; offline fallback = MicrosoftEdgeWebview2Setup.exe /silent /install requires
-; bundled runtime CAB — owner decision recorded in release notes until then.
+; The genuine, Authenticode-validated OFFLINE WebView2 standalone installer
+; is bundled in Prerequisites/ and invoked locally by the host if missing.
+; No online bootstrapper or CAB download is required on customer devices.
 
 [Dirs]
 Name: "{localappdata}\AlTamam"; Permissions: users-modify
