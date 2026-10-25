@@ -942,8 +942,18 @@
       op=field("نوع العملية (رمز)"),startDate=field("من تاريخ","","date"),
       endDate=field("إلى تاريخ","","date"),controls=node("div","functional-toolbar"),
       results=node("div","admin-note");
+    const canEditAudit=["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role);
+    let openDetail=null;
     const search=btn("بحث",()=>{state.page=1;load();},"btn btn-primary");
     controls.append(actor.wrap,targetField.wrap,op.wrap,startDate.wrap,endDate.wrap,search);
+    const showHidden=node("input");
+    if(canEditAudit){
+      showHidden.type="checkbox";
+      const toggle=node("label","admin-input");
+      toggle.append(showHidden,node("span","","إظهار القيود المخفية (للمسؤولين فقط)"));
+      showHidden.addEventListener("change",()=>{state.page=1;load();});
+      controls.appendChild(toggle);
+    }
     box.append(controls,results);
     async function load() {
       const token=++currentRequest;
@@ -951,15 +961,18 @@
         const response=await api().invoke("QueryAuditLog",{
           actor:actor.input.value,target:targetField.input.value,
           operation:op.input.value,fromDate:startDate.input.value,toDate:endDate.input.value,
+          includeTombstoned:canEditAudit&&showHidden.checked,
           page:state.page,pageSize:50});
         if(token!==currentRequest)return;
-        const data=response.data||{},t=table(["العملية","الهدف","المنفذ","وقت التنفيذ"]);
+        const data=response.data||{},t=table(["العملية","الهدف","المنفذ","الوصف الظاهر","وقت التنفيذ"]);
         (data.items||[]).forEach(item=>addRow(t.body,[
-          item.operationArabicName,item.targetDisplay,
-          [item.actorUsername,item.actorRosterFullName].filter(Boolean).join(" — "),
+          item.operationArabicName+(item.isTombstoned?" (مخفي)":""),
+          item.targetDisplay,
+          [item.actorUsername,item.actorRosterFullName].filter(Boolean).join(" - "),
+          item.description||item.rawDescription,
           item.executedAtUtc
         ],"عرض التفاصيل",()=>showAuditDetails(item.auditEventId)));
-        empty(t.body,4,"لا توجد عمليات مطابقة.");
+        empty(t.body,5,"لا توجد عمليات مطابقة.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
         prev.disabled=state.page<=1;next.disabled=!data.hasNext;
@@ -968,7 +981,9 @@
       }catch(e){if(token===currentRequest)errors(results,e);}
     }
     async function showAuditDetails(auditEventId) {
+      openDetail?.remove();
       const detail=card("تفاصيل القيد وسلامة السجل");
+      openDetail=detail;
       results.after(detail);
       const content=node("div","admin-note");
       detail.append(content,btn("إغلاق التفاصيل",()=>detail.remove()));
@@ -985,6 +1000,10 @@
           ["الاسم الكامل",item.actorRosterFullName],
           ["وقت التنفيذ",item.executedAtUtc],
           ["الوصف الأصلي",item.rawDescription],
+          ["الوصف الظاهر الحالي",item.overlays?.length
+            ? (item.overlays[item.overlays.length-1].correctedDescription||
+               (item.overlays[item.overlays.length-1].isTombstoned?"مخفي":item.rawDescription))
+            : item.rawDescription],
           ["سلامة تسلسل السجل",item.chainValid?"موثوق":"تعذر إثبات سلامة التسلسل"]
         ]){
           const line=node("div","settings-property");
@@ -993,6 +1012,60 @@
           facts.appendChild(line);
         }
         content.replaceChildren(facts);
+        const history=node("div","settings-properties");
+        const overlays=Array.isArray(item.overlays)?item.overlays:[];
+        const latest=overlays.at(-1);
+        const revision=Number(latest?.overlayVersion)||0;
+        if(overlays.length){
+          history.appendChild(node("h3","section-title","تاريخ التعديلات والإخفاء (لا يُحذف)"));
+          for(const entry of overlays){
+            history.appendChild(node("p","section-description",
+              "الإصدار "+entry.overlayVersion+" — "+
+              (entry.isTombstoned?"إخفاء":"تعديل ظاهر")+
+              " — "+entry.editedByDisplay+" — "+entry.editedAtUtc+
+              " — السبب: "+entry.reason));
+          }
+          content.appendChild(history);
+        }
+        if(canEditAudit){
+          const editBox=node("div","admin-note");
+          const reason=field("سبب التعديل أو الإخفاء (إلزامي)");
+          const corrected=field("الوصف الظاهر الجديد",
+            latest?.correctedDescription||item.rawDescription);
+          const form=node("div","functional-toolbar");
+          let retry=null;
+          async function commitOverlay(action){
+            const reasonText=reason.input.value.trim();
+            const description=corrected.input.value.trim();
+            if(!reasonText || (action==="UpdateAuditPresentation"&&!description))
+              return errors(editBox,new Error("اكتب سبب الإجراء والوصف البديل عند التعديل."));
+            const signature=JSON.stringify([action,auditEventId,revision,reasonText,description]);
+            if(retry?.signature!==signature)
+              retry={signature,operationId:makeOperationId()};
+            const label=action==="DeleteAuditPresentation"?"إخفاء القيد":"حفظ الوصف الظاهر";
+            if(!await dialogs.confirm("تأكيد "+label+"؟ يبقى القيد الأصلي محفوظاً دون تغيير."))return;
+            edit.disabled=true;hide.disabled=true;
+            try{
+              const payload={auditEventId,expectedOverlayVersion:revision,
+                reason:reasonText,operationId:retry.operationId};
+              if(action==="UpdateAuditPresentation")payload.correctedDescription=description;
+              const reply=await api().invoke(action,payload);
+              if(!reply.data?.rawEvidenceUntouched)
+                throw Error("لم يؤكد الخادم الاحتفاظ بالقيد الأصلي.");
+              retry=null;
+              detail.remove();openDetail=null;
+              await load();
+            }catch(e){errors(editBox,e);}
+            finally{edit.disabled=false;hide.disabled=false;}
+          }
+          const edit=btn(latest?.isTombstoned?"إظهار القيد بوصف معدل":"تعديل الوصف الظاهر",
+            ()=>commitOverlay("UpdateAuditPresentation"),"btn btn-primary");
+          const hide=btn("إخفاء القيد من العرض",
+            ()=>commitOverlay("DeleteAuditPresentation"),"btn btn-outline");
+          hide.disabled=latest?.isTombstoned===true;
+          form.append(edit,hide);
+          content.append(reason.wrap,corrected.wrap,form,editBox);
+        }
       }catch(e){errors(content,e);}
     }
     await load();
