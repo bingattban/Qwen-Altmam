@@ -60,8 +60,6 @@ public sealed class DailyMonthlyReadService
             )
             LEFT JOIN AttendanceRecords ar ON ar.PersonId = p.PersonId
                                           AND ar.AttendanceLocalDate = $date
-            LEFT JOIN PersonnelMovements m ON m.PersonId=p.PersonId
-                AND m.EffectiveLocalDate=$date AND m.MovementType=1
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
@@ -142,6 +140,8 @@ public sealed class DailyMonthlyReadService
             LEFT JOIN Sites s ON s.SiteId = a.SiteId
             LEFT JOIN AttendanceRecords ar ON ar.PersonId = p.PersonId
                                           AND ar.AttendanceLocalDate = $date
+            LEFT JOIN PersonnelMovements m ON m.PersonId=p.PersonId
+                AND m.EffectiveLocalDate=$date AND m.MovementType=1
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
