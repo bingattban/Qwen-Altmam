@@ -56,6 +56,29 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task UntrustedSessionQueryNeverExtendsFiveMinuteExpiry()
+    {
+        var dispatcher = BridgeHandlerCatalog.Create(_services);
+        _time.Forward(TimeSpan.FromSeconds(299));
+        for(int i=0;i<3;i++)
+        {
+            var envelope=new JsonObject{
+                ["requestId"]="UNTRUSTED-HEARTBEAT-"+i,
+                ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+                ["action"]="GetCurrentSession",
+                ["sessionNonce"]=_actor.SessionNonce,
+                ["payload"]=new JsonObject{["userActivity"]=true}
+            };
+            var response=await dispatcher.DispatchAsync(
+                envelope.ToJsonString(),LocalWebUiOrigin.BaseUrl,true,
+                nonce=>_services.ResolveSessionAsync(nonce));
+            Assert.True(response.Response.Success,response.Response.UserMessage);
+        }
+        _time.Forward(TimeSpan.FromSeconds(1));
+        Assert.Null(await _services.ResolveSessionAsync(_actor.SessionNonce));
+    }
+
+    [Fact]
     public async Task ConcurrentLoginBlockedUntilLogout_AndRestartRevokesOldSessions()
     {
         var (other, denied)=await _services.AuthenticateAsync(
