@@ -130,8 +130,17 @@ public sealed class BridgeSharedServices
         {
             using var find = connection.CreateCommand();
             find.Transaction = tx;
-            find.CommandText = @"SELECT UserId, Username, Role, CredentialHash, PasswordSalt, ActiveFlag, LockedUntilUtc
-                                 FROM Users WHERE NormalizedUsername = $u;";
+            find.CommandText = """
+                SELECT u.UserId,u.Username,u.Role,u.CredentialHash,u.PasswordSalt,
+                       u.ActiveFlag,u.LockedUntilUtc,u.FailedLoginCount,
+                       CASE WHEN u.Role=1 THEN 1
+                            WHEN u.LinkedPersonId IS NOT NULL AND EXISTS(
+                                SELECT 1 FROM Persons p
+                                WHERE p.PersonId=u.LinkedPersonId AND p.ActiveFlag=1
+                                  AND p.OrganizationalStatus=1) THEN 1
+                            ELSE 0 END
+                FROM Users u WHERE u.NormalizedUsername=$u;
+                """;
             find.Parameters.AddWithValue("$u", normalized);
             using SqliteDataReader reader = await find.ExecuteReaderAsync(ct).ConfigureAwait(false);
             if (!await reader.ReadAsync(ct).ConfigureAwait(false))
@@ -144,26 +153,69 @@ public sealed class BridgeSharedServices
             var salt = reader.GetString(4);
             bool active = Convert.ToInt32(reader.GetValue(5)) == 1;
             string? lockedUntil = reader.IsDBNull(6) ? null : reader.GetString(6);
+            int failureCount = reader.GetInt32(7);
+            bool eligibleForRoster = reader.GetInt32(8) == 1;
             reader.Close();
 
             if (!active)
                 return (null, Error(BridgeErrorCodes.Unauthorized, "الحساب معطّل."));
+            // Defense in depth for old/corrupt lifecycle state: personnel exit
+            // must NEVER leave an active account or a reusable session behind.
+            // Founder role remains separately governed to prevent accidental
+            // permanent loss of the only GeneralAdmin (03.13 policy conflict).
+            if (!eligibleForRoster)
+            {
+                using var suspend = connection.CreateCommand();
+                suspend.Transaction = tx;
+                suspend.CommandText = """
+                    UPDATE Users SET ActiveFlag=0,RowVersion=RowVersion+1,
+                        FailedLoginCount=0,LockedUntilUtc=NULL
+                    WHERE UserId=$user AND Role<>1 AND ActiveFlag=1;
+                    UPDATE UserSessions SET RevokedFlag=1
+                    WHERE UserId=$user AND RevokedFlag=0;
+                    """;
+                suspend.Parameters.AddWithValue("$user",userId);
+                await suspend.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                await BridgeAuditWriter.WriteAsync(connection,tx,_time,
+                    "USER_LIFECYCLE_SUSPEND_GUARD",
+                    "تعطيل حساب لا يرتبط بفرد نشط في القوة",
+                    "USR-SYSTEM","النظام","النظام","User",userId,storedName,
+                    new JsonObject{["active"]=true}.ToJsonString(),
+                    new JsonObject{["active"]=false,["reason"]="inactive-or-missing-roster"}.ToJsonString(),
+                    "رفض تسجيل الدخول وإلغاء الجلسات بسبب انتهاء أهلية الفرد",
+                    "اكتشاف حساب مرتبط بفرد غير نشط",
+                    _time.GetLocalNow().ToString("yyyy-MM-dd"),
+                    Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
+                return (null,Error(BridgeErrorCodes.Unauthorized,
+                    "الفرد المرتبط بالحساب غير نشط؛ عُطّل الحساب ويلزم تفعيله مجدداً من الإدارة."));
+            }
             if (lockedUntil is not null && DateTimeOffset.TryParse(lockedUntil, out DateTimeOffset lockEnd) && lockEnd > nowUtc)
                 return (null, Error(BridgeErrorCodes.Unauthorized, "الحساب مقفل مؤقتاً بعد محاولات فاشلة متكررة."));
 
             if (!PasswordSecurity.VerifyPassword(password, hash, salt))
             {
+                // Temporary lockouts are recoverable: once a 15-minute
+                // cooldown expires the next wrong attempt starts at 1/5, not
+                // an immediate new lock. Use injected TimeProvider instead
+                // of SQLite's unrelated wall clock.
+                bool cooldownPassed = lockedUntil is not null &&
+                    DateTimeOffset.TryParse(lockedUntil,out DateTimeOffset lastLockEnd) &&
+                    lastLockEnd <= nowUtc;
+                int failures = cooldownPassed ? 1 : failureCount + 1;
+                string? until = failures >= 5 ? nowUtc.AddMinutes(15).ToString("O") : null;
                 using var fail = connection.CreateCommand();
                 fail.Transaction = tx;
-                fail.CommandText = @"UPDATE Users SET FailedLoginCount = FailedLoginCount + 1,
-                                    LockedUntilUtc = CASE WHEN FailedLoginCount + 1 >= 5
-                                        THEN STRFTIME('%Y-%m-%dT%H:%M:%fZ','now','+15 minutes') ELSE LockedUntilUtc END
-                                    WHERE UserId = $id;
-                                    INSERT INTO FailedLoginEvents (UsernameAttempted, AttemptedAtUtc, FailureReason)
-                                    VALUES ($u, $now, 'bad-password');";
-                fail.Parameters.AddWithValue("$id", userId);
-                fail.Parameters.AddWithValue("$u", normalized);
-                fail.Parameters.AddWithValue("$now", nowUtc.ToString("O"));
+                fail.CommandText = """
+                    UPDATE Users SET FailedLoginCount=$failures,
+                        LockedUntilUtc=$until WHERE UserId=$id;
+                    INSERT INTO FailedLoginEvents (UsernameAttempted,AttemptedAtUtc,FailureReason)
+                    VALUES ($u,$now,'bad-password');
+                    """;
+                fail.Parameters.AddWithValue("$id",userId);
+                fail.Parameters.AddWithValue("$u",normalized);
+                fail.Parameters.AddWithValue("$now",nowUtc.ToString("O"));
+                fail.Parameters.AddWithValue("$failures",failures);
+                fail.Parameters.AddWithValue("$until",(object?)until ?? DBNull.Value);
                 await fail.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 return (null, Error(BridgeErrorCodes.Unauthorized, "بيانات الدخول غير صحيحة."));
             }
@@ -208,7 +260,11 @@ public sealed class BridgeSharedServices
         using var cmd = connection.CreateCommand();
         cmd.CommandText = @"SELECT u.UserId, u.Username, s.Role
                             FROM UserSessions s JOIN Users u ON u.UserId = s.UserId
-                            WHERE s.SessionNonce = $n AND s.RevokedFlag = 0 AND s.ExpiresAtUtc > $now AND u.ActiveFlag = 1;";
+                            WHERE s.SessionNonce = $n AND s.RevokedFlag=0 AND s.ExpiresAtUtc>$now
+                              AND u.ActiveFlag=1
+                              AND (u.Role=1 OR (u.LinkedPersonId IS NOT NULL AND EXISTS(
+                                  SELECT 1 FROM Persons p WHERE p.PersonId=u.LinkedPersonId
+                                    AND p.ActiveFlag=1 AND p.OrganizationalStatus=1)));";
         cmd.Parameters.AddWithValue("$n", sessionNonce);
         cmd.Parameters.AddWithValue("$now", _time.GetUtcNow().ToString("O"));
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -229,7 +285,12 @@ public sealed class BridgeSharedServices
         using var cmd=c.CreateCommand();
         cmd.CommandText="""
             UPDATE UserSessions SET ExpiresAtUtc=$newExpiry
-            WHERE SessionNonce=$nonce AND RevokedFlag=0 AND ExpiresAtUtc>$now;
+            WHERE SessionNonce=$nonce AND RevokedFlag=0 AND ExpiresAtUtc>$now
+              AND EXISTS(SELECT 1 FROM Users u WHERE u.UserId=UserSessions.UserId
+                AND u.ActiveFlag=1 AND (u.Role=1 OR
+                (u.LinkedPersonId IS NOT NULL AND EXISTS(
+                  SELECT 1 FROM Persons p WHERE p.PersonId=u.LinkedPersonId
+                    AND p.ActiveFlag=1 AND p.OrganizationalStatus=1))));
             """;
         cmd.Parameters.AddWithValue("$nonce",nonce);
         cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
@@ -259,7 +320,12 @@ public sealed class BridgeSharedServices
         using var q=c.CreateCommand();
         q.CommandText="""
             UPDATE UserSessions SET ExpiresAtUtc=$deadline
-            WHERE RevokedFlag=0 AND ExpiresAtUtc>$now;
+            WHERE RevokedFlag=0 AND ExpiresAtUtc>$now
+              AND EXISTS(SELECT 1 FROM Users u WHERE u.UserId=UserSessions.UserId
+                AND u.ActiveFlag=1 AND (u.Role=1 OR
+                (u.LinkedPersonId IS NOT NULL AND EXISTS(
+                  SELECT 1 FROM Persons p WHERE p.PersonId=u.LinkedPersonId
+                    AND p.ActiveFlag=1 AND p.OrganizationalStatus=1))));
             """;
         q.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
         q.Parameters.AddWithValue("$deadline",_time.GetUtcNow().AddSeconds(300).ToString("O"));
