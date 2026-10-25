@@ -269,15 +269,29 @@ jobs:
           Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH.exe" -Force
       - name: Generate SHA-256 checksums + build metadata (15.07)
         run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
-      - name: Upload BOTH release-candidate artifacts for ${{ matrix.arch }}
+      # One download contains ONE customer-facing version, never both.
+      - name: Upload standalone Portable package for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
-          name: AlTamam-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
+          name: AlTamam-Portable-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
+          path: artifacts/AlTamam-Portable-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload standalone Installer package for ${{ matrix.arch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Installer-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
+          path: artifacts/AlTamam-Installer-${{ matrix.arch }}.exe
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload checksums and build metadata for ${{ matrix.arch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Checksums-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
           path: |
-            artifacts/AlTamam-Portable-${{ matrix.arch }}.zip
-            artifacts/AlTamam-Installer-${{ matrix.arch }}.exe
             artifacts/SHA256SUMS.txt
             artifacts/BUILD_METADATA.json
+          if-no-files-found: error
           retention-days: 90
       - name: Retain raw publish dir for acceptance testing
         uses: actions/upload-artifact@v4
@@ -300,7 +314,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@v4
-        with: { pattern: "AlTamam-Windows-64bit-rc-*", merge-multiple: true, path: rc }
+        with: { pattern: "AlTamam-Installer-Windows-64bit-rc-*", merge-multiple: true, path: rc }
       - name: Stage installer next to cwd
         shell: pwsh
         run: Copy-Item rc/AlTamam-Installer-Windows-64bit.exe .
