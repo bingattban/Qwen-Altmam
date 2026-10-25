@@ -14,24 +14,6 @@ namespace AlTamam.Application.Bridge;
 /// </summary>
 internal static class AccountLifecycleService
 {
-    internal static async Task<bool> WouldStrandFoundingAdministratorAsync(
-        SqliteConnection c,SqliteTransaction tx,IReadOnlyCollection<string> personIds,
-        CancellationToken ct)
-    {
-        foreach(string id in personIds)
-        {
-            using var cmd=c.CreateCommand();cmd.Transaction=tx;
-            cmd.CommandText="""
-                SELECT EXISTS(SELECT 1 FROM Users
-                    WHERE LinkedPersonId=$person AND Role=1 AND ActiveFlag=1);
-                """;
-            cmd.Parameters.AddWithValue("$person",id);
-            if(Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false))==1)
-                return true;
-        }
-        return false;
-    }
-
     internal static async Task<int> SuspendAccountsForPersonnelExitAsync(
         SqliteConnection c,SqliteTransaction tx,string personId,string reasonCode,
         string actorUserId,string actorUsername,TimeProvider clock,string effectiveDate,CancellationToken ct)
@@ -42,7 +24,7 @@ internal static class AccountLifecycleService
             find.Transaction=tx;
             find.CommandText="""
                 SELECT UserId,Username,RowVersion FROM Users
-                WHERE LinkedPersonId=$person AND ActiveFlag=1 ORDER BY UserId;
+                WHERE LinkedPersonId=$person AND Role<>1 AND ActiveFlag=1 ORDER BY UserId;
                 """;
             find.Parameters.AddWithValue("$person",personId);
             using var reader=await find.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -57,7 +39,7 @@ internal static class AccountLifecycleService
                 update.CommandText="""
                     UPDATE Users SET ActiveFlag=0,RowVersion=RowVersion+1,
                         LockedUntilUtc=NULL,FailedLoginCount=0
-                    WHERE UserId=$id AND LinkedPersonId=$person
+                    WHERE UserId=$id AND LinkedPersonId=$person AND Role<>1
                         AND ActiveFlag=1 AND RowVersion=$version;
                     """;
                 update.Parameters.AddWithValue("$id",account.Id);

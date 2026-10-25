@@ -145,10 +145,6 @@ public sealed class PersonnelSeparationService
                await Forbidden(c,tx,id,date,ct).ConfigureAwait(false))
                 return Fail(BridgeErrorCodes.ConflictStale,
                     "تغيرت بيانات الفرد أو تحضيره بعد المعاينة؛ ألغي الفصل دون تعديل.");
-            if(await AccountLifecycleService.WouldStrandFoundingAdministratorAsync(
-                c,tx,[id],ct).ConfigureAwait(false))
-                return Fail(BridgeErrorCodes.Unauthorized,
-                    "لا يمكن فصل الفرد المرتبط بحساب الإدارة العامة المؤسس قبل معالجة ربط حساب التأسيس.");
             long? consumed=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,tx,token,
                 Operation,actor.UserId,version,ct).ConfigureAwait(false);
             if(consumed!=version)return Fail(BridgeErrorCodes.ConflictStale,
