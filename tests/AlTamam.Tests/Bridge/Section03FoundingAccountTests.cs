@@ -51,6 +51,10 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         Assert.False(weak.Success);
         Assert.False(await _service.IsProvisionedAsync());
 
+        // Subsequent users allow 8, but the founding administrator keeps
+        // the previously owner-approved stronger 10-character minimum.
+        Assert.False((await _service.ProvisionFirstAdministratorAsync(
+            "chosenOwner","Abc123!z",CancellationToken.None)).Success);
         var setup = await _service.ProvisionFirstAdministratorAsync(
             "chosenOwner", "test-password-123", CancellationToken.None, "صاحب البرنامج");
         Assert.True(setup.Success, setup.UserMessage);
