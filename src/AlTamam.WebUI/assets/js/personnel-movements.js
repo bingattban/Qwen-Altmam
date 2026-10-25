@@ -78,15 +78,24 @@ async function transfer(host,external){
       const t=table(["الرقم (ع)","الاسم","الموقع السابق","الجهة الجديدة"]);
       data.persons.forEach(p=>row(t.body,[p.serviceNumberA,p.name,p.sourceSiteName,data.destinationName]));
       review.appendChild(t.wrap);
+      // Keep one operation ID for the lifetime of this exact preview. If the
+      // response is lost, re-clicking confirms the same intent exactly once.
+      const operationId=window.crypto?.randomUUID?.()||
+        ("MOV-"+Date.now()+"-"+Math.random().toString(36).slice(2)+
+         Math.random().toString(36).slice(2));
       const confirmButton=btn("تأكيد النقل النهائي",async()=>{
         if(!await modalConfirm("تأكيد نقل "+data.count+" فرداً إلى "+data.destinationName+"؟"))return;
         confirmButton.disabled=true;
         try{
           const result=await api().invoke(external?"CommitExternalTransfer":"CommitInternalTransfer",
-            {previewToken:data.previewToken});
+            {previewToken:data.previewToken,operationId});
           reset();page=1;await load();
           note.replaceChildren(el("p","تم حفظ نقل "+result.data.count+" فرداً وسجل العملية.","settings-success"));
-        }catch(e){err(note,e);confirmation.replaceChildren();}
+        }catch(e){
+          // Retain the same preview and operationId for an exact network retry.
+          // A genuine stale/expired preview still gets rejected by C#.
+          err(note,e);
+        }
         finally{confirmButton.disabled=false;}
       });
       review.append(confirmButton,btn("إلغاء",async()=>{if(await modalConfirm("إلغاء المعاينة دون نقل؟"))confirmation.replaceChildren();}));
