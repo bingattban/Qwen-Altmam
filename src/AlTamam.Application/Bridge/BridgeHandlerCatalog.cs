@@ -461,14 +461,6 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner=await svc.CreateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged)):Fail(req,inner);
         },
-        "LinkFoundingAdministrator" => async(req,principal,ct) =>
-        {
-            var svc=new UserAccountManagementService(services.Db,services.Time);
-            BridgeResponse inner=await svc.LinkFoundingAccountAsync(req.Payload,principal!,ct)
-                .ConfigureAwait(false);
-            return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged))
-                :Fail(req,inner);
-        },
         "ChangeUserPassword" => async(req,principal,ct) =>
         {
             var svc=new UserAccountManagementService(services.Db,services.Time);
