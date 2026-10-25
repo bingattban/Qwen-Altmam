@@ -70,7 +70,7 @@ public partial class MainWindow : Window
     {
         if(_gateway is null)return;
         DateTimeOffset now=DateTimeOffset.UtcNow;
-        if(now-_lastNativeActivityPing < TimeSpan.FromSeconds(15))return;
+        if(now-_lastNativeActivityPing < TimeSpan.FromSeconds(1))return;
         _lastNativeActivityPing=now;
         try {await _gateway.RecordNativeInputAsync().ConfigureAwait(true);}
         catch { /* Never crash UI on an idle-activity update. The server still expires. */ }
