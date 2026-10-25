@@ -121,6 +121,44 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
         Assert.Equal("مفصول",cell["name"]!.GetValue<string>());
     }
     [Fact]
+    public async Task SeparationExactRetry_IsRecordedOnceAfterEnforcedFiveSecondDelay()
+    {
+        var svc=new PersonnelSeparationService(_db,_clock);
+        string token=Token(await svc.PreviewAsync(Data(),Actor,CancellationToken.None));
+        const string operationId="separation-retry-20261025";
+        var request=new JsonObject{
+            ["previewToken"]=token,["operationId"]=operationId
+        };
+        var early=await svc.CommitAsync(request,Actor,CancellationToken.None);
+        Assert.False(early.Success);
+        Assert.Equal(0L,Count("MutationReceipts"));
+        Assert.Equal(0L,Count("PersonnelMovements"));
+
+        _clock.Advance(TimeSpan.FromSeconds(6));
+        var saved=await svc.CommitAsync(request,Actor,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var replay=await svc.CommitAsync((JsonObject)request.DeepClone(),
+            Actor,CancellationToken.None);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(saved.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(replay.Data).ToJsonString());
+        Assert.Equal(1L,Count("PersonnelMovements"));
+        Assert.Equal(1L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
+
+        var modified=await svc.CommitAsync(new JsonObject{
+            ["previewToken"]="0000000000000000000000000000000000000000000000000000000000000000",
+            ["operationId"]=operationId
+        },Actor,CancellationToken.None);
+        Assert.False(modified.Success);
+        Assert.Equal(1L,Count("PersonnelMovements"));
+
+        var other=Actor with {UserId="TEST-DIFFERENT-ADMIN"};
+        Assert.False((await svc.CommitAsync(request,other,CancellationToken.None)).Success);
+        Assert.Equal(1L,Count("AuditEvents"));
+    }
+
+    [Fact]
     public async Task MissingReasonAndWrongPersonDoNotChangeDatabase()
     {
         var svc=new PersonnelSeparationService(_db,_clock);
