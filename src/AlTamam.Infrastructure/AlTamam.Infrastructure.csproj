@@ -13,5 +13,6 @@
     <EmbeddedResource Include="Persistence/Migrations/V006_FoundingAccount.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V007_PermanentIdentifiers.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V008_MutationReceipts.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/V009_FoundingAdminIndependent.sql" />
   </ItemGroup>
 </Project>
