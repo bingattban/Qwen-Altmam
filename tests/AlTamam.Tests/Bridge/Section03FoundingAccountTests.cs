@@ -162,7 +162,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         Assert.Throws<SqliteException>(()=>Exec(
             "UPDATE Users SET LinkedPersonId='PER-FOUNDER-TEST' WHERE Role=1;"));
         Assert.Throws<SqliteException>(()=>Exec(
-            "UPDATE Users SET Role=1,LinkedPersonId='PER-FOUNDER-TEST' WHERE UserId='NONEXISTENT';"));
+            "UPDATE Users SET Role=1,LinkedPersonId='PER-FOUNDER-TEST' WHERE Role=1;"));
         Assert.Equal("",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
         Assert.Equal(userId,Scalar("SELECT UserId FROM Users WHERE Role=1;"));
         Assert.Equal("صاحب الحساب المؤسس",Scalar(
