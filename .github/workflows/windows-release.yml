@@ -142,9 +142,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [win-x64, win-x86]
+        include:
+          - arch: Windows-64bit
+            runtime: win-x64
+          - arch: Windows-32bit
+            runtime: win-x86
     env:
-      RUNTIME: ${{ matrix.arch }}
+      # win-x86 is the .NET runtime identifier for REAL 32-bit Windows.
+      # Customer-facing package names are ONLY Windows-32bit / Windows-64bit.
+      RUNTIME: ${{ matrix.runtime }}
+      DISPLAY_ARCH: ${{ matrix.arch }}
       PUBLISH_DIR: publish/AlTamam-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
@@ -239,7 +246,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
           Compress-Archive -Path "$env:PUBLISH_DIR\*" `
-            -DestinationPath "artifacts/AlTamam-Portable-$env:RUNTIME.zip" -Force
+            -DestinationPath "artifacts/AlTamam-Portable-$env:DISPLAY_ARCH.zip" -Force
         shell: pwsh
         env: { }
       - name: Install Inno Setup 6 (approved tool) and compile installer
@@ -256,12 +263,12 @@ jobs:
           & $iscc $architectureOption `
             /DAppVersion=$env:RELEASE_VERSION `
             /DPublishDir=$publishDirAbsolute `
-            /DTargetArch=$env:RUNTIME `
+            /DTargetArch=$env:DISPLAY_ARCH `
             build/AlTamam-installer.iss
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compiler failed' }
-          Move-Item "artifacts/AlTamam-Installer-$env:RUNTIME-setup.exe" "artifacts/AlTamam-Installer-$env:RUNTIME.exe" -Force
+          Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH.exe" -Force
       - name: Generate SHA-256 checksums + build metadata (15.07)
-        run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:RUNTIME
+        run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
       - name: Upload BOTH release-candidate artifacts for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
@@ -293,17 +300,17 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - uses: actions/download-artifact@v4
-        with: { pattern: "AlTamam-win-x64-rc-*", merge-multiple: true, path: rc }
+        with: { pattern: "AlTamam-Windows-64bit-rc-*", merge-multiple: true, path: rc }
       - name: Stage installer next to cwd
         shell: pwsh
-        run: Copy-Item rc/AlTamam-Installer-win-x64.exe .
+        run: Copy-Item rc/AlTamam-Installer-Windows-64bit.exe .
       - name: Installer silent install to fresh profile
         shell: pwsh
         run: |
           # 1) first run, 2) login, 3) attendance, 4) import/export,
           # 5) shutdown/reopen, 6) upgrade-in-place, 7) uninstall keeps DB/backups,
           # 8) reinstall sees preserved data, 9) backup+restore round-trip.
-          Start-Process -FilePath ".\AlTamam-Installer-win-x64.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
+          Start-Process -FilePath ".\AlTamam-Installer-Windows-64bit.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
           if (-not (Test-Path "C:\AlTamamTest\AlTamam.DesktopHost.exe")) { throw "installer did not lay down exe" }
       - name: Automated acceptance driver (synthetic data only)
         # §22 audit 2026-10-23: Category=Acceptance tests DO NOT EXIST in the repo yet.
