@@ -30,6 +30,18 @@ public sealed class Section04EightPmCarryForwardTests : IAsyncLifetime, IDisposa
     {
         _db = new AlTamamDbContext(_path,SyntheticFixtures.TestKeyHex);
         await _db.InitializeAsync();
+        // Production schema may seed the real machine's clock watermark. The
+        // simulated 19:59 must have a matching watermark, not appear as rollback.
+        using var connection=_db.CreateOpenConnection();
+        using var command=connection.CreateCommand();
+        command.CommandText= """
+            INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+            VALUES('LastObservedUtcTimestamp',$now,$now)
+            ON CONFLICT(SettingKey) DO UPDATE
+            SET SettingValue=$now,UpdatedAtUtc=$now;
+            """;
+        command.Parameters.AddWithValue("$now",_clock.GetUtcNow().ToString("O"));
+        await command.ExecuteNonQueryAsync();
     }
 
     private async Task AddPersonAsync(string id,string suffix,bool hasYesterday,
