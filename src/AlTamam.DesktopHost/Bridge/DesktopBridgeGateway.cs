@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
@@ -16,6 +17,57 @@ public sealed class DesktopBridgeGateway
     private readonly WebView2BridgeDispatcher _dispatcher;
     private readonly BridgeSharedServices _services;
     private CoreWebView2? _core;
+
+    // Genuine browser mouse/key/touch input is visible to Windows via
+    // GetLastInputInfo even when WebView2 does not bubble input to WPF.
+    // A JavaScript flag is NOT sufficient evidence of human activity.
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LastInputInfo { public uint Size; public uint Tick; }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetLastInputInfo(ref LastInputInfo input);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    private static bool IsRecentPhysicalInputIntoForegroundApp()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        var window = GetForegroundWindow();
+        if (window == IntPtr.Zero ||
+            GetWindowThreadProcessId(window, out uint processId) == 0 ||
+            processId != (uint)Environment.ProcessId)
+            return false;
+        var input = new LastInputInfo { Size = (uint)Marshal.SizeOf<LastInputInfo>() };
+        if (!GetLastInputInfo(ref input)) return false;
+        // Both are 32-bit Windows uptime ticks; unsigned subtraction is
+        // wrap-safe, including across the 49-day tick counter rollover.
+        uint elapsed = unchecked((uint)Environment.TickCount - input.Tick);
+        return elapsed <= 2_000;
+    }
+
+    private static bool IsRequestedHumanActivityCheck(string raw)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("action", out var action) &&
+                action.ValueKind == JsonValueKind.String &&
+                action.GetString() == "GetCurrentSession" &&
+                root.TryGetProperty("payload", out var payload) &&
+                payload.ValueKind == JsonValueKind.Object &&
+                payload.TryGetProperty("userActivity", out var activity) &&
+                activity.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException) { return false; }
+    }
+
     public Func<string?,Task<string?>>? FolderPicker
     { get => _services.PickOutputDirectoryAsync; set => _services.PickOutputDirectoryAsync = value; }
 
@@ -53,6 +105,13 @@ public sealed class DesktopBridgeGateway
                 originUri,
                 isMainFrame: true,
                 nonce => _services.ResolveSessionAsync(nonce)).ConfigureAwait(true);
+
+            // A successful authenticated session check is not enough to
+            // refresh inactivity: verify actual recent Windows user input.
+            // Neither timers nor forged payload.userActivity alone can extend it.
+            if (result.Response.Success && IsRequestedHumanActivityCheck(raw) &&
+                IsRecentPhysicalInputIntoForegroundApp())
+                await _services.RefreshActiveSessionFromNativeInputAsync().ConfigureAwait(true);
 
             string json = JsonSerializer.Serialize(result.Response, ResponseJsonOptions);
             _core.PostWebMessageAsString(json);
