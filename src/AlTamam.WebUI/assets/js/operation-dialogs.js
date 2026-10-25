@@ -39,14 +39,14 @@
         const scrolling=make("div","attendance-review-scroll");
         const grid=make("table","data-table attendance-review-table");
         const head=make("thead"),header=make("tr");
-        for(const column of ["الرقم (ع)","اسم الفرد","الحالة السابقة","الحالة الجديدة"]){
+        for(const column of ["الرقم (ع)","اسم الفرد","الموقع","الحالة السابقة","الحالة الجديدة"]){
           const th=make("th","",column);th.scope="col";header.appendChild(th);
         }
         head.appendChild(header);
         const rows=make("tbody");
         for(const person of options.review.persons){
           const tr=make("tr");
-          for(const value of [person.serviceNumberA,person.name,
+          for(const value of [person.serviceNumberA,person.name,person.siteName,
             person.previousStatusName,options.review.status])
             tr.appendChild(make("td","",value||"غير محضر"));
           rows.appendChild(tr);
@@ -55,6 +55,35 @@
         detail.appendChild(scrolling);body.appendChild(detail);
         body.appendChild(make("p","attendance-review-warning",
           "يراجع البرنامج حالة كل فرد مرة أخرى قبل الحفظ. لن يُعتمد أي تغيير قبل الضغط على زر التأكيد."));
+      }
+      if(options.transferReview){
+        const review=options.transferReview;
+        const detail=make("section","attendance-review");
+        detail.appendChild(make("p","attendance-review-summary",
+          "تاريخ الحركة: "+review.businessDate+" — نوع النقل: "+
+          (review.external?"خارجي":"داخلي")+" — إجمالي الأفراد: "+review.persons.length));
+        const scrolling=make("div","attendance-review-scroll");
+        const grid=make("table","data-table attendance-review-table");
+        const head=make("thead"),header=make("tr");
+        for(const column of ["الرقم (ع)","اسم الفرد","الموقع المصدر","الجهة المستقبلة","تاريخ الحركة"]){
+          const th=make("th","",column);th.scope="col";header.appendChild(th);
+        }
+        head.appendChild(header);
+        const rows=make("tbody");
+        for(const person of review.persons){
+          const tr=make("tr");
+          for(const value of [person.serviceNumberA,person.name,
+            person.sourceSiteName,review.destinationName,review.businessDate])
+            tr.appendChild(make("td","",value));
+          rows.appendChild(tr);
+        }
+        grid.append(head,rows);scrolling.appendChild(grid);
+        detail.appendChild(scrolling);
+        detail.appendChild(make("p","attendance-review-warning",
+          review.external
+            ?"سيُستبعد الأفراد من القوة الفعلية مع حفظ سجلاتهم التاريخية."
+            :"تظهر حركة النقل اليوم في الموقعين، ويبدأ التحضير العادي في الموقع الجديد غداً."));
+        body.appendChild(detail);
       }
       let field=null,feedback=null;
       if(options.input){
@@ -128,6 +157,18 @@
       confirmLabel:opts.confirmLabel||"معاينة العملية",input:{
         label:"سبب العملية",multiline:true,minLength:opts.minLength||5,maxLength:400
       }}),
+    transferReview:(review,opts={})=>{
+      if(!review||!Array.isArray(review.persons)||!review.persons.length||
+         review.persons.length>100||typeof review.businessDate!=="string"||
+         typeof review.destinationName!=="string"||
+         !review.persons.every(p=>typeof p.name==="string"&&
+           typeof p.serviceNumberA==="string"&&typeof p.sourceSiteName==="string"))
+        return Promise.resolve(false);
+      return show({title:opts.title||"معاينة النقل النهائي",
+        message:"راجع أسماء الأفراد وأرقامهم والمواقع وتاريخ الحركة قبل الحفظ.",
+        confirmLabel:"تأكيد النقل النهائي",transferReview:review
+      }).then(result=>result===true);
+    },
     attendanceReview:(review,opts={})=>{
       if(!review||!Array.isArray(review.persons)||!review.persons.length||
          review.persons.length>100||!review.persons.every(p=>

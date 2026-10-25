@@ -21,7 +21,10 @@ async function transfer(host,external){
   function reset(){selected.clear();counter.textContent="الأفراد المحددون: 0";confirmation.replaceChildren();}
   function destinations(){if(external)return;to.replaceChildren(opt("","اختر الموقع المنقول إليه"));sites.filter(s=>s.siteId!==from.value).forEach(s=>to.appendChild(opt(s.siteId,s.name)));}
   card.appendChild(el("h2",external?"النقل الخارجي":"النقل الداخلي","section-title"));
-  card.appendChild(el("p","نقل اليوم فقط، ولا يجوز نقل من سبق تحضيره أو نقله اليوم.","section-description"));
+  card.appendChild(el("p",external
+     ?"النقل الخارجي يستبعد الفرد من القوة مع الاحتفاظ بتاريخ خدمته."
+     :"تظهر حركة النقل في يوم التنفيذ بالموقعين، ويبدأ التحضير بالموقع الجديد في اليوم التالي.",
+     "section-description"));
   bar.append(from,external?outside:to,search,btn("بحث",()=>{page=1;reset();load();}));
   card.append(bar,counter,note,list,confirmation);host.appendChild(card);
   try{
@@ -74,7 +77,7 @@ async function transfer(host,external){
       if(!card.isConnected)return;
       if(!data.previewToken||!Array.isArray(data.persons))throw Error("فشلت المعاينة.");
       const review=el("section",undefined,"card");
-      review.appendChild(el("h3","مراجعة نقل "+data.count+" فرداً","section-title"));
+      review.appendChild(el("h3","مراجعة نقل "+data.count+" فرداً بتاريخ "+data.businessDate,"section-title"));
       const t=table(["الرقم (ع)","الاسم","الموقع السابق","الجهة الجديدة"]);
       data.persons.forEach(p=>row(t.body,[p.serviceNumberA,p.name,p.sourceSiteName,data.destinationName]));
       review.appendChild(t.wrap);
@@ -84,7 +87,10 @@ async function transfer(host,external){
         ("MOV-"+Date.now()+"-"+Math.random().toString(36).slice(2)+
          Math.random().toString(36).slice(2));
       const confirmButton=btn("تأكيد النقل النهائي",async()=>{
-        if(!await modalConfirm("تأكيد نقل "+data.count+" فرداً إلى "+data.destinationName+"؟"))return;
+        const transferReview=window.AltamamDialog?.transferReview;
+         if(typeof transferReview!=="function")
+           return err(note,new Error("نافذة مراجعة النقل غير متاحة؛ أُلغي الحفظ."));
+         if(!await transferReview(data))return;
         confirmButton.disabled=true;
         try{
           const result=await api().invoke(external?"CommitExternalTransfer":"CommitInternalTransfer",

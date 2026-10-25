@@ -66,6 +66,8 @@ async function choose(){
 async function main(){
  await context.window.AltamamAttendance.render(root);
  assert.ok(one("معاينة التحضير"),"actual attendance page");
+ assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&x.payload.statusId==="__ELIGIBLE__"),
+   "attendance selection must exclude the movement-day roster on the C# query");
  assert.equal(root.all().filter(x=>x.tag==="input"&&x.type==="checkbox").length,2);
  assert.equal(writes.length,0,"no write on load");
  selects()[1].value="STS-PRESENT";await choose();

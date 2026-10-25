@@ -75,7 +75,7 @@
      list.replaceChildren(make("p","جارٍ تحميل كشف القوة..."));
      try{
        const response=await bridge.invoke("QueryDailyRoster",{
-         businessDate:day,siteId:site.value,statusId:"",
+         businessDate:day,siteId:site.value,statusId:"__ELIGIBLE__",
          page:pageNo,pageSize:50
        });
        if(current!==nonce||!host.isConnected)return;

@@ -45,7 +45,11 @@ public sealed class DailyMonthlyReadService
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
-            SELECT ar.StatusId, COUNT(*)
+            SELECT ar.StatusId,
+                   EXISTS(SELECT 1 FROM PersonnelMovements m
+                          WHERE m.PersonId=p.PersonId AND m.EffectiveLocalDate=$date
+                            AND m.MovementType=1) AS IsInternalTransferDay,
+                   COUNT(*)
             FROM Persons p
             LEFT JOIN PersonAssignments a ON a.AssignmentId = (
                 SELECT innerA.AssignmentId FROM PersonAssignments innerA
@@ -59,20 +63,26 @@ public sealed class DailyMonthlyReadService
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
-            GROUP BY ar.StatusId;
+            GROUP BY ar.StatusId, IsInternalTransferDay;
             """;
         cmd.Parameters.AddWithValue("$date", Iso(date));
         cmd.Parameters.AddWithValue("$site", siteId);
         var totals = new Dictionary<string, long>(StringComparer.Ordinal);
-        long force = 0, unprepared = 0;
+        long force = 0, unprepared = 0, transferDay = 0;
         using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
         {
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
-                long amount = reader.GetInt64(1);
+                long amount = reader.GetInt64(2);
                 force += amount;
-                if (reader.IsDBNull(0)) unprepared += amount;
-                else totals[reader.GetString(0)] = amount;
+                if (reader.GetInt64(1) != 0)
+                {
+                    // Membership counts from transfer date; ordinary attendance
+                    // at destination starts on the following business day.
+                    transferDay += amount;
+                }
+                else if (reader.IsDBNull(0)) unprepared += amount;
+                else totals[reader.GetString(0)] = totals.GetValueOrDefault(reader.GetString(0)) + amount;
             }
         }
 
@@ -104,8 +114,11 @@ public sealed class DailyMonthlyReadService
             ["siteId"] = siteId,
             ["totalForce"] = force,
             ["unprepared"] = unprepared,
-            ["completionPercentage"] = force == 0 ? 0 :
-                (int)Math.Round(100m * (force - unprepared) / force, MidpointRounding.AwayFromZero),
+            ["internalTransferDay"] = transferDay,
+            ["attendanceEligible"] = force - transferDay,
+            ["completionPercentage"] = force == transferDay ? 0 :
+                (int)Math.Round(100m * (force - transferDay - unprepared) /
+                    (force - transferDay), MidpointRounding.AwayFromZero),
             ["statusCounts"] = statuses
         });
     }
@@ -127,11 +140,16 @@ public sealed class DailyMonthlyReadService
             LEFT JOIN Sites s ON s.SiteId = a.SiteId
             LEFT JOIN AttendanceRecords ar ON ar.PersonId = p.PersonId
                                           AND ar.AttendanceLocalDate = $date
+            LEFT JOIN PersonnelMovements m ON m.PersonId=p.PersonId
+                AND m.EffectiveLocalDate=$date AND m.MovementType=1
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
               AND ($status = '' OR ar.StatusId = $status
-                   OR ($status = '__UNPREPARED__' AND ar.StatusId IS NULL))
+                   OR ($status = '__UNPREPARED__' AND ar.StatusId IS NULL
+                        AND m.MovementId IS NULL)
+                   OR ($status = '__TRANSFER_DAY__' AND m.MovementId IS NOT NULL)
+                   OR ($status = '__ELIGIBLE__' AND m.MovementId IS NULL))
             """;
         using var connection = _db.CreateOpenConnection();
         using var count = connection.CreateCommand();
@@ -142,7 +160,8 @@ public sealed class DailyMonthlyReadService
         cmd.CommandText = """
             SELECT p.PersonId, p.CurrentServiceNumberA, p.CurrentVisibleName,
                    COALESCE(s.VisibleName, 'غير محدد'),
-                   ar.StatusId, ar.StatusNameSnapshot, ar.StatusColorSnapshot
+                   ar.StatusId, ar.StatusNameSnapshot, ar.StatusColorSnapshot,
+                    m.MovementId, m.SourceSiteNameSnapshot, m.DestinationSiteNameSnapshot
             """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
@@ -159,9 +178,16 @@ public sealed class DailyMonthlyReadService
                 ["serviceNumberA"] = reader.GetString(1),
                 ["name"] = reader.GetString(2),
                 ["siteName"] = reader.GetString(3),
-                ["statusId"] = reader.IsDBNull(4) ? null : reader.GetString(4),
-                ["statusName"] = reader.IsDBNull(5) ? "غير محضر" : reader.GetString(5),
-                ["statusColor"] = reader.IsDBNull(6) ? null : reader.GetString(6)
+                ["statusId"] = reader.IsDBNull(7)
+                    ? (reader.IsDBNull(4) ? null : reader.GetString(4))
+                    : "__TRANSFER_DAY__",
+                ["statusName"] = reader.IsDBNull(7)
+                    ? (reader.IsDBNull(5) ? "غير محضر" : reader.GetString(5))
+                    : "تم نقله من " + reader.GetString(8) + " إلى " + reader.GetString(9),
+                ["statusColor"] = reader.IsDBNull(7)
+                    ? (reader.IsDBNull(6) ? null : reader.GetString(6))
+                    : "#D8B4FE",
+                ["transferDay"] = !reader.IsDBNull(7)
             });
         }
         return BridgeHelpers.Ok(new JsonObject
