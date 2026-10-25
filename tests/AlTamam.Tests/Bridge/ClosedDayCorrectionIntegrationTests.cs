@@ -129,6 +129,105 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
     }
 
     [Fact]
+    public async Task ClosedDayCorrection_ExactRetryReturnsOriginalWithoutSecondRevisionOrAudit()
+    {
+        await Enable();
+        var service=new ClosedDayCorrectionService(_db);
+        var preview=await service.PreviewAsync(Request(),Ga,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var token=Assert.IsType<JsonObject>(preview.Data)["previewToken"]!.GetValue<string>();
+        const string operationId="closed-day-correction-20261025";
+        var intent=new JsonObject{["previewToken"]=token,["operationId"]=operationId};
+        var first=await service.CommitAsync(intent,Ga,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var retry=await service.CommitAsync((JsonObject)intent.DeepClone(),Ga,CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(retry.Data).ToJsonString());
+        Assert.Equal("2",Stored("SELECT RevisionNumber FROM AttendanceRecords"));
+        Assert.Equal("1",Stored("SELECT COUNT(*) FROM AttendanceRevisions"));
+        Assert.Equal("1",Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTED'"));
+        Assert.Equal("1",Stored("SELECT COUNT(*) FROM MutationReceipts"));
+        Assert.Equal(OriginalTime,Stored("SELECT CommittedAtUtc FROM AttendanceRecords"));
+        Assert.Equal("1",Stored("SELECT IsClosed FROM PeriodClosures WHERE PeriodKey='2026-10-10'"));
+
+        var modified=await service.CommitAsync(new JsonObject{
+            ["previewToken"]=new string('0',64),["operationId"]=operationId
+        },Ga,CancellationToken.None);
+        Assert.False(modified.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,modified.ErrorCode);
+        Assert.False((await service.CommitAsync(intent,OtherGa,CancellationToken.None)).Success);
+        Assert.False((await service.CommitAsync(new JsonObject{
+            ["previewToken"]=token
+        },Ga,CancellationToken.None)).Success);
+        Assert.Equal("1",Stored("SELECT COUNT(*) FROM AttendanceRevisions"));
+    }
+
+    [Fact]
+    public async Task InvalidOrStaleCommitCannotReserveReceipt_AndCannotOverwriteConcurrentUpdate()
+    {
+        await Enable();
+        var service=new ClosedDayCorrectionService(_db);
+        const string operationId="closed-correction-stale-retry-20261025";
+        var invalid=await service.CommitAsync(new JsonObject{
+            ["previewToken"]=new string('0',64),["operationId"]=operationId
+        },Ga,CancellationToken.None);
+        Assert.False(invalid.Success);
+        Assert.Equal("0",Stored("SELECT COUNT(*) FROM MutationReceipts"));
+        var preview=await service.PreviewAsync(Request(),Ga,CancellationToken.None);
+        var token=Assert.IsType<JsonObject>(preview.Data)["previewToken"]!.GetValue<string>();
+        using(var connection=_db.CreateOpenConnection())
+        using(var cmd=connection.CreateCommand()){
+            cmd.CommandText="UPDATE AttendanceRecords SET RevisionNumber=RevisionNumber+1 WHERE PersonId='TST-CLOSED-P1';";
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var stale=await service.CommitAsync(new JsonObject{
+            ["previewToken"]=token,["operationId"]=operationId
+        },Ga,CancellationToken.None);
+        Assert.False(stale.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,stale.ErrorCode);
+        Assert.Equal("0",Stored("SELECT COUNT(*) FROM MutationReceipts"));
+        Assert.Equal("0",Stored("SELECT COUNT(*) FROM AttendanceRevisions"));
+        Assert.Equal("موجود",Stored("SELECT StatusNameSnapshot FROM AttendanceRecords"));
+    }
+
+    [Fact]
+    public async Task CorrectionPolicy_ExactRetryMustNotGenerateSecondAuditEvent()
+    {
+        var service=new ClosedDayCorrectionService(_db);
+        var request=new JsonObject{
+            ["enabled"]=true,
+            ["reason"]="سماح استثنائي موثق لأجل المراجعة",
+            ["operationId"]="closed-day-policy-on-20261025"
+        };
+        var first=await service.SetPolicyAsync(request,Ga,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var retry=await service.SetPolicyAsync((JsonObject)request.DeepClone(),Ga,CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal("1",Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTION_POLICY'"));
+        Assert.Equal("1",Stored("SELECT COUNT(*) FROM MutationReceipts"));
+        var tampered=await service.SetPolicyAsync(new JsonObject{
+            ["enabled"]=false,
+            ["reason"]="سماح استثنائي موثق لأجل المراجعة",
+            ["operationId"]="closed-day-policy-on-20261025"
+        },Ga,CancellationToken.None);
+        Assert.False(tampered.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,tampered.ErrorCode);
+        Assert.Equal("true",Stored("SELECT SettingValue FROM AppSettings WHERE SettingKey='AllowClosedDayEmergencyOverride'"));
+        Assert.False((await service.SetPolicyAsync(request,Supervisor,CancellationToken.None)).Success);
+        // Receipts are scoped to the actor. Another authorized administrator
+        // is NOT allowed to claim the first actor's receipt, but may perform
+        // their own independent (audited) policy action.
+        var independent=await service.SetPolicyAsync(
+            (JsonObject)request.DeepClone(),OtherGa,CancellationToken.None);
+        Assert.True(independent.Success,independent.UserMessage);
+        Assert.Equal("2",Stored("SELECT COUNT(*) FROM MutationReceipts"));
+        Assert.Equal("2",Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTION_POLICY'"));
+        Assert.True((await service.SetPolicyAsync(request,OtherGa,CancellationToken.None)).Success);
+        Assert.Equal("2",Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTION_POLICY'"));
+    }
+
+    [Fact]
     public async Task OrdinaryAdmin_CanCorrectWithReason_AndAuditRetainsOriginal()
     {
         var svc = new ClosedDayCorrectionService(_db);

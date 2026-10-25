@@ -457,14 +457,21 @@
       }catch(e){errors(notice,e);}
       finally{search.disabled=false;}
     });
+    // Keep the same operation ID for the same policy intent after a lost reply.
+    // A changed target or reason is a fresh intent; success clears the retry key.
+    let policyIntent=null;
     const setPolicy=enabled=>async()=>{
       clearPreview();
       const verb=enabled?"تفعيل":"إيقاف";
       if(!await dialogs.confirm("هل تؤكد "+verb+" إذن التصحيح الاستثنائي؟ سيتم تسجيل تغيير الإعداد في سجل العمليات، والسبب إلزامي عند تصحيح التحضير نفسه فقط."))return;
+      const signature=JSON.stringify([enabled,reason.input.value]);
+      if(policyIntent?.signature!==signature)
+        policyIntent={signature,operationId:makeOperationId()};
       try{
         const result=await api().invoke("SetClosedDayCorrectionPolicy",{
-          enabled,reason:reason.input.value});
+          enabled,reason:reason.input.value,operationId:policyIntent.operationId});
         if(result.data?.enabled!==enabled)throw Error("لم يؤكد الخادم تعديل السياسة.");
+        policyIntent=null;
         notice.replaceChildren(node("p","", "تم "+verb+" التصحيح الاستثنائي وتسجيل العملية."));
       }catch(e){errors(notice,e);}
     };
@@ -485,17 +492,26 @@
           ["من الحالة",result.beforeStatusName],["إلى الحالة",result.afterStatusName],
           ["السبب",result.reason]
         ])summary.appendChild(settingsValue(label,value));
+        const operationId=makeOperationId();
         const submit=btn("اعتماد التصحيح الاستثنائي",async()=>{
           if(!previewToken)return;
           if(!await dialogs.confirm("اعتماد التصحيح النهائي لليوم المغلق؟ ستُحفظ الحالة السابقة والتعديل والسبب في سجل العمليات."))return;
-          const chosen=previewToken;previewToken=null;submit.disabled=true;
+          submit.disabled=true;
           try{
-            const committed=await api().invoke("CommitClosedDayCorrection",{previewToken:chosen});
+            const committed=await api().invoke("CommitClosedDayCorrection",{
+              previewToken,operationId
+            });
             if(!committed.data?.revisionNumber)throw Error("لم يؤكد الخادم اعتماد التصحيح.");
+            previewToken=null;
             previewPanel.replaceChildren(node("p","",
               "اعتمد التصحيح بنجاح، ورقم المراجعة "+committed.data.revisionNumber+
               ". لم يُغيَّر تاريخ التحضير الأصلي."));
-          }catch(e){errors(previewPanel,e);}
+          }catch(e){
+            // The database may have committed before the reply was lost:
+            // preserve this exact preview and operationId for safe retry.
+            errors(notice,e);
+            submit.disabled=false;
+          }
         },"btn btn-primary");
         previewPanel.replaceChildren(summary,submit,btn("إلغاء",clearPreview));
       }catch(e){errors(previewPanel,e);}
