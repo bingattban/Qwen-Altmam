@@ -122,7 +122,8 @@ public sealed class AutoAttendanceService
                        AND a.ValidFromLocalDate <= $date
                        AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
                       JOIN Sites s ON s.SiteId = a.SiteId
-                     WHERE p.ActiveFlag = 1
+                     WHERE p.ActiveFlag = 1 AND p.OrganizationalStatus = 1
+                       AND p.FirstRecordedLocalDate <= $date
                      ORDER BY p.PersonId;";
                 roster.Parameters.AddWithValue("$date", Iso(businessDate));
                 using SqliteDataReader readers = await roster.ExecuteReaderAsync(ct).ConfigureAwait(false);
