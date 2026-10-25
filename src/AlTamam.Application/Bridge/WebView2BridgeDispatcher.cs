@@ -166,8 +166,13 @@ public sealed class WebView2BridgeDispatcher
     {
         if (string.IsNullOrWhiteSpace(uriString)) return false;
         if (!Uri.TryCreate(uriString, UriKind.Absolute, out Uri? uri)) return false;
+        // A virtual host is an origin (scheme + host + port), not merely a
+        // hostname. Reject nonstandard HTTPS ports and credentialed URLs before
+        // authentication, even if an injected frame forges a matching host.
         return string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-               && string.Equals(uri.Host, LocalWebUiOrigin.Host, StringComparison.OrdinalIgnoreCase);
+               && string.Equals(uri.Host, LocalWebUiOrigin.Host, StringComparison.OrdinalIgnoreCase)
+               && uri.IsDefaultPort
+               && uri.UserInfo.Length == 0;
     }
 
     private static bool TryGetLong(JsonObject payload, string key, out long value)
