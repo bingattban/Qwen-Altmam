@@ -22,6 +22,13 @@ public sealed class AttendanceCommitService
     private static string Read(JsonObject? p,string key)
     { try{return p?[key]?.GetValue<string>()?.Trim()??"";}catch{return "";} }
     private string Today()=>_time.GetLocalNow().ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
+    // Initial preparation of an unprepared person closes at 20:00 local.
+    // Existing committed records still use the auditable revision workflow.
+    private bool InitialPreparationWindowClosed() =>
+        _time.GetLocalNow().TimeOfDay >= TimeSpan.FromHours(20);
+    private static BridgeResponse PreparationWindowEnded() =>
+        Fail(BridgeErrorCodes.HistoricDayLocked,
+            "انتهى وقت تحضير غير المحضرين الساعة ٨ مساءً؛ يعتمد النظام حالة الأمس تلقائياً عند توفرها.");
     private static BridgeResponse Fail(string code,string message)=>BridgeHelpers.Error(code,message);
     private static string[] PersonIds(JsonObject? data)
     {
@@ -130,6 +137,8 @@ public sealed class AttendanceCommitService
         var ids=PersonIds(payload);
         if(date!=Today())return Fail(BridgeErrorCodes.HistoricDayLocked,
             "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.");
+        if(mode=="initial" && InitialPreparationWindowClosed())
+            return PreparationWindowEnded();
         if(ids.Length==0||statusId.Length==0||mode is not("initial" or "revise"))
             return Fail(BridgeErrorCodes.ValidationError,"اختر الحالة وفرداً أو أكثر (حتى 100) ونوع العملية.");
         // A routine same-day status change requires an explicit, user-bound preview
@@ -188,9 +197,12 @@ public sealed class AttendanceCommitService
         bool revise,CancellationToken ct)
     {
         string token=Read(payload,"previewToken"),mode=revise?"revise":"initial";
+        if(!revise && InitialPreparationWindowClosed())return PreparationWindowEnded();
         if(token.Length<32)return Fail(BridgeErrorCodes.ValidationError,"معرّف المعاينة مطلوب.");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
+            // A preview approved at 19:59 must not commit after the 20:00 boundary.
+            if(!revise && InitialPreparationWindowClosed())return PreparationWindowEnded();
             using var find=c.CreateCommand();find.Transaction=t;
             find.CommandText="""
                 SELECT PayloadCanonicalJson FROM PreviewTokens
