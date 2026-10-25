@@ -41,6 +41,24 @@ The run is INSERT-only against `UNIQUE(PersonId, AttendanceLocalDate)`:
   edits of those rows go through the normal revision path (old evidence preserved in
   `AttendanceRevisions`).
 
+## 4a. Section 04 owner amendment (25 October 2026)
+- Until **19:59:59 local time**, unprepared active people may receive a new
+  manual attendance status after individual/bulk review.
+- At **20:00 local**, initial manual attendance is refused by C# at BOTH
+  preview and commit. A preview issued before 20:00 cannot be committed after it.
+  A committed same-day status may still be corrected via the existing authorized,
+  audited revision route; this is not an unsanctioned first attendance.
+- The scheduler uses yesterday's **committed** status snapshot and only fills
+  missing current-day rows. A person without any yesterday record remains
+  **غير محضر**; the system never invents Present or Absent.
+- On an internal transfer date, show the transfer in the source and destination
+  monthly cells. That person is **not** classified as Not Prepared that day,
+  and cannot receive ordinary attendance until the following day. The Dashboard
+  only shows its separate **نُقلوا اليوم** filter if the site-filtered number of
+  current-day internal transfers is positive.
+- Automatic carry-forward must respect the person's first-admission date and
+  active organizational membership as well as transfer-day exclusion.
+
 ## 5. Idempotency & ledger
 - One ledger row per business date: `JobKey = AUTO20H-YYYY-MM-DD`, `BusinessDate UNIQUE`.
 - A second attempt for the same date is a no-op success reporting the stored ledger summary
