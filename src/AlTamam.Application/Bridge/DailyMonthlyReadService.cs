@@ -148,7 +148,8 @@ public sealed class DailyMonthlyReadService
               AND ($status = '' OR ar.StatusId = $status
                    OR ($status = '__UNPREPARED__' AND ar.StatusId IS NULL
                         AND m.MovementId IS NULL)
-                   OR ($status = '__TRANSFER_DAY__' AND m.MovementId IS NOT NULL))
+                   OR ($status = '__TRANSFER_DAY__' AND m.MovementId IS NOT NULL)
+                   OR ($status = '__ELIGIBLE__' AND m.MovementId IS NULL))
             """;
         using var connection = _db.CreateOpenConnection();
         using var count = connection.CreateCommand();
