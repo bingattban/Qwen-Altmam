@@ -38,10 +38,15 @@ public sealed class PreMigrationEncryptedRescueTests : IDisposable
 
         var backups = Directory.GetFiles(RescueFolder, "pre-migration-v001-to-v009-*.db");
         Assert.Single(backups);
-        using var backup = new AlTamamDbContext(backups[0], SyntheticFixtures.TestKeyHex);
-        using var older = backup.CreateOpenConnection();
-        Assert.Equal(1, SchemaMigrationRunner.GetCurrentVersion(older));
-        Assert.True(backup.HasValidIntegrity());
+        // Windows keeps an SQLCipher database file locked while its connection is
+        // open. Dispose all handles BEFORE inspecting raw encrypted bytes or
+        // removing the rescue directory during fixture cleanup.
+        using (var backup = new AlTamamDbContext(backups[0], SyntheticFixtures.TestKeyHex))
+        {
+            using (var older = backup.CreateOpenConnection())
+                Assert.Equal(1, SchemaMigrationRunner.GetCurrentVersion(older));
+            Assert.True(backup.HasValidIntegrity());
+        }
 
         byte[] original = File.ReadAllBytes(backups[0]);
         Assert.False(original.AsSpan(0, 16).SequenceEqual("SQLite format 3\\0"u8),
@@ -81,8 +86,9 @@ public sealed class PreMigrationEncryptedRescueTests : IDisposable
     {
         using var db = new AlTamamDbContext(_path, SyntheticFixtures.TestKeyHex);
         await db.InitializeAsync();
-        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,
-            SchemaMigrationRunner.GetCurrentVersion(db.CreateOpenConnection()));
+        using (var connection = db.CreateOpenConnection())
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,
+                SchemaMigrationRunner.GetCurrentVersion(connection));
         Assert.False(Directory.Exists(RescueFolder));
     }
 
