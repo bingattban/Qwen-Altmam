@@ -34,7 +34,7 @@ def main() -> None:
     check(len(manifest["screens"]) == manifest["screenCount"] == 69, "missing route manifest entries")
     # Phase 00: count alone hid a missing AddPerson route and an obsolete Reports route.
     # Compare the ACTUAL navigable JavaScript catalog to the canonical route manifest.
-    catalog_match = re.search(r"const SCREEN_CATALOG = (\\[[^\\n]+?\\]);", navigation)
+    catalog_match = re.search(r"const SCREEN_CATALOG = (\[[^\n]+?\]);", navigation)
     check(catalog_match is not None, "missing SCREEN_CATALOG in live JavaScript")
     catalog = json.loads(catalog_match.group(1))
     declared = manifest["screens"]
@@ -71,8 +71,8 @@ def main() -> None:
         check(pattern in ignored, "missing sensitive file ignore pattern: " + pattern)
     import subprocess
     tracked = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT,
-                             capture_output=True, check=True).stdout.decode("utf-8").split("\\0")
-    dangerous = re.compile(r"(?i)\\.(?:db|sqlite|sqlite3|db-wal|db-shm|key|protected|bak|xlsx|xlsm|pdf)$")
+                             capture_output=True, check=True).stdout.decode("utf-8").split("\0")
+    dangerous = re.compile(r"(?i)\.(?:db|sqlite|sqlite3|db-wal|db-shm|key|protected|bak|xlsx|xlsm|pdf)$")
     leaked = [f for f in tracked if dangerous.search(f) and not f.startswith("tests/fixtures/")]
     check(not leaked, "possible tracked personnel data / key / report: " + str(leaked[:5]))
     check(len(actions) == 96, "action manifest drift")
