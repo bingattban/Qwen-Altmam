@@ -71,6 +71,43 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task MovementArchive_CombinedSiteAndDateFilters_ReturnOnlyMatchingMovements()
+    {
+        var svc = new PersonnelMovementService(_db);
+        var first = await svc.PreviewAsync(Plan(["TST-MOVEMENT-P1"]), Actor, false, CancellationToken.None);
+        var saved = await svc.CommitAsync(new JsonObject { ["previewToken"] = Token(first) },
+            Actor, false, CancellationToken.None);
+        Assert.True(saved.Success, saved.UserMessage);
+
+        var second = await svc.PreviewAsync(Plan(["TST-MOVEMENT-P2"], external: true),
+            Actor, true, CancellationToken.None);
+        var exited = await svc.CommitAsync(new JsonObject { ["previewToken"] = Token(second) },
+            Actor, true, CancellationToken.None);
+        Assert.True(exited.Success, exited.UserMessage);
+
+        async Task<JsonObject> Archive(string site, string type, string from, string to)
+        {
+            var response = await svc.ArchiveAsync(new JsonObject {
+                ["siteId"] = site, ["type"] = type, ["dateFrom"] = from,
+                ["dateTo"] = to, ["page"] = 1, ["pageSize"] = 50
+            }, CancellationToken.None);
+            Assert.True(response.Success, response.UserMessage);
+            return Assert.IsType<JsonObject>(response.Data);
+        }
+
+        string today = Today();
+        var destination = await Archive("SITE-DEST", "internal", today, today);
+        Assert.Equal(1L, destination["total"]!.GetValue<long>());
+        var internalRow = Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(destination["items"])));
+        Assert.Equal("TST-MOVEMENT-P1", internalRow["personId"]!.GetValue<string>());
+        var source = await Archive("SITE-UNSPECIFIED", "external", today, today);
+        Assert.Equal(1L, source["total"]!.GetValue<long>());
+        Assert.Equal(0L, (await Archive("SITE-DEST", "external", today, today))["total"]!.GetValue<long>());
+        Assert.Equal(0L, (await Archive("", "", Yesterday(), Yesterday()))["total"]!.GetValue<long>());
+    }
+
+    [Fact]
     public async Task InternalBulkTransfer_EffectiveDatesAndAudit_OneTime()
     {
         var svc=new PersonnelMovementService(_db);
