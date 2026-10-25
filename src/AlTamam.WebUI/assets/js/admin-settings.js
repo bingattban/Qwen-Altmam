@@ -907,7 +907,8 @@
       content.replaceChildren(warning("جارٍ تحميل الأفراد..."));
       try {
         const response=await api().invoke("QueryPersons",{
-          term:state.term,siteId:state.siteId,page:state.page,pageSize:50});
+          term:state.term,siteId:state.siteId,organizationalStatus:1,
+          page:state.page,pageSize:50});
         if(token!==currentRequest)return;
         const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","إجراء"]);
         for(const person of data.items||[]){
