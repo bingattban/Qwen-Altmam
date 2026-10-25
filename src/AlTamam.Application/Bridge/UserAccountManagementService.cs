@@ -389,11 +389,16 @@ public sealed class UserAccountManagementService
             using var cmd=c.CreateCommand();cmd.Transaction=t;
             cmd.CommandText="""
                 SELECT u.Username,u.Role,u.ActiveFlag,u.RowVersion,
-                    u.LinkedPersonId,p.ActiveFlag,p.OrganizationalStatus
+                    u.LinkedPersonId,p.ActiveFlag,p.OrganizationalStatus,
+                    EXISTS(SELECT 1 FROM PersonAssignments a
+                      WHERE a.PersonId=p.PersonId
+                        AND a.ValidFromLocalDate<=$today
+                        AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate>$today))
                 FROM Users u LEFT JOIN Persons p ON p.PersonId=u.LinkedPersonId
                 WHERE u.UserId=$id;
                 """;
             cmd.Parameters.AddWithValue("$id",id);
+            cmd.Parameters.AddWithValue("$today",_time.GetLocalNow().ToString("yyyy-MM-dd"));
             string username,personId;UserRole targetRole;long revision;int active;
             using(var reader=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
             {
@@ -405,7 +410,8 @@ public sealed class UserAccountManagementService
                 revision=reader.GetInt64(3);
                 personId=reader.IsDBNull(4)?"":reader.GetString(4);
                 if(string.IsNullOrWhiteSpace(personId) || reader.IsDBNull(5) ||
-                   reader.GetInt32(5)!=1 || reader.GetInt32(6)!=1)
+                   reader.GetInt32(5)!=1 || reader.GetInt32(6)!=1 ||
+                   reader.GetInt32(7)!=1)
                     return Error("إعادة تفعيل الحساب تتطلب عودة صاحبه فعلياً إلى كشف القوة النشطة.",
                         BridgeErrorCodes.ConflictStale);
             }
