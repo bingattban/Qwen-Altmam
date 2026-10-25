@@ -121,6 +121,47 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
         Assert.Equal("مفصول",cell["name"]!.GetValue<string>());
     }
     [Fact]
+    public async Task Separation_RevokesLinkedAccountAndSessionsInOneTransaction()
+    {
+        var accounts=new UserAccountManagementService(_db,_clock);
+        var created=await accounts.CreateAsync(new JsonObject{
+            ["username"]="separate-linked",["password"]="Abc123!secure",
+            ["personId"]="TEST-SEP-P1",["role"]="Supervisor"
+        },Actor,default);
+        Assert.True(created.Success,created.UserMessage);
+        string id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO UserSessions(SessionNonce,UserId,Role,IssuedAtUtc,ExpiresAtUtc,RevokedFlag)
+                VALUES('abcdef0123456789abcdef0123456789',$id,3,
+                    '2026-10-25T00:00:00Z','2028-10-25T00:00:00Z',0);
+                """;
+            q.Parameters.AddWithValue("$id",id);q.ExecuteNonQuery();
+        }
+        var service=new PersonnelSeparationService(_db,_clock);
+        string token=Token(await service.PreviewAsync(Data(),Actor,default));
+        _clock.Advance(TimeSpan.FromSeconds(6));
+        var request=new JsonObject{
+            ["previewToken"]=token,["operationId"]="separation-disables-account-20261025"
+        };
+        Assert.True((await service.CommitAsync(request,Actor,default)).Success);
+        Assert.True((await service.CommitAsync(request,Actor,default)).Success);
+        using var conn=_db.CreateOpenConnection();
+        using var cmd=conn.CreateCommand();
+        cmd.CommandText="SELECT ActiveFlag FROM Users WHERE UserId=$id;";
+        cmd.Parameters.AddWithValue("$id",id);
+        Assert.Equal(0L,Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText="SELECT RevokedFlag FROM UserSessions WHERE UserId=$id;";
+        Assert.Equal(1L,Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_LIFECYCLE_SUSPEND';";
+        Assert.Equal(1L,Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText="SELECT COUNT(*) FROM PersonnelMovements WHERE MovementType=3;";
+        Assert.Equal(1L,Convert.ToInt64(cmd.ExecuteScalar()));
+    }
+
+    [Fact]
     public async Task SeparationExactRetry_IsRecordedOnceAfterEnforcedFiveSecondDelay()
     {
         var svc=new PersonnelSeparationService(_db,_clock);
