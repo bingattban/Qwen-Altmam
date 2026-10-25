@@ -39,6 +39,10 @@ public sealed class Section04EightPmCarryForwardTests : IAsyncLifetime, IDisposa
             VALUES('LastObservedUtcTimestamp',$now,$now)
             ON CONFLICT(SettingKey) DO UPDATE
             SET SettingValue=$now,UpdatedAtUtc=$now;
+            INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+            VALUES('AutoAttendanceDueHourLocal','18',$now)
+            ON CONFLICT(SettingKey) DO UPDATE
+            SET SettingValue='18',UpdatedAtUtc=$now;
             """;
         command.Parameters.AddWithValue("$now",_clock.GetUtcNow().ToString("O"));
         await command.ExecuteNonQueryAsync();
@@ -167,6 +171,7 @@ public sealed class Section04EightPmCarryForwardTests : IAsyncLifetime, IDisposa
         await AddPersonAsync("TST-04-P1","1",hasYesterday:true);
         var scheduler=new AutoAttendanceService(_db,_clock);
         Assert.False(scheduler.IsDueNow());
+        // A legacy stored 18:00 setting must not cause early auto-preparation.
         Assert.Empty(await scheduler.RunPendingAsync());
         var manual=new AttendanceCommitService(_db,_clock);
         var preview=await manual.PreviewAsync(new JsonObject
