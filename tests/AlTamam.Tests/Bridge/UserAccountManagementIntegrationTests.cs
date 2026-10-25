@@ -46,7 +46,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         Assert.False(PasswordPolicyValidator.Validate("Abc123عربي").IsValid);
         Assert.False(PasswordPolicyValidator.Validate("Abc123٤").IsValid);
         Assert.True(PasswordPolicyValidator.Validate("Abc123!x").IsValid);
-        Assert.True(PasswordPolicyValidator.Validate("Abc123!").IsValid);
+        Assert.False(PasswordPolicyValidator.Validate("Abc123!").IsValid);
     }
 
     [Fact]
