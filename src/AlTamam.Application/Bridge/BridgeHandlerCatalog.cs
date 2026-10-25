@@ -71,9 +71,10 @@ public static class BridgeHandlerCatalog
             if(principal is null)
                 return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.SessionExpired,
                     "لا توجد جلسة نشطة."));
-            // Background session queries cannot extend genuine user inactivity.
-            if (req.Payload?["userActivity"]?.GetValue<bool>() == true)
-                await services.RefreshSessionIdleDeadlineAsync(req.SessionNonce,ct).ConfigureAwait(false);
+            // The caller can forge payload.userActivity through WebView2 devtools.
+            // Only the trusted Windows host, after verifying recent native OS input
+            // and that our app owns the foreground window, may extend the deadline.
+            // No bridge/API query ever renews a session by itself.
             return Done(req,SessionData(principal));
         },
         "Logout" => async (req, principal, ct) =>
