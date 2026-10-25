@@ -48,6 +48,8 @@ The run is INSERT-only against `UNIQUE(PersonId, AttendanceLocalDate)`:
   preview and commit. A preview issued before 20:00 cannot be committed after it.
   A committed same-day status may still be corrected via the existing authorized,
   audited revision route; this is not an unsanctioned first attendance.
+- The scheduler executes at **20:00 exactly** as the owner-fixed due hour.
+  Old `AutoAttendanceDueHourLocal` settings cannot override this deadline.
 - The scheduler uses yesterday's **committed** status snapshot and only fills
   missing current-day rows. A person without any yesterday record remains
   **غير محضر**; the system never invents Present or Absent.
