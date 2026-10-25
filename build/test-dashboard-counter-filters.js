@@ -15,6 +15,7 @@ class El{
 }
 const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
  badge=new El("span"),events={},calls=[],nav={};
+let movedToday=0;
 for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]=new El("button");
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
  invoke:async(action,payload)=>{
@@ -24,13 +25,16 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
    if(action==="QuerySites")
      return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
    if(action==="GetDashboardSummary")
-     return{data:{totalForce:3,unprepared:1,completionPercentage:67,statusCounts:[
+     return{data:{totalForce:3+movedToday,unprepared:1,internalTransferDay:movedToday,
+       completionPercentage:67,statusCounts:[
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
    if(action==="QueryDailyRoster"){
      const all=[{personId:"P1",statusId:null,statusName:"غير محضر"},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
        {personId:"P3",statusId:"STS-ABSENT",statusName:"غياب"}];
+     if(movedToday)all.push({personId:"P4",statusId:"__TRANSFER_DAY__",
+       statusName:"تم نقله من الموقع الأول إلى الموقع الثاني"});
      const selected=all.filter(p=>!payload.statusId ||
        (payload.statusId==="__UNPREPARED__"?p.statusId===null:p.statusId===payload.statusId));
      return{data:{items:selected.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
@@ -55,6 +59,8 @@ async function main(){
  assert.ok(counter("all"),"total-force counter must be interactive");
  assert.ok(counter("__UNPREPARED__"),"unprepared counter must be interactive");
  assert.ok(counter("STS-PRESENT"),"saved attendance counter must be interactive");
+ assert.equal(counter("__TRANSFER_DAY__"),undefined,
+   "no movement today means no transfer counter in dashboard");
  assert.ok(!viewport.all().some(x=>x.className.includes("functional-status-filters")),
    "remove redundant status chips below counters");
  assert.equal(lastRoster().payload.statusId,"");
@@ -72,6 +78,18 @@ async function main(){
  counter("all").handlers.click();await settle();
  assert.equal(lastRoster().payload.statusId,"");
  assert.equal(counter("all").attrs["aria-pressed"],"true");
+ movedToday=1;
+ const refresh=viewport.all().find(x=>x.tag==="button"&&x.textContent==="تحديث البيانات");
+ refresh.handlers.click();await settle();
+ assert.ok(counter("__TRANSFER_DAY__"),"the transfer counter appears only after a real movement");
+ counter("__TRANSFER_DAY__").handlers.click();await settle();
+ assert.equal(lastRoster().payload.statusId,"__TRANSFER_DAY__");
+ assert.ok(viewport.all().some(x=>x.textContent==="P4"));
+ movedToday=0;
+ viewport.all().find(x=>x.tag==="button"&&x.textContent==="تحديث البيانات").handlers.click();
+ await settle();
+ assert.equal(counter("__TRANSFER_DAY__"),undefined,"zero movements removes the transfer counter");
+ assert.equal(lastRoster().payload.statusId,"","removing counter also resets its stale roster filter");
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance"].includes(x.action)).length,0);
  console.log("DASHBOARD COUNTER FILTERS PASS: total/unprepared/status buttons, active states, no redundant chips");
 }
