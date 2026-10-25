@@ -641,17 +641,21 @@
           const cell=node("td","admin-row-buttons");
           if(account.canModify && account.active){
             cell.appendChild(btn("تغيير كلمة المرور",()=>showPassword(account),"btn btn-outline"));
+            // One stable ID per requested disable, safe when a response is lost.
+            const disableOperationId=makeOperationId();
             cell.appendChild(btn("تعطيل الحساب",async()=>{
               if(!await dialogs.confirm("تأكيد تعطيل حساب «"+account.username+
                 "»؟ لن يتمكن من الدخول، وستلغى جلساته الحالية."))return;
               try {
                 await api().invoke("DeactivateUserAccount",{
-                  userId:account.userId,expectedRevision:account.rowVersion
+                  userId:account.userId,expectedRevision:account.rowVersion,
+                  operationId:disableOperationId
                 });
                 await load();
               }catch(e){errors(notice,e);}
             },"btn btn-danger"));
           }else if(account.canModify && !account.active){
+            let reactivationIntent=null;
             cell.appendChild(btn("إعادة تفعيل الحساب",async()=>{
               const reason=await dialogs.prompt(
                 "سبب إعادة التفعيل: يُشترط أن يعود الفرد فعليًا إلى كشف القوة النشطة.");
@@ -660,11 +664,15 @@
                 new Error("يجب كتابة سبب واضح من خمسة أحرف على الأقل."));
               if(!await dialogs.confirm("هل تؤكد إعادة تفعيل حساب «"+
                 account.username+"»؟ سيتم تسجيل العملية وستبقى الجلسات القديمة ملغاة."))return;
+              const intent=JSON.stringify([account.userId,account.rowVersion,reason.trim()]);
+              if(reactivationIntent?.signature!==intent)
+                reactivationIntent={signature:intent,operationId:makeOperationId()};
               try{
                 await api().invoke("ReactivateUserAccount",{
                   userId:account.userId,expectedRevision:account.rowVersion,
-                  reason:reason.trim()
+                  reason:reason.trim(),operationId:reactivationIntent.operationId
                 });
+                reactivationIntent=null;
                 await load();
               }catch(e){errors(notice,e);}
             },"btn btn-primary"));
@@ -686,16 +694,24 @@
       const pwd=field("كلمة المرور الجديدة","","password");
       pwd.input.autocomplete="new-password";
       const result=node("div","admin-note");
+      let passwordIntent=null;
       const save=btn("تأكيد التغيير",async()=>{
         if(!await dialogs.confirm("اعتماد كلمة المرور الجديدة وإلغاء جلسات هذا الحساب؟"))return;
         save.disabled=true;
+        const intent=JSON.stringify([account.userId,account.rowVersion,pwd.input.value]);
+        if(passwordIntent?.signature!==intent)
+          passwordIntent={signature:intent,operationId:makeOperationId()};
         try {
           await api().invoke("ChangeUserPassword",{
-            userId:account.userId,expectedRevision:account.rowVersion,password:pwd.input.value
+            userId:account.userId,expectedRevision:account.rowVersion,
+            password:pwd.input.value,operationId:passwordIntent.operationId
           });
-          pwd.input.value="";wrapper.remove();await load();
-        }catch(e){pwd.input.value="";errors(result,e);}
-        finally{save.disabled=false;}
+          pwd.input.value="";passwordIntent=null;wrapper.remove();await load();
+        }catch(e){
+          // Do not persist passwords. Keep the input only within this dialog so
+          // an interrupted successful update may be retried with the same ID.
+          errors(result,e);
+        }finally{save.disabled=false;}
       },"btn btn-primary");
       wrapper.append(pwd.wrap,save,btn("إلغاء",()=>{pwd.input.value="";wrapper.remove();}),
         result);
