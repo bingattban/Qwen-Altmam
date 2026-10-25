@@ -29,9 +29,12 @@
    page.replaceChildren(host);
    const header=make("section",undefined,"card");
    header.append(make("h2","التمام اليومي","section-title"),
-       make("p","تحضير فردي أو جماعي لليوم الحالي. لا يحفظ أي تعديل قبل المراجعة.","section-description"));
+       make("p","التحضير الجديد متاح إلى الساعة ٨ مساءً، وبعدها يعتمد النظام حالة الأمس لمن لم يُحضَّر. يوم النقل مستثنى.","section-description"));
    const filters=make("div",undefined,"functional-toolbar");
-   const site=make("select"),status=make("select"),mode=make("select");
+   const site=make("select"),status=make("select"),mode=make("select"),
+     search=make("input");search.type="search";
+   search.placeholder="بحث بالاسم أو الرقم (ع)";
+   search.setAttribute("aria-label","بحث في أسماء وأرقام القوة");
    site.setAttribute("aria-label","الموقع");
    status.setAttribute("aria-label","الحالة الجديدة");
    mode.setAttribute("aria-label","نوع العملية");
@@ -55,7 +58,11 @@
    });
    status.addEventListener("change",clearReview);
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
-   filters.append(site,status,mode);
+   search.addEventListener("input",clearReview);
+   search.addEventListener("keydown",e=>{
+     if(e.key==="Enter"){e.preventDefault();pageNo=1;load();}
+   });
+   filters.append(site,search,button("بحث",()=>{pageNo=1;load();}),status,mode);
    header.append(filters,choice,info,list);
    host.appendChild(draftPanel);
    host.insertBefore(header,draftPanel);
@@ -76,7 +83,7 @@
      try{
        const response=await bridge.invoke("QueryDailyRoster",{
          businessDate:day,siteId:site.value,statusId:"__ELIGIBLE__",
-         page:pageNo,pageSize:50
+         term:search.value.trim(),page:pageNo,pageSize:50
        });
        if(current!==nonce||!host.isConnected)return;
        const d=response.data||{},t=table(fields);
