@@ -149,6 +149,14 @@ public sealed class PersonnelMovementService
         if(token.Length<32)return Reject(BridgeErrorCodes.ValidationError,"لا يوجد رمز معاينة موثوق.");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
+            // A successful transfer and its retry receipt commit together.
+            // On a lost bridge response, an IDENTICAL operationId + previewToken
+            // replays the original success without duplicating movements/audit.
+            // Different data for the same operationId fails closed.
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,external?"CommitExternalTransfer":"CommitInternalTransfer",
+                actor.UserId,data,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var find=c.CreateCommand();find.Transaction=t;
             find.CommandText="""
                 SELECT PayloadCanonicalJson FROM PreviewTokens WHERE Token=$token
@@ -264,12 +272,16 @@ public sealed class PersonnelMovementService
                     "نقل "+p.Name+" من "+p.SiteName+" إلى "+destName,null,date,corr,ct)
                     .ConfigureAwait(false);
             }
-            return BridgeHelpers.Ok(new JsonObject
+            var responseData=new JsonObject
             {
                 ["count"]=entries.Count,["destinationName"]=destName,
                 ["businessDate"]=date,["external"]=external
-            },events:BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelMoved,
-                date,entries.Select(x=>x.Id)));
+            };
+            await MutationIdempotency.StoreAsync(c,t,receipt,responseData,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(responseData,events:
+                BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelMoved,
+                    date,entries.Select(x=>x.Id)));
         },ct).ConfigureAwait(false);
     }
 

@@ -108,16 +108,28 @@
           el("p","سبب الفصل: "+data.reason),
           el("p","سيختفي من كشف القوة النشطة وتظل بياناته التاريخية محفوظة.","admin-warning"));
         const info=el("p","مهلة التأكيد: 5 ثوانٍ");
+        // Once the five-second delay expires, this exact preview has one
+        // stable retry identity even if the successful response is lost.
+        const operationId=window.crypto?.randomUUID?.()||
+          ("SEP-"+Date.now()+"-"+Math.random().toString(36).slice(2)+
+           Math.random().toString(36).slice(2));
         const save=button("تأكيد الفصل",async()=>{
           if(!await dialogs.confirm("تأكيد فصل «"+data.name+"»؟ السبب: "+data.reason+" — ستبقى السجلات التاريخية محفوظة."))return;
           save.disabled=true;
           try{
-            await api().invoke("CommitSeparation",{previewToken:data.previewToken});
+            await api().invoke("CommitSeparation",{
+              previewToken:data.previewToken,operationId
+            });
             if(!root.isConnected)return;
             clear();selected.replaceChildren();person=null;page=1;
             feedback.replaceChildren(el("p","تم تنفيذ الفصل وتسجيله في الأرشيف وسجل العمليات.","settings-success"));
             await search();
-          }catch(e){error(feedback,e);clear();}
+          }catch(e){
+            // A network error may happen after C# has committed successfully.
+            // Keep this preview and operationId for a safe exact retry.
+            error(feedback,e);
+            save.disabled=false;
+          }
         },"btn btn-danger");
         save.disabled=true;
         const cancel=button("إلغاء الطلب",()=>{
