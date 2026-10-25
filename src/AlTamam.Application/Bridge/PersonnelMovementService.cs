@@ -292,19 +292,33 @@ public sealed class PersonnelMovementService
     public async Task<BridgeResponse> ArchiveAsync(JsonObject? payload,CancellationToken ct)
     {
         int page=Math.Clamp(Num(payload,"page",1),1,100000),size=Math.Clamp(Num(payload,"pageSize",50),1,100);
-        string type=Get(payload,"type"),term=Get(payload,"term");
+        string type=Get(payload,"type"),term=Get(payload,"term"),
+            siteId=Get(payload,"siteId"),dateFrom=Get(payload,"dateFrom"),dateTo=Get(payload,"dateTo");
+        if (type.Length>0 && type!="internal" && type!="external")
+            return Reject(BridgeErrorCodes.ValidationError,"نوع النقل غير صالح.");
+        if ((dateFrom.Length>0 && (!DateOnly.TryParseExact(dateFrom,"yyyy-MM-dd",out _) || dateFrom.Length!=10)) ||
+            (dateTo.Length>0 && (!DateOnly.TryParseExact(dateTo,"yyyy-MM-dd",out _) || dateTo.Length!=10)) ||
+            (dateFrom.Length>0 && dateTo.Length>0 && string.CompareOrdinal(dateFrom,dateTo)>0))
+            return Reject(BridgeErrorCodes.ValidationError,
+                "نطاق التاريخ غير صالح؛ يجب أن يكون تاريخ البداية قبل النهاية.");
         int filter=type=="internal"?1:type=="external"?2:0;
         string like="%"+term.Replace("\\","\\\\").Replace("%","\\%").Replace("_","\\_")+"%";
         const string where="""
             WHERE m.MovementType IN (1,2) AND ($type=0 OR m.MovementType=$type)
               AND (m.PersonNameSnapshot LIKE $term ESCAPE '\'
                OR m.ServiceNumberASnapshot LIKE $term ESCAPE '\')
+              AND ($site='' OR m.SourceSiteId=$site OR m.DestinationSiteId=$site)
+              AND ($dateFrom='' OR m.EffectiveLocalDate >= $dateFrom)
+              AND ($dateTo='' OR m.EffectiveLocalDate <= $dateTo)
             """;
         using var c=_db.CreateOpenConnection();
         using var count=c.CreateCommand();
         count.CommandText="SELECT COUNT(*) FROM PersonnelMovements m "+where;
         count.Parameters.AddWithValue("$type",filter);
         count.Parameters.AddWithValue("$term",like);
+        count.Parameters.AddWithValue("$site",siteId);
+        count.Parameters.AddWithValue("$dateFrom",dateFrom);
+        count.Parameters.AddWithValue("$dateTo",dateTo);
         long total=Convert.ToInt64(await count.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var cmd=c.CreateCommand();
         cmd.CommandText="""
@@ -319,6 +333,9 @@ public sealed class PersonnelMovementService
             """;
         cmd.Parameters.AddWithValue("$type",filter);
         cmd.Parameters.AddWithValue("$term",like);
+        cmd.Parameters.AddWithValue("$site",siteId);
+        cmd.Parameters.AddWithValue("$dateFrom",dateFrom);
+        cmd.Parameters.AddWithValue("$dateTo",dateTo);
         cmd.Parameters.AddWithValue("$limit",size);
         cmd.Parameters.AddWithValue("$offset",(long)(page-1)*size);
         var rows=new JsonArray();
