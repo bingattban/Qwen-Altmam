@@ -163,7 +163,7 @@ public sealed class Section02EvidenceAndReportsTests : IAsyncLifetime, IDisposab
             ["operation"]="TEST_OVERLAY_RETRY"
         },CancellationToken.None,Supervisor);
         Assert.True(normal.Success,normal.UserMessage);
-        Assert.Equal(0,Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(normal.Data)["items"]).Count);
+        Assert.Empty(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(normal.Data)["items"]));
 
         var bypass=await svc.QueryAuditLogAsync(new JsonObject
         {
