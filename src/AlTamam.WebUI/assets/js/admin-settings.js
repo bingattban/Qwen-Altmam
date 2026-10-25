@@ -16,8 +16,9 @@
   const sections = [
     {key:"force",title:"إدارة القوة",children:[
       ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
-      ["reports","التقارير والفصل"]]},
-    {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
+      ["separation","الفصل"],["archives","الأرشيف"],["personReport","التقرير"]]},
+    {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"],
+      ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
       ["export","تصدير Excel"],["layout","تعديل هيكل الكشف"]]},
     {key:"users",title:"المستخدمون",children:[]},
@@ -77,24 +78,20 @@
   const nestedOptions = Object.freeze({
     transfers: [
       ["transferInternal","النقل الداخلي"],
-      ["transferExternal","النقل الخارجي"],
-      ["transferArchive","أرشيف التنقلات"]
-    ],
-    reports: [
-      ["personReport","التقرير"],
-      ["separation","الفصل"],
-      ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]
+      ["transferExternal","النقل الخارجي"]
     ],
     separation: [
-      ["separatePerson","فصل فرد"],
+      ["separatePerson","فصل فرد"]
+    ],
+    archives: [
+      ["transferArchive","أرشيف التنقلات"],
       ["separatedArchive","أرشيف المفصولين"]
     ]
   });
   const nestedParents = Object.freeze({
-    transferInternal:"transfers",transferExternal:"transfers",transferArchive:"transfers",
-    personReport:"reports",separation:"reports",
-    separatePerson:"separation",separatedArchive:"separation",
-    closedCorrection:"reports"
+    transferInternal:"transfers",transferExternal:"transfers",
+    transferArchive:"archives",separatedArchive:"archives",
+    separatePerson:"separation"
   });
   function parentOf(screen) {
     return sections.find(section => section.children.some(child => child[0] === screen));
@@ -104,7 +101,7 @@
     const parent=parentOf(state.active);
     const parentKey=nestedParents[state.active];
     const parentLabel=parentKey==="transfers"?"التنقلات":
-      parentKey==="reports"?"التقارير والفصل":
+      parentKey==="archives"?"الأرشيف":
       parentKey==="separation"?"الفصل":null;
     const head=card(title);
     head.classList.add("admin-subpage-heading");
@@ -167,6 +164,7 @@
     const grid=node("div","admin-subsection-grid");
     grid.setAttribute("aria-label","شاشات "+section.title);
     for(const [key,title] of section.children) {
+      if(key==="closedCorrection" && !["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))continue;
       const item=btn(title,()=>navigate(key),"admin-subsection-tile");
       item.dataset.adminScreen=key;
       item.setAttribute("aria-label","فتح شاشة "+title);
@@ -198,7 +196,7 @@
       return window.AltamamSeparation.render(page,screen);
     }
     if(screen==="personReport" && window.AltamamReports)
-      return window.AltamamReports.render(target(),()=>navigate("reports"));
+      return window.AltamamReports.render(target(),()=>renderGroup("force"));
     if(screen==="import")return importExcel();
     if(screen==="export" && window.AltamamFunctional)
       return window.AltamamFunctional.render("monthly");
@@ -209,7 +207,7 @@
     if(screen==="persons")return persons();
     if(screen==="log")return audit();
     if(screen==="transfers")return renderNested(screen,"التنقلات");
-    if(screen==="reports")return renderNested(screen,"التقارير والفصل");
+    if(screen==="archives")return renderNested(screen,"الأرشيف");
     if(screen==="separation")return renderNested(screen,"الفصل");
 
     const labels={
@@ -828,11 +826,16 @@
     const creation=node("details","admin-create-person card");
     const toggle=node("summary","btn btn-primary","إضافة فرد واحد للكشف");
     const creationFields=node("div","admin-site-form");
-    const nameField=field("الاسم الكامل"), numberField=field("الرقم (ع) — أربع خانات فأكثر"),
-      siteField=field("الموقع (اختر الموجود أو اكتب موقعاً جديداً)","غير محدد");
-    const siteSuggestions=node("datalist");
-    siteSuggestions.id="person-site-options";
-    siteField.input.setAttribute("list","person-site-options");
+    const nameField=field("الاسم الكامل"),
+      numberField=field("الرقم (ع) — أربع خانات فأكثر");
+    const selectSite=node("select","form-control");
+    selectSite.setAttribute("aria-label","الموقع المسجل");
+    const fallback=node("option","","غير محدد");
+    fallback.value="SITE-UNSPECIFIED";
+    selectSite.appendChild(fallback);
+    selectSite.value="SITE-UNSPECIFIED";
+    const siteField={input:selectSite,wrap:node("label","admin-input")};
+    siteField.wrap.append(node("span","","اختر الموقع من المواقع المسجلة"),selectSite);
     numberField.input.inputMode="numeric";
     numberField.input.minLength=4;
     numberField.input.maxLength=70;
@@ -845,36 +848,39 @@
     let lastPersonPayload=null,lastPersonOperation=null;
     const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
       const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
-        siteName=siteField.input.value.trim()||"غير محدد";
-      if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || siteName.length<2)
+        siteId=siteField.input.value||"SITE-UNSPECIFIED",
+        siteName=Array.from(selectSite.children).find(option=>option.value===siteId)?.textContent||"غير محدد";
+      if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || !siteId)
         return errors(addMessage,new Error("أدخل الاسم والرقم (ع) بأربع خانات رقمية على الأقل والموقع."));
       if(!await dialogs.confirm("تأكيد إضافة «"+name+"» بالرقم (ع) «"+number+
-        "» في الموقع «"+siteName+"»؟ سيُسجَّل الموقع تلقائياً إذا لم يكن موجوداً."))return;
+        "» في الموقع «"+siteName+"»؟"))return;
       saveNew.disabled=true;
       try{
-        const createKey=JSON.stringify([name,number,siteName]);
+        const createKey=JSON.stringify([name,number,siteId]);
         if(lastPersonPayload!==createKey){
           lastPersonPayload=createKey;lastPersonOperation=makeOperationId();
         }
         const response=await api().invoke("CreatePerson",{visibleName:name,
-          serviceNumberA:number,siteName,operationId:lastPersonOperation});
+          serviceNumberA:number,siteId,operationId:lastPersonOperation});
         lastPersonPayload=null;lastPersonOperation=null;
         if(!response.data?.personId)throw Error("لم يتم تأكيد إنشاء السجل.");
-        nameField.input.value="";numberField.input.value="";
+        nameField.input.value="";numberField.input.value="";selectSite.value="SITE-UNSPECIFIED";
         addMessage.replaceChildren(node("p","settings-success",
           "تمت إضافة الفرد بنجاح. رقم (ع): "+number+" — الموقع: "+siteName));
         await load();
-        const sites=await api().invoke("QuerySites",{});
-        siteSuggestions.replaceChildren();
-        for(const item of sites.data||[]){
-          if(!item.active)continue;
-          const option=node("option");option.value=item.name;siteSuggestions.appendChild(option);
-        }
       }catch(e){errors(addMessage,e);}
       finally{saveNew.disabled=false;}
     },"btn btn-primary");
     creationFields.append(nameField.wrap,numberField.wrap,siteField.wrap);
-    creation.append(toggle,creationFields,siteSuggestions,saveNew,addMessage);
+    const cancelCreation=btn("إلغاء",async()=>{
+      if((nameField.input.value.trim()||numberField.input.value.trim()) &&
+        !await dialogs.confirm("إلغاء بيانات الفرد قبل الحفظ؟"))return;
+      nameField.input.value="";numberField.input.value="";
+      selectSite.value="SITE-UNSPECIFIED";
+      creation.open=false;
+      addMessage.replaceChildren();
+    });
+    creation.append(toggle,creationFields,saveNew,cancelCreation,addMessage);
     page.append(creation,box);
     const controls=node("div","functional-toolbar"),search=field("بحث بالاسم أو الرقم (ع)",state.term);
     const filter=node("select","form-select");
@@ -888,7 +894,10 @@
         if(!site.active)continue;
         const option=node("option","",site.name);option.value=site.siteId;
         filter.appendChild(option);
-        const hint=node("option");hint.value=site.name;siteSuggestions.appendChild(hint);
+        if(site.siteId!=="SITE-UNSPECIFIED"){
+          const choice=node("option","",site.name);choice.value=site.siteId;
+          selectSite.appendChild(choice);
+        }
       }
       filter.value=state.siteId;
       filter.addEventListener("change",()=>{state.siteId=filter.value;state.page=1;load();});
@@ -898,7 +907,8 @@
       content.replaceChildren(warning("جارٍ تحميل الأفراد..."));
       try {
         const response=await api().invoke("QueryPersons",{
-          term:state.term,siteId:state.siteId,page:state.page,pageSize:50});
+          term:state.term,siteId:state.siteId,organizationalStatus:1,
+          page:state.page,pageSize:50});
         if(token!==currentRequest)return;
         const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","إجراء"]);
         for(const person of data.items||[]){

@@ -34,7 +34,7 @@ public sealed class PersonnelFourDigitsAndSitesTests : IAsyncLifetime, IDisposab
     }
 
     [Fact]
-    public async Task SinglePerson_RequiresFourDigitsAndAutoCreatesOrReusesSiteWithHistory()
+    public async Task SinglePerson_RequiresFourDigitsAndAnExistingSite()
     {
         var service = new PersonRosterService(_db);
         var invalid=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
@@ -44,8 +44,24 @@ public sealed class PersonnelFourDigitsAndSitesTests : IAsyncLifetime, IDisposab
         Assert.Equal(0,Count("SELECT COUNT(*) FROM Persons"));
         Assert.Equal(0,Count("SELECT COUNT(*) FROM Sites WHERE NormalizedName<>'غير محدد'"));
 
-        var first=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
+        var unknownSite=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
             ["visibleName"]="محمد صالح باصالح",["serviceNumberA"]="١٢٣٤",["siteName"]="قطاع الشمال"
+        },CancellationToken.None);
+        Assert.False(unknownSite.Success);
+        Assert.Equal(0,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='قطاع الشمال'"));
+        using(var c=_db.CreateOpenConnection())
+        using(var seed=c.CreateCommand())
+        {
+            seed.CommandText="""
+                INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,ActiveFlag,CreatedAtUtc,RowVersion)
+                VALUES('SITE-EXISTING','قطاع الشمال','قطاع الشمال',0,1,'2026-01-01T00:00:00Z',1);
+                INSERT INTO SiteNameHistory(SiteId,VisibleNameSnapshot,ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc)
+                VALUES('SITE-EXISTING','قطاع الشمال','2026-01-01',NULL,'TST-SITES-ACTOR','2026-01-01T00:00:00Z');
+                """;
+            await seed.ExecuteNonQueryAsync();
+        }
+        var first=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
+            ["visibleName"]="محمد صالح باصالح",["serviceNumberA"]="١٢٣٤",["siteId"]="SITE-EXISTING"
         },CancellationToken.None);
         Assert.True(first.Success,first.UserMessage);
         Assert.Equal(1,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='قطاع الشمال'"));
@@ -54,7 +70,7 @@ public sealed class PersonnelFourDigitsAndSitesTests : IAsyncLifetime, IDisposab
         Assert.Equal(1,Count("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId IN (SELECT SiteId FROM Sites WHERE VisibleName='قطاع الشمال')"));
 
         var second=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
-            ["visibleName"]="علي عبدالله الحضرمي",["serviceNumberA"]="12346",["siteName"]="قطاع الشمال"
+            ["visibleName"]="علي عبدالله الحضرمي",["serviceNumberA"]="12346",["siteId"]="SITE-EXISTING"
         },CancellationToken.None);
         Assert.True(second.Success,second.UserMessage);
         Assert.Equal(1,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='قطاع الشمال'"));
@@ -62,6 +78,41 @@ public sealed class PersonnelFourDigitsAndSitesTests : IAsyncLifetime, IDisposab
         Assert.Equal(2,Count("SELECT COUNT(*) FROM Persons"));
         Assert.Equal(2,Count("SELECT COUNT(*) FROM PersonIdentityHistory"));
         Assert.True(Count("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_CREATE'")>=2);
+    }
+
+    [Fact]
+    public async Task AddPerson_ArchivedNameOrNumberMatch_BlocksDuplicateIdentity()
+    {
+        var service = new PersonRosterService(_db);
+        var first=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
+            ["visibleName"]="سالم باعيسى الحضرمي",["serviceNumberA"]="0088",
+            ["firstRecordedLocalDate"]=DateOnly.FromDateTime(DateTime.Today).AddDays(-3).ToString("yyyy-MM-dd")
+        },CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        string personId=((JsonObject)first.Data!)["personId"]!.GetValue<string>();
+        using(var c=_db.CreateOpenConnection())
+        using(var exit=c.CreateCommand())
+        {
+            exit.CommandText="""
+                UPDATE Persons SET OrganizationalStatus=2,ActiveFlag=0,RowVersion=RowVersion+1 WHERE PersonId=$id;
+                UPDATE PersonAssignments SET ValidToLocalDate=$day WHERE PersonId=$id;
+                """;
+            exit.Parameters.AddWithValue("$id",personId);
+            exit.Parameters.AddWithValue("$day",DateOnly.FromDateTime(DateTime.Today).AddDays(-1).ToString("yyyy-MM-dd"));
+            await exit.ExecuteNonQueryAsync();
+        }
+        foreach(var (name,number) in new[] {
+            ("اسم آخر لا يمثل الشخص","0088"),
+            ("سالم باعيسى الحضرمي","9988")
+        })
+        {
+            var proposed=await service.CreatePersonAsync(Actor,"tester",new JsonObject {
+                ["visibleName"]=name,["serviceNumberA"]=number
+            },CancellationToken.None);
+            Assert.False(proposed.Success);
+            Assert.Contains("الأرشيف",proposed.UserMessage);
+        }
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM Persons"));
     }
 
     private static JsonObject Workbook()
