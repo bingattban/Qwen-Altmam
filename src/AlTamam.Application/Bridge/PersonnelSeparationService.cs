@@ -103,6 +103,12 @@ public sealed class PersonnelSeparationService
             "رمز المعاينة مطلوب لإتمام الفصل.");
         return await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>
         {
+            // Preserve the existing five-second server-side delay for FIRST use.
+            // A retry may read an atomic receipt only after the original
+            // successful confirmation has already committed.
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,tx,"CommitSeparation",actor.UserId,data,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var read=c.CreateCommand();read.Transaction=tx;
             read.CommandText="""
                 SELECT PayloadCanonicalJson,BaseRevision,IssuedAtUtc
@@ -202,13 +208,17 @@ public sealed class PersonnelSeparationService
                     ["movementId"]=movementId,["reason"]=reason}.ToJsonString(),
                 "فصل الفرد "+person.Name+" بسبب: "+reason,reason,date,
                 Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject
+            var responseData=new JsonObject
             {
                 ["movementId"]=movementId,["personId"]=person.Id,
                 ["name"]=person.Name,["serviceNumberA"]=person.Number,
                 ["date"]=date,["separated"]=true
-            },events:BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelMoved,
-                date,[person.Id]));
+            };
+            await MutationIdempotency.StoreAsync(c,tx,receipt,responseData,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(responseData,events:
+                BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelMoved,
+                    date,[person.Id]));
         },ct).ConfigureAwait(false);
     }
 
