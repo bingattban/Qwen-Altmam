@@ -872,7 +872,15 @@
       finally{saveNew.disabled=false;}
     },"btn btn-primary");
     creationFields.append(nameField.wrap,numberField.wrap,siteField.wrap);
-    creation.append(toggle,creationFields,saveNew,addMessage);
+    const cancelCreation=btn("إلغاء",async()=>{
+      if((nameField.input.value.trim()||numberField.input.value.trim()) &&
+        !await dialogs.confirm("إلغاء بيانات الفرد قبل الحفظ؟"))return;
+      nameField.input.value="";numberField.input.value="";
+      selectSite.value="SITE-UNSPECIFIED";
+      creation.open=false;
+      addMessage.replaceChildren();
+    });
+    creation.append(toggle,creationFields,saveNew,cancelCreation,addMessage);
     page.append(creation,box);
     const controls=node("div","functional-toolbar"),search=field("بحث بالاسم أو الرقم (ع)",state.term);
     const filter=node("select","form-select");
