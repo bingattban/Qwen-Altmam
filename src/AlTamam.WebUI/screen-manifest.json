@@ -20,7 +20,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "06",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Dashboard/index.html"
+      "localAssetPath": "screens/Dashboard/index.html",
+      "screenId": "screen_001"
     },
     {
       "routeKey": "UnpreparedPersonnel",
@@ -32,7 +33,8 @@
       "sources": "Original dashboard + explicit user changes + improved master §07",
       "implementationPhase": "06",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Dashboard/UnpreparedPersonnel/index.html"
+      "localAssetPath": "screens/Dashboard/UnpreparedPersonnel/index.html",
+      "screenId": "screen_002"
     },
     {
       "routeKey": "SelectStatusAndConfirm",
@@ -44,7 +46,8 @@
       "sources": "Explicit user changes + enhanced master §07",
       "implementationPhase": "06",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Dashboard/UnpreparedPersonnel/SelectStatusAndConfirm/index.html"
+      "localAssetPath": "screens/Dashboard/UnpreparedPersonnel/SelectStatusAndConfirm/index.html",
+      "screenId": "screen_003"
     },
     {
       "routeKey": "MonthlyAttendance",
@@ -56,7 +59,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/MonthlyAttendance/index.html"
+      "localAssetPath": "screens/MonthlyAttendance/index.html",
+      "screenId": "screen_004"
     },
     {
       "routeKey": "SelectArchive",
@@ -68,7 +72,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/MonthlyAttendance/SelectArchive/index.html"
+      "localAssetPath": "screens/MonthlyAttendance/SelectArchive/index.html",
+      "screenId": "screen_005"
     },
     {
       "routeKey": "Administration",
@@ -80,7 +85,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "04",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/index.html"
+      "localAssetPath": "screens/Administration/index.html",
+      "screenId": "screen_006"
     },
     {
       "routeKey": "PersonnelManagement",
@@ -92,7 +98,8 @@
       "sources": "Original page 4 and user addition to management, enhanced master §09",
       "implementationPhase": "04",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/index.html",
+      "screenId": "screen_007"
     },
     {
       "routeKey": "Attendance",
@@ -104,7 +111,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "06",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/Attendance/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/Attendance/index.html",
+      "screenId": "screen_008"
     },
     {
       "routeKey": "ConfirmAttendance",
@@ -116,7 +124,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "06",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/Attendance/ConfirmAttendance/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/Attendance/ConfirmAttendance/index.html",
+      "screenId": "screen_009"
     },
     {
       "routeKey": "EditPersonnelNames",
@@ -128,19 +137,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html"
-    },
-    {
-      "routeKey": "AddPerson",
-      "titleAr": "إضافة فرد",
-      "breadcrumbAr": "الإدارة > إدارة القوة > تعديل الأسماء > إضافة فرد",
-      "relativeFolder": "Administration/PersonnelManagement/EditPersonnelNames/AddPerson",
-      "kind": "embedded panel",
-      "access": "Roster mutation permissions enforced by C#; single person only",
-      "sources": "Latest master specification §04.03/05; owner decisions 2026-10-24",
-      "implementationPhase": "05",
-      "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html",
+      "screenId": "screen_010"
     },
     {
       "routeKey": "EditPersonDetails",
@@ -152,7 +150,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/EditPersonDetails/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/EditPersonDetails/index.html",
+      "screenId": "screen_011"
     },
     {
       "routeKey": "RemovePersonnel",
@@ -164,7 +163,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/RemovePersonnel/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/RemovePersonnel/index.html",
+      "screenId": "screen_012"
     },
     {
       "routeKey": "Transfers",
@@ -176,7 +176,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/index.html",
+      "screenId": "screen_013"
     },
     {
       "routeKey": "InternalTransfer",
@@ -188,7 +189,8 @@
       "sources": "Original pp.5-6 + explicit user transfer-day override + enhanced master §08",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/InternalTransfer/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/InternalTransfer/index.html",
+      "screenId": "screen_014"
     },
     {
       "routeKey": "ConfirmTransfer",
@@ -200,7 +202,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/InternalTransfer/ConfirmTransfer/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/InternalTransfer/ConfirmTransfer/index.html",
+      "screenId": "screen_015"
     },
     {
       "routeKey": "ExternalTransfer",
@@ -212,7 +215,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/ExternalTransfer/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/ExternalTransfer/index.html",
+      "screenId": "screen_016"
     },
     {
       "routeKey": "ConfirmExternalTransfer",
@@ -224,11 +228,12 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/ExternalTransfer/ConfirmExternalTransfer/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/ExternalTransfer/ConfirmExternalTransfer/index.html",
+      "screenId": "screen_017"
     },
     {
       "routeKey": "TransferArchive",
-      "titleAr": "الأرشيف",
+      "titleAr": "أرشيف التنقلات",
       "breadcrumbAr": "إدارة القوة > التنقلات > الأرشيف",
       "relativeFolder": "Administration/PersonnelManagement/Transfers/TransferArchive",
       "kind": "screen",
@@ -236,19 +241,21 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/TransferArchive/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/Transfers/TransferArchive/index.html",
+      "screenId": "screen_018"
     },
     {
       "routeKey": "ReportsAndDismissal",
-      "titleAr": "التقارير والفصل",
-      "breadcrumbAr": "إدارة القوة > التقارير والفصل",
+      "titleAr": "الفصل والأرشيف",
+      "breadcrumbAr": "الإدارة > إدارة القوة > الفصل والأرشيف",
       "relativeFolder": "Administration/PersonnelManagement/ReportsAndDismissal",
       "kind": "screen",
       "access": "All authenticated roles subject to action permissions",
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "09",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/index.html",
+      "screenId": "screen_019"
     },
     {
       "routeKey": "Dismissal",
@@ -260,7 +267,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/index.html",
+      "screenId": "screen_021"
     },
     {
       "routeKey": "DismissPerson",
@@ -272,7 +280,8 @@
       "sources": "Original page 7 + enhanced master §08",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissPerson/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissPerson/index.html",
+      "screenId": "screen_022"
     },
     {
       "routeKey": "ConfirmDismissal",
@@ -284,11 +293,12 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissPerson/ConfirmDismissal/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissPerson/ConfirmDismissal/index.html",
+      "screenId": "screen_023"
     },
     {
       "routeKey": "DismissedPersonnelArchive",
-      "titleAr": "الأرشيف",
+      "titleAr": "أرشيف المفصولين",
       "breadcrumbAr": "إدارة القوة > التقارير والفصل > الفصل > الأرشيف",
       "relativeFolder": "Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissedPersonnelArchive",
       "kind": "screen",
@@ -296,31 +306,34 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "08",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissedPersonnelArchive/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/ReportsAndDismissal/Dismissal/DismissedPersonnelArchive/index.html",
+      "screenId": "screen_024"
     },
     {
       "routeKey": "PersonnelReport",
       "titleAr": "التقرير",
-      "breadcrumbAr": "الإدارة > إدارة القوة > التقارير والفصل > التقرير",
+      "breadcrumbAr": "الإدارة > إدارة القوة > التقرير",
       "relativeFolder": "Administration/PersonnelManagement/PersonnelReport",
       "kind": "screen",
       "access": "All authenticated roles with person report read permission",
       "sources": "Explicit user change + enhanced master §10",
       "implementationPhase": "09",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/PersonnelReport/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/PersonnelReport/index.html",
+      "screenId": "screen_025"
     },
     {
       "routeKey": "ExportPersonReport",
       "titleAr": "تصدير تقرير الفرد",
-      "breadcrumbAr": "الإدارة > إدارة القوة > التقارير والفصل > التقرير > تصدير Excel",
+      "breadcrumbAr": "الإدارة > إدارة القوة > التقرير > تصدير Excel",
       "relativeFolder": "Administration/PersonnelManagement/PersonnelReport/ExportPersonReport",
       "kind": "export flow",
       "access": "Report-read/export authorized users",
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "09",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/PersonnelManagement/PersonnelReport/ExportPersonReport/index.html"
+      "localAssetPath": "screens/Administration/PersonnelManagement/PersonnelReport/ExportPersonReport/index.html",
+      "screenId": "screen_026"
     },
     {
       "routeKey": "StatusesAndSites",
@@ -332,7 +345,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/index.html",
+      "screenId": "screen_027"
     },
     {
       "routeKey": "Statuses",
@@ -344,7 +358,8 @@
       "sources": "Original p8 + explicit status-counter override + enhanced master §09",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/Statuses/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/Statuses/index.html",
+      "screenId": "screen_028"
     },
     {
       "routeKey": "AddStatus",
@@ -356,7 +371,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/Statuses/AddStatus/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/Statuses/AddStatus/index.html",
+      "screenId": "screen_029"
     },
     {
       "routeKey": "EditStatus",
@@ -368,7 +384,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/Statuses/EditStatus/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/Statuses/EditStatus/index.html",
+      "screenId": "screen_030"
     },
     {
       "routeKey": "DeleteStatus",
@@ -380,7 +397,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/Statuses/DeleteStatus/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/Statuses/DeleteStatus/index.html",
+      "screenId": "screen_031"
     },
     {
       "routeKey": "Sites",
@@ -392,7 +410,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/Sites/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/Sites/index.html",
+      "screenId": "screen_032"
     },
     {
       "routeKey": "AddSite",
@@ -404,7 +423,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/Sites/AddSite/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/Sites/AddSite/index.html",
+      "screenId": "screen_033"
     },
     {
       "routeKey": "EditSite",
@@ -416,7 +436,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/Sites/EditSite/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/Sites/EditSite/index.html",
+      "screenId": "screen_034"
     },
     {
       "routeKey": "DeleteSite",
@@ -428,7 +449,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "05",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/StatusesAndSites/Sites/DeleteSite/index.html"
+      "localAssetPath": "screens/Administration/StatusesAndSites/Sites/DeleteSite/index.html",
+      "screenId": "screen_035"
     },
     {
       "routeKey": "Rosters",
@@ -440,7 +462,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/index.html"
+      "localAssetPath": "screens/Administration/Rosters/index.html",
+      "screenId": "screen_036"
     },
     {
       "routeKey": "Import",
@@ -452,7 +475,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/Import/index.html"
+      "localAssetPath": "screens/Administration/Rosters/Import/index.html",
+      "screenId": "screen_037"
     },
     {
       "routeKey": "SelectFile",
@@ -464,7 +488,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/Import/SelectFile/index.html"
+      "localAssetPath": "screens/Administration/Rosters/Import/SelectFile/index.html",
+      "screenId": "screen_038"
     },
     {
       "routeKey": "PreviewAndValidate",
@@ -476,7 +501,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/Import/PreviewAndValidate/index.html"
+      "localAssetPath": "screens/Administration/Rosters/Import/PreviewAndValidate/index.html",
+      "screenId": "screen_039"
     },
     {
       "routeKey": "ImportResults",
@@ -488,7 +514,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/Import/ImportResults/index.html"
+      "localAssetPath": "screens/Administration/Rosters/Import/ImportResults/index.html",
+      "screenId": "screen_040"
     },
     {
       "routeKey": "Export",
@@ -500,7 +527,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/Export/index.html"
+      "localAssetPath": "screens/Administration/Rosters/Export/index.html",
+      "screenId": "screen_041"
     },
     {
       "routeKey": "PreviewAndConfirmExport",
@@ -512,7 +540,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/Export/PreviewAndConfirmExport/index.html"
+      "localAssetPath": "screens/Administration/Rosters/Export/PreviewAndConfirmExport/index.html",
+      "screenId": "screen_042"
     },
     {
       "routeKey": "ExportProgressAndResult",
@@ -524,7 +553,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/Export/ExportProgressAndResult/index.html"
+      "localAssetPath": "screens/Administration/Rosters/Export/ExportProgressAndResult/index.html",
+      "screenId": "screen_043"
     },
     {
       "routeKey": "RosterLayout",
@@ -536,7 +566,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/RosterLayout/index.html"
+      "localAssetPath": "screens/Administration/Rosters/RosterLayout/index.html",
+      "screenId": "screen_044"
     },
     {
       "routeKey": "AddOrEditColumn",
@@ -548,7 +579,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "10",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Rosters/RosterLayout/AddOrEditColumn/index.html"
+      "localAssetPath": "screens/Administration/Rosters/RosterLayout/AddOrEditColumn/index.html",
+      "screenId": "screen_045"
     },
     {
       "routeKey": "Users",
@@ -560,7 +592,8 @@
       "sources": "Original pp.10-12 + enhanced master §05",
       "implementationPhase": "03",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Users/index.html"
+      "localAssetPath": "screens/Administration/Users/index.html",
+      "screenId": "screen_046"
     },
     {
       "routeKey": "AddUser",
@@ -572,7 +605,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "03",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Users/AddUser/index.html"
+      "localAssetPath": "screens/Administration/Users/AddUser/index.html",
+      "screenId": "screen_047"
     },
     {
       "routeKey": "ChangePassword",
@@ -584,7 +618,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "03",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Users/ChangePassword/index.html"
+      "localAssetPath": "screens/Administration/Users/ChangePassword/index.html",
+      "screenId": "screen_048"
     },
     {
       "routeKey": "DeleteAccount",
@@ -596,7 +631,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "03",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/Users/DeleteAccount/index.html"
+      "localAssetPath": "screens/Administration/Users/DeleteAccount/index.html",
+      "screenId": "screen_049"
     },
     {
       "routeKey": "AuditLog",
@@ -608,7 +644,8 @@
       "sources": "Original p12 + exact explicit user audit edit/delete override + master §12",
       "implementationPhase": "11",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/AuditLog/index.html"
+      "localAssetPath": "screens/Administration/AuditLog/index.html",
+      "screenId": "screen_050"
     },
     {
       "routeKey": "EditAuditEntry",
@@ -620,7 +657,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "11",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/AuditLog/EditAuditEntry/index.html"
+      "localAssetPath": "screens/Administration/AuditLog/EditAuditEntry/index.html",
+      "screenId": "screen_051"
     },
     {
       "routeKey": "DeleteAuditEntry",
@@ -632,7 +670,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "11",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/AuditLog/DeleteAuditEntry/index.html"
+      "localAssetPath": "screens/Administration/AuditLog/DeleteAuditEntry/index.html",
+      "screenId": "screen_052"
     },
     {
       "routeKey": "ModifiedDeletedAuditEntries",
@@ -644,7 +683,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "11",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Administration/AuditLog/ModifiedDeletedAuditEntries/index.html"
+      "localAssetPath": "screens/Administration/AuditLog/ModifiedDeletedAuditEntries/index.html",
+      "screenId": "screen_053"
     },
     {
       "routeKey": "Settings",
@@ -656,7 +696,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "12",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Settings/index.html"
+      "localAssetPath": "screens/Settings/index.html",
+      "screenId": "screen_054"
     },
     {
       "routeKey": "CreateBackup",
@@ -668,7 +709,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "12",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Settings/CreateBackup/index.html"
+      "localAssetPath": "screens/Settings/CreateBackup/index.html",
+      "screenId": "screen_055"
     },
     {
       "routeKey": "RestoreBackup",
@@ -680,7 +722,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "12",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Settings/RestoreBackup/index.html"
+      "localAssetPath": "screens/Settings/RestoreBackup/index.html",
+      "screenId": "screen_056"
     },
     {
       "routeKey": "ScheduledBackups",
@@ -692,7 +735,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "12",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Settings/ScheduledBackups/index.html"
+      "localAssetPath": "screens/Settings/ScheduledBackups/index.html",
+      "screenId": "screen_057"
     },
     {
       "routeKey": "ResetApplicationData",
@@ -704,7 +748,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "12",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Settings/ResetApplicationData/index.html"
+      "localAssetPath": "screens/Settings/ResetApplicationData/index.html",
+      "screenId": "screen_058"
     },
     {
       "routeKey": "AboutApplication",
@@ -716,7 +761,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "13",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Settings/AboutApplication/index.html"
+      "localAssetPath": "screens/Settings/AboutApplication/index.html",
+      "screenId": "screen_059"
     },
     {
       "routeKey": "Logout",
@@ -728,7 +774,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "12",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Settings/Logout/index.html"
+      "localAssetPath": "screens/Settings/Logout/index.html",
+      "screenId": "screen_060"
     },
     {
       "routeKey": "AppearanceAndDiagnostics",
@@ -740,7 +787,8 @@
       "sources": "Enhanced prompt approved usability/diagnostics",
       "implementationPhase": "13",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/Settings/AppearanceAndDiagnostics/index.html"
+      "localAssetPath": "screens/Settings/AppearanceAndDiagnostics/index.html",
+      "screenId": "screen_061"
     },
     {
       "routeKey": "Login",
@@ -752,7 +800,8 @@
       "sources": "Implicit original role-login concept + enhanced secure bootstrap",
       "implementationPhase": "03",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/SharedScreens/Login/index.html"
+      "localAssetPath": "screens/SharedScreens/Login/index.html",
+      "screenId": "screen_062"
     },
     {
       "routeKey": "FirstRunSetup",
@@ -764,7 +813,8 @@
       "sources": "Approved security correction to original credentials",
       "implementationPhase": "03",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/SharedScreens/FirstRunSetup/index.html"
+      "localAssetPath": "screens/SharedScreens/FirstRunSetup/index.html",
+      "screenId": "screen_063"
     },
     {
       "routeKey": "PersonPickerAndSearch",
@@ -776,7 +826,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "04",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/SharedScreens/PersonPickerAndSearch/index.html"
+      "localAssetPath": "screens/SharedScreens/PersonPickerAndSearch/index.html",
+      "screenId": "screen_064"
     },
     {
       "routeKey": "ConfirmationAndWarning",
@@ -788,7 +839,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "04",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/SharedScreens/ConfirmationAndWarning/index.html"
+      "localAssetPath": "screens/SharedScreens/ConfirmationAndWarning/index.html",
+      "screenId": "screen_065"
     },
     {
       "routeKey": "DraftsAndTemporarySave",
@@ -800,7 +852,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "04",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/SharedScreens/DraftsAndTemporarySave/index.html"
+      "localAssetPath": "screens/SharedScreens/DraftsAndTemporarySave/index.html",
+      "screenId": "screen_066"
     },
     {
       "routeKey": "ConflictsAndNotifications",
@@ -812,7 +865,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "04",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/SharedScreens/ConflictsAndNotifications/index.html"
+      "localAssetPath": "screens/SharedScreens/ConflictsAndNotifications/index.html",
+      "screenId": "screen_067"
     },
     {
       "routeKey": "ClosedDayExceptionalCorrection",
@@ -824,7 +878,8 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "11",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/SharedScreens/ClosedDayExceptionalCorrection/index.html"
+      "localAssetPath": "screens/SharedScreens/ClosedDayExceptionalCorrection/index.html",
+      "screenId": "screen_068"
     },
     {
       "routeKey": "EightPmScheduler",
@@ -836,7 +891,21 @@
       "sources": "Merged: original project document + approved enhanced prompt",
       "implementationPhase": "07",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
-      "localAssetPath": "screens/SharedScreens/EightPmScheduler/index.html"
+      "localAssetPath": "screens/SharedScreens/EightPmScheduler/index.html",
+      "screenId": "screen_069"
+    },
+    {
+      "routeKey": "AddPerson",
+      "titleAr": "إضافة فرد",
+      "breadcrumbAr": "الإدارة > إدارة القوة > تعديل الأسماء > إضافة فرد",
+      "relativeFolder": "Administration/PersonnelManagement/EditPersonnelNames/AddPerson",
+      "kind": "embedded panel",
+      "access": "Roster mutation permissions enforced by C#; single person only",
+      "sources": "Latest master specification §04.03/05; owner decisions 2026-10-24",
+      "implementationPhase": "05",
+      "uiAvailability": "INTEGRATED_HTML_CSS_JS",
+      "localAssetPath": "screens/Administration/PersonnelManagement/EditPersonnelNames/index.html",
+      "screenId": "screen_070"
     }
   ]
 }

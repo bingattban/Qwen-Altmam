@@ -101,6 +101,15 @@ public sealed class AlTamamDbContext : IDisposable
                 if (version < CurrentSchemaVersion)
                 {
                     transaction.Commit();
+                    // On an existing encrypted database, a verified WAL-consistent rescue
+                    // snapshot MUST exist before the first forward-only migration executes.
+                    // A missing/unwritable backup folder fails closed: no schema changes.
+                    string rescueFolder = _databasePath + ".migration-backups";
+                    Directory.CreateDirectory(rescueFolder);
+                    string rescuePath = Path.Combine(rescueFolder,
+                        $"pre-migration-v{version:D3}-to-v{CurrentSchemaVersion:D3}-{Guid.NewGuid():N}.db");
+                    await CreateVerifiedEncryptedBackupUnderWriteGateAsync(
+                        rescuePath, cancellationToken).ConfigureAwait(false);
                     var runner = new SchemaMigrationRunner(CanonicalMigrations);
                     await runner.UpgradeAsync(connection, cancellationToken).ConfigureAwait(false);
                     return;
@@ -162,10 +171,23 @@ public sealed class AlTamamDbContext : IDisposable
         string source = Path.GetFullPath(_databasePath);
         if (string.Equals(output, source, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The backup destination cannot be the active database.");
+        await _writeGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await CreateVerifiedEncryptedBackupUnderWriteGateAsync(output, ct).ConfigureAwait(false);
+        }
+        finally { _writeGate.Release(); }
+    }
+
+    // The caller holds _writeGate: initialization must not reacquire this semaphore.
+    // The same encrypted online-backup and verification path is used for manual
+    // backup and for mandatory pre-migration safety snapshots.
+    private async Task CreateVerifiedEncryptedBackupUnderWriteGateAsync(
+        string output, CancellationToken ct)
+    {
         string folder = Path.GetDirectoryName(output)!;
         Directory.CreateDirectory(folder);
         string temp = output + "." + Guid.NewGuid().ToString("N") + ".pending";
-        await _writeGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -218,7 +240,6 @@ public sealed class AlTamamDbContext : IDisposable
         }
         finally
         {
-            _writeGate.Release();
             try { if (File.Exists(temp)) File.Delete(temp); }
             catch (IOException) { /* Cleanup is best-effort; pending files are never advertised as backups. */ }
         }
