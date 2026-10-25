@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
 using AlTamam.Domain.Enums;
+using AlTamam.Domain.Policies;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Security;
 using AlTamam.Tests.Fixtures;
@@ -37,6 +38,15 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
               '2026-10-01','2026-10-01T10:00:00Z',1,1,1);
             """;
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public void SubsequentUserPasswordRequiresRealSpecialCharacter()
+    {
+        Assert.False(PasswordPolicyValidator.Validate("Abc123عربي").IsValid);
+        Assert.False(PasswordPolicyValidator.Validate("Abc123٤").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123!x").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123!").IsValid);
     }
 
     [Fact]
