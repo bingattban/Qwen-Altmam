@@ -280,7 +280,7 @@ public sealed class PersonnelMovementService
                     .ConfigureAwait(false);
                 if(external)
                     await AccountLifecycleService.SuspendAccountsForPersonnelExitAsync(
-                        c,t,p.Id,"TRANSFER_EXTERNAL",actor,_time,date,ct)
+                        c,t,p.Id,"TRANSFER_EXTERNAL",actor.UserId,actor.Username,_time,date,ct)
                         .ConfigureAwait(false);
             }
             var responseData=new JsonObject
