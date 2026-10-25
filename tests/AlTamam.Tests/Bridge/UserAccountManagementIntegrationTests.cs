@@ -183,7 +183,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     [Fact]
     public async Task CreatedBy_UsesFrozenActualRosterName_AndListPagesHaveSequentialIndices()
     {
-        // Founding administrator is linked to a real person, not synthetic metadata.
+        // Founding GeneralAdmin has no roster link. Only roster-linked ordinary creators use real roster names.
         var (hash,salt)=PasswordSecurity.HashPassword(SafePassword);
         using(var c=_db.CreateOpenConnection())
         using(var q=c.CreateCommand())
@@ -192,28 +192,36 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
                 INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
                     CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,
                     FailedLoginCount,CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,RowVersion)
-                VALUES('TST-GA','TST-ACTIVE-1','ga-test','ga-test',1,
+                VALUES('TST-GA',NULL,'ga-test','ga-test',1,
                     $hash,$salt,0,1,0,'TST-GA','ga-test','2026-01-01T00:00:00Z',1);
                 """;
             q.Parameters.AddWithValue("$hash",hash);q.Parameters.AddWithValue("$salt",salt);
             await q.ExecuteNonQueryAsync();
         }
         var svc=new UserAccountManagementService(_db);
+        var adminCreated=await svc.CreateAsync(new JsonObject {
+            ["username"]="roster-admin",["password"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="OrdinaryAdministration"
+        },_general,default);
+        Assert.True(adminCreated.Success,adminCreated.UserMessage);
+        var adminId=Assert.IsType<JsonObject>(adminCreated.Data)["userId"]!.GetValue<string>();
+        var rosterActor=new BridgePrincipal(adminId,"roster-admin",
+            UserRole.OrdinaryAdministration,"0123456789abcdef0123456789abcdef");
         var created=await svc.CreateAsync(new JsonObject {
             ["username"]="created-supervisor",["password"]=SafePassword,
             ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
-        },_general,default);
+        },rosterActor,default);
         Assert.True(created.Success,created.UserMessage);
         using(var c=_db.CreateOpenConnection())
         using(var q=c.CreateCommand())
         {
             q.CommandText="SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='created-supervisor';";
-            Assert.Equal("ga-test - مستخدم اختباري",q.ExecuteScalar());
+            Assert.Equal("roster-admin - مستخدم اختباري",q.ExecuteScalar());
             // Current name changes must never rewrite creator's historical snapshot.
             q.CommandText="UPDATE Persons SET CurrentVisibleName='اسم جديد' WHERE PersonId='TST-ACTIVE-1';";
             q.ExecuteNonQuery();
             q.CommandText="SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='created-supervisor';";
-            Assert.Equal("ga-test - مستخدم اختباري",q.ExecuteScalar());
+            Assert.Equal("roster-admin - مستخدم اختباري",q.ExecuteScalar());
         }
         var found=await svc.ListAsync(new JsonObject{
             ["term"]="created-supervisor",["page"]=1,["pageSize"]=20
@@ -222,8 +230,16 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(found.Data)["items"]);
         Assert.Single(items);
         Assert.Equal(1L,items[0]!["index"]!.GetValue<long>());
-        Assert.Equal("ga-test - مستخدم اختباري",items[0]!["createdBy"]!.GetValue<string>());
+        Assert.Equal("roster-admin - مستخدم اختباري",items[0]!["createdBy"]!.GetValue<string>());
         Assert.Equal("TEST-002",items[0]!["serviceNumberA"]!.GetValue<string>());
+        using(var creatorCheck=_db.CreateOpenConnection())
+        using(var queryCreator=creatorCheck.CreateCommand())
+        {
+            queryCreator.CommandText="SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='roster-admin';";
+            Assert.Equal("ga-test",queryCreator.ExecuteScalar());
+            queryCreator.CommandText="SELECT LinkedPersonId FROM Users WHERE Role=1;";
+            Assert.Null(queryCreator.ExecuteScalar());
+        }
         var secondPage=await svc.ListAsync(new JsonObject{["page"]=2,["pageSize"]=1},
             _general,default);
         Assert.True(secondPage.Success,secondPage.UserMessage);

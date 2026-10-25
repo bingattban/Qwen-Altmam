@@ -48,9 +48,10 @@
 ## 7. Section 03 final OWNER decision — optional founding account full name
 
 - **Resolved by owner, 2026-10-24:** The founding GeneralAdmin owner's full name is **optional** at first startup; this explicitly overrides the incompatible mandatory-name wording in Section 03.02 / 03.04. Username, strong password, and matching confirmation are mandatory.
-- In the user accounts display, ALWAYS show `الإدارة العامة - username` for the GeneralAdmin. When an optional real founder name was entered, append ` (الاسم الكامل)`. This display remains recognizable after linking the account to a roster person; the `PersonId` and the original historical evidence remain unchanged.
+- **New binding decision, 2026-10-25 (supersedes all earlier optional-link wording):** the founding GeneralAdmin account is NEVER linked to a person in the personnel roster. `Users.LinkedPersonId` must always be `NULL` for Role=1, regardless of whether a full name was optionally entered. There is no (ع) number requirement and no personnel lifecycle dependency. No user, including GeneralAdmin, can invoke a linking command.
+- In the user accounts display, ALWAYS show `الإدارة العامة - username` for the GeneralAdmin. When an optional real founder name was entered, append ` (الاسم الكامل)`. This display is independent of any roster name, personnel number, transfer, or separation.
 - The optional supplied founder name is stored in the encrypted database as `FoundingFullName`; the creation audit takes an immutable name snapshot. Without it, the audit snapshot uses `الإدارة العامة` and the actual username remains preserved separately.
-- Do not invent a fictitious personnel number, real roster person or second founding account.
+- Do not invent a fictitious personnel number, real roster person or second founding account. V009 automatically detaches any legacy founder account previously linked to a roster `PersonId` and bumps only its account revision, preserving its UserId, username, Argon2id credential, role, activation flag, and historical audit entries. V009 database triggers permanently prevent re-linking, including direct SQL calls. The old `LinkFoundingAdministrator` bridge command has been removed from both the compiled and WebUI manifests; 96 commands remain.
 
 ## 8. OWNER-APPROVED TEST-FIRST GITHUB PR AND MERGE POLICY
 

@@ -8,8 +8,8 @@ using Xunit;
 
 namespace AlTamam.Tests.Bridge;
 
-/// <summary>03.02-03.04: founding administrator is one-time, synthetic-free,
-/// role protected and optionally linkable to a real roster person.</summary>
+/// <summary>03.02-03.04: the founding administrator is one-time, independent
+/// from every personnel record, and may provide a purely optional full name.</summary>
 public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
 {
     private readonly string _path = SyntheticFixtures.CreateTempDatabasePath();
@@ -141,45 +141,53 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
-    public async Task FounderCanBindOnlyToRealActivePerson_WithoutReassigningIDsOrHistoricalAudit()
+    public async Task FounderCannotBeLinkedToAnyRosterPerson_EvenWhenRealAndActive()
     {
-        var setup = await _service.ProvisionFirstAdministratorAsync(
-            "realOwner", "test-password-123", CancellationToken.None, "صاحب الحساب المؤسس");
-        Assert.True(setup.Success, setup.UserMessage);
-        string userId = Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>();
-        var actor = new BridgePrincipal(userId,"realOwner",UserRole.GeneralAdministration,
+        var setup=await _service.ProvisionFirstAdministratorAsync(
+            "realOwner","test-password-123",CancellationToken.None,"صاحب الحساب المؤسس");
+        Assert.True(setup.Success,setup.UserMessage);
+        string userId=Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>();
+        var actor=new BridgePrincipal(userId,"realOwner",UserRole.GeneralAdministration,
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
         Exec("""
             INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
                 CurrentServiceNumberA,NormalizedServiceNumberA,
                 FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
                 ActiveFlag,RowVersion)
-            VALUES('PER-FOUNDER-TEST','اسم الفرد الحقيقي','اسم الفرد الحقيقي','5555','5555',
+            VALUES('PER-FOUNDER-TEST','اسم فرد مستقل','اسم فرد مستقل','5555','5555',
                 '2026-01-01','2026-01-01T00:00:00Z',1,1,1);
             """);
-        var svc = new UserAccountManagementService(_db);
-        var blocked = await svc.LinkFoundingAccountAsync(new JsonObject{
-            ["personId"]="PER-NON-EXISTENT",["expectedRevision"]=1
-        },actor,CancellationToken.None);
-        Assert.False(blocked.Success);
-        var link = await svc.LinkFoundingAccountAsync(new JsonObject{
-            ["personId"]="PER-FOUNDER-TEST",["expectedRevision"]=1,
-            ["reason"]="ربط الحساب المؤسس بعد اعتماد الفرد"
-        },actor,CancellationToken.None);
-        Assert.True(link.Success,link.UserMessage);
-        Assert.Equal("PER-FOUNDER-TEST",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
+        // The SQLCipher boundary must reject even a direct UPDATE performed
+        // outside WebView2, regardless of account privilege or person's status.
+        Assert.Throws<SqliteException>(()=>Exec(
+            "UPDATE Users SET LinkedPersonId='PER-FOUNDER-TEST' WHERE Role=1;"));
+        Assert.Throws<SqliteException>(()=>Exec(
+            "UPDATE Users SET Role=1,LinkedPersonId='PER-FOUNDER-TEST' WHERE Role=1;"));
+        Assert.Equal("",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
         Assert.Equal(userId,Scalar("SELECT UserId FROM Users WHERE Role=1;"));
-        var accounts = await svc.ListAsync(new JsonObject(), actor, CancellationToken.None);
+        Assert.Equal("صاحب الحساب المؤسس",Scalar(
+            "SELECT FoundingFullName FROM Users WHERE Role=1;"));
+
+        var accounts=await new UserAccountManagementService(_db).ListAsync(
+            new JsonObject(),actor,CancellationToken.None);
         Assert.True(accounts.Success,accounts.UserMessage);
-        var visible = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
+        var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
+        Assert.Single(items);
+        var listed=Assert.IsType<JsonObject>(items[0]);
+        Assert.Null(listed["personId"]);
+        Assert.Equal("",listed["serviceNumberA"]!.GetValue<string>());
         Assert.Equal("الإدارة العامة - realOwner (صاحب الحساب المؤسس)",
-            visible[0]!["fullName"]!.GetValue<string>());
+            listed["fullName"]!.GetValue<string>());
+        Assert.DoesNotContain(ActionManifest.All,
+            action=>action.Action=="LinkFoundingAdministrator");
         Assert.Equal("صاحب الحساب المؤسس",Scalar(
             "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
-        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ACCOUNT_LINKED';"));
-        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons WHERE PersonId='PER-FOUNDER-TEST';"));
-        Assert.False((await svc.LinkFoundingAccountAsync(new JsonObject{
-            ["personId"]="PER-FOUNDER-TEST",["expectedRevision"]=1
-        },actor,CancellationToken.None)).Success);
+        Assert.Equal("0",Scalar(
+            "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ACCOUNT_LINKED';"));
+
+        // The founder's lifecycle never depends on a roster person's lifecycle.
+        Exec("UPDATE Persons SET ActiveFlag=0,OrganizationalStatus=3 WHERE PersonId='PER-FOUNDER-TEST';");
+        Assert.Equal("1",Scalar("SELECT ActiveFlag FROM Users WHERE Role=1;"));
+        Assert.Equal("",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
     }
 }
