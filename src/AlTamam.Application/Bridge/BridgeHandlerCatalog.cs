@@ -477,6 +477,12 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner=await svc.DeactivateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged)):Fail(req,inner);
         },
+        "ReactivateUserAccount" => async(req,principal,ct) =>
+        {
+            var svc=new UserAccountManagementService(services.Db,services.Time);
+            BridgeResponse inner=await svc.ReactivateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged)):Fail(req,inner);
+        },
         // ---------------- Phase 11: UserAuditService — audit portion (immutable evidence + overlays)
         "QueryAuditLog" => async (req, principal, ct) =>
         {
