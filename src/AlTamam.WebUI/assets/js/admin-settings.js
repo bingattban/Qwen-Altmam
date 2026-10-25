@@ -848,36 +848,31 @@
     let lastPersonPayload=null,lastPersonOperation=null;
     const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
       const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
-        siteName=siteField.input.value.trim()||"غير محدد";
-      if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || siteName.length<2)
+        siteId=siteField.input.value||"SITE-UNSPECIFIED",
+        siteName=Array.from(selectSite.children).find(option=>option.value===siteId)?.textContent||"غير محدد";
+      if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || !siteId)
         return errors(addMessage,new Error("أدخل الاسم والرقم (ع) بأربع خانات رقمية على الأقل والموقع."));
       if(!await dialogs.confirm("تأكيد إضافة «"+name+"» بالرقم (ع) «"+number+
-        "» في الموقع «"+siteName+"»؟ سيُسجَّل الموقع تلقائياً إذا لم يكن موجوداً."))return;
+        "» في الموقع «"+siteName+"»؟"))return;
       saveNew.disabled=true;
       try{
-        const createKey=JSON.stringify([name,number,siteName]);
+        const createKey=JSON.stringify([name,number,siteId]);
         if(lastPersonPayload!==createKey){
           lastPersonPayload=createKey;lastPersonOperation=makeOperationId();
         }
         const response=await api().invoke("CreatePerson",{visibleName:name,
-          serviceNumberA:number,siteName,operationId:lastPersonOperation});
+          serviceNumberA:number,siteId,operationId:lastPersonOperation});
         lastPersonPayload=null;lastPersonOperation=null;
         if(!response.data?.personId)throw Error("لم يتم تأكيد إنشاء السجل.");
-        nameField.input.value="";numberField.input.value="";
+        nameField.input.value="";numberField.input.value="";selectSite.value="SITE-UNSPECIFIED";
         addMessage.replaceChildren(node("p","settings-success",
           "تمت إضافة الفرد بنجاح. رقم (ع): "+number+" — الموقع: "+siteName));
         await load();
-        const sites=await api().invoke("QuerySites",{});
-        siteSuggestions.replaceChildren();
-        for(const item of sites.data||[]){
-          if(!item.active)continue;
-          const option=node("option");option.value=item.name;siteSuggestions.appendChild(option);
-        }
       }catch(e){errors(addMessage,e);}
       finally{saveNew.disabled=false;}
     },"btn btn-primary");
     creationFields.append(nameField.wrap,numberField.wrap,siteField.wrap);
-    creation.append(toggle,creationFields,siteSuggestions,saveNew,addMessage);
+    creation.append(toggle,creationFields,saveNew,addMessage);
     page.append(creation,box);
     const controls=node("div","functional-toolbar"),search=field("بحث بالاسم أو الرقم (ع)",state.term);
     const filter=node("select","form-select");
@@ -891,7 +886,10 @@
         if(!site.active)continue;
         const option=node("option","",site.name);option.value=site.siteId;
         filter.appendChild(option);
-        const hint=node("option");hint.value=site.name;siteSuggestions.appendChild(hint);
+        if(site.siteId!=="SITE-UNSPECIFIED"){
+          const choice=node("option","",site.name);choice.value=site.siteId;
+          selectSite.appendChild(choice);
+        }
       }
       filter.value=state.siteId;
       filter.addEventListener("change",()=>{state.siteId=filter.value;state.page=1;load();});
