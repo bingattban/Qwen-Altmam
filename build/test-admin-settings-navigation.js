@@ -88,12 +88,12 @@ async function run() {
   byDataset("adminSection")[0].handlers.click();
   assert.equal(byDataset("adminSection").length,0,"top-level cards hidden in subgroup");
   assert.deepEqual(byDataset("adminScreen").map(x=>x.dataset.adminScreen),
-    ["attendance","persons","transfers","reports"]);
+    ["attendance","persons","transfers","separation","archives","personReport"]);
   byDataset("adminScreen")[0].handlers.click();
   assert.equal(byDataset("adminScreen").length,0,"only selected detail page is visible");
   assert.ok(buttonNamed("العودة إلى إدارة القوة"),"back from detail to parent");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  assert.equal(byDataset("adminScreen").length,4,"re-open proper subgroup");
+  assert.equal(byDataset("adminScreen").length,6,"re-open six separate roster sections");
   buttonNamed("العودة إلى الإدارة").handlers.click();
   assert.equal(byDataset("adminSection").length,5,"return to clean admin landing");
 
@@ -101,22 +101,27 @@ async function run() {
   byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="transfers").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["transferInternal","transferExternal","transferArchive"]);
+    ["transferInternal","transferExternal"]);
   byDataset("adminNested")[0].handlers.click();
   assert.equal(byDataset("adminNested").length,0,"nested cards hidden after opening a leaf");
   buttonNamed("العودة إلى التنقلات").handlers.click();
-  assert.equal(byDataset("adminNested").length,3,"back restores transfer choices");
+  assert.equal(byDataset("adminNested").length,2,"back restores transfer choices");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="reports").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="archives").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["personReport","separation","closedCorrection"]);
-  byDataset("adminNested").find(x=>x.dataset.adminNested==="separation").handlers.click();
+    ["transferArchive","separatedArchive"],"archives are a separate card");
+  buttonNamed("العودة إلى إدارة القوة").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="separation").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["separatePerson","separatedArchive"]);
-  buttonNamed("العودة إلى التقارير والفصل").handlers.click();
-  assert.equal(byDataset("adminNested").length,3,"back restores reports choices");
-
-  const correction=byDataset("adminNested").find(x=>x.dataset.adminNested==="closedCorrection");
+    ["separatePerson"],"dismissal is separate from report and archive");
+  buttonNamed("العودة إلى إدارة القوة").handlers.click();
+  assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="personReport"),
+    "one unified report card is present on roster landing");
+  assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="reports"),
+    "retired combined Reports/Dismissal card must not return");
+  buttonNamed("العودة إلى الإدارة").handlers.click();
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  const correction=byDataset("adminScreen").find(x=>x.dataset.adminScreen==="closedCorrection");
   assert.ok(correction,"GA sees restricted historical correction screen");
   correction.handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
@@ -143,17 +148,19 @@ async function run() {
   assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,1);
   assert.ok(visible().some(x=>x.textContent.includes("اعتمد التصحيح بنجاح")));
   controller.renderAdmin(admin);
-  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
-  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="reports").handlers.click();
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"));
 
   controller.renderAdmin({role:"OrdinaryAdministration",username:"test-admin"});
-  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
-  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="reports").handlers.click();
-  assert.ok(byDataset("adminNested").some(x=>x.dataset.adminNested==="closedCorrection"),
-    "ordinary admin has permission to open closed-day correction");
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"),
+    "ordinary admin can see closed-day correction");
     controller.renderAdmin({ role:"Supervisor" });
   assert.equal(byDataset("adminSection").length,4,"supervisor cannot see users card");
   assert.ok(!byDataset("adminSection").some(x=>x.dataset.adminSection==="users"));
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"),
+    "supervisor cannot see closed-day correction");
 
   controller.renderAdmin(admin);
   byDataset("adminSection").find(x=>x.dataset.adminSection==="audit").handlers.click();
