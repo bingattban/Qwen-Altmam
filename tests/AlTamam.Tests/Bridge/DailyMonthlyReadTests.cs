@@ -127,6 +127,33 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task DailyRoster_SearchCombinesSiteAndStatus_AndTreatsWildcardsAsLiterals()
+    {
+        var reads=new DailyMonthlyReadService(_db);
+        async Task<JsonObject> Query(string term,string site="SITE-UNSPECIFIED",
+            string status="STS-ABSENT") =>
+            Assert.IsType<JsonObject>((await reads.DailyRosterAsync(new JsonObject
+            {
+                ["businessDate"]="2026-10-19",["siteId"]=site,
+                ["statusId"]=status,["term"]=term
+            }, CancellationToken.None)).Data);
+
+        Assert.Equal(1L,(await Query("شخص"))["total"]!.GetValue<long>());
+        Assert.Equal(1L,(await Query("X001"))["total"]!.GetValue<long>());
+        Assert.Equal(1L,(await Query("x001"))["total"]!.GetValue<long>());
+        Assert.Equal(0L,(await Query("%"))["total"]!.GetValue<long>());
+        Assert.Equal(0L,(await Query("_"))["total"]!.GetValue<long>());
+        Assert.Equal(0L,(await Query("X001","SITE-NOT-THERE"))["total"]!.GetValue<long>());
+        Assert.Equal(0L,(await Query("X001","SITE-UNSPECIFIED","STS-PRESENT"))
+            ["total"]!.GetValue<long>());
+        var tooLong=await reads.DailyRosterAsync(new JsonObject
+        {
+            ["businessDate"]="2026-10-19",["term"]=new string('x',101)
+        },CancellationToken.None);
+        Assert.False(tooLong.Success);
+    }
+
+    [Fact]
     public async Task Monthly_IsReadOnlyAndRetainsSavedDailySnapshot()
     {
         var svc = new DailyMonthlyReadService(_db);
