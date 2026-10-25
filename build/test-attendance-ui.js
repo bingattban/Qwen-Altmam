@@ -69,6 +69,15 @@ async function main(){
  assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&x.payload.statusId==="__ELIGIBLE__"),
    "attendance selection must exclude the movement-day roster on the C# query");
  assert.equal(root.all().filter(x=>x.tag==="input"&&x.type==="checkbox").length,2);
+ const search=root.all().find(x=>x.tag==="input"&&x.type==="search");
+ assert.ok(search,"attendance page must provide name/number search");
+ search.value="12345";
+ await one("بحث").handlers.click();await flush();
+ assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&
+   x.payload.statusId==="__ELIGIBLE__"&&x.payload.term==="12345"),
+   "search must combine the literal term and eligibility filter at C#");
+ search.value="";
+ await one("بحث").handlers.click();await flush();
  assert.equal(writes.length,0,"no write on load");
  selects()[1].value="STS-PRESENT";await choose();
  await one("معاينة التحضير").handlers.click();await flush();
@@ -88,8 +97,8 @@ async function main(){
  choices[1].value="STS-ABSENT";
  choices[2].value="revise";choices[2].handlers.change();
  assert.ok(one("معاينة تغيير الحالة"));
- assert.equal(root.all().filter(x=>x.tag==="input"&&x.type!=="checkbox").length,0,
-   "routine status revision must not require a reason");
+ assert.equal(root.all().filter(x=>x.tag==="input"&&x.type!=="checkbox").length,1,
+   "routine status revision must not require a reason (search input only)");
  await choose();
  await one("معاينة تغيير الحالة").handlers.click();await flush();
  assert.equal(reviews.at(-1).opts.confirmLabel,"تأكيد تغيير الحالة");
