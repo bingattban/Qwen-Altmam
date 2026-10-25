@@ -215,8 +215,16 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
         Assert.Equal(BridgeErrorCodes.ConflictStale,tampered.ErrorCode);
         Assert.Equal("true",Stored("SELECT SettingValue FROM AppSettings WHERE SettingKey='AllowClosedDayEmergencyOverride'"));
         Assert.False((await service.SetPolicyAsync(request,Supervisor,CancellationToken.None)).Success);
-        Assert.False((await service.SetPolicyAsync(request,OtherGa,CancellationToken.None)).Success);
-        Assert.Equal("1",Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTION_POLICY'"));
+        // Receipts are scoped to the actor. Another authorized administrator
+        // is NOT allowed to claim the first actor's receipt, but may perform
+        // their own independent (audited) policy action.
+        var independent=await service.SetPolicyAsync(
+            (JsonObject)request.DeepClone(),OtherGa,CancellationToken.None);
+        Assert.True(independent.Success,independent.UserMessage);
+        Assert.Equal("2",Stored("SELECT COUNT(*) FROM MutationReceipts"));
+        Assert.Equal("2",Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTION_POLICY'"));
+        Assert.True((await service.SetPolicyAsync(request,OtherGa,CancellationToken.None)).Success);
+        Assert.Equal("2",Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTION_POLICY'"));
     }
 
     [Fact]
