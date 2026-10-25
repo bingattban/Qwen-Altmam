@@ -81,6 +81,26 @@ async function run(){
  assert.equal(overlay.classList.open,false);
  const invalidReview=await dialog.attendanceReview({...reviewData,persons:[]});
  assert.equal(invalidReview,false,"never approve an empty or missing server preview");
+ const transferPlan={businessDate:"2026-10-25",destinationName:"موقع حضرموت",
+   external:false,persons:[
+     {name:"محمد صالح",serviceNumberA:"12345",sourceSiteName:"الموقع الأول"},
+     {name:"أحمد سالم",serviceNumberA:"67890",sourceSiteName:"الموقع الثاني"}
+   ]};
+ const abortedTransfer=dialog.transferReview(transferPlan);
+ assert.equal(overlay.classList.open,true,"transfer must use the centered modal");
+ assert.equal(body.all().filter(x=>x.tag==="table").length,1,
+   "the full transfer list is rendered in the review");
+ assert.ok(body.all().some(x=>x.textContent==="2026-10-25"));
+ assert.ok(body.all().some(x=>x.textContent==="موقع حضرموت"));
+ assert.ok(body.all().some(x=>x.textContent==="محمد صالح"));
+ assert.ok(body.all().some(x=>x.textContent==="67890"));
+ button("إلغاء").click();
+ assert.equal(await abortedTransfer,false,"rejecting transfer review forbids commit");
+ const confirmedTransfer=dialog.transferReview(transferPlan);
+ button("تأكيد النقل النهائي").click();
+ assert.equal(await confirmedTransfer,true,"only explicit approval completes modal");
+ assert.equal(await dialog.transferReview({...transferPlan,persons:[]}),false,
+   "empty transfer selection cannot bypass the modal");
  const css=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
  assert.ok(css.includes(".modal-backdrop{z-index:1000;align-items:center;justify-content:center}"),
