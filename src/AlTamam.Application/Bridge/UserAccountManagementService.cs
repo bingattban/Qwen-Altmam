@@ -100,6 +100,7 @@ public sealed class UserAccountManagementService
             var role=(UserRole)reader.GetInt32(2);
             rows.Add(new JsonObject
             {
+                ["index"]=(long)(page-1)*size+rows.Count+1,
                 ["userId"]=reader.GetString(0),
                 ["username"]=reader.GetString(1),
                 ["role"]=role.ToString(),
@@ -176,6 +177,22 @@ public sealed class UserAccountManagementService
             duplicate.Parameters.AddWithValue("$person",personId);
             if(Convert.ToInt64(await duplicate.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
                 return Error("اسم المستخدم مستخدم أو يوجد حساب نشط مرتبط بهذا الفرد.",BridgeErrorCodes.DuplicateUsername);
+            // Freeze the creator's real roster identity AT account creation;
+            // later name/personnel-number edits must never rewrite this evidence.
+            string creatorName=actor.Username;
+            using(var creator=c.CreateCommand())
+            {
+                creator.Transaction=t;
+                creator.CommandText="""
+                    SELECT p.CurrentVisibleName FROM Users u
+                    JOIN Persons p ON p.PersonId=u.LinkedPersonId
+                    WHERE u.UserId=$creator;
+                    """;
+                creator.Parameters.AddWithValue("$creator",actor.UserId);
+                string? roster=await creator.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+                if(!string.IsNullOrWhiteSpace(roster))
+                    creatorName=actor.Username+" - "+roster;
+            }
             using var cmd=c.CreateCommand();cmd.Transaction=t;
             cmd.CommandText="""
                 INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
@@ -193,7 +210,7 @@ public sealed class UserAccountManagementService
             cmd.Parameters.AddWithValue("$hash",hash);
             cmd.Parameters.AddWithValue("$salt",salt);
             cmd.Parameters.AddWithValue("$actor",actor.UserId);
-            cmd.Parameters.AddWithValue("$actorName",actor.Username);
+            cmd.Parameters.AddWithValue("$actorName",creatorName);
             cmd.Parameters.AddWithValue("$now",now);
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             await Audit(c,t,actor,"USER_CREATE","إضافة حساب",id,username,null,
@@ -285,6 +302,12 @@ public sealed class UserAccountManagementService
         long expected=ReadLong(payload,"expectedRevision");
         string password=ReadSecret(payload);
         if(id.Length==0||expected<1)return Error("اختر الحساب وإصداره الحالي.");
+        // Ordinary password editing NEVER changes role, login name, identity,
+        // linked PersonId, activation status or any other privileged field.
+        if(!deactivate && payload is not null &&
+           payload.Any(field=>field.Key is not
+             ("userId" or "expectedRevision" or "password" or "operationId")))
+            return Error("تعديل كلمة المرور لا يسمح بتغيير اسم المستخدم أو الصلاحية أو ربط الفرد.");
         if(id==actor.UserId)return Error("لا يمكن تعديل أو تعطيل الحساب المستخدم حالياً.");
         if(!deactivate)
         {
