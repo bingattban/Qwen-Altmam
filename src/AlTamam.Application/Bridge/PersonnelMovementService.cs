@@ -194,13 +194,6 @@ public sealed class PersonnelMovementService
                         "أحد الأفراد تغير موقعه أو تحضيره أو سبق نقله اليوم؛ أُلغي النقل الجماعي.");
                 entries.Add(person);
             }
-            // One linked founding administrator is the only recovery account.
-            // Do not strand the device permanently: a separate, explicit
-            // founding-account unlink policy must precede their exit.
-            if(external && await AccountLifecycleService.WouldStrandFoundingAdministratorAsync(
-                c,t,entries.Select(p=>p.Id).ToArray(),ct).ConfigureAwait(false))
-                return Reject(BridgeErrorCodes.Unauthorized,
-                    "لا يمكن نقل الفرد المرتبط بحساب الإدارة العامة المؤسس خارجياً قبل معالجة ربط حساب التأسيس.");
             long? used=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,t,token,
                 Operation(external),actor.UserId,0,ct).ConfigureAwait(false);
             if(used!=0)return Reject(BridgeErrorCodes.ConflictStale,"معاينة غير صالحة أو مستخدمة.");
