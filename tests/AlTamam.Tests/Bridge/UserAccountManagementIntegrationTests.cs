@@ -262,6 +262,17 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         var supervisor=new BridgePrincipal(id,"reactivate-supervisor",UserRole.Supervisor,
             "00112233445566778899aabbccddeeff");
         Assert.False((await svc.ReactivateAsync(intent,supervisor,default)).Success);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                    ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-REACTIVE-ASSIGN','TST-ACTIVE-2','SITE-UNSPECIFIED',
+                    '2026-10-01',NULL,NULL,'2026-10-01T10:00:00Z');
+                """;
+            q.ExecuteNonQuery();
+        }
         var reactivated=await svc.ReactivateAsync(intent,_ordinary,default);
         Assert.True(reactivated.Success,reactivated.UserMessage);
         Assert.Equal(3L,Assert.IsType<JsonObject>(reactivated.Data)["rowVersion"]!.GetValue<long>());
