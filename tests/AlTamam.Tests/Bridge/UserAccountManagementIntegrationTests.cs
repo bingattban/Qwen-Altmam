@@ -238,7 +238,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
             queryCreator.CommandText="SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='roster-admin';";
             Assert.Equal("ga-test",queryCreator.ExecuteScalar());
             queryCreator.CommandText="SELECT LinkedPersonId FROM Users WHERE Role=1;";
-            Assert.Null(queryCreator.ExecuteScalar());
+            Assert.Equal(DBNull.Value,queryCreator.ExecuteScalar());
         }
         var secondPage=await svc.ListAsync(new JsonObject{["page"]=2,["pageSize"]=1},
             _general,default);
