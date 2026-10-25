@@ -429,6 +429,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.Equal(0L, transferDay["unprepared"]!.GetValue<long>());
         Assert.Equal(0, transferDay["completionPercentage"]!.GetValue<int>());
         Assert.Equal(0L, (await Roster(today, "__UNPREPARED__"))["total"]!.GetValue<long>());
+        Assert.Equal(0L, (await Roster(today, "__ELIGIBLE__"))["total"]!.GetValue<long>());
         var transfers = await Roster(today, "__TRANSFER_DAY__");
         Assert.Equal(2L, transfers["total"]!.GetValue<long>());
         foreach (var person in Assert.IsType<JsonArray>(transfers["items"]))
@@ -455,6 +456,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.Equal(2L, nextDay["attendanceEligible"]!.GetValue<long>());
         Assert.Equal(2L, nextDay["unprepared"]!.GetValue<long>());
         Assert.Equal(2L, (await Roster(tomorrow, "__UNPREPARED__"))["total"]!.GetValue<long>());
+        Assert.Equal(2L, (await Roster(tomorrow, "__ELIGIBLE__"))["total"]!.GetValue<long>());
         Assert.Equal(0L, (await Roster(tomorrow, "__TRANSFER_DAY__"))["total"]!.GetValue<long>());
     }
 
