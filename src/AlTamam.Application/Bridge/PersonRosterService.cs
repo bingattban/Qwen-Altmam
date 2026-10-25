@@ -188,11 +188,11 @@ public sealed class PersonRosterService
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "الرقم (ع) يجب أن يتكون من أربعة أرقام على الأقل؛ لا تستخدم الرقم التسلسلي العادي.");
         string normalizedNumber = serviceNumber;
+        string siteIdRequested = ReadString(payload, "siteId").Trim();
         string siteName = ReadString(payload, "siteName").Trim();
-        if (siteName.Length == 0) siteName = "غير محدد";
-        if (siteName.Length > 100 || (siteName != "غير محدد" && siteName.Length < 2)
-            || siteName.Any(char.IsControl))
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "اسم الموقع غير صالح.");
+        if (siteName.Length > 100 || siteName.Any(char.IsControl) ||
+            siteIdRequested.Length > 100 || siteIdRequested.Any(char.IsControl))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "الموقع المختار غير صالح.");
 
         string personId = "PRN-" + Guid.NewGuid().ToString("N");
         DateTimeOffset nowUtc = _time.GetUtcNow();
@@ -209,44 +209,60 @@ public sealed class PersonRosterService
                 return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
                     "«الرقم (ع)» مستخدم بالفعل لفرد نشط بعد التطبيع؛ لا يمكن تكراره.");
 
-            string siteId = "SITE-UNSPECIFIED";
-            if (siteName != "غير محدد")
+            // Prevent creating a NEW permanent PersonId for a possible human
+            // already present in the dismissal or external-transfer archive.
+            // A verified return must reuse the original PersonId, never a
+            // second "new" record. Even a name-only match requires resolution.
+            using(var archived = connection.CreateCommand())
             {
-                string normalizedSite = ArabicTextNormalizer.NormalizeForSearch(siteName);
+                archived.Transaction = tx;
+                archived.CommandText = """
+                    SELECT p.PersonId,p.CurrentVisibleName,p.CurrentServiceNumberA,
+                           p.OrganizationalStatus,COALESCE((
+                               SELECT m.EffectiveLocalDate FROM PersonnelMovements m
+                               WHERE m.PersonId=p.PersonId AND m.MovementType IN (2,3)
+                               ORDER BY m.EffectiveLocalDate DESC LIMIT 1
+                           ),'غير موثق')
+                    FROM Persons p
+                    WHERE p.ActiveFlag=0 AND p.OrganizationalStatus IN (2,3,4)
+                      AND (p.NormalizedServiceNumberA=$number OR p.NormalizedName=$name)
+                    ORDER BY p.CurrentVisibleName,p.PersonId LIMIT 6;
+                    """;
+                archived.Parameters.AddWithValue("$number",normalizedNumber);
+                archived.Parameters.AddWithValue("$name",normalizedName);
+                using var candidates=await archived.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                var matches=new List<string>();
+                while(await candidates.ReadAsync(ct).ConfigureAwait(false))
+                    matches.Add($"{candidates.GetString(1)} (ع: {candidates.GetString(2)})، " +
+                        (candidates.GetInt32(3)==2?"نقل خارجي":"أرشيف الفصل") +
+                        " بتاريخ " + candidates.GetString(4));
+                if(matches.Count>0)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                        "يوجد تطابق محتمل في الأرشيف. أوقف إنشاء هوية جديدة حتى التحقق من عودة نفس الشخص أو اختلاف الهوية: " +
+                        string.Join("؛ ",matches));
+            }
+
+            // Add Person may choose EXISTING active sites only. Import Excel
+            // has its own explicit site-creation process and remains unchanged.
+            string siteId = "SITE-UNSPECIFIED";
+            if(siteIdRequested.Length>0 || (siteName.Length>0 && siteName!="غير محدد"))
+            {
                 using var find = connection.CreateCommand();
                 find.Transaction = tx;
-                find.CommandText = """
-                    SELECT SiteId FROM Sites WHERE NormalizedName=$name AND ActiveFlag=1 LIMIT 1;
-                    """;
-                find.Parameters.AddWithValue("$name", normalizedSite);
-                siteId = await find.ExecuteScalarAsync(ct).ConfigureAwait(false) as string ?? "";
-                if (siteId.Length == 0)
+                if(siteIdRequested.Length>0)
                 {
-                    siteId = "SITE-" + Guid.NewGuid().ToString("N");
-                    using var create = connection.CreateCommand();
-                    create.Transaction = tx;
-                    create.CommandText = """
-                        INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,
-                                          ActiveFlag,CreatedAtUtc,RowVersion)
-                        VALUES($id,$name,$normalized,0,1,$now,1);
-                        INSERT INTO SiteNameHistory(SiteId,VisibleNameSnapshot,ValidFromLocalDate,
-                                                    ValidToLocalDate,ChangedByUserId,RecordedAtUtc)
-                        VALUES($id,$name,$day,NULL,$actor,$now);
-                        """;
-                    create.Parameters.AddWithValue("$id", siteId);
-                    create.Parameters.AddWithValue("$name", siteName);
-                    create.Parameters.AddWithValue("$normalized", normalizedSite);
-                    create.Parameters.AddWithValue("$now", nowUtc.ToString("O"));
-                    create.Parameters.AddWithValue("$day", effectiveDate);
-                    create.Parameters.AddWithValue("$actor", userId);
-                    await create.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                    await BridgeAuditWriter.WriteAsync(connection, tx, _time,
-                        "SITE_CREATE", "إنشاء موقع تلقائياً", userId, username, username,
-                        "Site", siteId, siteName, null,
-                        new JsonObject { ["siteId"] = siteId, ["name"] = siteName }.ToJsonString(),
-                        "تسجيل موقع غير موجود عند إضافة فرد", null, effectiveDate,
-                        ct.CorrelationId(), ct).ConfigureAwait(false);
+                    find.CommandText="SELECT SiteId FROM Sites WHERE SiteId=$site AND ActiveFlag=1;";
+                    find.Parameters.AddWithValue("$site",siteIdRequested);
                 }
+                else
+                {
+                    find.CommandText="SELECT SiteId FROM Sites WHERE NormalizedName=$name AND ActiveFlag=1 LIMIT 1;";
+                    find.Parameters.AddWithValue("$name",ArabicTextNormalizer.NormalizeForSearch(siteName));
+                }
+                siteId = await find.ExecuteScalarAsync(ct).ConfigureAwait(false) as string ?? "";
+                if(siteId.Length==0)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                        "الموقع غير موجود أو غير نشط. اختر موقعاً مسجلاً من شاشة المواقع، أو «غير محدد».");
             }
             using var insert = connection.CreateCommand();
             insert.Transaction = tx;
