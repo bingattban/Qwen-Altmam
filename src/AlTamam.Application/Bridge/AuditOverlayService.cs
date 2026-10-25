@@ -40,7 +40,8 @@ public sealed class AuditOverlayService
     /// latest presentation overlay (corrected description / tombstone) while always returning the
     /// immutable raw fields alongside it.
     /// </summary>
-    public async Task<BridgeResponse> QueryAuditLogAsync(JsonObject payload, CancellationToken ct)
+    public async Task<BridgeResponse> QueryAuditLogAsync(
+        JsonObject payload, CancellationToken ct, BridgePrincipal? principal = null)
     {
         string actor = ReadString(payload, "actor");
         string target = ReadString(payload, "target");
@@ -48,6 +49,10 @@ public sealed class AuditOverlayService
         string from = ReadString(payload, "fromDate");
         string to = ReadString(payload, "toDate");
         bool includeTombstoned = ReadBool(payload, "includeTombstoned", false);
+        if (includeTombstoned && principal?.Role is not
+            (UserRole.GeneralAdministration or UserRole.OrdinaryAdministration))
+            return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
+                "عرض القيود المخفية محصور بالإدارة العامة والإدارة العادية.");
         int page = Math.Max(ReadInt(payload, "page", 1), 1);
         int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, MaxPageSize);
 
@@ -283,10 +288,17 @@ public sealed class AuditOverlayService
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "الوصف البديل مطلوب للتعديل الظاهر.");
 
         string editedAtUtc = _time.GetUtcNow().ToString("O");
-        string overlayId = "OVL-" + Guid.NewGuid().ToString("N");
 
         return await _db.ExecuteInWriteTransactionAsync(async (connection, transaction) =>
         {
+            // An overlay, its immutable meta-audit and its success receipt are
+            // ONE atomic operation. A retry of the same exact signed-in user's
+            // intent must not append another overlay or duplicate audit row.
+            var (replay, receipt) = await MutationIdempotency.StartAsync(
+                connection, transaction,
+                tombstone ? "DeleteAuditPresentation" : "UpdateAuditPresentation",
+                principal.UserId, payload, ct).ConfigureAwait(false);
+            if (replay is not null) return replay;
             using var check = connection.CreateCommand();
             check.Transaction = transaction;
             check.CommandText = "SELECT 1 FROM AuditEvents WHERE AuditEventId = $id;";
@@ -337,13 +349,16 @@ public sealed class AuditOverlayService
                 reason, DateOnly.FromDateTime(_time.GetUtcNow().DateTime).ToString("yyyy-MM-dd"),
                 ct.CorrelationId(), ct).ConfigureAwait(false);
 
-            return BridgeHelpers.Ok(new JsonObject
+            var result = new JsonObject
             {
                 ["auditEventId"] = auditEventId,
                 ["overlayVersion"] = currentVersion + 1,
                 ["isTombstoned"] = tombstone,
                 ["rawEvidenceUntouched"] = true
-            });
+            };
+            await MutationIdempotency.StoreAsync(connection, transaction,
+                receipt, result, _time, ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(result);
         }, ct).ConfigureAwait(false);
     }
 
