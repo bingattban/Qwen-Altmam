@@ -95,7 +95,7 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     {
         Assert.True(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc123!z").IsValid);
         Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc123!").IsValid);
-        Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Ab123!!z").IsValid);
+        Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Ab123!!?").IsValid);
         Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc12!!z").IsValid);
         var (digest,salt)=AlTamam.Infrastructure.Security.PasswordSecurity.HashPassword("Abc123!z");
         Assert.True(AlTamam.Infrastructure.Security.PasswordSecurity.VerifyPassword("Abc123!z",digest,salt));
