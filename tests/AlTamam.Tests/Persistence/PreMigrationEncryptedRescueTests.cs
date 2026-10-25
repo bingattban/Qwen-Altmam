@@ -2,6 +2,7 @@ using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Persistence.Migrations;
 using AlTamam.Tests.Fixtures;
 using Xunit;
+using Microsoft.Data.Sqlite;
 
 namespace AlTamam.Tests.Persistence;
 
@@ -48,6 +49,9 @@ public sealed class PreMigrationEncryptedRescueTests : IDisposable
             Assert.True(backup.HasValidIntegrity());
         }
 
+        // A disposed pooled SQLite connection can still retain a Windows file
+        // handle: drop idle pooled handles before the raw header check.
+        SqliteConnection.ClearAllPools();
         byte[] original = File.ReadAllBytes(backups[0]);
         Assert.False(original.AsSpan(0, 16).SequenceEqual("SQLite format 3\\0"u8),
             "The rescue image must be encrypted, never plaintext SQLite.");
@@ -94,6 +98,7 @@ public sealed class PreMigrationEncryptedRescueTests : IDisposable
 
     public void Dispose()
     {
+        SqliteConnection.ClearAllPools();
         if (Directory.Exists(RescueFolder)) Directory.Delete(RescueFolder, recursive: true);
         else if (File.Exists(RescueFolder)) File.Delete(RescueFolder);
         SyntheticFixtures.DeleteTempDatabase(_path);
