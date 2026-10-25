@@ -484,7 +484,7 @@ public static class BridgeHandlerCatalog
         "QueryAuditLog" => async (req, principal, ct) =>
         {
             var svc = new AuditOverlayService(services.Db, services.Time);
-            BridgeResponse inner = await svc.QueryAuditLogAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            BridgeResponse inner = await svc.QueryAuditLogAsync(req.Payload ?? new JsonObject(), ct, principal).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
         "GetAuditEntryDetails" => async (req, principal, ct) =>
