@@ -135,6 +135,85 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task IdenticalInternalTransferRetry_ReturnsRecordedResultWithoutExtraMovementsOrAudit()
+    {
+        var svc=new PersonnelMovementService(_db);
+        string token=Token(await svc.PreviewAsync(Plan(["TST-MOVEMENT-P1","TST-MOVEMENT-P2"]),
+            Actor,false,CancellationToken.None));
+        const string operationId="transfer-retry-intent-20261025";
+        var request=new JsonObject{["previewToken"]=token,["operationId"]=operationId};
+        var committed=await svc.CommitAsync(request,Actor,false,CancellationToken.None);
+        Assert.True(committed.Success,committed.UserMessage);
+        Assert.Equal(2L,Count("PersonnelMovements"));
+        Assert.Equal(2L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
+
+        // Simulates UI retry after the first success response was lost.
+        var replay=await svc.CommitAsync((JsonObject)request.DeepClone(),Actor,false,CancellationToken.None);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(committed.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(replay.Data).ToJsonString());
+        Assert.Equal(2L,Count("PersonnelMovements"));
+        Assert.Equal(2L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
+
+        // Operation IDs cannot be used to swap a different preview or action.
+        var changed=await svc.CommitAsync(new JsonObject{
+            ["previewToken"]="0000000000000000000000000000000000000000000000000000000000000000",
+            ["operationId"]=operationId
+        },Actor,false,CancellationToken.None);
+        Assert.False(changed.Success);
+        var wrongAction=await svc.CommitAsync((JsonObject)request.DeepClone(),
+            Actor,true,CancellationToken.None);
+        Assert.False(wrongAction.Success);
+        Assert.Equal(2L,Count("PersonnelMovements"));
+        Assert.Equal(2L,Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task FailedTransferValidation_DoesNotReserveOperationId_AndActorCannotReplayAnotherUser()
+    {
+        var svc=new PersonnelMovementService(_db);
+        const string operationId="transfer-valid-after-failed-preview";
+        var invalid=await svc.CommitAsync(new JsonObject{
+            ["previewToken"]="0000000000000000000000000000000000000000000000000000000000000000",
+            ["operationId"]=operationId
+        },Actor,false,CancellationToken.None);
+        Assert.False(invalid.Success);
+        Assert.Equal(0L,Count("MutationReceipts"));
+
+        string token=Token(await svc.PreviewAsync(Plan(["TST-MOVEMENT-P3"]),
+            Actor,false,CancellationToken.None));
+        var request=new JsonObject{["previewToken"]=token,["operationId"]=operationId};
+        var success=await svc.CommitAsync(request,Actor,false,CancellationToken.None);
+        Assert.True(success.Success,success.UserMessage);
+        var anotherActor=Actor with {UserId="TST-OTHER-ADMIN"};
+        var crossUser=await svc.CommitAsync(request,anotherActor,false,CancellationToken.None);
+        Assert.False(crossUser.Success);
+        Assert.Equal(1L,Count("PersonnelMovements"));
+        Assert.Equal(1L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
+    }
+
+    [Fact]
+    public async Task ExternalTransfer_RetriesAreAtomicAndNeverReactivateArchivedPerson()
+    {
+        var svc=new PersonnelMovementService(_db);
+        string token=Token(await svc.PreviewAsync(Plan(["TST-MOVEMENT-P3"],true),
+            Actor,true,CancellationToken.None));
+        var request=new JsonObject{["previewToken"]=token,
+            ["operationId"]="external-transfer-retry-20261025"};
+        Assert.True((await svc.CommitAsync(request,Actor,true,CancellationToken.None)).Success);
+        Assert.True((await svc.CommitAsync(request,Actor,true,CancellationToken.None)).Success);
+        Assert.Equal(1L,Count("PersonnelMovements"));
+        Assert.Equal(1L,Count("AuditEvents"));
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT ActiveFlag FROM Persons WHERE PersonId='TST-MOVEMENT-P3';";
+        Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
     public async Task ExternalTransferRemovesActiveRosterButPreservesArchive()
     {
         var svc=new PersonnelMovementService(_db);
