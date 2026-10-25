@@ -14,7 +14,8 @@ public static class PasswordPolicyValidator
 
         var letters = password.Count(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z');
         var digits = password.Count(c => c is >= '0' and <= '9');
-        var symbols = password.Length - letters - digits;
+        // Non-Latin letters and non-ASCII numerals are not special characters.
+        var symbols = password.Count(c => !char.IsLetterOrDigit(c) && !char.IsWhiteSpace(c) && !char.IsControl(c));
         if (letters < 3 || digits < 3 || symbols < 1)
             return (false, "يجب أن تحتوي كلمة المرور على ثلاثة أحرف إنجليزية وثلاثة أرقام ورمز خاص على الأقل.");
         return (true, null);
