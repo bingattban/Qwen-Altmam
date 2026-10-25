@@ -7,8 +7,8 @@ public static class PasswordPolicyValidator
     {
         if (string.IsNullOrWhiteSpace(password))
             return (false, "كلمة المرور مطلوبة ولا يمكن تركها فارغة.");
-        if (password.Length < 10)
-            return (false, "يجب أن تتكون كلمة المرور من 10 خانات على الأقل.");
+        if (password.Length < 8)
+            return (false, "يجب أن تتكون كلمة المرور من 8 خانات على الأقل.");
         if (password.Any(char.IsWhiteSpace))
             return (false, "لا يُسمح بوجود مسافات داخل كلمة المرور.");
 
