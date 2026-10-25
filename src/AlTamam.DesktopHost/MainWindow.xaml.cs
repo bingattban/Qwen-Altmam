@@ -43,6 +43,13 @@ public partial class MainWindow : Window
         webViewHost.Children.Add(_webView);
         Panel.SetZIndex(_webView, 0); // keep the native Arabic startup message above the browser
         Loaded += OnLoadedOrSelfCheck;
+        // Native WPF keyboard/mouse/touch events are real user input, unlike
+        // dispatcher timers or background WebUI refreshes. Browser input is
+        // independently observed via trusted WebView2 DOM events.
+        PreviewKeyDown += (_, _) => RefreshIdleFromNativeInput();
+        PreviewMouseDown += (_, _) => RefreshIdleFromNativeInput();
+        PreviewMouseWheel += (_, _) => RefreshIdleFromNativeInput();
+        PreviewTouchDown += (_, _) => RefreshIdleFromNativeInput();
         Closed += async (_, _) =>
         {
             try
@@ -55,6 +62,18 @@ public partial class MainWindow : Window
                 _dbContext?.Dispose();
             }
         };
+    }
+
+    private DateTimeOffset _lastNativeActivityPing=DateTimeOffset.MinValue;
+
+    private async void RefreshIdleFromNativeInput()
+    {
+        if(_gateway is null)return;
+        DateTimeOffset now=DateTimeOffset.UtcNow;
+        if(now-_lastNativeActivityPing < TimeSpan.FromSeconds(1))return;
+        _lastNativeActivityPing=now;
+        try {await _gateway.RecordNativeInputAsync().ConfigureAwait(true);}
+        catch { /* Never crash UI on an idle-activity update. The server still expires. */ }
     }
 
     /// <summary>
@@ -131,6 +150,7 @@ public partial class MainWindow : Window
         {
             await database.InitializeAsync().ConfigureAwait(false);
             var services = new BridgeSharedServices(database);
+            await services.RevokeOrphanedSessionsOnStartupAsync().ConfigureAwait(false);
             var dispatcher = BridgeHandlerCatalog.Create(services);
             var gateway = new DesktopBridgeGateway(dispatcher, services);
             var attendance = new AlTamam.Application.Scheduling.AutoAttendanceService(database);

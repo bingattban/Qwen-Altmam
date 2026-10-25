@@ -214,6 +214,87 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task ExternalTransfer_DisablesLinkedAccountRevokesSessionsAndKeepsImmutableAudit()
+    {
+        var accounts=new UserAccountManagementService(_db);
+        var created=await accounts.CreateAsync(new JsonObject{
+            ["username"]="external-linked",["password"]="Abc123!secure",
+            ["personId"]="TST-MOVEMENT-P3",["role"]="Supervisor"
+        },Actor,default);
+        Assert.True(created.Success,created.UserMessage);
+        string accountId=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO UserSessions(SessionNonce,UserId,Role,IssuedAtUtc,ExpiresAtUtc,RevokedFlag)
+                VALUES('11223344556677889900aabbccddeeff',$id,3,
+                    '2026-10-25T00:00:00Z','2028-10-25T00:00:00Z',0);
+                """;
+            q.Parameters.AddWithValue("$id",accountId);q.ExecuteNonQuery();
+        }
+        var movements=new PersonnelMovementService(_db);
+        string token=Token(await movements.PreviewAsync(Plan(["TST-MOVEMENT-P3"],true),
+            Actor,true,default));
+        var request=new JsonObject{
+            ["previewToken"]=token,["operationId"]="external-account-disable-20261025"
+        };
+        Assert.True((await movements.CommitAsync(request,Actor,true,default)).Success);
+        Assert.True((await movements.CommitAsync(request,Actor,true,default)).Success);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT ActiveFlag FROM Users WHERE UserId=$id;";
+            q.Parameters.AddWithValue("$id",accountId);
+            Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+            q.CommandText="SELECT RevokedFlag FROM UserSessions WHERE UserId=$id;";
+            Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+            q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_LIFECYCLE_SUSPEND';";
+            Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+            q.CommandText="SELECT COUNT(*) FROM PersonnelMovements WHERE MovementType=2;";
+            Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+            // Returning the person to the active flags NEVER silently reactivates an account.
+            q.CommandText="""
+                UPDATE Persons SET ActiveFlag=1,OrganizationalStatus=1
+                WHERE PersonId='TST-MOVEMENT-P3';
+                """;
+            q.ExecuteNonQuery();
+            q.CommandText="SELECT ActiveFlag FROM Users WHERE UserId=$id;";
+            Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+        }
+    }
+
+    [Fact]
+    public async Task FounderLinkedAccount_CannotBeStrandedByExternalTransfer()
+    {
+        var (hash,salt)=AlTamam.Infrastructure.Security.PasswordSecurity.HashPassword("Abc123!secure");
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
+                    CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,
+                    FailedLoginCount,CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,RowVersion)
+                VALUES('TST-FOUNDER','TST-MOVEMENT-P3','founder','founder',1,
+                    $hash,$salt,0,1,0,'TST-FOUNDER','founder','2026-01-01T00:00:00Z',1);
+                """;
+            q.Parameters.AddWithValue("$hash",hash);q.Parameters.AddWithValue("$salt",salt);
+            q.ExecuteNonQuery();
+        }
+        var svc=new PersonnelMovementService(_db);
+        var preview=await svc.PreviewAsync(Plan(["TST-MOVEMENT-P3"],true),Actor,true,default);
+        var result=await svc.CommitAsync(new JsonObject{
+            ["previewToken"]=Token(preview)
+        },Actor,true,default);
+        Assert.False(result.Success);
+        Assert.Equal(0L,Count("PersonnelMovements"));
+        Assert.Equal(0L,Count("AuditEvents"));
+        using var check=_db.CreateOpenConnection();using var cmd=check.CreateCommand();
+        cmd.CommandText="SELECT ActiveFlag FROM Persons WHERE PersonId='TST-MOVEMENT-P3';";
+        Assert.Equal(1L,Convert.ToInt64(cmd.ExecuteScalar()));
+    }
+
+    [Fact]
     public async Task ExternalTransferRemovesActiveRosterButPreservesArchive()
     {
         var svc=new PersonnelMovementService(_db);

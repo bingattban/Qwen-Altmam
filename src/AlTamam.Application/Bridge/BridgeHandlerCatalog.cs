@@ -38,6 +38,10 @@ public static class BridgeHandlerCatalog
         },
         "AuthenticateLocalUser" => async (req, principal, ct) =>
         {
+            // A live user MUST explicitly logout before any other login.
+            if(principal is not null)
+                return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.Unauthorized,
+                    "لتغيير المستخدم، انتقل إلى الإعدادات ثم تسجيل الخروج أولاً."));
             string username = req.Payload?["username"]?.GetValue<string>() ?? "";
             // Authentication alone must NEVER silently create a privileged account.
             // First-use setup requires an explicit owner-intent marker AND matching
@@ -475,6 +479,12 @@ public static class BridgeHandlerCatalog
         {
             var svc=new UserAccountManagementService(services.Db,services.Time);
             BridgeResponse inner=await svc.DeactivateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged)):Fail(req,inner);
+        },
+        "ReactivateUserAccount" => async(req,principal,ct) =>
+        {
+            var svc=new UserAccountManagementService(services.Db,services.Time);
+            BridgeResponse inner=await svc.ReactivateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return inner.Success?Done(req,inner.Data,Invalidation(UiInvalidationEvents.UserAccountChanged)):Fail(req,inner);
         },
         // ---------------- Phase 11: UserAuditService — audit portion (immutable evidence + overlays)

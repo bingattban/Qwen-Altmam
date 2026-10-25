@@ -1880,6 +1880,30 @@
       }
     },
     {
+      "action": "ReactivateUserAccount",
+      "owningService": "UserAuditService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
       "action": "QueryAuditLog",
       "owningService": "UserAuditService",
       "allowedRoles": [

@@ -616,7 +616,7 @@
       },"btn btn-primary");
       form.append(personSearch.wrap,searchButton,personPick,selected,
         username.wrap,password.wrap,node("p","section-description",
-          "كلمة المرور: 10 خانات على الأقل، 3 أحرف إنجليزية، 3 أرقام ورمز خاص دون مسافات."),
+          "كلمة المرور: 8 خانات على الأقل، 3 أحرف إنجليزية، 3 أرقام ورمز خاص دون مسافات."),
         node("label","","نوع الحساب"),role,save,
         btn("إلغاء",()=>form.remove()),message);
       page.appendChild(form);
@@ -631,11 +631,11 @@
           page:state.page,pageSize:30,term:state.term
         });
         if(serial!==currentRequest)return;
-        const data=reply.data||{},listing=table(["الرقم (ع)","المستخدم","الاسم الكامل",
+        const data=reply.data||{},listing=table(["م","الرقم (ع)","المستخدم","الاسم الكامل",
           "نوع الحساب","أضافه","الحالة","الإجراءات"]);
         (data.items||[]).forEach(account=>{
           const row=node("tr");
-          const fields=[account.serviceNumberA,account.username,account.fullName,
+          const fields=[account.index,account.serviceNumberA,account.username,account.fullName,
             account.roleLabelAr,account.createdBy,account.active?"نشط":"معطّل"];
           fields.forEach(v=>row.appendChild(node("td","",v)));
           const cell=node("td","admin-row-buttons");
@@ -651,10 +651,27 @@
                 await load();
               }catch(e){errors(notice,e);}
             },"btn btn-danger"));
+          }else if(account.canModify && !account.active){
+            cell.appendChild(btn("إعادة تفعيل الحساب",async()=>{
+              const reason=await dialogs.prompt(
+                "سبب إعادة التفعيل: يُشترط أن يعود الفرد فعليًا إلى كشف القوة النشطة.");
+              if(reason===null)return;
+              if(reason.trim().length<5)return errors(notice,
+                new Error("يجب كتابة سبب واضح من خمسة أحرف على الأقل."));
+              if(!await dialogs.confirm("هل تؤكد إعادة تفعيل حساب «"+
+                account.username+"»؟ سيتم تسجيل العملية وستبقى الجلسات القديمة ملغاة."))return;
+              try{
+                await api().invoke("ReactivateUserAccount",{
+                  userId:account.userId,expectedRevision:account.rowVersion,
+                  reason:reason.trim()
+                });
+                await load();
+              }catch(e){errors(notice,e);}
+            },"btn btn-primary"));
           }else cell.textContent="—";
           row.appendChild(cell);listing.body.appendChild(row);
         });
-        empty(listing.body,7,"لا توجد حسابات مطابقة للبحث.");
+        empty(listing.body,8,"لا توجد حسابات مطابقة للبحث.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();});
         const next=btn("التالي",()=>{state.page++;load();});

@@ -32,7 +32,7 @@ def main() -> None:
         "settings": "الإعدادات",
     }
     check(len(manifest["screens"]) == manifest["screenCount"] == 69, "missing route manifest entries")
-    check(len(actions) == 96, "action manifest drift")
+    check(len(actions) == 97, "action manifest drift")
     for section, title in sections.items():
         tag = re.search(
             r'<button\b[^>]*id="navBtn-' + re.escape(section)
@@ -66,7 +66,7 @@ def main() -> None:
         in (UI / r["localAssetPath"]).read_text(encoding="utf-8")
         for r in manifest["screens"]
     )
-    print(f"UI SHELL GUARD PASS: 4 Arabic sections, 69 paths, 96 bridge contracts.")
+    print(f"UI SHELL GUARD PASS: 4 Arabic sections, 69 paths, 97 bridge contracts.")
     print(f"FUNCTIONAL COMPLETENESS: {scaffolded}/69 pages still show a placeholder.")
     print("Passing this guard does NOT count as completed user-facing integration.")
 

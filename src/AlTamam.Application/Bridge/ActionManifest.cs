@@ -6,7 +6,7 @@ public sealed record BridgeActionMetadata(string Action, string OwningService, s
 
 public static class ActionManifest
 {
-    /// <summary>All 96 canonical actions with owning service and allowed roles.</summary>
+    /// <summary>All 97 canonical actions with owning service and allowed roles.</summary>
     public static readonly BridgeActionMetadata[] All = new BridgeActionMetadata[]
     {
         new("GetProvisioningState", "AuthenticationService", new[] { "Unauthenticated", "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
@@ -86,6 +86,7 @@ public static class ActionManifest
         new("LinkFoundingAdministrator", "UserAuditService", new[] { "GeneralAdministration" }, true),
         new("ChangeUserPassword", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
         new("DeactivateUserAccount", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
+        new("ReactivateUserAccount", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
         new("QueryAuditLog", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("GetAuditEntryDetails", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("UpdateAuditPresentation", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),

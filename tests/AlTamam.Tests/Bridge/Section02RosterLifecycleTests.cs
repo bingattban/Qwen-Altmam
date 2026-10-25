@@ -111,6 +111,38 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task ArchiveLinkedSupervisor_RevokesSessionsWithoutRestoringAccessWhenPersonReturns()
+    {
+        var (hash,salt)=AlTamam.Infrastructure.Security.PasswordSecurity.HashPassword("Abc123!secure");
+        Execute($"""
+            INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
+              CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,
+              FailedLoginCount,CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,RowVersion)
+            VALUES('TST-ARCHIVE-USER','TST-LIFE-P1','archive-user','archive-user',3,
+              '{hash}','{salt}',0,1,0,'TST-ADMIN','admin','2026-01-01T00:00:00Z',1);
+            INSERT INTO UserSessions(SessionNonce,UserId,Role,IssuedAtUtc,ExpiresAtUtc,RevokedFlag)
+            VALUES('f1aabbccddeeff001122334455667788','TST-ARCHIVE-USER',3,
+              '2026-10-01T00:00:00Z','2028-10-01T00:00:00Z',0);
+            """);
+        var svc=new PersonRosterService(_db);
+        var preview=await svc.PreviewArchivePersonsAsync(Selected(),Actor,default);
+        Assert.True(preview.Success,preview.UserMessage);
+        var payload=Commit(Assert.IsType<JsonObject>(preview.Data),
+            (JsonArray)Selected()["personIds"]!);
+        var archive=await svc.ArchivePersonsAsync(Actor,"test-admin",payload,default);
+        Assert.True(archive.Success,archive.UserMessage);
+        Assert.Equal(0,Number("SELECT ActiveFlag FROM Users WHERE UserId='TST-ARCHIVE-USER';"));
+        Assert.Equal(1,Number("SELECT RevokedFlag FROM UserSessions WHERE UserId='TST-ARCHIVE-USER';"));
+        Assert.Equal(1,Number("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_LIFECYCLE_SUSPEND';"));
+        var returned=await svc.RestoreArchivedPersonAsync(Actor,"test-admin",new JsonObject{
+            ["personId"]="TST-LIFE-P1",["effectiveLocalDate"]=Day,
+            ["expectedRevision"]=2L,["reason"]="عودة نظامية موثقة"
+        },default);
+        Assert.True(returned.Success,returned.UserMessage);
+        Assert.Equal(0,Number("SELECT ActiveFlag FROM Users WHERE UserId='TST-ARCHIVE-USER';"));
+    }
+
+    [Fact]
     public async Task StaleBatchRejectsAllMembersWithoutPartialArchiving()
     {
         var service = new PersonRosterService(_db);

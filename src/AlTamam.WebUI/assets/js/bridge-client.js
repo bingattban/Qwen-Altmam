@@ -33,6 +33,17 @@
       if (nonce) localStorage.setItem(SESSION_NONCE_STORAGE_KEY, nonce);
       else localStorage.removeItem(SESSION_NONCE_STORAGE_KEY);
     } catch (_) { /* ignore */ }
+    if (!nonce) {
+      // Logout/idle expiry discards EVERY unresolved response of the old user.
+      // No delayed result is allowed to repaint a new user's screen.
+      for (const [requestId, entry] of pending) {
+        pending.delete(requestId);
+        clearTimeout(entry.timer);
+        const error = new Error("أُلغيت العملية لانتهاء جلسة المستخدم.");
+        error.errorCode = "SessionExpired";
+        entry.reject(error);
+      }
+    }
   }
 
   const pending = new Map();          // requestId -> {resolve, reject, timer}

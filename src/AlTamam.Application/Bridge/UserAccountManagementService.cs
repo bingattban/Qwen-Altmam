@@ -100,6 +100,7 @@ public sealed class UserAccountManagementService
             var role=(UserRole)reader.GetInt32(2);
             rows.Add(new JsonObject
             {
+                ["index"]=(long)(page-1)*size+rows.Count+1,
                 ["userId"]=reader.GetString(0),
                 ["username"]=reader.GetString(1),
                 ["role"]=role.ToString(),
@@ -176,6 +177,22 @@ public sealed class UserAccountManagementService
             duplicate.Parameters.AddWithValue("$person",personId);
             if(Convert.ToInt64(await duplicate.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
                 return Error("اسم المستخدم مستخدم أو يوجد حساب نشط مرتبط بهذا الفرد.",BridgeErrorCodes.DuplicateUsername);
+            // Freeze the creator's real roster identity AT account creation;
+            // later name/personnel-number edits must never rewrite this evidence.
+            string creatorName=actor.Username;
+            using(var creator=c.CreateCommand())
+            {
+                creator.Transaction=t;
+                creator.CommandText="""
+                    SELECT p.CurrentVisibleName FROM Users u
+                    JOIN Persons p ON p.PersonId=u.LinkedPersonId
+                    WHERE u.UserId=$creator;
+                    """;
+                creator.Parameters.AddWithValue("$creator",actor.UserId);
+                string? roster=await creator.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+                if(!string.IsNullOrWhiteSpace(roster))
+                    creatorName=actor.Username+" - "+roster;
+            }
             using var cmd=c.CreateCommand();cmd.Transaction=t;
             cmd.CommandText="""
                 INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
@@ -193,7 +210,7 @@ public sealed class UserAccountManagementService
             cmd.Parameters.AddWithValue("$hash",hash);
             cmd.Parameters.AddWithValue("$salt",salt);
             cmd.Parameters.AddWithValue("$actor",actor.UserId);
-            cmd.Parameters.AddWithValue("$actorName",actor.Username);
+            cmd.Parameters.AddWithValue("$actorName",creatorName);
             cmd.Parameters.AddWithValue("$now",now);
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             await Audit(c,t,actor,"USER_CREATE","إضافة حساب",id,username,null,
@@ -285,6 +302,12 @@ public sealed class UserAccountManagementService
         long expected=ReadLong(payload,"expectedRevision");
         string password=ReadSecret(payload);
         if(id.Length==0||expected<1)return Error("اختر الحساب وإصداره الحالي.");
+        // Ordinary password editing NEVER changes role, login name, identity,
+        // linked PersonId, activation status or any other privileged field.
+        if(!deactivate && payload is not null &&
+           payload.Any(field=>field.Key is not
+             ("userId" or "expectedRevision" or "password" or "operationId")))
+            return Error("تعديل كلمة المرور لا يسمح بتغيير اسم المستخدم أو الصلاحية أو ربط الفرد.");
         if(id==actor.UserId)return Error("لا يمكن تعديل أو تعطيل الحساب المستخدم حالياً.");
         if(!deactivate)
         {
@@ -345,6 +368,91 @@ public sealed class UserAccountManagementService
             }
             return BridgeHelpers.Ok(new JsonObject{["userId"]=id,
                 ["active"]=!deactivate,["rowVersion"]=expected+1});
+        },ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 03.13: reactivation NEVER occurs merely because the person returned to
+    /// active service. It requires a fresh explicit admin action, optimistic
+    /// account version, verified active roster linkage and immutable audit.
+    /// Prior user sessions remain permanently revoked.
+    /// </summary>
+    public async Task<BridgeResponse> ReactivateAsync(JsonObject? payload,
+        BridgePrincipal actor,CancellationToken ct)
+    {
+        string id=Read(payload,"userId"),reason=Read(payload,"reason");
+        long expected=ReadLong(payload,"expectedRevision");
+        if(id.Length==0 || expected<1 || reason.Length is <5 or >400)
+            return Error("اختر حساباً معطّلاً وإصداره الحالي، واكتب سبباً واضحاً (5–400 حرف).");
+        return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
+        {
+            using var cmd=c.CreateCommand();cmd.Transaction=t;
+            cmd.CommandText="""
+                SELECT u.Username,u.Role,u.ActiveFlag,u.RowVersion,
+                    u.LinkedPersonId,p.ActiveFlag,p.OrganizationalStatus,
+                    EXISTS(SELECT 1 FROM PersonAssignments a
+                      WHERE a.PersonId=p.PersonId
+                        AND a.ValidFromLocalDate<=$today
+                        AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate>$today))
+                FROM Users u LEFT JOIN Persons p ON p.PersonId=u.LinkedPersonId
+                WHERE u.UserId=$id;
+                """;
+            cmd.Parameters.AddWithValue("$id",id);
+            cmd.Parameters.AddWithValue("$today",_time.GetLocalNow().ToString("yyyy-MM-dd"));
+            string username,personId;UserRole targetRole;long revision;int active;
+            using(var reader=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+            {
+                if(!await reader.ReadAsync(ct).ConfigureAwait(false))
+                    return Error("الحساب المطلوب غير موجود.");
+                username=reader.GetString(0);
+                targetRole=(UserRole)reader.GetInt32(1);
+                active=reader.GetInt32(2);
+                revision=reader.GetInt64(3);
+                personId=reader.IsDBNull(4)?"":reader.GetString(4);
+                if(string.IsNullOrWhiteSpace(personId) || reader.IsDBNull(5) ||
+                   reader.GetInt32(5)!=1 || reader.GetInt32(6)!=1 ||
+                   reader.GetInt32(7)!=1)
+                    return Error("إعادة تفعيل الحساب تتطلب عودة صاحبه فعلياً إلى كشف القوة النشطة.",
+                        BridgeErrorCodes.ConflictStale);
+            }
+            if(!RoleAuthorizationPolicy.CanModifyAccount(actor.Role,targetRole))
+                return Error("لا تملك صلاحية إعادة تفعيل هذا النوع من الحسابات.",
+                    BridgeErrorCodes.Unauthorized);
+            if(active!=0 || revision!=expected)
+                return Error("الحساب مفعل أو تغير إصداره؛ أعد تحميل القائمة.",
+                    BridgeErrorCodes.ConflictStale);
+            using(var duplicate=c.CreateCommand())
+            {
+                duplicate.Transaction=t;
+                duplicate.CommandText="""
+                    SELECT EXISTS(SELECT 1 FROM Users
+                      WHERE LinkedPersonId=$person AND ActiveFlag=1 AND UserId<>$id);
+                    """;
+                duplicate.Parameters.AddWithValue("$person",personId);
+                duplicate.Parameters.AddWithValue("$id",id);
+                if(Convert.ToInt32(await duplicate.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
+                    return Error("الفرد مرتبط بحساب آخر نشط.",BridgeErrorCodes.ConflictStale);
+            }
+            using(var update=c.CreateCommand())
+            {
+                update.Transaction=t;
+                update.CommandText="""
+                    UPDATE Users SET ActiveFlag=1,RowVersion=RowVersion+1,
+                       FailedLoginCount=0,LockedUntilUtc=NULL
+                    WHERE UserId=$id AND ActiveFlag=0 AND RowVersion=$expected;
+                    """;
+                update.Parameters.AddWithValue("$id",id);
+                update.Parameters.AddWithValue("$expected",expected);
+                if(await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
+                    return Error("تغير الحساب أثناء إعادة التفعيل.",BridgeErrorCodes.ConflictStale);
+            }
+            await Audit(c,t,actor,"USER_REACTIVATE","إعادة تفعيل حساب",id,username,
+                new JsonObject{["active"]=false}.ToJsonString(),
+                new JsonObject{["active"]=true,["reason"]=reason,
+                    ["personId"]=personId}.ToJsonString(),ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(new JsonObject{
+                ["userId"]=id,["active"]=true,["rowVersion"]=expected+1
+            });
         },ct).ConfigureAwait(false);
     }
 
