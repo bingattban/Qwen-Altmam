@@ -391,6 +391,73 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.Equal(0L,Count("PersonnelMovements"));
     }
 
+
+    [Fact]
+    public async Task ApprovedTransferRule_MovementOnDayAndAttendanceEligibleNextDay()
+    {
+        var movements = new PersonnelMovementService(_db);
+        var preview = await movements.PreviewAsync(
+            Plan(["TST-MOVEMENT-P1", "TST-MOVEMENT-P2"]),
+            Actor, false, CancellationToken.None);
+        var committed = await movements.CommitAsync(new JsonObject
+        {
+            ["previewToken"] = Token(preview)
+        }, Actor, false, CancellationToken.None);
+        Assert.True(committed.Success, committed.UserMessage);
+
+        var reads = new DailyMonthlyReadService(_db);
+        var today = Today();
+        var tomorrow = DateOnly.Parse(today).AddDays(1).ToString("yyyy-MM-dd");
+
+        async Task<JsonObject> Summary(string date) =>
+            Assert.IsType<JsonObject>((await reads.DashboardSummaryAsync(new JsonObject
+            {
+                ["businessDate"] = date, ["siteId"] = "SITE-DEST"
+            }, CancellationToken.None)).Data);
+
+        async Task<JsonObject> Roster(string date, string status) =>
+            Assert.IsType<JsonObject>((await reads.DailyRosterAsync(new JsonObject
+            {
+                ["businessDate"] = date, ["siteId"] = "SITE-DEST",
+                ["statusId"] = status, ["page"] = 1, ["pageSize"] = 50
+            }, CancellationToken.None)).Data);
+
+        var transferDay = await Summary(today);
+        Assert.Equal(2L, transferDay["totalForce"]!.GetValue<long>());
+        Assert.Equal(2L, transferDay["internalTransferDay"]!.GetValue<long>());
+        Assert.Equal(0L, transferDay["attendanceEligible"]!.GetValue<long>());
+        Assert.Equal(0L, transferDay["unprepared"]!.GetValue<long>());
+        Assert.Equal(0, transferDay["completionPercentage"]!.GetValue<int>());
+        Assert.Equal(0L, (await Roster(today, "__UNPREPARED__"))["total"]!.GetValue<long>());
+        var transfers = await Roster(today, "__TRANSFER_DAY__");
+        Assert.Equal(2L, transfers["total"]!.GetValue<long>());
+        foreach (var person in Assert.IsType<JsonArray>(transfers["items"]))
+        {
+            Assert.True(person!["transferDay"]!.GetValue<bool>());
+            Assert.Equal("__TRANSFER_DAY__", person["statusId"]!.GetValue<string>());
+            Assert.Contains("تم نقله من", person["statusName"]!.GetValue<string>());
+            Assert.Contains("إلى الموقع الجديد", person["statusName"]!.GetValue<string>());
+        }
+
+        // On movement day even the destination cannot prepare the transferred person.
+        var forbidden = await new AttendanceCommitService(_db).PreviewAsync(new JsonObject
+        {
+            ["businessDate"] = today, ["siteId"] = "SITE-DEST",
+            ["statusId"] = "STS-PRESENT", ["mode"] = "initial",
+            ["personIds"] = new JsonArray("TST-MOVEMENT-P1")
+        }, Actor, CancellationToken.None);
+        Assert.False(forbidden.Success);
+        Assert.Equal(BridgeErrorCodes.TransferDayAttendanceForbidden, forbidden.ErrorCode);
+
+        var nextDay = await Summary(tomorrow);
+        Assert.Equal(2L, nextDay["totalForce"]!.GetValue<long>());
+        Assert.Equal(0L, nextDay["internalTransferDay"]!.GetValue<long>());
+        Assert.Equal(2L, nextDay["attendanceEligible"]!.GetValue<long>());
+        Assert.Equal(2L, nextDay["unprepared"]!.GetValue<long>());
+        Assert.Equal(2L, (await Roster(tomorrow, "__UNPREPARED__"))["total"]!.GetValue<long>());
+        Assert.Equal(0L, (await Roster(tomorrow, "__TRANSFER_DAY__"))["total"]!.GetValue<long>());
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
