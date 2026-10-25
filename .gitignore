@@ -1,11 +1,59 @@
+# Build outputs and local IDE state
 bin/
 obj/
+dist/
+publish/
+artifacts/
+TestResults/
+PerformanceEvidence/
+.vs/
+.idea/
 *.user
 *.suo
 *.cache
-.vs/
-.idea/
 *.swp
 *.tmp
 .DS_Store
 Thumbs.db
+
+# PRIVATE PERSONNEL RECORDS, LIVE SQLCIPHER DATABASES AND WAL JOURNALS
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+
+# User/device secrets, DPAPI protected key blobs and recovery material
+*.key
+*.protected
+*.pfx
+*.p12
+*.pem
+*.private
+*.env
+.env
+.env.*
+keys.env
+db.key.protected
+
+# Real backup archives, exports and personnel reports
+*.bak
+*.backup
+*.sqlcipher
+*.xlsx
+*.xlsm
+*.xls
+*.pdf
+*.zip
+*.7z
+*.csv
+!docs/requirements/SCREEN_MATRIX.csv
+
+# Logs and local state
+*.log
+*.trx
+*.dmp
