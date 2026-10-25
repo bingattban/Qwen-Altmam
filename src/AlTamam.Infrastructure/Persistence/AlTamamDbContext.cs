@@ -171,6 +171,7 @@ public sealed class AlTamamDbContext : IDisposable
         string source = Path.GetFullPath(_databasePath);
         if (string.Equals(output, source, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The backup destination cannot be the active database.");
+        await _writeGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             await CreateVerifiedEncryptedBackupUnderWriteGateAsync(output, ct).ConfigureAwait(false);
@@ -187,7 +188,6 @@ public sealed class AlTamamDbContext : IDisposable
         string folder = Path.GetDirectoryName(output)!;
         Directory.CreateDirectory(folder);
         string temp = output + "." + Guid.NewGuid().ToString("N") + ".pending";
-        await _writeGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             ct.ThrowIfCancellationRequested();
