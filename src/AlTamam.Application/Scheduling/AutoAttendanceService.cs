@@ -59,9 +59,11 @@ public sealed class AutoAttendanceService
             throw new BridgeProtocolException(BridgeErrorCodes.ClockRollbackSuspected,
                 "رُصد ارتداد في ساعة النظام؛ أُوقف التحضير التلقائي حتى تصحيح الساعة.");
 
-        int dueHour = await GetSettingIntAsync("AutoAttendanceDueHourLocal", DefaultDueHour, ct).ConfigureAwait(false);
+        // Section 04 owner rule is fixed at 20:00 local. An old persisted
+        // AutoAttendanceDueHourLocal value must not open/close the manual window
+        // at a different hour from the automatic scheduler.
         int catchUpDays = await GetSettingIntAsync("AutoAttendanceCatchUpDays", DefaultCatchUpDays, ct).ConfigureAwait(false);
-        bool dayDue = localNow.TimeOfDay >= new TimeSpan(Math.Clamp(dueHour, 0, 23), 0, 0);
+        bool dayDue = localNow.TimeOfDay >= new TimeSpan(DefaultDueHour, 0, 0);
 
         List<DateOnly> pending = EnumeratePendingDates(today, dayDue, catchUpDays,
             await GetLastCompletedBusinessDateAsync(ct).ConfigureAwait(false), out int unrecoverable);
