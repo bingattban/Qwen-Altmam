@@ -398,8 +398,8 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     [Fact]
     public async Task ExplicitReactivation_ExactRetryCannotBypassRoleAndProducesOneAuditEvent()
     {
-        using(var c=_db.CreateOpenConnection())
-        using(var assign=c.CreateCommand())
+        using(var setupConnection=_db.CreateOpenConnection())
+        using(var assign=setupConnection.CreateCommand())
         {
             assign.CommandText="""
                 INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
