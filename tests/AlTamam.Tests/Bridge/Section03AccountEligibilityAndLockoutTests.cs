@@ -158,7 +158,8 @@ public sealed class Section03AccountEligibilityAndLockoutTests : IAsyncLifetime,
         using(var q=c.CreateCommand())
         {
             q.CommandText="SELECT LockedUntilUtc FROM Users WHERE Username='founding-owner';";
-            Assert.Null(q.ExecuteScalar());
+            var value=q.ExecuteScalar();
+            Assert.True(value is null or DBNull);
         }
         var (recovered,successError)=await _auth.AuthenticateAsync(
             "founding-owner",Password,default);
