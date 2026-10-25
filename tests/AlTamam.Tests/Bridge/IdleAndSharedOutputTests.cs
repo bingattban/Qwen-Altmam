@@ -56,6 +56,54 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task ConcurrentLoginBlockedUntilLogout_AndRestartRevokesOldSessions()
+    {
+        var (other, denied)=await _services.AuthenticateAsync(
+            "tester-idle","test-password-123",default);
+        Assert.Null(other);
+        Assert.NotNull(denied);
+        await _services.RevokeSessionAsync(_actor.SessionNonce);
+        Assert.Null(await _services.ResolveSessionAsync(_actor.SessionNonce));
+        var (fresh, error)=await _services.AuthenticateAsync(
+            "tester-idle","test-password-123",default);
+        Assert.Null(error);
+        Assert.NotNull(fresh);
+        Assert.NotEqual(_actor.SessionNonce,fresh!.SessionNonce);
+        await _services.RevokeOrphanedSessionsOnStartupAsync();
+        Assert.Null(await _services.ResolveSessionAsync(fresh.SessionNonce));
+        var (reopened, reopenError)=await _services.AuthenticateAsync(
+            "tester-idle","test-password-123",default);
+        Assert.Null(reopenError);
+        Assert.NotNull(reopened);
+    }
+
+    [Fact]
+    public async Task NativeUserInputRenewsOnlyStillActiveSessions()
+    {
+        _time.Forward(TimeSpan.FromSeconds(299));
+        await _services.RefreshActiveSessionFromNativeInputAsync();
+        _time.Forward(TimeSpan.FromSeconds(299));
+        Assert.NotNull(await _services.ResolveSessionAsync(_actor.SessionNonce));
+        _time.Forward(TimeSpan.FromSeconds(1));
+        Assert.Null(await _services.ResolveSessionAsync(_actor.SessionNonce));
+        await _services.RefreshActiveSessionFromNativeInputAsync();
+        Assert.Null(await _services.ResolveSessionAsync(_actor.SessionNonce));
+    }
+
+    [Fact]
+    public void SubsequentPasswordsAcceptExactEightCharacterMinimumWithArgon2id()
+    {
+        Assert.True(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc123!z").IsValid);
+        Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc123!").IsValid);
+        Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Ab123!!z").IsValid);
+        Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc12!!z").IsValid);
+        var (digest,salt)=AlTamam.Infrastructure.Security.PasswordSecurity.HashPassword("Abc123!z");
+        Assert.True(AlTamam.Infrastructure.Security.PasswordSecurity.VerifyPassword("Abc123!z",digest,salt));
+        Assert.False(AlTamam.Infrastructure.Security.PasswordSecurity.VerifyPassword("Abc123!x",digest,salt));
+        Assert.DoesNotContain("Abc123!z",digest);
+    }
+
+    [Fact]
     public async Task FoundingAdmin_UsesRoleLabelAndCannotBeRecreatedAfterDisable()
     {
         using(var c=_db.CreateOpenConnection())
