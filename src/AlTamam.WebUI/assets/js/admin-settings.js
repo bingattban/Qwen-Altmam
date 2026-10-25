@@ -826,11 +826,16 @@
     const creation=node("details","admin-create-person card");
     const toggle=node("summary","btn btn-primary","إضافة فرد واحد للكشف");
     const creationFields=node("div","admin-site-form");
-    const nameField=field("الاسم الكامل"), numberField=field("الرقم (ع) — أربع خانات فأكثر"),
-      siteField=field("الموقع (اختر الموجود أو اكتب موقعاً جديداً)","غير محدد");
-    const siteSuggestions=node("datalist");
-    siteSuggestions.id="person-site-options";
-    siteField.input.setAttribute("list","person-site-options");
+    const nameField=field("الاسم الكامل"),
+      numberField=field("الرقم (ع) — أربع خانات فأكثر");
+    const selectSite=node("select","form-control");
+    selectSite.setAttribute("aria-label","الموقع المسجل");
+    const fallback=node("option","","غير محدد");
+    fallback.value="SITE-UNSPECIFIED";
+    selectSite.appendChild(fallback);
+    selectSite.value="SITE-UNSPECIFIED";
+    const siteField={input:selectSite,wrap:node("label","admin-input")};
+    siteField.wrap.append(node("span","","اختر الموقع من المواقع المسجلة"),selectSite);
     numberField.input.inputMode="numeric";
     numberField.input.minLength=4;
     numberField.input.maxLength=70;
