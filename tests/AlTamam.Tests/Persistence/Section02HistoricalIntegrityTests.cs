@@ -49,7 +49,7 @@ public sealed class Section02HistoricalIntegrityTests : IAsyncLifetime, IDisposa
     public void V004_IdentityIntervals_AreNonOverlappingAndHistoricallyImmutable()
     {
         using var c = _db.CreateOpenConnection();
-        Assert.Equal(8, SchemaMigrationRunner.GetCurrentVersion(c));
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion, SchemaMigrationRunner.GetCurrentVersion(c));
         SeedPerson(c);
         Exec(c, """
             INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
@@ -187,7 +187,7 @@ public sealed class Section02HistoricalIntegrityTests : IAsyncLifetime, IDisposa
             }
             await db.InitializeAsync();
             using var upgraded = db.CreateOpenConnection();
-            Assert.Equal(8, SchemaMigrationRunner.GetCurrentVersion(upgraded));
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion, SchemaMigrationRunner.GetCurrentVersion(upgraded));
             Assert.Equal("منفذ تجريبي", Scalar(upgraded,
                 "SELECT CurrentVisibleName FROM Persons WHERE PersonId='TST-SECTION02-PERSON';"));
             Assert.Equal("ok", Scalar(upgraded, "PRAGMA integrity_check;"));
