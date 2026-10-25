@@ -694,19 +694,20 @@
       const pwd=field("كلمة المرور الجديدة","","password");
       pwd.input.autocomplete="new-password";
       const result=node("div","admin-note");
-      let passwordIntent=null;
+      // Do not cache the plaintext password in an additional JS signature.
+      // The field owns its value; changing it starts a fresh operation ID.
+      let passwordOperationId=null;
+      pwd.input.addEventListener("input",()=>{passwordOperationId=null;});
       const save=btn("تأكيد التغيير",async()=>{
         if(!await dialogs.confirm("اعتماد كلمة المرور الجديدة وإلغاء جلسات هذا الحساب؟"))return;
         save.disabled=true;
-        const intent=JSON.stringify([account.userId,account.rowVersion,pwd.input.value]);
-        if(passwordIntent?.signature!==intent)
-          passwordIntent={signature:intent,operationId:makeOperationId()};
+        if(!passwordOperationId)passwordOperationId=makeOperationId();
         try {
           await api().invoke("ChangeUserPassword",{
             userId:account.userId,expectedRevision:account.rowVersion,
-            password:pwd.input.value,operationId:passwordIntent.operationId
+            password:pwd.input.value,operationId:passwordOperationId
           });
-          pwd.input.value="";passwordIntent=null;wrapper.remove();await load();
+          pwd.input.value="";passwordOperationId=null;wrapper.remove();await load();
         }catch(e){
           // Do not persist passwords. Keep the input only within this dialog so
           // an interrupted successful update may be retried with the same ID.
