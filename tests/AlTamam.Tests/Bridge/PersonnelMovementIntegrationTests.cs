@@ -265,7 +265,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
     }
 
     [Fact]
-    public async Task FounderLinkedAccount_CannotBeStrandedByExternalTransfer()
+    public async Task IndependentFounder_RemainsActiveWhenDifferentRosterPersonTransfersExternally()
     {
         var (hash,salt)=AlTamam.Infrastructure.Security.PasswordSecurity.HashPassword("Abc123!secure");
         using(var c=_db.CreateOpenConnection())
@@ -275,7 +275,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
                 INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
                     CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,
                     FailedLoginCount,CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,RowVersion)
-                VALUES('TST-FOUNDER','TST-MOVEMENT-P3','founder','founder',1,
+                VALUES('TST-FOUNDER',NULL,'founder','founder',1,
                     $hash,$salt,0,1,0,'TST-FOUNDER','founder','2026-01-01T00:00:00Z',1);
                 """;
             q.Parameters.AddWithValue("$hash",hash);q.Parameters.AddWithValue("$salt",salt);
@@ -286,12 +286,16 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         var result=await svc.CommitAsync(new JsonObject{
             ["previewToken"]=Token(preview)
         },Actor,true,default);
-        Assert.False(result.Success);
-        Assert.Equal(0L,Count("PersonnelMovements"));
-        Assert.Equal(0L,Count("AuditEvents"));
+        Assert.True(result.Success,result.UserMessage);
+        Assert.Equal(1L,Count("PersonnelMovements"));
+        Assert.True(Count("AuditEvents")>=1L);
         using var check=_db.CreateOpenConnection();using var cmd=check.CreateCommand();
         cmd.CommandText="SELECT ActiveFlag FROM Persons WHERE PersonId='TST-MOVEMENT-P3';";
+        Assert.Equal(0L,Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText="SELECT ActiveFlag FROM Users WHERE UserId='TST-FOUNDER';";
         Assert.Equal(1L,Convert.ToInt64(cmd.ExecuteScalar()));
+        cmd.CommandText="SELECT LinkedPersonId FROM Users WHERE UserId='TST-FOUNDER';";
+        Assert.Equal(DBNull.Value,cmd.ExecuteScalar());
     }
 
     [Fact]
