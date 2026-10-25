@@ -39,6 +39,30 @@ public static class SyntheticFixtures
         return Path.Combine(dir, AppDataLayout.DatabaseFileName);
     }
 
+    /// <summary>Stable local test clock so attendance boundary tests never depend
+    /// on the Windows build agent's actual time of day.</summary>
+    public static AdjustableClock ClockAtLocalHour(int hour, int minute = 0)
+    {
+        var local = DateTime.Today.AddHours(hour).AddMinutes(minute);
+        var utc = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local)).ToUniversalTime();
+        return new AdjustableClock(utc, TimeZoneInfo.Local);
+    }
+
+    public sealed class AdjustableClock : TimeProvider
+    {
+        private DateTimeOffset _utcNow;
+        private readonly TimeZoneInfo _zone;
+        public AdjustableClock(DateTimeOffset utcNow, TimeZoneInfo? zone = null)
+        {
+            _utcNow = utcNow;
+            _zone = zone ?? TimeZoneInfo.Utc;
+        }
+        public override DateTimeOffset GetUtcNow() => _utcNow;
+        public override TimeZoneInfo LocalTimeZone => _zone;
+        public void SetUtcNow(DateTimeOffset now) => _utcNow = now;
+        public void Advance(TimeSpan duration) => _utcNow = _utcNow.Add(duration);
+    }
+
     public static void DeleteTempDatabase(string path)
     {
         try
