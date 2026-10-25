@@ -27,6 +27,9 @@ public sealed class DesktopBridgeGateway
         _services = services;
     }
 
+    public Task RecordNativeInputAsync(CancellationToken ct=default)
+        => _services.RefreshActiveSessionFromNativeInputAsync(ct);
+
     /// <summary>Attaches the gateway to one CoreWebView2 instance (postMessage pipe only).</summary>
     public void Attach(CoreWebView2 core)
     {
