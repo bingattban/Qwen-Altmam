@@ -96,6 +96,111 @@ public sealed class Section02EvidenceAndReportsTests : IAsyncLifetime, IDisposab
         Assert.Equal("غير محدد", daily["2026-01-15"]!["siteName"]!.GetValue<string>());
     }
 
+
+    [Fact]
+    public async Task AuditOverlay_ExactRetryPreservesOneVersionAndOneMetaAudit_AndHiddenIsAdminOnly()
+    {
+        Sql("""
+            INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
+              CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,FailedLoginCount,
+              CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,RowVersion)
+            VALUES('TST-EVID-GA',NULL,'test-evid-ga','test-evid-ga',1,
+              'test-hash','test-salt',0,1,0,'USR-SYSTEM','النظام','2026-01-01T00:00:00Z',1),
+              ('TST-EVID-OA',NULL,'test-evid-oa','test-evid-oa',2,
+              'test-hash','test-salt',0,1,0,'USR-SYSTEM','النظام','2026-01-01T00:00:00Z',1);
+            """);
+        await _db.ExecuteInWriteTransactionAsync(async (c,t) =>
+        {
+            await BridgeAuditWriter.WriteAsync(c,t,TimeProvider.System,
+                "TEST_OVERLAY_RETRY","سجل اختبار مراجعة","TST-EVID-GA","test-evid-ga",null,
+                "Person","TST-SUBJECT","اختبار",null,null,"الوصف الأصلي غير المعدل",null,
+                "2026-01-01","TEST-RETRY-CORR",CancellationToken.None);
+            return true;
+        });
+        string id=Scalar("SELECT AuditEventId FROM AuditEvents WHERE OperationCode='TEST_OVERLAY_RETRY';");
+        var svc=new AuditOverlayService(_db);
+
+        var originalEdit=new JsonObject
+        {
+            ["auditEventId"]=id,["expectedOverlayVersion"]=0,
+            ["reason"]="توضيح ظاهر موثق",["correctedDescription"]="تصحيح الوصف الظاهر",
+            ["operationId"]="audit-edit-retry-20261025"
+        };
+        var first=await svc.UpdateAuditPresentationAsync(originalEdit,General,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var retry=await svc.UpdateAuditPresentationAsync(
+            (JsonObject)originalEdit.DeepClone(),General,CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data).ToJsonString(),
+            Assert.IsType<JsonObject>(retry.Data).ToJsonString());
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditLogPresentationEdits;"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='UpdateAuditPresentation';"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM MutationReceipts;"));
+        Assert.Equal("الوصف الأصلي غير المعدل",Scalar(
+            "SELECT DefaultArabicDescription FROM AuditEvents WHERE OperationCode='TEST_OVERLAY_RETRY';"));
+
+        var altered=(JsonObject)originalEdit.DeepClone();
+        altered["correctedDescription"]="نص آخر";
+        var collision=await svc.UpdateAuditPresentationAsync(altered,General,CancellationToken.None);
+        Assert.False(collision.Success);
+        Assert.False((await svc.UpdateAuditPresentationAsync(originalEdit,Supervisor,CancellationToken.None)).Success);
+
+        var hide=new JsonObject
+        {
+            ["auditEventId"]=id,["expectedOverlayVersion"]=1,
+            ["reason"]="إخفاء ظاهر بعد المراجعة",["operationId"]="audit-hide-retry-20261025"
+        };
+        var hideFirst=await svc.DeleteAuditPresentationAsync(hide,Ordinary,CancellationToken.None);
+        Assert.True(hideFirst.Success,hideFirst.UserMessage);
+        Assert.True((await svc.DeleteAuditPresentationAsync(
+            (JsonObject)hide.DeepClone(),Ordinary,CancellationToken.None)).Success);
+        Assert.Equal("2",Scalar("SELECT COUNT(*) FROM AuditLogPresentationEdits;"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='DeleteAuditPresentation';"));
+        Assert.Equal("2",Scalar("SELECT COUNT(*) FROM MutationReceipts;"));
+
+        var normal=await svc.QueryAuditLogAsync(new JsonObject
+        {
+            ["operation"]="TEST_OVERLAY_RETRY"
+        },CancellationToken.None,Supervisor);
+        Assert.True(normal.Success,normal.UserMessage);
+        Assert.Empty(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(normal.Data)["items"]));
+
+        var bypass=await svc.QueryAuditLogAsync(new JsonObject
+        {
+            ["operation"]="TEST_OVERLAY_RETRY",["includeTombstoned"]=true
+        },CancellationToken.None,Supervisor);
+        Assert.False(bypass.Success);
+        var adminVisible=await svc.QueryAuditLogAsync(new JsonObject
+        {
+            ["operation"]="TEST_OVERLAY_RETRY",["includeTombstoned"]=true
+        },CancellationToken.None,General);
+        Assert.True(adminVisible.Success,adminVisible.UserMessage);
+        var hiddenEntries=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(adminVisible.Data)["items"]);
+        Assert.Single(hiddenEntries);
+        Assert.True(hiddenEntries[0]!["isTombstoned"]!.GetValue<bool>());
+
+        var restore=new JsonObject
+        {
+            ["auditEventId"]=id,["expectedOverlayVersion"]=2,
+            ["reason"]="إعادة الظهور بعد مراجعة المرفقات",
+            ["correctedDescription"]="بيان مصحح مع إثبات تاريخ الإخفاء",
+            ["operationId"]="audit-restore-retry-20261025"
+        };
+        Assert.True((await svc.UpdateAuditPresentationAsync(restore,General,CancellationToken.None)).Success);
+        Assert.Equal("3",Scalar("SELECT COUNT(*) FROM AuditLogPresentationEdits;"));
+        Assert.Equal("الوصف الأصلي غير المعدل",Scalar(
+            "SELECT DefaultArabicDescription FROM AuditEvents WHERE OperationCode='TEST_OVERLAY_RETRY';"));
+        var details=await svc.GetAuditEntryDetailsAsync(new JsonObject
+        {
+            ["auditEventId"]=id
+        },CancellationToken.None);
+        Assert.True(details.Success,details.UserMessage);
+        var data=Assert.IsType<JsonObject>(details.Data);
+        Assert.True(data["chainValid"]!.GetValue<bool>());
+        Assert.Equal(3,Assert.IsType<JsonArray>(data["overlays"]).Count);
+        Assert.Equal("3",Scalar("SELECT COUNT(*) FROM MutationReceipts;"));
+    }
+
     [Fact]
     public async Task DisplayOverlay_IsAuthorizedAppendOnlyAndAudited()
     {
