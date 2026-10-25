@@ -213,7 +213,7 @@ public sealed class PersonnelSeparationService
                 "فصل الفرد "+person.Name+" بسبب: "+reason,reason,date,
                 Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
             await AccountLifecycleService.SuspendAccountsForPersonnelExitAsync(
-                c,tx,person.Id,"PERSON_SEPARATE",actor,_time,date,ct)
+                c,tx,person.Id,"PERSON_SEPARATE",actor.UserId,actor.Username,_time,date,ct)
                 .ConfigureAwait(false);
             var responseData=new JsonObject
             {
