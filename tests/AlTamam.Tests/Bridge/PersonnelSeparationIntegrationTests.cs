@@ -200,6 +200,33 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
     }
 
     [Fact]
+    public async Task FounderStaysIndependentAndActive_WhenUnrelatedRosterPersonIsSeparated()
+    {
+        var auth=new BridgeSharedServices(_db);
+        var founder=await auth.ProvisionFirstAdministratorAsync(
+            "founderIndependent","test-password-123",CancellationToken.None);
+        Assert.True(founder.Success,founder.UserMessage);
+        var svc=new PersonnelSeparationService(_db,_clock);
+        string token=Token(await svc.PreviewAsync(Data(),Actor,CancellationToken.None));
+        _clock.Advance(TimeSpan.FromSeconds(6));
+        var separated=await svc.CommitAsync(new JsonObject { ["previewToken"]=token },
+            Actor,CancellationToken.None);
+        Assert.True(separated.Success,separated.UserMessage);
+        Assert.Equal(1L,Count("PersonnelMovements"));
+        using var c=_db.CreateOpenConnection();
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="SELECT ActiveFlag, LinkedPersonId FROM Users WHERE Role=1;";
+        using var read=await cmd.ExecuteReaderAsync();
+        Assert.True(await read.ReadAsync());
+        Assert.Equal(1,read.GetInt32(0));
+        Assert.True(read.IsDBNull(1));
+        Assert.False(await read.ReadAsync());
+        cmd.CommandText="SELECT OrganizationalStatus FROM Persons WHERE PersonId='TEST-SEP-P1';";
+        read.Close();
+        Assert.Equal(3,Convert.ToInt32(await cmd.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task MissingReasonAndWrongPersonDoNotChangeDatabase()
     {
         var svc=new PersonnelSeparationService(_db,_clock);
