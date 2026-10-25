@@ -56,6 +56,44 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task ForgedWebViewUserActivityFlag_CannotRenewSessionWithoutTrustedNativeInput()
+    {
+        var dispatcher=BridgeHandlerCatalog.Create(_services);
+        // Any script or DevTools code can craft this JSON; the server must
+        // never treat its userActivity flag as proof of human interaction.
+        _time.Forward(TimeSpan.FromSeconds(299));
+        for(int attempt=0;attempt<4;attempt++)
+        {
+            var envelope=new JsonObject
+            {
+                ["requestId"]="SPOOF-IDLE-"+attempt,
+                ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+                ["action"]="GetCurrentSession",
+                ["sessionNonce"]=_actor.SessionNonce,
+                ["payload"]=new JsonObject{["userActivity"]=true}
+            };
+            var response=await dispatcher.DispatchAsync(
+                envelope.ToJsonString(),LocalWebUiOrigin.BaseUrl,true,
+                nonce=>_services.ResolveSessionAsync(nonce));
+            Assert.True(response.Response.Success,response.Response.UserMessage);
+        }
+        // Polling and userActivity=true CANNOT extend a 300-second deadline.
+        _time.Forward(TimeSpan.FromSeconds(1));
+        Assert.Null(await _services.ResolveSessionAsync(_actor.SessionNonce));
+        var expired=await dispatcher.DispatchAsync(new JsonObject
+        {
+            ["requestId"]="SPOOF-IDLE-EXPIRED",
+            ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+            ["action"]="GetCurrentSession",
+            ["sessionNonce"]=_actor.SessionNonce,
+            ["payload"]=new JsonObject{["userActivity"]=true}
+        }.ToJsonString(),LocalWebUiOrigin.BaseUrl,true,
+            nonce=>_services.ResolveSessionAsync(nonce));
+        Assert.False(expired.Response.Success);
+        Assert.Equal(BridgeErrorCodes.SessionExpired,expired.Response.ErrorCode);
+    }
+
+    [Fact]
     public async Task ConcurrentLoginBlockedUntilLogout_AndRestartRevokesOldSessions()
     {
         var (other, denied)=await _services.AuthenticateAsync(
