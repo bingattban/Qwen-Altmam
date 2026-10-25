@@ -163,6 +163,20 @@ public sealed class BridgeSharedServices
                 return (null, Error(BridgeErrorCodes.Unauthorized, "بيانات الدخول غير صحيحة."));
             }
 
+            // A second login cannot replace or preserve a currently signed-in
+            // user's session. Log out explicitly, or let 300s inactivity expire.
+            using(var existing=connection.CreateCommand())
+            {
+                existing.Transaction=tx;
+                existing.CommandText="""
+                    SELECT EXISTS(SELECT 1 FROM UserSessions
+                      WHERE RevokedFlag=0 AND ExpiresAtUtc>$now);
+                    """;
+                existing.Parameters.AddWithValue("$now",nowUtc.ToString("O"));
+                if(Convert.ToInt32(await existing.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
+                    return (null, Error(BridgeErrorCodes.Unauthorized,
+                        "توجد جلسة مستخدم نشطة. لتغيير الحساب سجّل الخروج أولاً."));
+            }
             string nonce = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
             DateTimeOffset expiry = nowUtc.AddMinutes(5);
             using var session = connection.CreateCommand();
@@ -216,6 +230,35 @@ public sealed class BridgeSharedServices
         cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
         cmd.Parameters.AddWithValue("$newExpiry",_time.GetUtcNow().AddMinutes(5).ToString("O"));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A restarted desktop process has no still-authenticated human UI session.
+    /// Revoke any orphaned nonces from its previous run BEFORE accepting logins.
+    /// </summary>
+    public async Task RevokeOrphanedSessionsOnStartupAsync(CancellationToken ct=default)
+    {
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="UPDATE UserSessions SET RevokedFlag=1 WHERE RevokedFlag=0;";
+        await q.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Only WPF-hosted, genuine native input handlers call this; background
+    /// schedulers, UI counters, and polling never invoke it.
+    /// </summary>
+    public async Task RefreshActiveSessionFromNativeInputAsync(CancellationToken ct=default)
+    {
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="""
+            UPDATE UserSessions SET ExpiresAtUtc=$deadline
+            WHERE RevokedFlag=0 AND ExpiresAtUtc>$now;
+            """;
+        q.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
+        q.Parameters.AddWithValue("$deadline",_time.GetUtcNow().AddSeconds(300).ToString("O"));
+        await q.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Revokes the presenting session (Logout / SessionEnded).</summary>
