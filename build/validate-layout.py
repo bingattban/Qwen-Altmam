@@ -8,7 +8,7 @@ webui content and forbids stray build junk (.pdb allowed only if owner opts in;
 default: reject .pdb, .xml docs, obj/, *.FileList.txt).
 Exit codes: 0 = pass, 1 = layout violation, 2 = directory missing.
 """
-import os, struct, sys
+import json, os, struct, sys
 
 def pe_machine(path: str) -> int | None:
     """Genuine Windows PE check: MZ header + e_lfanew -> 'PE\\0\\0' signature."""
@@ -93,18 +93,38 @@ def main() -> int:
             if not os.path.isfile(os.path.join(font_dir, license_file)):
                 errors.append(f"offline Arabic font license missing: {license_file}")
         screens = os.path.join(root, "webui", "screens")
-        if os.path.isdir(screens):
-            # Screens are nested route directories (screens/**/index.html),
-            # not 69 HTML files immediately inside screens/.
-            n = sum(
-                1 for directory, _, files in os.walk(screens)
-                for name in files
-                if name.lower() == "index.html"
-            )
-            if n < 69:
-                errors.append(f"webui/screens has {n} route index.html files, expected >=69")
+        routes_json = os.path.join(root, "webui", "screen-manifest.json")
+        if not os.path.isdir(screens) or not os.path.isfile(routes_json):
+            errors.append("portable ZIP missing webui/screens or canonical screen-manifest.json")
         else:
-            errors.append("portable ZIP missing webui/screens")
+            # 69 immutable screen/flow IDs do NOT imply 69 distinct HTML files:
+            # screen_070 AddPerson is embedded in screen_010 Edit Names.
+            # Derive the expected physical asset count from the exact manifest,
+            # so obsolete HTML cannot make a missing route look present.
+            with open(routes_json, encoding="utf-8") as file:
+                screen_manifest = json.load(file)
+            routes = screen_manifest["screens"]
+            ids = [route.get("screenId") for route in routes]
+            expected_ids = [f"screen_{i:03d}" for i in range(1, 71) if i != 20]
+            if ids != expected_ids or screen_manifest.get("screenCount") != 69:
+                errors.append("publish manifest must have exactly the approved 69 route IDs")
+            unique_assets = {route["localAssetPath"] for route in routes}
+            missing_routes = [
+                path for path in unique_assets
+                if not os.path.isfile(os.path.join(root, "webui", path))
+            ]
+            if missing_routes:
+                errors.append(f"packaged route assets missing: {sorted(missing_routes)[:5]}")
+            actual = {
+                os.path.relpath(os.path.join(directory, name), os.path.join(root, "webui")).replace("\\\\", "/")
+                for directory, _, files in os.walk(screens)
+                for name in files if name.lower() == "index.html"
+            }
+            extra_routes = actual - unique_assets
+            if extra_routes:
+                errors.append(f"unexpected obsolete/unregistered route assets: {sorted(extra_routes)[:5]}")
+            if len(actual) != len(unique_assets):
+                errors.append(f"route HTML count drift: {len(actual)} files vs {len(unique_assets)} manifest assets")
         for junk in ("*.pdb", "*.xml", "obj", "*.binlog"):
             hits = [f for f in os.listdir(root)
                     if (junk.startswith("*.") and f.endswith(junk[1:])) or f == junk]
