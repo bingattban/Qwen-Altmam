@@ -101,14 +101,16 @@ public sealed class DesktopBridgeGateway
         try
         {
             string raw = e.TryGetWebMessageAsString();
-            // The postMessage pipe only delivers from documents rendered inside this WebView, whose
-            // origin is pinned to the bundled virtual host by SetVirtualHostNameToFolderMapping plus
-            // the NavigationStarting/FrameNavigation guards. Pass the page URI for the strict check.
-            string originUri = _core.Source ?? LocalWebUiOrigin.BaseUrl;
+            // Source MUST come from the actual web-message sender (e.Source),
+            // never the outer WebView's trusted Source as a substitute for a
+            // message sent by an injected/foreign child frame.
+            string originUri = e.Source;
+            bool isMainFrame = string.Equals(originUri, _core.Source,
+                StringComparison.OrdinalIgnoreCase);
             var result = await _dispatcher.DispatchAsync(
                 raw,
                 originUri,
-                isMainFrame: true,
+                isMainFrame,
                 nonce => _services.ResolveSessionAsync(nonce)).ConfigureAwait(true);
 
             // A successful authenticated session check is not enough to
