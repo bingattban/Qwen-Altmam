@@ -50,22 +50,27 @@ public sealed class DesktopBridgeGateway
         return elapsed <= 2_000;
     }
 
-    private static bool IsRequestedHumanActivityCheck(string raw)
+    private static string? RequestedHumanActivitySessionNonce(string raw)
     {
         try
         {
             using var document = JsonDocument.Parse(raw);
             var root = document.RootElement;
-            return root.ValueKind == JsonValueKind.Object &&
-                root.TryGetProperty("action", out var action) &&
-                action.ValueKind == JsonValueKind.String &&
-                action.GetString() == "GetCurrentSession" &&
-                root.TryGetProperty("payload", out var payload) &&
-                payload.ValueKind == JsonValueKind.Object &&
-                payload.TryGetProperty("userActivity", out var activity) &&
-                activity.ValueKind == JsonValueKind.True;
+            if(root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("action", out var action) ||
+                action.ValueKind != JsonValueKind.String ||
+                action.GetString() != "GetCurrentSession" ||
+                !root.TryGetProperty("payload", out var payload) ||
+                payload.ValueKind != JsonValueKind.Object ||
+                !payload.TryGetProperty("userActivity", out var activity) ||
+                activity.ValueKind != JsonValueKind.True ||
+                !root.TryGetProperty("sessionNonce", out var nonce) ||
+                nonce.ValueKind != JsonValueKind.String)
+                return null;
+            var sessionNonce=nonce.GetString();
+            return BridgeProtocol.IsValidSessionNonceFormat(sessionNonce) ? sessionNonce : null;
         }
-        catch (JsonException) { return false; }
+        catch (JsonException) { return null; }
     }
 
     public Func<string?,Task<string?>>? FolderPicker
@@ -109,9 +114,12 @@ public sealed class DesktopBridgeGateway
             // A successful authenticated session check is not enough to
             // refresh inactivity: verify actual recent Windows user input.
             // Neither timers nor forged payload.userActivity alone can extend it.
-            if (result.Response.Success && IsRequestedHumanActivityCheck(raw) &&
-                IsRecentPhysicalInputIntoForegroundApp())
-                await _services.RefreshActiveSessionFromNativeInputAsync().ConfigureAwait(true);
+            // Explicitly renew only the nonce authenticated by THIS request.
+            // A delayed old-user message cannot renew a newly logged-in account.
+            string? activityNonce=result.Response.Success
+                ? RequestedHumanActivitySessionNonce(raw) : null;
+            if (activityNonce is not null && IsRecentPhysicalInputIntoForegroundApp())
+                await _services.RefreshSessionIdleDeadlineAsync(activityNonce).ConfigureAwait(true);
 
             string json = JsonSerializer.Serialize(result.Response, ResponseJsonOptions);
             _core.PostWebMessageAsString(json);
