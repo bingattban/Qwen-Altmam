@@ -637,10 +637,6 @@ public sealed class PersonRosterService
             if (sum != baseRevision)
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                     "تغيّرت إصدارات الأفراد بعد المعاينة؛ لم تُجرَ أي تغييرات.");
-            if(await AccountLifecycleService.WouldStrandFoundingAdministratorAsync(
-                connection,tx,ids,ct).ConfigureAwait(false))
-                return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
-                    "لا يمكن إخراج الفرد المرتبط بحساب الإدارة العامة المؤسس من القوة قبل معالجة ربط الحساب.");
             long? used = await BridgePreviewTokens.ConsumeAsync(_db, _time, connection, tx,
                 token, "ArchivePersons", userId, baseRevision, ct).ConfigureAwait(false);
             if (used != baseRevision)
