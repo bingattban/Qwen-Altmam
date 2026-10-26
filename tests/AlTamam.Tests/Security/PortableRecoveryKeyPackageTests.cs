@@ -136,6 +136,16 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         // The test-only materialized databases use Microsoft.Data.Sqlite pooling.
         // Release idle handles after semantic DB assertions and before cleanup.
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if(Directory.Exists(_root))Directory.Delete(_root,true);
+        try{if(Directory.Exists(_root))Directory.Delete(_root,true);}
+        catch(IOException)
+        {
+            // Windows native SQLCipher may transiently retain a handle after
+            // pooled connections close. Synthetic fixture cleanup is best-effort;
+            // the actual recovery, failure and nonmutation assertions run above.
+        }
+        catch(UnauthorizedAccessException)
+        {
+            // Identical test-only cleanup limitation on locked temp directories.
+        }
     }
 }
