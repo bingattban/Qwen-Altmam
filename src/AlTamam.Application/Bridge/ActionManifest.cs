@@ -6,7 +6,7 @@ public sealed record BridgeActionMetadata(string Action, string OwningService, s
 
 public static class ActionManifest
 {
-    /// <summary>All 100 canonical actions with owning service and allowed roles.</summary>
+    /// <summary>All 102 canonical actions with owning service and allowed roles.</summary>
     public static readonly BridgeActionMetadata[] All = new BridgeActionMetadata[]
     {
         new("GetProvisioningState", "AuthenticationService", new[] { "Unauthenticated", "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
@@ -20,6 +20,8 @@ public static class ActionManifest
         new("QueryUnprepared", "DashboardService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("GetAutoAttendanceRun", "DashboardService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("GetActiveAttendanceStatuses", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
+        new("PreviewUnpreparedCarryForward", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
+        new("CommitUnpreparedCarryForward", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("PreviewAttendanceChange", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("SubmitAttendance", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("ReviseTodayAttendance", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
