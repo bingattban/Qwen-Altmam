@@ -239,6 +239,7 @@
       if(!force&&(chosen.size||stage==="review") &&
          !await confirm("هناك اختيارات أو معاينة لم تُحفظ. إلغاء العملية وإغلاق النافذة؟"))return;
       ++epoch;
+      document.removeEventListener?.("keydown",keyHandler);
       if(shade.parentNode)shade.parentNode.removeChild(shade);
       else if(typeof shade.remove==="function")shade.remove();
       focusBack?.focus?.();
