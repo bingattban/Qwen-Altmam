@@ -43,6 +43,8 @@
     const name=node("span","",label);
     const input=node("input","form-control");
     input.type=type||"text";input.value=value||"";
+    if(label.startsWith("بحث")||label.includes("بحث بالاسم"))
+      input.className+=" boxed-search";
     wrap.append(name,input);return {wrap,input};
   }
   function warning(text) {
