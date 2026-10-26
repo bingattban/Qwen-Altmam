@@ -368,6 +368,108 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
         Assert.True(sw.ElapsedMilliseconds < 10_000, "Diagnostic budget exceeded; see Phase 14 report §perf.");
     }
 
+    [Fact]
+    public async Task BatchedAutomaticAttendanceSelection_HasIdenticalOutputAndMeasuredLowerLatency()
+    {
+        // Use the real production SQLCipher schema with 2,000 seeded people. This
+        // measures the exact selection stage, not the necessary per-person INSERTs.
+        const string date = "2025-06-02";
+        const string yesterday = "2025-06-01";
+        using var connection = _db.CreateOpenConnection();
+        var people = new List<(string PersonId, string Assignment, string Site)>();
+        using (var roster = connection.CreateCommand())
+        {
+            roster.CommandText = """
+                SELECT p.PersonId,a.AssignmentId,a.SiteId FROM Persons p
+                JOIN PersonAssignments a ON a.PersonId=p.PersonId
+                    AND a.ValidFromLocalDate <= $date
+                    AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
+                JOIN Sites s ON s.SiteId=a.SiteId
+                WHERE p.ActiveFlag=1 AND p.OrganizationalStatus=1
+                    AND p.FirstRecordedLocalDate <= $date
+                ORDER BY p.PersonId;
+                """;
+            roster.Parameters.AddWithValue("$date", date);
+            using var reader = await roster.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                people.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+        }
+
+        var oldResult = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        foreach (var person in people)
+        {
+            using var movement = connection.CreateCommand();
+            movement.CommandText = """
+                SELECT EXISTS(SELECT 1 FROM PersonnelMovements
+                    WHERE PersonId=$person AND EffectiveLocalDate=$date AND MovementType IN (1,2,3));
+                """;
+            movement.Parameters.AddWithValue("$person", person.PersonId);
+            movement.Parameters.AddWithValue("$date", date);
+            long transfer = Convert.ToInt64(await movement.ExecuteScalarAsync());
+
+            using var today = connection.CreateCommand();
+            today.CommandText = """
+                SELECT EXISTS(SELECT 1 FROM AttendanceRecords
+                    WHERE PersonId=$person AND AttendanceLocalDate=$date);
+                """;
+            today.Parameters.AddWithValue("$person", person.PersonId);
+            today.Parameters.AddWithValue("$date", date);
+            long existing = Convert.ToInt64(await today.ExecuteScalarAsync());
+
+            using var previous = connection.CreateCommand();
+            previous.CommandText = """
+                SELECT StatusId FROM AttendanceRecords WHERE PersonId=$person AND AttendanceLocalDate=$yday;
+                """;
+            previous.Parameters.AddWithValue("$person", person.PersonId);
+            previous.Parameters.AddWithValue("$yday", yesterday);
+            string status = (await previous.ExecuteScalarAsync())?.ToString() ?? "";
+            oldResult.Add(person.PersonId, string.Join("|", person.Assignment, person.Site, transfer, existing, status));
+        }
+        sw.Stop();
+        double baselineMs = sw.Elapsed.TotalMilliseconds;
+
+        var batchedResult = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        sw.Restart();
+        using (var batched = connection.CreateCommand())
+        {
+            batched.CommandText = """
+                SELECT p.PersonId,a.AssignmentId,a.SiteId,
+                       EXISTS(SELECT 1 FROM PersonnelMovements m
+                           WHERE m.PersonId=p.PersonId AND m.EffectiveLocalDate=$date
+                           AND m.MovementType IN (1,2,3)),
+                       EXISTS(SELECT 1 FROM AttendanceRecords today
+                           WHERE today.PersonId=p.PersonId AND today.AttendanceLocalDate=$date),
+                       yesterday.StatusId
+                FROM Persons p
+                JOIN PersonAssignments a ON a.PersonId=p.PersonId
+                    AND a.ValidFromLocalDate <= $date
+                    AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
+                JOIN Sites s ON s.SiteId=a.SiteId
+                LEFT JOIN AttendanceRecords yesterday
+                    ON yesterday.PersonId=p.PersonId AND yesterday.AttendanceLocalDate=$yday
+                WHERE p.ActiveFlag=1 AND p.OrganizationalStatus=1
+                    AND p.FirstRecordedLocalDate <= $date
+                ORDER BY p.PersonId;
+                """;
+            batched.Parameters.AddWithValue("$date", date);
+            batched.Parameters.AddWithValue("$yday", yesterday);
+            using var reader = await batched.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                batchedResult.Add(reader.GetString(0), string.Join("|", reader.GetString(1),
+                    reader.GetString(2), reader.GetInt64(3), reader.GetInt64(4),
+                    reader.IsDBNull(5) ? "" : reader.GetString(5)));
+        }
+        sw.Stop();
+        double optimizedMs = sw.Elapsed.TotalMilliseconds;
+        Assert.Equal(PersonCount, people.Count);
+        Assert.Equal(oldResult, batchedResult);
+        Console.WriteLine(
+            $"ALTAMAM_ATTENDANCE_SELECTION personCount={PersonCount} baselineCommands={1+PersonCount*3} optimizedCommands=1 baselineMs={baselineMs:F3} optimizedMs={optimizedMs:F3}");
+        Assert.True(optimizedMs < baselineMs,
+            $"Measured batched selection must be faster on synthetic corpus: old {baselineMs:F3} ms / new {optimizedMs:F3} ms.");
+    }
+
     private static string ReadAll(SqliteCommand cmd)
     {
         var sb = new System.Text.StringBuilder();
