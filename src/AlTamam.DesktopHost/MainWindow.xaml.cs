@@ -155,7 +155,8 @@ public partial class MainWindow : Window
             var gateway = new DesktopBridgeGateway(dispatcher, services);
             var attendance = new AlTamam.Application.Scheduling.AutoAttendanceService(database);
             return new PreparedServices(database, gateway,
-                new Scheduling.EightPmSchedulerService(attendance));
+                new Scheduling.EightPmSchedulerService(attendance,
+                    tokenRetention: new AlTamam.Application.Scheduling.PreviewTokenRetentionService(database)));
         }
         catch
         {
