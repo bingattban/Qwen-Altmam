@@ -34,7 +34,16 @@ public delegate Task<BridgeResponse> BridgeActionHandler(BridgeRequest request, 
 public sealed class WebView2BridgeDispatcher
 {
     private readonly IReadOnlyDictionary<string, BridgeActionRegistration> _actions;
-    private readonly ISet<string> _seenMutatingRequestIds = new HashSet<string>(StringComparer.Ordinal);
+    // Never evict live replay IDs: eviction would allow executing an old mutation twice.
+    // Keep separately bounded nonce-scoped sets and fail closed at their limits.
+    private const int MaxRequestsPerSession = 32768;
+    private const int MaxTrackedSessions = 32;
+    private sealed class ReplaySession(CancellationToken revocation)
+    {
+        public readonly HashSet<string> Seen = new(StringComparer.Ordinal);
+        public readonly CancellationToken Revocation = revocation;
+    }
+    private readonly Dictionary<string, ReplaySession> _replaySessions = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public WebView2BridgeDispatcher(IEnumerable<BridgeActionRegistration> registrations)
@@ -112,15 +121,36 @@ public sealed class WebView2BridgeDispatcher
                     $"صلاحية '{roleLabel}' لا تسمح بتنفيذ '{request.Action}'.", BridgeOutcomeKind.Forbidden);
         }
 
-        // 6) Anti-replay: a mutating requestId may be accepted exactly once per session lifetime.
+        // 6) Anti-replay: a requestId is accepted only once per authenticated
+        // session, or once per unauthenticated login flow. Prune ONLY revoked
+        // sessions; NEVER evict a still-valid request ID or use a short TTL.
         if (registration.IsMutating)
         {
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                if (!_seenMutatingRequestIds.Add(request.RequestId))
+                foreach (string dead in _replaySessions
+                    .Where(pair => pair.Value.Revocation.IsCancellationRequested)
+                    .Select(pair => pair.Key).ToArray())
+                    _replaySessions.Remove(dead);
+
+                string replaySessionKey = principal is null ? "__unauthenticated__" : request.SessionNonce;
+                if (!_replaySessions.TryGetValue(replaySessionKey, out var tracked))
+                {
+                    if (_replaySessions.Count >= MaxTrackedSessions)
+                        return Fail(request.RequestId, BridgeErrorCodes.ConflictStale,
+                            "بلغت حماية الجلسات حدها الآمن. سجّل الخروج وأعد الدخول.", BridgeOutcomeKind.Conflict);
+                    tracked = new ReplaySession(principal?.SessionRevocation ?? CancellationToken.None);
+                    _replaySessions.Add(replaySessionKey, tracked);
+                }
+                if (tracked.Seen.Contains(request.RequestId))
                     return Fail(request.RequestId, BridgeErrorCodes.ConflictStale,
                         "تم تنفيذ هذا الطلب مسبقاً؛ رفض الطلب المكرر.", BridgeOutcomeKind.Conflict);
+                if (tracked.Seen.Count >= MaxRequestsPerSession)
+                    return Fail(request.RequestId, BridgeErrorCodes.ConflictStale,
+                        "بلغت الجلسة الحد الآمن للعمليات؛ سجّل الخروج ثم ادخل بجلسة جديدة.",
+                        BridgeOutcomeKind.Conflict);
+                tracked.Seen.Add(request.RequestId);
             }
             finally { _gate.Release(); }
         }
@@ -156,6 +186,18 @@ public sealed class WebView2BridgeDispatcher
                  await authenticate(request.SessionNonce).ConfigureAwait(false) is null))
                 return Fail(request.RequestId, BridgeErrorCodes.SessionExpired,
                     "انتهت صلاحية الجلسة، يجب تسجيل الدخول من جديد.", BridgeOutcomeKind.Unauthorized);
+            // Revoked/logout sessions no longer need replay history; their nonces
+            // cannot authenticate again. Successful login ends the anonymous flow.
+            if (response.Success && (request.Action == "Logout" || request.Action == "AuthenticateLocalUser"))
+            {
+                await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+                try
+                {
+                    _replaySessions.Remove(request.Action == "Logout"
+                        ? request.SessionNonce : "__unauthenticated__");
+                }
+                finally { _gate.Release(); }
+            }
             var shaped = response with { RequestId = request.RequestId };
             return new BridgeDispatchResult(shaped, shaped.Success ? BridgeOutcomeKind.Success : BridgeOutcomeKind.HandlerError);
         }
@@ -165,7 +207,12 @@ public sealed class WebView2BridgeDispatcher
             if (registration.IsMutating)
             {
                 await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-                try { _seenMutatingRequestIds.Remove(request.RequestId); }
+                try
+                {
+                    string key = principal is null ? "__unauthenticated__" : request.SessionNonce;
+                    if (_replaySessions.TryGetValue(key, out var tracked))
+                        tracked.Seen.Remove(request.RequestId);
+                }
                 finally { _gate.Release(); }
             }
             if (principal?.SessionRevocation.IsCancellationRequested == true)
