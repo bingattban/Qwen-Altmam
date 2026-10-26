@@ -40,7 +40,7 @@
     root.replaceChildren(el("h2","فصل فرد من القوة","section-title"),
       el("p","تُحفظ هوية الفرد وتاريخه وتحضيراته السابقة. الفصل لا يحذف أي سجل.","section-description"));
     const today=date();
-    const input=el("input");input.type="search";input.placeholder="بحث بالاسم أو الرقم (ع)";
+    const input=el("input");input.type="search";input.placeholder="بحث بالاسم أو الرقم (ع)";input.className="form-input boxed-search";
     input.setAttribute("aria-label","البحث عن فرد نشط");
     const find=button("بحث",search,"btn btn-outline");
     const bar=el("div",undefined,"functional-toolbar");
@@ -153,7 +153,7 @@
   async function archive(root) {
     root.replaceChildren(el("h2","أرشيف الأفراد المفصولين","section-title"),
       el("p","الأرشيف للقراءة فقط، ولا يحذف سجلات الأفراد أو تحضيراتهم السابقة.","section-description"));
-    const query=el("input");query.type="search";query.placeholder="بحث بالاسم أو الرقم (ع)";
+    const query=el("input");query.type="search";query.placeholder="بحث بالاسم أو الرقم (ع)";query.className="form-input boxed-search";
     const sites=el("select");sites.appendChild(option("","جميع المواقع"));
     const bar=el("div",undefined,"functional-toolbar");
     const out=el("div");
