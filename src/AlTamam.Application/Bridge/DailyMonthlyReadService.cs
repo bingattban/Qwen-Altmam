@@ -393,6 +393,14 @@ public sealed class DailyMonthlyReadService
                         ["serviceNumberA"]=movementReader.GetString(8),
                         ["siteName"]=siteId.Length>0 && siteId==targetId ? after : before
                     };
+                else if(movementType==4)
+                {
+                    // Return and ordinary attendance may both occur on admission
+                    // date; preserve both facts in the SAME historical cell.
+                    var existing=(JsonObject)days[movementDate]!;
+                    existing["movementNote"]=label;
+                    existing["movementKind"]="return";
+                }
             }
         }
         var rows = new JsonArray();
