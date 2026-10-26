@@ -68,6 +68,11 @@ async function main(){
  assert.ok(one("معاينة التحضير"),"actual attendance page");
  assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&x.payload.statusId==="__ELIGIBLE__"),
    "attendance selection must exclude the movement-day roster on the C# query");
+ const search=root.all().find(x=>x.tag==="input"&&x.attrs["aria-label"]==="بحث في كشف التحضير");
+ assert.ok(search,"daily attendance has a boxed search");
+ search.value="شخص";
+ await one("بحث").handlers.click();await flush();
+ assert.equal(calls.filter(x=>x.name==="QueryDailyRoster").at(-1).payload.term,"شخص");
  assert.equal(root.all().filter(x=>x.tag==="input"&&x.type==="checkbox").length,2);
  assert.equal(writes.length,0,"no write on load");
  selects()[1].value="STS-PRESENT";await choose();
@@ -88,8 +93,8 @@ async function main(){
  choices[1].value="STS-ABSENT";
  choices[2].value="revise";choices[2].handlers.change();
  assert.ok(one("معاينة تغيير الحالة"));
- assert.equal(root.all().filter(x=>x.tag==="input"&&x.type!=="checkbox").length,0,
-   "routine status revision must not require a reason");
+ assert.equal(root.all().filter(x=>x.tag==="input"&&x.type!=="checkbox").length,1,
+   "routine revision has a boxed search field but no extra reason requirement");
  await choose();
  await one("معاينة تغيير الحالة").handlers.click();await flush();
  assert.equal(reviews.at(-1).opts.confirmLabel,"تأكيد تغيير الحالة");
