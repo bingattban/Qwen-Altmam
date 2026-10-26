@@ -317,7 +317,7 @@
         }else content.appendChild(item("التحضير","لا يوجد تحضير معتمد لهذا اليوم"));
         if(data.movement){
           const m=data.movement;
-          const kind=m.type===3?"فصل":m.type===2?"نقل خارجي":"نقل داخلي";
+          const kind=m.type===4?"عودة للخدمة":m.type===3?"فصل":m.type===2?"نقل خارجي":"نقل داخلي";
           append(content,item("الواقعة الإدارية",kind),
             item("من الموقع",m.sourceSiteName),
             item("إلى",m.destinationSiteName||m.destinationExternalName),
@@ -475,9 +475,9 @@
           const info=(person.days||{})[date];
           const cell=el("td",day===currentDay?
             "day-cell current-day-column":"day-cell");
-          cell.title=info?info.name:"لا يوجد تحضير مسجل";
+          cell.title=info?(info.name+(info.movementNote?" — "+info.movementNote:"")):"لا يوجد تحضير مسجل";
           if(info){
-            const open=button(info.symbol||"تفاصيل",()=>showCellDetails(person.personId,date),
+            const open=button((info.symbol||"تفاصيل")+(info.movementKind==="return"?" ↩":""),()=>showCellDetails(person.personId,date),
               "monthly-day-detail");
             open.setAttribute("aria-label","عرض تفاصيل "+person.name+" في "+date);
             cell.appendChild(open);
