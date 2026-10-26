@@ -849,6 +849,11 @@ body{min-width:0}
  .functional-paged-area>.functional-pager{min-height:45px;padding:6px 8px}
 }
 
+/* Monthly navigation stays in the upper toolbar; the paging footer remains
+   outside the horizontally scrollable historical day grid. */
+.functional-toolbar>.monthly-period-nav{white-space:nowrap;min-width:114px}
+@media(max-width:720px){.functional-toolbar>.monthly-period-nav{min-width:0;flex:1 1 auto}}
+
 /* Monthly roster: legible Arabic, unclipped identity/site fields, moving date highlight. */
 .monthly-scroll .functional-table{
   font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;
