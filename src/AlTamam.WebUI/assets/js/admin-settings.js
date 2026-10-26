@@ -922,6 +922,30 @@
         }
         review.appendChild(t.wrap);
         const contested=candidates.some(x=>x.numberMatch);
+        const dismissedNumberCandidates=candidates.filter(x=>x.numberMatch &&
+          x.organizationalStatus===3 && x.exitType==="فصل");
+        const numberCandidates=candidates.filter(x=>x.numberMatch);
+        if(contested && numberCandidates.length===1 && dismissedNumberCandidates.length===1){
+          const former=dismissedNumberCandidates[0];
+          review.appendChild(btn("إضافة فرد جديد مستقل بهذا الرقم (ع)",()=>submitted(async()=>{
+            const detail="الرقم (ع) «"+canonicalNumber+"» يخص المفصول «"+former.name+
+              "» (تاريخ الفصل "+former.exitDate+").";
+            const confirmed=await dialogs.confirm(detail+" هل تؤكد أن «"+name+
+              "» شخص آخر مختلف تماماً؟ سيُنشأ له سجل جديد من الصفر ومعرّف داخلي مستقل؛ "+
+              "لن يُنقل إليه أي تحضير أو حركة أو تاريخ من المفصول، "+
+              "وستبقى الأدلة القديمة محفوظة في الأرشيف دون نسبتها إليه.");
+            if(!confirmed)return;
+            const response=await api().invoke("CreatePerson",{
+              visibleName:name,serviceNumberA:canonicalNumber,siteId,
+              identityResolutionToken:scanned.previewToken,
+              identityDecision:"replaceDismissed",dismissedPersonId:former.personId,
+              operationId:makeOperationId()
+            });
+            if(!response.data?.personId || response.data.personId===former.personId)
+              throw Error("لم يتم تأكيد إنشاء هوية مستقلة جديدة.");
+            await resetForm("أُنشئ للفرد الجديد سجل مستقل من الصفر دون سجل المفصول السابق.");
+          }),"btn btn-primary"));
+        }
         if(!contested){
           review.appendChild(btn("فرد آخر مختلف عن جميع المرشحين",()=>submitted(async()=>{
             const detail=candidates.map(x=>x.name+" (ع: "+x.serviceNumberA+
@@ -936,8 +960,8 @@
             if(!response.data?.personId)throw Error("لم يتم تأكيد الهوية المستقلة الجديدة.");
             await resetForm("أُنشئت هوية مستقلة بعد توثيق أنها مختلفة عن مرشحي الأرشيف.");
           }),"btn btn-outline"));
-        }else{
-          review.appendChild(warning("الرقم (ع) يطابق هوية مؤرشفة؛ لا يمكن إنشاء شخص آخر بهذا الرقم. يجب إثبات العودة أو حل التعارض أولاً."));
+        }else if(dismissedNumberCandidates.length!==1 || numberCandidates.length!==1){
+          review.appendChild(warning("الرقم (ع) يتطابق مع سجل غير مؤهل للاستبدال أو عدة سجلات؛ يلزم تسوية التعارض. لا يمكن تجاوز سجل المنقول خارجياً."));
         }
         addMessage.replaceChildren(review);
       }catch(e){errors(addMessage,e);}

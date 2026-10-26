@@ -58,10 +58,13 @@
        });
        if(ticket!==serial||!root.isConnected)return;
        const items=reply.data?.items||[];
-       const t=table(["الرقم (ع)","الاسم","الموقع","التقرير"]);
+       const t=table(["الرقم (ع)","الاسم","حالة السجل","الموقع","التقرير"]);
        for(const person of items){
          const tr=el("tr");
-         [person.serviceNumberA,person.displayName,person.siteName]
+         const lifecycle=person.active?"نشط":person.organizationalStatus===3?
+           "مفصول — سجل تاريخي":person.organizationalStatus===2?
+           "منقول خارجيًا — سجل تاريخي":"مؤرشف — سجل تاريخي";
+         [person.serviceNumberA,person.displayName,lifecycle,person.siteName]
            .forEach(v=>tr.appendChild(el("td",v)));
          const cell=el("td");
          cell.appendChild(btn("عرض التقرير",()=>{
@@ -72,7 +75,7 @@
        }
        if(!items.length){
          const tr=el("tr"),cell=el("td","لا يوجد فرد مطابق للبحث");
-         cell.colSpan=4;tr.appendChild(cell);t.body.appendChild(tr);
+         cell.colSpan=5;tr.appendChild(cell);t.body.appendChild(tr);
        }
        results.replaceChildren(t.wrap);
      }catch(e){if(ticket===serial&&root.isConnected)alert(results,e);}

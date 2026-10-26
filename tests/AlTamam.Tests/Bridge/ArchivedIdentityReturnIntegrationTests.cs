@@ -228,6 +228,149 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         Assert.Equal(2L,Scalar("SELECT COUNT(*) FROM Persons"));
     }
 
+
+    [Fact]
+    public async Task DismissedNumberReuse_CreatesCleanIndependentPerson_WithoutMixingHistoricalRecords()
+    {
+        // Seed a real archived attendance and an audit event for the dismissed human.
+        // These MUST survive and MUST NOT appear in the new person's report.
+        string oldDate=DateOnly.Parse(Today).AddDays(-5).ToString("yyyy-MM-dd");
+        using(var connection=_db.CreateOpenConnection())
+        using(var seedCommand=connection.CreateCommand())
+        {
+            seedCommand.CommandText="""
+                INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
+                    StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                    AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                    Source,CreatedByUserId,CommittedAtUtc,RevisionNumber,IdempotencyKey)
+                VALUES('TST-RETURN-SEP',$date,'STS-ABSENT','غياب','غ','#EF4444',
+                    'ASG-TST-RETURN-SEP','SITE-UNSPECIFIED','غير محدد',
+                    'manual','TST-SEED','2026-01-01T00:00:00Z',1,'TST-OLD-PERSON-ABSENT');
+                """;
+            seedCommand.Parameters.AddWithValue("$date",oldDate);
+            await seedCommand.ExecuteNonQueryAsync();
+        }
+        await _db.ExecuteInWriteTransactionAsync(async(connection,tx)=>
+        {
+            await BridgeAuditWriter.WriteAsync(connection,tx,TimeProvider.System,
+                operationCode:"OLD_PERSON_HISTORY",operationArabicName:"سجل قديم للمفصول",
+                actorUserId:Actor.UserId,actorUsername:Actor.Username,actorDisplayName:null,
+                targetEntityType:"Person",targetEntityId:"TST-RETURN-SEP",
+                targetDisplay:"شخص سابق مفصول",
+                oldValueJson:null,newValueJson:"{}",description:"تاريخ قديم خاص بالفرد المفصول",
+                reason:null,effectiveLocalDate:oldDate,correlationId:"TEST-OLD-EVIDENCE",
+                ct:default);
+            return 0;
+        },default);
+        var previewService=new ArchivedReturnService(_db);
+        var offered=Require(await previewService.PreviewAsync(
+            Input("فرد جديد مستقل","5151"),Actor,default));
+        Assert.True(offered["numberContested"]!.GetValue<bool>());
+        var choice=Assert.IsType<JsonObject>(Assert.Single(Assert.IsType<JsonArray>(offered["candidates"])));
+        Assert.Equal("TST-RETURN-SEP",choice["personId"]!.GetValue<string>());
+        Assert.Equal("فصل",choice["exitType"]!.GetValue<string>());
+
+        var command=new JsonObject
+        {
+            ["visibleName"]="فرد جديد مستقل",["serviceNumberA"]="٥١٥١",
+            ["siteId"]="SITE-RETURN",["identityDecision"]="replaceDismissed",
+            ["dismissedPersonId"]="TST-RETURN-SEP",
+            ["identityResolutionToken"]=offered["previewToken"]!.GetValue<string>(),
+            ["operationId"]="TST-DISMISSED-NUMBER-NEW-HUMAN-0001"
+        };
+        // Arabic-Indic digits normalize to the same canonical number and
+        // must never cause archived attendance to leak into the new identity.
+        var created=Require(await new PersonRosterService(_db).CreatePersonAsync(
+            Actor.UserId,Actor.Username,command,default));
+        string newId=created["personId"]!.GetValue<string>();
+        Assert.NotEqual("TST-RETURN-SEP",newId);
+        Assert.StartsWith("PRN-",newId);
+        Assert.Equal(2L,Scalar("SELECT COUNT(*) FROM Persons WHERE NormalizedServiceNumberA='5151'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM Persons WHERE NormalizedServiceNumberA='5151' AND ActiveFlag=1"));
+        Assert.Equal(0L,Scalar("SELECT ActiveFlag FROM Persons WHERE PersonId='TST-RETURN-SEP'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId='TST-RETURN-SEP'"));
+        Assert.Equal(0L,Scalar("SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId='"+newId+"'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId='TST-RETURN-SEP'"));
+        Assert.Equal(0L,Scalar("SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId='"+newId+"'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM PersonIdentityHistory WHERE PersonId='"+newId+"'"));
+        Assert.Equal(Today,Value("SELECT FirstRecordedLocalDate FROM Persons WHERE PersonId='"+newId+"'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='DISMISSED_NUMBER_REUSED'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='DISMISSED_NUMBER_REUSED' AND TargetEntityType='PersonnelNumberAssignment'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE TargetEntityType='Person' AND TargetEntityId='"+newId+"'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE TargetEntityType='Person' AND TargetEntityId='TST-RETURN-SEP'"));
+
+        var report=new PersonnelReportService(_db);
+        var newReport=Require(await report.ReportAsync(new JsonObject{["personId"]=newId},default));
+        var oldReport=Require(await report.ReportAsync(new JsonObject{["personId"]="TST-RETURN-SEP"},default));
+        Assert.Equal(0, newReport["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(0, newReport["movementTotal"]!.GetValue<long>());
+        Assert.Equal(1, newReport["identityTotal"]!.GetValue<long>());
+        Assert.Equal(1, newReport["auditTotal"]!.GetValue<long>());
+        Assert.Equal(1, oldReport["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(1, oldReport["movementTotal"]!.GetValue<long>());
+        Assert.Equal(1, oldReport["auditTotal"]!.GetValue<long>());
+        Assert.DoesNotContain("شخص سابق مفصول",newReport.ToJsonString());
+        Assert.DoesNotContain("تاريخ قديم خاص بالفرد المفصول",newReport.ToJsonString());
+
+        var month=DateOnly.Parse(Today);
+        var grid=Require(await new DailyMonthlyReadService(_db).MonthlyGridAsync(
+            new JsonObject{["year"]=month.Year,["month"]=month.Month,
+                ["siteId"]="SITE-RETURN",["page"]=1,["pageSize"]=50},default));
+        var newRow=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(grid["items"])));
+        Assert.Equal(newId,newRow["personId"]!.GetValue<string>());
+        Assert.Empty(Assert.IsType<JsonObject>(newRow["days"]));
+        var roster=Require(await new DailyMonthlyReadService(_db).DailyRosterAsync(
+            new JsonObject{["businessDate"]=Today,["siteId"]="SITE-RETURN",
+                ["page"]=1,["pageSize"]=50},default));
+        Assert.Equal(newId,Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(roster["items"])))["personId"]!.GetValue<string>());
+
+        // Confirming twice must not produce a second new identity.
+        var repeated=Require(await new PersonRosterService(_db).CreatePersonAsync(
+            Actor.UserId,Actor.Username,(JsonObject)command.DeepClone(),default));
+        Assert.Equal(newId,repeated["personId"]!.GetValue<string>());
+        Assert.Equal(2L,Scalar("SELECT COUNT(*) FROM Persons WHERE NormalizedServiceNumberA='5151'"));
+    }
+
+    [Fact]
+    public async Task DismissedNumberReuse_RejectsWrongOldPerson_MissingToken_ExternalAndStalePreview()
+    {
+        var service=new ArchivedReturnService(_db);
+        var preview=Require(await service.PreviewAsync(Input("فرد مستقل آخر","5151"),Actor,default));
+        JsonObject Request()=>new()
+        {
+            ["visibleName"]="فرد مستقل آخر",["serviceNumberA"]="5151",
+            ["siteId"]="SITE-RETURN",["identityDecision"]="replaceDismissed",
+            ["dismissedPersonId"]="TST-RETURN-SEP",
+            ["identityResolutionToken"]=preview["previewToken"]!.GetValue<string>()
+        };
+        var roster=new PersonRosterService(_db);
+        var noToken=Request();noToken.Remove("identityResolutionToken");
+        Assert.False((await roster.CreatePersonAsync(Actor.UserId,Actor.Username,noToken,default)).Success);
+        var wrong=Request();wrong["dismissedPersonId"]="TST-RETURN-EXT";
+        Assert.False((await roster.CreatePersonAsync(Actor.UserId,Actor.Username,wrong,default)).Success);
+        var external=Require(await service.PreviewAsync(Input("فرد جديد آخر","4141"),Actor,default));
+        var requestExternal=new JsonObject
+        {
+            ["visibleName"]="فرد جديد آخر",["serviceNumberA"]="4141",
+            ["siteId"]="SITE-RETURN",["identityDecision"]="replaceDismissed",
+            ["dismissedPersonId"]="TST-RETURN-EXT",
+            ["identityResolutionToken"]=external["previewToken"]!.GetValue<string>()
+        };
+        Assert.False((await roster.CreatePersonAsync(Actor.UserId,Actor.Username,
+            requestExternal,default)).Success);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="UPDATE Persons SET RowVersion=RowVersion+1 WHERE PersonId='TST-RETURN-SEP';";
+            q.ExecuteNonQuery();
+        }
+        Assert.False((await roster.CreatePersonAsync(Actor.UserId,Actor.Username,Request(),default)).Success);
+        Assert.Equal(2L,Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal(0L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='DISMISSED_NUMBER_REUSED'"));
+    }
+
     [Fact]
     public async Task NameOnlyCollision_ExplicitDifferentHumanCanCreateIndependentId()
     {
