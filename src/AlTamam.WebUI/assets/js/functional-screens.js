@@ -499,20 +499,41 @@
             exportPanel.replaceChildren(message("لا توجد أسماء في هذا الشهر والموقع للتصدير."));
             return;
           }
+          if(!preview.exportId||!preview.scopeSignature||!preview.directory||
+             !Array.isArray(preview.files)||preview.files.length===0)
+            throw new Error("لم ترجع معاينة خادم Excel أسماء الملفات ومجلد الحفظ.");
           const description=el("p","section-description",
-            "سيتم حفظ "+preview.personCount+" فرد في ملف Excel لشهر "+
-            year+"-"+String(month).padStart(2,"0")+
-            (STATE.monthTerm?" وفق البحث «"+STATE.monthTerm+"»":"")+
-            ". يتم حفظ نفس كشف الموقع والبحث الظاهر في الصفحة في مجلد الإعدادات، دون تعديل التحضير.");
-          const confirmSave=button("حفظ ملف Excel",async()=>{
+            "سيُصدّر "+preview.personCount+" فردًا لشهر "+year+"-"+
+            String(month).padStart(2,"0")+
+            (STATE.monthTerm?" حسب البحث «"+STATE.monthTerm+"»":"")+
+            " في "+preview.fileCount+" ملف Excel. "+
+            (STATE.siteId?"ملف الموقع المحدد فقط.":
+              "ملف موحد لجميع المواقع وملف منفصل لكل موقع له أفراد مطابقون."));
+          const directory=el("p","section-description","مجلد الحفظ: "+preview.directory);
+          const files=el("div","monthly-export-files");
+          files.setAttribute("aria-label","الملفات المقترحة");
+          for(const entry of preview.files){
+            files.appendChild(el("p","section-description",entry.fileName+
+              " — "+entry.personCount+" فرد"));
+          }
+          const confirmSave=button("تأكيد تصدير ملفات Excel",async()=>{
             confirmSave.disabled=true;
-            exportPanel.replaceChildren(description,message("جارٍ إنشاء ملف Excel..."));
+            exportPanel.replaceChildren(description,directory,files,
+              message("جارٍ إنشاء "+preview.fileCount+" ملف Excel..."));
             try{
-              const result=parseData(await bridge().invoke("ExportMonthlyWorkbookSet",chosen));
+              const result=parseData(await bridge().invoke("ExportMonthlyWorkbookSet",{
+                ...chosen,exportId:preview.exportId,
+                scopeSignature:preview.scopeSignature,confirmed:true
+              }));
               if(STATE.monthEpoch!==epoch)return;
-              if(!result||result.format!=="xlsx"||!result.filePath)
-                throw new Error("لم يؤكد الخادم إنشاء ملف Excel.");
-              exportPanel.replaceChildren(message("تم حفظ الكشف بنجاح: "+result.filePath));
+              if(!result||result.format!=="xlsx"||!result.filePath||
+                 !Array.isArray(result.files)||!result.files.length)
+                throw new Error("لم يؤكد الخادم اكتمال جميع ملفات Excel.");
+              const saved=el("div","monthly-export-files");
+              saved.appendChild(message("اكتمل حفظ "+result.fileCount+" ملف Excel في "+result.directory));
+              for(const file of result.files)
+                saved.appendChild(el("p","section-description",file.filePath));
+              exportPanel.replaceChildren(saved);
             }catch(error){
               if(STATE.monthEpoch===epoch)showError(exportPanel,error);
             }finally{confirmSave.disabled=false;}
@@ -520,7 +541,7 @@
           const cancel=button("إلغاء التصدير",()=>{
             exportPanel.replaceChildren();exportPanel.hidden=true;
           });
-          exportPanel.replaceChildren(description,confirmSave,cancel);
+          exportPanel.replaceChildren(description,directory,files,confirmSave,cancel);
         }catch(error){
           if(STATE.monthEpoch===epoch)showError(exportPanel,error);
         }finally{previewExport.disabled=false;}
