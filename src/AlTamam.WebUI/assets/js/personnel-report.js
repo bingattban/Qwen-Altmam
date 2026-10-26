@@ -42,7 +42,7 @@
    term.type="search";term.placeholder="بحث بالاسم أو الرقم (ع)";
    term.setAttribute("aria-label","البحث عن فرد");
    const controls=el("div",undefined,"functional-toolbar");
-   const results=el("div"),report=el("div"),status=el("div"),selectedPanel=el("div");
+   const results=el("div"),report=el("div",undefined,"person-report-content"),status=el("div"),selectedPanel=el("div");
    const popup=el("section",undefined,"person-report-modal");
    popup.hidden=true;popup.setAttribute("role","dialog");
    popup.setAttribute("aria-modal","true");
