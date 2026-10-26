@@ -111,32 +111,48 @@ async function transfer(host,external){
   });
   card.appendChild(previewButton);
 }
-async function archive(host){
+async function archive(host,external){
  const card=el("section",undefined,"card"),bar=el("div",undefined,"functional-toolbar");
- const kind=el("select"),site=el("select"),search=el("input"),
-    dateFrom=el("input"),dateTo=el("input"),result=el("div");
+ const site=el("select"),search=el("input"),
+    dateFrom=el("input"),dateTo=el("input"),result=el("div"),notice=el("div");
   dateFrom.type="date";dateTo.type="date";
   dateFrom.setAttribute("aria-label","من تاريخ");
   dateTo.setAttribute("aria-label","إلى تاريخ");
   site.setAttribute("aria-label","فلتر الموقع");
   site.appendChild(opt("","جميع المواقع"));
- kind.setAttribute("aria-label","نوع النقل");
- kind.append(opt("","الكل"),opt("internal","داخلي"),opt("external","خارجي"));
- search.placeholder="بحث بالاسم أو الرقم (ع)";
- card.appendChild(el("h2","أرشيف التنقلات","section-title"));
+ search.type="search";search.placeholder="بحث بالاسم أو الرقم (ع)";
+ const archiveType=external?"external":"internal";
+ const title=external?"أرشيف النقل الخارجي":"أرشيف النقل الداخلي";
+ card.appendChild(el("h2",title,"section-title"));
+ card.appendChild(el("p",external?
+   "يعرض النقل الخارجي فقط ويحتفظ بتاريخ كل فرد مستقلاً.":
+   "يعرض النقل الداخلي فقط مع الموقع السابق والوجهة والتاريخ.","section-description"));
  let page=1;
- bar.append(kind,site,dateFrom,dateTo,search,btn("بحث",()=>{page=1;load();}));
+ bar.append(site,dateFrom,dateTo,search,btn("بحث",()=>{page=1;load();}));
+ bar.appendChild(btn("تصدير "+title+" إلى Excel",async()=>{
+   const payload={mode:"movementArchive",type:archiveType,
+     term:search.value.trim(),siteId:site.value,
+     dateFrom:dateFrom.value,dateTo:dateTo.value};
+   if(!await modalConfirm("تصدير "+title+" حسب البحث والفلاتر المعروضة؟ "+
+     "سيُحفظ Excel في مجلد التقارير المحدد بالإعدادات."))return;
+   notice.replaceChildren(el("p","جارٍ تجهيز ملف Excel..."));
+   try{
+     const response=await api().invoke("ExportPersonLifetimeExcel",payload);
+     if(!card.isConnected)return;
+     notice.replaceChildren(el("p","تم إنشاء الملف: "+response.data.filePath,"settings-success"));
+   }catch(e){if(card.isConnected)err(notice,e);}
+ }));
   try {
     const response=await api().invoke("QuerySites",{});
     for(const entry of response.data||[])site.appendChild(opt(entry.siteId,entry.name));
   }catch(e){err(result,e);}
- for(const selector of [kind,site,dateFrom,dateTo])
+ for(const selector of [site,dateFrom,dateTo])
     selector.addEventListener("change",()=>{page=1;load();});
- card.append(bar,result);host.appendChild(card);
+ card.append(bar,notice,result);host.appendChild(card);
  async function load(){
    try{
      const data=(await api().invoke("QueryMovementArchive",{page,pageSize:50,
-       type:kind.value,term:search.value.trim(),siteId:site.value,
+       type:archiveType,term:search.value.trim(),siteId:site.value,
         dateFrom:dateFrom.value,dateTo:dateTo.value})).data||{};
      if(!card.isConnected)return;
      const t=table(["الرقم (ع)","الاسم","النوع","الموقع السابق","الجهة الجديدة","التاريخ"]);
@@ -149,6 +165,10 @@ async function archive(host){
    }catch(e){err(result,e);}
  }await load();
 }
-window.AltamamMovements=Object.freeze({render:(host,screen)=>screen==="transferArchive"?archive(host):
- transfer(host,screen==="transferExternal")});
+window.AltamamMovements=Object.freeze({render:(host,screen)=>
+  screen==="archiveInternal"?archive(host,false):
+  screen==="archiveExternal"?archive(host,true):
+  screen==="transferInternal"?transfer(host,false):
+  screen==="transferExternal"?transfer(host,true):
+  host.appendChild(el("p","شاشة النقل غير معروفة.","admin-warning"))});
 })();
