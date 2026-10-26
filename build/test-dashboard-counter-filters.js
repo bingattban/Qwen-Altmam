@@ -60,7 +60,7 @@ const FakeDate=class extends Date {
   constructor(...args){super(...(args.length?args:["2026-10-26T17:59:00"]));}
   static now(){return new Date("2026-10-26T17:59:00").getTime();}
 };
-const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}}},
+const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
    AltamamDialog:{confirm:async()=>true}},
  document,location:{hash:"#dashboard"},history:{replaceState:()=>{}},Date:FakeDate,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
