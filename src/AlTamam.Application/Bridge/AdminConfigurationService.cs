@@ -144,6 +144,177 @@ public sealed class AdminConfigurationService
         },ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Retire a non-system site without deleting its historical foreign keys.
+    /// The move takes effect TODAY only if no selected person was enrolled,
+    /// prepared or moved today. Otherwise refuse rather than rewrite history.
+    /// Both the reassignment and per-person/site audit events are atomic.
+    /// </summary>
+    public async Task<BridgeResponse> RemoveSiteAndReassignCurrentPersonsAsync(
+        JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
+    {
+        string siteId=Read(payload,"siteId");
+        long version=ReadVersion(payload);
+        long expectedCount;
+        bool confirmed;
+        try
+        {
+            expectedCount=payload?["expectedActiveCount"]?.GetValue<long>()??-1;
+        }
+        catch
+        {
+            try{expectedCount=payload?["expectedActiveCount"]?.GetValue<int>()??-1;}
+            catch{expectedCount=-1;}
+        }
+        try{confirmed=payload?["confirmed"]?.GetValue<bool>()==true;}
+        catch{confirmed=false;}
+        if(siteId.Length is <3 or >128 || siteId.Any(char.IsControl) ||
+           siteId=="SITE-UNSPECIFIED" || version<1 || expectedCount<0 || !confirmed)
+            return Fail("حدد موقعًا غير محمي وإصداره وعدد أفراده، ثم أكّد النقل والإزالة صراحة.");
+        if(string.IsNullOrWhiteSpace(Read(payload,"operationId")))
+            return Fail("معرّف عملية الإزالة الموثوق مطلوب لمنع تنفيذها مرتين.");
+        string date=LocalDate(),now=Now();
+        return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
+        {
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"RemoveSiteAndReassignCurrentPersons",actor.UserId,payload,ct)
+                .ConfigureAwait(false);
+            if(replay is not null)return replay;
+            using var site=c.CreateCommand();site.Transaction=t;
+            site.CommandText="""
+                SELECT VisibleName,RowVersion,IsSystemSite FROM Sites
+                WHERE SiteId=$id AND ActiveFlag=1;
+                """;
+            site.Parameters.AddWithValue("$id",siteId);
+            string name;long latestVersion;bool isSystem;
+            using(var r=await site.ExecuteReaderAsync(ct).ConfigureAwait(false))
+            {
+                if(!await r.ReadAsync(ct).ConfigureAwait(false))
+                    return Fail("الموقع غير موجود أو سبق تعطيله؛ حدّث قائمة المواقع.",
+                        BridgeErrorCodes.ConflictStale);
+                name=r.GetString(0);latestVersion=r.GetInt64(1);
+                isSystem=r.GetInt32(2)!=0;
+            }
+            if(isSystem)return Fail("موقع غير محدد محمي ولا يمكن إزالته.");
+            if(latestVersion!=version)
+                return Fail("تغير إصدار الموقع منذ المعاينة؛ حدّث القائمة وأكّد مجددًا.",
+                    BridgeErrorCodes.ConflictStale);
+            using var current=c.CreateCommand();current.Transaction=t;
+            current.CommandText="""
+                SELECT a.AssignmentId,a.PersonId,p.CurrentVisibleName,p.CurrentServiceNumberA,
+                       a.ValidFromLocalDate,p.OrganizationalStatus,p.ActiveFlag
+                FROM PersonAssignments a
+                JOIN Persons p ON p.PersonId=a.PersonId
+                WHERE a.SiteId=$id AND a.ValidToLocalDate IS NULL
+                ORDER BY a.PersonId,a.AssignmentId;
+                """;
+            current.Parameters.AddWithValue("$id",siteId);
+            var people=new List<(string Assignment,string PersonId,string Name,
+                string Number,string From,bool Eligible)>();
+            using(var r=await current.ExecuteReaderAsync(ct).ConfigureAwait(false))
+                while(await r.ReadAsync(ct).ConfigureAwait(false))
+                    people.Add((r.GetString(0),r.GetString(1),r.GetString(2),
+                        r.GetString(3),r.GetString(4),
+                        r.GetInt32(5)==1&&r.GetInt32(6)==1));
+            if(people.Any(x=>!x.Eligible))
+                return Fail("الموقع يحتوي قيد انتساب غير نشط ما زال مفتوحًا؛ صحّح هذا القيد أولًا دون حذف التاريخ.");
+            if(people.Count!=expectedCount)
+                return Fail("تغير عدد الأفراد في الموقع منذ المعاينة؛ أعد فتحه وأكّد العدد الجديد.",
+                    BridgeErrorCodes.ConflictStale);
+            // The storage trigger forbids a zero-length [from,to) assignment;
+            // changing an entry opened today would also erase today's location.
+            if(people.Any(x=>string.CompareOrdinal(x.From,date)>=0))
+                return Fail("يوجد فرد أُدرج أو نُقل إلى الموقع اليوم؛ أجّل إزالة الموقع إلى يوم لاحق لحفظ تاريخه دون تداخل.",
+                    BridgeErrorCodes.ConflictStale);
+            if(people.Count>0)
+            {
+                using var closure=c.CreateCommand();closure.Transaction=t;
+                closure.CommandText="""
+                    SELECT EXISTS(SELECT 1 FROM PeriodClosures
+                    WHERE IsClosed=1 AND ((PeriodType='DAY' AND PeriodKey=$day)
+                      OR (PeriodType='MONTH' AND PeriodKey=$month)));
+                    """;
+                closure.Parameters.AddWithValue("$day",date);
+                closure.Parameters.AddWithValue("$month",date[..7]);
+                if(Convert.ToInt32(await closure.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
+                    return Fail("اليوم أو الشهر مغلق؛ لا يمكن تغيير الانتساب خلال فترة مغلقة.");
+                using var dayEvidence=c.CreateCommand();dayEvidence.Transaction=t;
+                dayEvidence.CommandText="""
+                    SELECT EXISTS(
+                      SELECT 1 FROM PersonAssignments a
+                      WHERE a.SiteId=$site AND a.ValidToLocalDate IS NULL
+                        AND (EXISTS(SELECT 1 FROM AttendanceRecords d
+                            WHERE d.PersonId=a.PersonId AND d.AttendanceLocalDate=$day)
+                        OR EXISTS(SELECT 1 FROM PersonnelMovements m
+                            WHERE m.PersonId=a.PersonId AND m.EffectiveLocalDate=$day)));
+                    """;
+                dayEvidence.Parameters.AddWithValue("$site",siteId);
+                dayEvidence.Parameters.AddWithValue("$day",date);
+                if(Convert.ToInt32(await dayEvidence.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
+                    return Fail("أحد أفراد الموقع لديه تحضير أو حركة اليوم؛ لا يجوز تغيير موقعه بأثر رجعي. أعد المحاولة في يوم مناسب.",
+                        BridgeErrorCodes.ConflictStale);
+            }
+            foreach(var p in people)
+            {
+                string nextId="ASG-"+Guid.NewGuid().ToString("N");
+                using var move=c.CreateCommand();move.Transaction=t;
+                move.CommandText="""
+                    UPDATE PersonAssignments SET ValidToLocalDate=$day
+                    WHERE AssignmentId=$old AND PersonId=$person AND ValidToLocalDate IS NULL;
+                    """;
+                move.Parameters.AddWithValue("$day",date);
+                move.Parameters.AddWithValue("$old",p.Assignment);
+                move.Parameters.AddWithValue("$person",p.PersonId);
+                if(await move.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
+                    return Fail("تغير انتساب أحد الأفراد؛ أعد تحميل الموقع.",BridgeErrorCodes.ConflictStale);
+                using var create=c.CreateCommand();create.Transaction=t;
+                create.CommandText="""
+                    INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                      ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                    VALUES($assignment,$person,'SITE-UNSPECIFIED',$day,NULL,NULL,$now);
+                    UPDATE Persons SET RowVersion=RowVersion+1 WHERE PersonId=$person;
+                    """;
+                create.Parameters.AddWithValue("$assignment",nextId);
+                create.Parameters.AddWithValue("$person",p.PersonId);
+                create.Parameters.AddWithValue("$day",date);
+                create.Parameters.AddWithValue("$now",now);
+                await create.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                await BridgeAuditWriter.WriteAsync(c,t,_time,
+                    "SITE_RETIRE_PERSON_REASSIGNED","نقل الفرد إلى غير محدد عند إزالة الموقع",
+                    actor.UserId,actor.Username,actor.Username,"Person",p.PersonId,p.Name,
+                    new JsonObject{["siteId"]=siteId,["siteName"]=name,
+                        ["assignmentId"]=p.Assignment}.ToJsonString(),
+                    new JsonObject{["siteId"]="SITE-UNSPECIFIED",
+                        ["siteName"]="غير محدد",["assignmentId"]=nextId,
+                        ["effectiveDate"]=date}.ToJsonString(),
+                    "نقل تلقائي آمن بسبب إزالة موقع دون تغيير التحضير التاريخي.",
+                    "إزالة الموقع "+name,date,ct.CorrelationId(),ct).ConfigureAwait(false);
+            }
+            using var deactivate=c.CreateCommand();deactivate.Transaction=t;
+            deactivate.CommandText="""
+                UPDATE Sites SET ActiveFlag=0,RowVersion=RowVersion+1
+                WHERE SiteId=$id AND RowVersion=$version AND IsSystemSite=0 AND ActiveFlag=1;
+                """;
+            deactivate.Parameters.AddWithValue("$id",siteId);
+            deactivate.Parameters.AddWithValue("$version",version);
+            if(await deactivate.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
+                return Fail("تغير الموقع أثناء الإزالة.",BridgeErrorCodes.ConflictStale);
+            await Audit(c,t,actor,"SITE_RETIRE","إزالة موقع ونقل الأفراد",
+                "Site",siteId,name,
+                new JsonObject{["active"]=true,["affectedPersons"]=people.Count}.ToJsonString(),
+                new JsonObject{["active"]=false,["reassignedTo"]="SITE-UNSPECIFIED",
+                    ["effectiveDate"]=date,["affectedPersons"]=people.Count}.ToJsonString(),
+                ct).ConfigureAwait(false);
+            var outcome=new JsonObject{
+                ["siteId"]=siteId,["siteName"]=name,["active"]=false,
+                ["reassignedCount"]=people.Count,["effectiveDate"]=date,
+                ["rowVersion"]=version+1
+            };
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
+        },ct).ConfigureAwait(false);
+    }
+
     public async Task<BridgeResponse> CreateStatusAsync(JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
     {
         string name=Read(payload,"name"),symbol=Read(payload,"symbol"),color=Read(payload,"color");
