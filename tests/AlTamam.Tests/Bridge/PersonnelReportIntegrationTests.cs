@@ -162,8 +162,10 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         using(var q=c.CreateCommand())
         {
             q.CommandText="""
-                INSERT INTO Sites(SiteId,CurrentVisibleName,ActiveFlag,RowVersion)
-                VALUES('SITE-REPORT-NEW','موقع التقرير الجديد',1,1);
+                INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,
+                    ActiveFlag,CreatedAtUtc,RowVersion)
+                VALUES('SITE-REPORT-NEW','موقع التقرير الجديد','موقع التقرير الجديد',0,
+                    1,'2026-01-01T00:00:00Z',1);
                 INSERT INTO SiteNameHistory(SiteId,VisibleNameSnapshot,ValidFromLocalDate,
                     ValidToLocalDate,ChangedByUserId,RecordedAtUtc)
                 VALUES('SITE-REPORT-NEW','موقع التقرير الجديد','2026-01-01',
