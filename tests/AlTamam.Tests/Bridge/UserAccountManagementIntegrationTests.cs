@@ -50,6 +50,31 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     }
 
     [Fact]
+    public async Task MissingOrMismatchedPasswordConfirmation_IsRejectedBeforeCredentialWrite()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var intent=new JsonObject {
+            ["username"]="confirm-security",["password"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
+        };
+        Assert.False((await svc.CreateAsync((JsonObject)intent.DeepClone(),
+            _general,default)).Success);
+        intent["passwordConfirmation"]="Mismatch123!";
+        Assert.False((await svc.CreateAsync((JsonObject)intent.DeepClone(),
+            _general,default)).Success);
+        using var conn=_db.CreateOpenConnection();
+        using var cmd=conn.CreateCommand();
+        cmd.CommandText="SELECT COUNT(*) FROM Users WHERE Username='confirm-security';";
+        Assert.Equal(0L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        cmd.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_CREATE';";
+        Assert.Equal(0L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        intent["passwordConfirmation"]=SafePassword;
+        Assert.True((await svc.CreateAsync(intent,_general,default)).Success);
+        cmd.CommandText="SELECT COUNT(*) FROM Users WHERE Username='confirm-security';";
+        Assert.Equal(1L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task GeneralAdministration_CreatesLinkedOrdinaryAccountWithAuditAndArgon2id()
     {
         var svc=new UserAccountManagementService(_db);
