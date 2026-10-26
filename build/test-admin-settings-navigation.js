@@ -18,6 +18,7 @@ class Element {
     this.disabled = false;
     this.style = {};
   }
+  get firstChild() { return this.children[0]||null; }
   get classList() {
     return {
       add: (...tokens) => { this.className += " " + tokens.join(" "); },
