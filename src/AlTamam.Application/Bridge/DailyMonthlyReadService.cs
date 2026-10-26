@@ -128,6 +128,8 @@ public sealed class DailyMonthlyReadService
         if (!TryBusinessDate(payload, out var date)) return BadDate();
         string siteId = ReadString(payload, "siteId");
         string statusId = ReadString(payload, "statusId");
+        string search = ArabicTextNormalizer.NormalizeForSearch(ReadString(payload, "search").Trim());
+        if(search.Length>100)return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"نص البحث طويل جداً.");
         int page = Math.Clamp(ReadInt(payload, "page", 1), 1, 100000);
         int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, 200);
         const string fromSql = """
@@ -145,6 +147,8 @@ public sealed class DailyMonthlyReadService
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
+              AND ($search = '' OR p.NormalizedName LIKE $search ESCAPE '\\'
+                   OR p.NormalizedServiceNumberA LIKE $search ESCAPE '\\')
               AND ($status = '' OR ar.StatusId = $status
                    OR ($status = '__UNPREPARED__' AND ar.StatusId IS NULL
                         AND m.MovementId IS NULL)
@@ -154,7 +158,7 @@ public sealed class DailyMonthlyReadService
         using var connection = _db.CreateOpenConnection();
         using var count = connection.CreateCommand();
         count.CommandText = "SELECT COUNT(*) " + fromSql;
-        BindFilters(count, Iso(date), siteId, statusId);
+        BindFilters(count, Iso(date), siteId, statusId, search);
         long total = Convert.ToInt64(await count.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
@@ -165,7 +169,7 @@ public sealed class DailyMonthlyReadService
             """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
-        BindFilters(cmd, Iso(date), siteId, statusId);
+        BindFilters(cmd, Iso(date), siteId, statusId, search);
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (long)(page - 1) * pageSize);
         var rows = new JsonArray();
@@ -197,11 +201,12 @@ public sealed class DailyMonthlyReadService
         });
     }
 
-    private static void BindFilters(SqliteCommand cmd, string date, string site, string status)
+    private static void BindFilters(SqliteCommand cmd, string date, string site, string status, string search)
     {
         cmd.Parameters.AddWithValue("$date", date);
         cmd.Parameters.AddWithValue("$site", site);
         cmd.Parameters.AddWithValue("$status", status);
+        cmd.Parameters.AddWithValue("$search", "%"+search.Replace("\\","\\\\").Replace("%","\\%").Replace("_","\\_")+"%");
     }
 
     public async Task<BridgeResponse> ArchivePeriodsAsync(CancellationToken ct)
