@@ -50,11 +50,36 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     }
 
     [Fact]
+    public async Task MissingOrMismatchedPasswordConfirmation_IsRejectedBeforeCredentialWrite()
+    {
+        var svc=new UserAccountManagementService(_db);
+        var intent=new JsonObject {
+            ["username"]="confirm-security",["password"]=SafePassword,
+            ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
+        };
+        Assert.False((await svc.CreateAsync((JsonObject)intent.DeepClone(),
+            _general,default)).Success);
+        intent["passwordConfirmation"]="Mismatch123!";
+        Assert.False((await svc.CreateAsync((JsonObject)intent.DeepClone(),
+            _general,default)).Success);
+        using var conn=_db.CreateOpenConnection();
+        using var cmd=conn.CreateCommand();
+        cmd.CommandText="SELECT COUNT(*) FROM Users WHERE Username='confirm-security';";
+        Assert.Equal(0L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        cmd.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='USER_CREATE';";
+        Assert.Equal(0L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        intent["passwordConfirmation"]=SafePassword;
+        Assert.True((await svc.CreateAsync(intent,_general,default)).Success);
+        cmd.CommandText="SELECT COUNT(*) FROM Users WHERE Username='confirm-security';";
+        Assert.Equal(1L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task GeneralAdministration_CreatesLinkedOrdinaryAccountWithAuditAndArgon2id()
     {
         var svc=new UserAccountManagementService(_db);
         var result=await svc.CreateAsync(new JsonObject {
-            ["username"]="Person.Test",["password"]=SafePassword,
+            ["username"]="Person.Test",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-1",["role"]="OrdinaryAdministration"
         },_general,CancellationToken.None);
         Assert.True(result.Success,result.UserMessage);
@@ -87,7 +112,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     {
         var svc=new UserAccountManagementService(_db);
         var payload=new JsonObject {
-            ["username"]="same-intent",["password"]=SafePassword,
+            ["username"]="same-intent",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-1",["role"]="Supervisor",
             ["operationId"]="OPERATION-USER-000001"
         };
@@ -117,12 +142,12 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     {
         var svc=new UserAccountManagementService(_db);
         var denied=await svc.CreateAsync(new JsonObject {
-            ["username"]="denied",["password"]=SafePassword,
+            ["username"]="denied",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-1",["role"]="OrdinaryAdministration"
         },_ordinary,CancellationToken.None);
         Assert.False(denied.Success);
         var success=await svc.CreateAsync(new JsonObject {
-            ["username"]="supervisor-test",["password"]=SafePassword,
+            ["username"]="supervisor-test",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
         },_ordinary,CancellationToken.None);
         Assert.True(success.Success,success.UserMessage);
@@ -138,7 +163,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     {
         var svc=new UserAccountManagementService(_db);
         var create=await svc.CreateAsync(new JsonObject {
-            ["username"]="person-password",["password"]=SafePassword,
+            ["username"]="person-password",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
         },_general,CancellationToken.None);
         Assert.True(create.Success,create.UserMessage);
@@ -200,7 +225,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         }
         var svc=new UserAccountManagementService(_db);
         var adminCreated=await svc.CreateAsync(new JsonObject {
-            ["username"]="roster-admin",["password"]=SafePassword,
+            ["username"]="roster-admin",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-1",["role"]="OrdinaryAdministration"
         },_general,default);
         Assert.True(adminCreated.Success,adminCreated.UserMessage);
@@ -208,7 +233,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         var rosterActor=new BridgePrincipal(adminId,"roster-admin",
             UserRole.OrdinaryAdministration,"0123456789abcdef0123456789abcdef");
         var created=await svc.CreateAsync(new JsonObject {
-            ["username"]="created-supervisor",["password"]=SafePassword,
+            ["username"]="created-supervisor",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
         },rosterActor,default);
         Assert.True(created.Success,created.UserMessage);
@@ -253,7 +278,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     {
         var svc=new UserAccountManagementService(_db);
         var created=await svc.CreateAsync(new JsonObject{
-            ["username"]="reactivate-supervisor",["password"]=SafePassword,
+            ["username"]="reactivate-supervisor",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
         },_ordinary,default);
         Assert.True(created.Success,created.UserMessage);
@@ -317,7 +342,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     {
         var svc=new UserAccountManagementService(_db);
         var created=await svc.CreateAsync(new JsonObject{
-            ["username"]="immutable-account",["password"]=SafePassword,
+            ["username"]="immutable-account",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
         },_general,default);
         Assert.True(created.Success,created.UserMessage);
@@ -347,7 +372,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     {
         var svc=new UserAccountManagementService(_db);
         var created=await svc.CreateAsync(new JsonObject{
-            ["username"]="supervisor-retry",["password"]=SafePassword,
+            ["username"]="supervisor-retry",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-1",["role"]="Supervisor"
         },_ordinary,default);
         Assert.True(created.Success,created.UserMessage);
@@ -411,7 +436,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         }
         var svc=new UserAccountManagementService(_db);
         var created=await svc.CreateAsync(new JsonObject{
-            ["username"]="reactivation-retry",["password"]=SafePassword,
+            ["username"]="reactivation-retry",["password"]=SafePassword,["passwordConfirmation"]=SafePassword,
             ["personId"]="TST-ACTIVE-2",["role"]="Supervisor"
         },_ordinary,default);
         Assert.True(created.Success,created.UserMessage);

@@ -70,6 +70,7 @@ public sealed class Section03AccountEligibilityAndLockoutTests : IAsyncLifetime,
         var accounts=new UserAccountManagementService(_db,_time);
         var created=await accounts.CreateAsync(new JsonObject{
             ["username"]="linked-supervisor",["password"]=Password,
+            ["passwordConfirmation"]=Password,
             ["personId"]="TEST-ELIGIBLE-PERSON",["role"]="Supervisor"
         },_general,default);
         Assert.True(created.Success,created.UserMessage);

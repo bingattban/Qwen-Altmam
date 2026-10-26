@@ -560,6 +560,8 @@
       const username=field("اسم المستخدم");
       const password=field("كلمة المرور الجديدة","","password");
       password.input.autocomplete="new-password";
+      const passwordConfirm=field("تأكيد كلمة المرور","","password");
+      passwordConfirm.input.autocomplete="new-password";
       const role=node("select","form-control");
       role.setAttribute("aria-label","نوع الحساب");
       for(const allowed of allowedRoles){
@@ -589,20 +591,25 @@
       const message=node("div","admin-note");
       let accountPayload=null,accountOperation=null;
       const save=btn("تأكيد إضافة الحساب",async()=>{
-        if(!personPick.value||!username.input.value.trim()||!password.input.value)
-          return errors(message,new Error("اختر فرداً وأدخل اسم المستخدم وكلمة المرور."));
+        if(!personPick.value||!username.input.value.trim()||!password.input.value||
+           !passwordConfirm.input.value)
+          return errors(message,new Error("اختر فرداً وأدخل اسم المستخدم وكلمة المرور وتأكيدها."));
+        if(password.input.value!==passwordConfirm.input.value)
+          return errors(message,new Error("كلمة المرور وتأكيدها غير متطابقين."));
         if(!await dialogs.confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
         save.disabled=true;message.replaceChildren();
         try {
-          const fields=[personPick.value,username.input.value.trim(),role.value,password.input.value];
+          const fields=[personPick.value,username.input.value.trim(),role.value,
+            password.input.value,passwordConfirm.input.value];
           const signature=JSON.stringify(fields);
           if(accountPayload!==signature){accountPayload=signature;accountOperation=makeOperationId();}
           await api().invoke("CreateUserAccount",{
             personId:personPick.value,username:username.input.value.trim(),
-            role:role.value,password:password.input.value,operationId:accountOperation
+            role:role.value,password:password.input.value,
+            passwordConfirmation:passwordConfirm.input.value,operationId:accountOperation
           });
           accountPayload=null;accountOperation=null;
-          password.input.value="";
+          password.input.value="";passwordConfirm.input.value="";
           form.remove();
           notice.replaceChildren(node("p","settings-success","تم إنشاء الحساب بعد حفظه بنجاح."));
           await load();
@@ -610,7 +617,7 @@
         finally{save.disabled=false;}
       },"btn btn-primary");
       form.append(personSearch.wrap,searchButton,personPick,selected,
-        username.wrap,password.wrap,node("p","section-description",
+        username.wrap,password.wrap,passwordConfirm.wrap,node("p","section-description",
           "كلمة المرور: 8 خانات على الأقل، 3 أحرف إنجليزية، 3 أرقام ورمز خاص دون مسافات."),
         node("label","","نوع الحساب"),role,save,
         btn("إلغاء",()=>form.remove()),message);

@@ -189,6 +189,24 @@ async function run() {
   assert.equal(byDataset("adminScreen").length,0,
     "users must open directly without an intermediate screen");
   assert.ok(buttonNamed("إضافة حساب"),"real add-account action visible immediately");
+  buttonNamed("إضافة حساب").handlers.click();
+  const addUserForm=visible().find(x=>x.className.includes("admin-user-form"));
+  assert.ok(addUserForm,"account editor is a real contained form");
+  const secrets=addUserForm.all().filter(x=>x.tag==="input"&&x.type==="password");
+  assert.equal(secrets.length,2,
+    "account form must render both password and matching confirmation");
+  const selection=addUserForm.all().find(x=>x.tag==="select"&&
+    x.attrs["aria-label"]==="اختر فرداً من الكشف");
+  selection.value="TST-ACTIVE-1";
+  const usernameField=addUserForm.all().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="اسم المستخدم");
+  assert.ok(usernameField,"a dedicated username field is required");
+  usernameField.children.find(x=>x.tag==="input").value="tester-user";
+  secrets[0].value="Abc123!secure";secrets[1].value="Different123!";
+  const beforeUserWrites=calls.filter(x=>x.name==="CreateUserAccount").length;
+  await buttonNamed("تأكيد إضافة الحساب").handlers.click();
+  assert.equal(calls.filter(x=>x.name==="CreateUserAccount").length,beforeUserWrites,
+    "mismatched passwords cannot reach C# bridge even when a PersonId is selected");
   assert.ok(calls.some(x=>x.name==="ListUserAccounts"),
     "opening users must request server-side account list");
   assert.ok(calls.some(x=>x.name==="QueryAuditLog"),
