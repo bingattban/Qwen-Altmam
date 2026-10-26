@@ -11,7 +11,7 @@ public sealed class StagedRestorePreparationTests : IDisposable
         "altamam-restore-stage-"+Guid.NewGuid().ToString("N"));
     private string Current=>Path.Combine(_folder,"live.db");
     private string Incoming=>Path.Combine(_folder,"incoming.dbbackup");
-    private const string Key = SyntheticFixtures.TestKeyHex;
+    private static readonly string Key = SyntheticFixtures.TestKeyHex;
 
     [Fact]
     public async Task Stage_RetainsCurrentPeopleInRescue_ButIncomingDifferentHistory_WithoutChangingLiveDb()
