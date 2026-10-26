@@ -58,6 +58,20 @@ const bridge = {
       ListUserAccounts: { items:[],total:0,hasNext:false },
       QueryAuditLog: { items:[],total:0,hasNext:false },
       GetActiveAttendanceStatuses: [{statusId:"STS-ABSENT",displayName:"غياب"}],
+      GetCustomFieldDefinitions:{items:[
+        {columnId:"FLD-SYS-NAME",technicalKey:"sys_person_name",caption:"الاسم",
+          fieldType:1,displayOrder:3,isSystemProtected:true,
+          active:true,visible:true,storedValueCount:0,snapshot:"A".repeat(64)},
+        {columnId:"FLD-TST-ONE",technicalKey:"custom_one",caption:"جهة العمل",
+          fieldType:1,displayOrder:5,isSystemProtected:false,
+          active:true,visible:true,storedValueCount:2,snapshot:"B".repeat(64)},
+        {columnId:"FLD-TST-TWO",technicalKey:"custom_two",caption:"ملاحظة",
+          fieldType:1,displayOrder:6,isSystemProtected:false,
+          active:true,visible:true,storedValueCount:0,snapshot:"C".repeat(64)}
+      ],total:3},
+      CreateCustomFieldDefinition:{columnId:"FLD-TST-NEW"},
+      UpdateCustomFieldMetadata:{columnId:"FLD-TST-ONE"},
+      DeactivateCustomField:{columnId:"FLD-TST-ONE"},
       QuerySites:[{siteId:"SITE-RETURN",name:"الموقع الجديد",active:true},
         {siteId:"SITE-REMOVABLE",name:"موقع تجريبي قابل للإزالة",active:true,rowVersion:3},
         {siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true,rowVersion:1}],
@@ -135,6 +149,32 @@ async function run() {
   assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="reports"),
     "retired combined Reports/Dismissal card must not return");
   buttonNamed("العودة إلى الإدارة").handlers.click();
+  // 04.09(d): a real server-backed layout leaf, not a placeholder.
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="sheets").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="layout").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(buttonNamed("إضافة العمود"),"layout editor must expose actual custom column create");
+  assert.ok(visible().some(x=>x.textContent==="عمود محمي"),
+    "core identifier columns remain protected");
+  const layoutCaption=visible().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="عنوان العمود الجديد");
+  assert.ok(layoutCaption,"custom column caption field");
+  layoutCaption.children.find(x=>x.tag==="input").value="تاريخ الإضافة";
+  await buttonNamed("إضافة العمود").handlers.click();
+  assert.ok(calls.some(x=>x.name==="CreateCustomFieldDefinition"&&
+    x.body.caption==="تاريخ الإضافة"&&x.body.fieldType===1&&
+    x.body.operationId.length>=16));
+  await buttonNamed("إخفاء").handlers.click();
+  assert.ok(calls.some(x=>x.name==="UpdateCustomFieldMetadata"&&
+    x.body.columnId==="FLD-TST-ONE"&&x.body.visible===false&&
+    x.body.expectedSnapshot==="B".repeat(64)));
+  await buttonNamed("أسفل").handlers.click();
+  assert.ok(calls.some(x=>x.name==="UpdateCustomFieldMetadata"&&
+    x.body.columnId==="FLD-TST-ONE"&&x.body.displayOrder===6));
+  await buttonNamed("تعطيل العمود").handlers.click();
+  assert.ok(calls.some(x=>x.name==="DeactivateCustomField"&&
+    x.body.columnId==="FLD-TST-ONE"&&x.body.confirmed===true));
+  controller.renderAdmin(admin);
   byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
   const correction=byDataset("adminScreen").find(x=>x.dataset.adminScreen==="closedCorrection");
   assert.ok(correction,"GA sees restricted historical correction screen");

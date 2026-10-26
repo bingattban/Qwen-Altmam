@@ -350,6 +350,30 @@ public static class BridgeHandlerCatalog
                 ? Done(req,inner.Data,Invalidation(UiInvalidationEvents.SiteRenamed))
                 : Fail(req,inner);
         },
+        "GetCustomFieldDefinitions" => async (req, principal, ct) =>
+        {
+            var service=new RosterColumnStructureService(services.Db,services.Time);
+            var result=await service.ListAsync(req.Payload,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "CreateCustomFieldDefinition" => async (req, principal, ct) =>
+        {
+            var service=new RosterColumnStructureService(services.Db,services.Time);
+            var result=await service.CreateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "UpdateCustomFieldMetadata" => async (req, principal, ct) =>
+        {
+            var service=new RosterColumnStructureService(services.Db,services.Time);
+            var result=await service.UpdateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "DeactivateCustomField" => async (req, principal, ct) =>
+        {
+            var service=new RosterColumnStructureService(services.Db,services.Time);
+            var result=await service.DeactivateAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "CreateAttendanceStatus" => async (req, principal, ct) =>
         {
             var svc = new AdminConfigurationService(services.Db);
