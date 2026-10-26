@@ -131,93 +131,110 @@ public sealed class AutoAttendanceService
 
             // One row per eligible active person with an open assignment covering the date.
             int copied = 0, defaulted = 0, skipNoYesterday = 0, skipTransfer = 0, skipManual = 0;
+            // Four indexed set reads replace thousands of scalar queries.
+            // Avoid a correlated join: measured SQLCipher timings showed it was
+            // slower than the original N+1 algorithm on 2,000 synthetic people.
             var people = new List<(string PersonId, string AssignmentId, string SiteId, string SiteName)>();
             using (var roster = connection.CreateCommand())
             {
                 roster.Transaction = tx;
-                roster.CommandText = @"
+                roster.CommandText = """
                     SELECT p.PersonId, a.AssignmentId, a.SiteId, s.VisibleName
-                      FROM Persons p
-                      JOIN PersonAssignments a ON a.PersonId = p.PersonId
-                       AND a.ValidFromLocalDate <= $date
-                       AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
-                      JOIN Sites s ON s.SiteId = a.SiteId
-                     WHERE p.ActiveFlag = 1 AND p.OrganizationalStatus=1
-                       AND p.FirstRecordedLocalDate <= $date
-                     ORDER BY p.PersonId;";
+                    FROM Persons p
+                    JOIN PersonAssignments a ON a.PersonId=p.PersonId
+                        AND a.ValidFromLocalDate <= $date
+                        AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
+                    JOIN Sites s ON s.SiteId=a.SiteId
+                    WHERE p.ActiveFlag=1 AND p.OrganizationalStatus=1
+                      AND p.FirstRecordedLocalDate <= $date
+                    ORDER BY p.PersonId;
+                    """;
                 roster.Parameters.AddWithValue("$date", Iso(businessDate));
-                using SqliteDataReader readers = await roster.ExecuteReaderAsync(ct).ConfigureAwait(false);
-                while (await readers.ReadAsync(ct).ConfigureAwait(false))
-                    people.Add((readers.GetString(0), readers.GetString(1), readers.GetString(2), readers.GetString(3)));
+                using var reader = await roster.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    people.Add((reader.GetString(0), reader.GetString(1),
+                        reader.GetString(2), reader.GetString(3)));
+            }
+
+            var transferredToday = new HashSet<string>(StringComparer.Ordinal);
+            using (var movements = connection.CreateCommand())
+            {
+                movements.Transaction = tx;
+                movements.CommandText = """
+                    SELECT PersonId FROM PersonnelMovements
+                    WHERE EffectiveLocalDate=$date AND MovementType IN (1,2,3);
+                    """;
+                movements.Parameters.AddWithValue("$date", Iso(businessDate));
+                using var reader = await movements.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    transferredToday.Add(reader.GetString(0));
+            }
+
+            var existingToday = new HashSet<string>(StringComparer.Ordinal);
+            using (var committed = connection.CreateCommand())
+            {
+                committed.Transaction = tx;
+                committed.CommandText = """
+                    SELECT PersonId FROM AttendanceRecords WHERE AttendanceLocalDate=$date;
+                    """;
+                committed.Parameters.AddWithValue("$date", Iso(businessDate));
+                using var reader = await committed.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    existingToday.Add(reader.GetString(0));
+            }
+
+            var previousStatuses = new Dictionary<string,
+                (string Id, string Name, string Symbol, string Color)>(StringComparer.Ordinal);
+            using (var previous = connection.CreateCommand())
+            {
+                previous.Transaction = tx;
+                previous.CommandText = """
+                    SELECT PersonId, StatusId, StatusNameSnapshot,
+                           StatusSymbolSnapshot, StatusColorSnapshot
+                    FROM AttendanceRecords WHERE AttendanceLocalDate=$yday;
+                    """;
+                previous.Parameters.AddWithValue("$yday", Iso(businessDate.AddDays(-1)));
+                using var reader = await previous.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    previousStatuses.Add(reader.GetString(0),
+                        (reader.GetString(1), reader.GetString(2),
+                         reader.GetString(3), reader.GetString(4)));
             }
 
             foreach (var person in people)
             {
-                // Transfer-effective-date exclusion (canonical AttendanceDayPolicy mirrored in SQL).
-                using (var movement = connection.CreateCommand())
+                if (transferredToday.Contains(person.PersonId))
                 {
-                    movement.Transaction = tx;
-                    movement.CommandText = @"SELECT EXISTS(SELECT 1 FROM PersonnelMovements
-                                               WHERE PersonId = $p AND EffectiveLocalDate = $date
-                                                 AND MovementType IN(1,2,3));";
-                    movement.Parameters.AddWithValue("$p", person.PersonId);
-                    movement.Parameters.AddWithValue("$date", Iso(businessDate));
-                    if (Convert.ToInt32(await movement.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
-                    {
-                        skipTransfer++;
-                        continue;
-                    }
+                    skipTransfer++;
+                    continue;
+                }
+                if (existingToday.Contains(person.PersonId))
+                {
+                    skipManual++;
+                    continue;
                 }
 
-                // Manual precedence: never overwrite any legitimate existing row for the date.
-                using (var existsToday = connection.CreateCommand())
-                {
-                    existsToday.Transaction = tx;
-                    existsToday.CommandText = @"SELECT Source FROM AttendanceRecords
-                                                WHERE PersonId = $p AND AttendanceLocalDate = $date;";
-                    existsToday.Parameters.AddWithValue("$p", person.PersonId);
-                    existsToday.Parameters.AddWithValue("$date", Iso(businessDate));
-                    object? existingSource = await existsToday.ExecuteScalarAsync(ct).ConfigureAwait(false);
-                    if (existingSource is not null and not DBNull)
-                    {
-                        skipManual++;
-                        continue;
-                    }
-                }
-
-                // Carried-forward status selection from yesterday's committed row.
                 string statusId, statusName, statusSymbol, statusColor;
-                using (var yesterday = connection.CreateCommand())
+                if (!previousStatuses.TryGetValue(person.PersonId, out var previous))
                 {
-                    yesterday.Transaction = tx;
-                    yesterday.CommandText = @"SELECT StatusId, StatusNameSnapshot, StatusSymbolSnapshot, StatusColorSnapshot
-                                                FROM AttendanceRecords WHERE PersonId = $p AND AttendanceLocalDate = $yday;";
-                    yesterday.Parameters.AddWithValue("$p", person.PersonId);
-                    yesterday.Parameters.AddWithValue("$yday", Iso(businessDate.AddDays(-1)));
-                    using SqliteDataReader yReader = await yesterday.ExecuteReaderAsync(ct).ConfigureAwait(false);
-                    if (!await yReader.ReadAsync(ct).ConfigureAwait(false))
+                    if (configuredDefault is null)
                     {
-                        if (configuredDefault is null)
-                        {
-                            // Do not close the ledger or partially commit the day.
-                            // When the administrator selects a fallback, the next
-                            // scheduler tick can retry the same date safely.
-                            throw new InvalidOperationException(
-                                "تعذر التحضير التلقائي: يجب أن تحدد الإدارة حالة افتراضية نشطة في الإعدادات لعدم وجود تحضير أمس.");
-                        }
-                        statusId = configuredDefault.Value.Id;
-                        statusName = configuredDefault.Value.Name;
-                        statusSymbol = configuredDefault.Value.Symbol;
-                        statusColor = configuredDefault.Value.Color;
-                        defaulted++;
+                        // Fail the entire transaction; no partial 20:00 attendance.
+                        throw new InvalidOperationException(
+                            "تعذر التحضير التلقائي: يجب أن تحدد الإدارة حالة افتراضية نشطة في الإعدادات لعدم وجود تحضير أمس.");
                     }
-                    else
-                    {
-                        statusId = yReader.GetString(0);
-                        statusName = yReader.GetString(1);
-                        statusSymbol = yReader.GetString(2);
-                        statusColor = yReader.GetString(3);
-                    }
+                    statusId = configuredDefault.Value.Id;
+                    statusName = configuredDefault.Value.Name;
+                    statusSymbol = configuredDefault.Value.Symbol;
+                    statusColor = configuredDefault.Value.Color;
+                    defaulted++;
+                }
+                else
+                {
+                    statusId = previous.Id;
+                    statusName = previous.Name;
+                    statusSymbol = previous.Symbol;
+                    statusColor = previous.Color;
                 }
 
                 using var insert = connection.CreateCommand();

@@ -368,6 +368,114 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
         Assert.True(sw.ElapsedMilliseconds < 10_000, "Diagnostic budget exceeded; see Phase 14 report §perf.");
     }
 
+    [Fact]
+    public async Task BulkAutomaticAttendanceSelection_HasIdenticalOutputAndMeasuredLowerLatency()
+    {
+        // Use the real production SQLCipher schema with 2,000 seeded people. This
+        // measures the exact selection stage, not the necessary per-person INSERTs.
+        const string date = "2025-06-02";
+        const string yesterday = "2025-06-01";
+        using var connection = _db.CreateOpenConnection();
+        var people = new List<(string PersonId, string Assignment, string Site)>();
+        using (var roster = connection.CreateCommand())
+        {
+            roster.CommandText = """
+                SELECT p.PersonId,a.AssignmentId,a.SiteId FROM Persons p
+                JOIN PersonAssignments a ON a.PersonId=p.PersonId
+                    AND a.ValidFromLocalDate <= $date
+                    AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
+                JOIN Sites s ON s.SiteId=a.SiteId
+                WHERE p.ActiveFlag=1 AND p.OrganizationalStatus=1
+                    AND p.FirstRecordedLocalDate <= $date
+                ORDER BY p.PersonId;
+                """;
+            roster.Parameters.AddWithValue("$date", date);
+            using var reader = await roster.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                people.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+        }
+
+        var oldResult = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        foreach (var person in people)
+        {
+            using var movement = connection.CreateCommand();
+            movement.CommandText = """
+                SELECT EXISTS(SELECT 1 FROM PersonnelMovements
+                    WHERE PersonId=$person AND EffectiveLocalDate=$date AND MovementType IN (1,2,3));
+                """;
+            movement.Parameters.AddWithValue("$person", person.PersonId);
+            movement.Parameters.AddWithValue("$date", date);
+            long transfer = Convert.ToInt64(await movement.ExecuteScalarAsync());
+
+            using var today = connection.CreateCommand();
+            today.CommandText = """
+                SELECT EXISTS(SELECT 1 FROM AttendanceRecords
+                    WHERE PersonId=$person AND AttendanceLocalDate=$date);
+                """;
+            today.Parameters.AddWithValue("$person", person.PersonId);
+            today.Parameters.AddWithValue("$date", date);
+            long existing = Convert.ToInt64(await today.ExecuteScalarAsync());
+
+            using var previous = connection.CreateCommand();
+            previous.CommandText = """
+                SELECT StatusId FROM AttendanceRecords WHERE PersonId=$person AND AttendanceLocalDate=$yday;
+                """;
+            previous.Parameters.AddWithValue("$person", person.PersonId);
+            previous.Parameters.AddWithValue("$yday", yesterday);
+            string status = (await previous.ExecuteScalarAsync())?.ToString() ?? "";
+            oldResult.Add(person.PersonId, string.Join("|", person.Assignment, person.Site, transfer, existing, status));
+        }
+        sw.Stop();
+        double baselineMs = sw.Elapsed.TotalMilliseconds;
+
+        var batchedResult = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        sw.Restart();
+        var transferred = new HashSet<string>(StringComparer.Ordinal);
+        using (var movements = connection.CreateCommand())
+        {
+            movements.CommandText = """
+                SELECT PersonId FROM PersonnelMovements
+                WHERE EffectiveLocalDate=$date AND MovementType IN (1,2,3);
+                """;
+            movements.Parameters.AddWithValue("$date", date);
+            using var reader = await movements.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) transferred.Add(reader.GetString(0));
+        }
+        var committed = new HashSet<string>(StringComparer.Ordinal);
+        using (var today = connection.CreateCommand())
+        {
+            today.CommandText = "SELECT PersonId FROM AttendanceRecords WHERE AttendanceLocalDate=$date;";
+            today.Parameters.AddWithValue("$date", date);
+            using var reader = await today.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) committed.Add(reader.GetString(0));
+        }
+        var previousStatuses = new Dictionary<string, string>(StringComparer.Ordinal);
+        using (var previous = connection.CreateCommand())
+        {
+            previous.CommandText = """
+                SELECT PersonId,StatusId FROM AttendanceRecords WHERE AttendanceLocalDate=$yday;
+                """;
+            previous.Parameters.AddWithValue("$yday", yesterday);
+            using var reader = await previous.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                previousStatuses.Add(reader.GetString(0), reader.GetString(1));
+        }
+        foreach (var person in people)
+            batchedResult.Add(person.PersonId, string.Join("|", person.Assignment,
+                person.Site, transferred.Contains(person.PersonId) ? 1L : 0L,
+                committed.Contains(person.PersonId) ? 1L : 0L,
+                previousStatuses.GetValueOrDefault(person.PersonId, "")));
+        sw.Stop();
+        double optimizedMs = sw.Elapsed.TotalMilliseconds;
+        Assert.Equal(PersonCount, people.Count);
+        Assert.Equal(oldResult.ToArray(), batchedResult.ToArray());
+        Console.WriteLine(
+            $"ALTAMAM_ATTENDANCE_SELECTION personCount={PersonCount} baselineCommands={1+PersonCount*3} optimizedCommands=4 baselineMs={baselineMs:F3} optimizedMs={optimizedMs:F3}");
+        Assert.True(optimizedMs < baselineMs,
+            $"Measured four-read selection must be faster on synthetic corpus: old {baselineMs:F3} ms / new {optimizedMs:F3} ms.");
+    }
+
     private static string ReadAll(SqliteCommand cmd)
     {
         var sb = new System.Text.StringBuilder();

@@ -555,34 +555,54 @@ public sealed class PersonRosterService
         var candidates = new JsonArray();
         var expectedVersions = new JsonArray();
         long baseRevisionSum = 0;
+        // Parameterized batched reads avoid one database round-trip per person.
+        // Reconstruct the preview in the caller's original order, including its
+        // revisions and first-missing-person error semantics.
+        var details = new Dictionary<string,
+            (string Name, string Number, int Org, bool Active, long Revision, string Site, long Days)>(
+                StringComparer.Ordinal);
+        const int batchSize = 400; // Safely below SQLite's legacy parameter limit.
+        for (int offset = 0; offset < ids.Count; offset += batchSize)
+        {
+            string[] batch = ids.Skip(offset).Take(batchSize).ToArray();
+            using var cmd = connection.CreateCommand();
+            string[] placeholders = new string[batch.Length];
+            for (int i = 0; i < batch.Length; i++)
+            {
+                placeholders[i] = "$person" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                cmd.Parameters.Add(placeholders[i], SqliteType.Text).Value = batch[i];
+            }
+            cmd.CommandText = $"""
+                SELECT p.PersonId, p.CurrentVisibleName, p.CurrentServiceNumberA,
+                       p.OrganizationalStatus, p.ActiveFlag, p.RowVersion,
+                       COALESCE((SELECT s.VisibleName
+                                 FROM PersonAssignments a JOIN Sites s ON s.SiteId=a.SiteId
+                                 WHERE a.PersonId=p.PersonId AND a.ValidToLocalDate IS NULL), 'غير محدد'),
+                       (SELECT COUNT(*) FROM AttendanceRecords r WHERE r.PersonId=p.PersonId)
+                FROM Persons p WHERE p.PersonId IN ({string.Join(",", placeholders)});
+                """;
+            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                details.Add(reader.GetString(0),
+                    (reader.GetString(1), reader.GetString(2), reader.GetInt32(3),
+                     Convert.ToInt32(reader.GetValue(4)) == 1, reader.GetInt64(5),
+                     reader.GetString(6), reader.GetInt64(7)));
+        }
         foreach (string id in ids)
         {
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = """
-                SELECT CurrentVisibleName, CurrentServiceNumberA, OrganizationalStatus, ActiveFlag, RowVersion,
-                       COALESCE((SELECT s.VisibleName FROM PersonAssignments a JOIN Sites s ON s.SiteId = a.SiteId
-                                 WHERE a.PersonId = p.PersonId AND a.ValidToLocalDate IS NULL), 'غير محدد'),
-                       (SELECT COUNT(*) FROM AttendanceRecords r WHERE r.PersonId = p.PersonId)
-                FROM Persons p WHERE PersonId = $id;
-                """;
-            cmd.Parameters.Add("$id", SqliteType.Text).Value = id;
-            using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-            if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+            if (!details.TryGetValue(id, out var row))
                 return BridgeHelpers.Error(BridgeErrorCodes.MissingData, $"الفرد {id} غير موجود — التمهيد غير صالح.");
-            var org = reader.GetInt32(2);
-            var active = Convert.ToInt32(reader.GetValue(3)) == 1;
-            long memberRevision = reader.GetInt64(4);
-            baseRevisionSum += memberRevision;
-            expectedVersions.Add(new JsonObject { ["personId"] = id, ["rowVersion"] = memberRevision });
+            baseRevisionSum += row.Revision;
+            expectedVersions.Add(new JsonObject { ["personId"] = id, ["rowVersion"] = row.Revision });
             candidates.Add(new JsonObject
             {
                 ["personId"] = id,
-                ["displayName"] = reader.GetString(0),
-                ["serviceNumberA"] = reader.GetString(1),
-                ["organizationalStatus"] = org,
-                ["currentSiteName"] = reader.GetString(5),
-                ["attendanceDays"] = reader.GetInt64(6),
-                ["blocker"] = !active ? "محفوظ مسبقاً" : org == 4 ? "مؤرشف سابقاً" : null
+                ["displayName"] = row.Name,
+                ["serviceNumberA"] = row.Number,
+                ["organizationalStatus"] = row.Org,
+                ["currentSiteName"] = row.Site,
+                ["attendanceDays"] = row.Days,
+                ["blocker"] = !row.Active ? "محفوظ مسبقاً" : row.Org == 4 ? "مؤرشف سابقاً" : null
             });
         }
 
