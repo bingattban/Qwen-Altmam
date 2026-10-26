@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Application.Bridge;
 using AlTamam.Infrastructure.Persistence;
 
 namespace AlTamam.Application.Scheduling;
