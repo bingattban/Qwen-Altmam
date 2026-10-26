@@ -181,7 +181,87 @@
     return Array.isArray(data)?data:[];
   }
 
+  let dashboardClockTimer=null;
+  function stopDashboardClock(){
+    if(dashboardClockTimer!==null&&typeof window.clearInterval==="function")
+      window.clearInterval(dashboardClockTimer);
+    dashboardClockTimer=null;
+  }
+  function beginEightPmCountdown(host,businessDate){
+    stopDashboardClock();
+    const line=el("div","dashboard-eight-clock");
+    line.setAttribute("role","timer");
+    line.setAttribute("aria-label","الوقت المتبقي للاعتماد التلقائي الساعة الثامنة مساءً");
+    host.appendChild(line);
+    const tick=()=>{
+      const now=new Date();
+      if(startOfToday()!==businessDate){
+        stopDashboardClock();
+        if(STATE.session&&view().contains?.(line))void renderDashboard();
+        return;
+      }
+      const cutoff=new Date(now.getFullYear(),now.getMonth(),now.getDate(),20,0,0,0);
+      const remaining=Math.max(0,Math.ceil((cutoff.getTime()-now.getTime())/1000));
+      const h=String(Math.floor(remaining/3600)).padStart(2,"0");
+      const m=String(Math.floor(remaining%3600/60)).padStart(2,"0");
+      const sec=String(remaining%60).padStart(2,"0");
+      line.textContent=remaining>0
+        ?"الوقت المتبقي لاعتماد حالات أمس تلقائياً الساعة ٨ مساءً: "+h+":"+m+":"+sec
+        :"حلّت الساعة ٨ مساءً؛ يتولى نظام Windows الاعتماد التلقائي. حدّث البيانات لعرض النتائج.";
+    };
+    tick();
+    // The native scheduler is authoritative; this is DISPLAY ONLY and never
+    // renews an idle session or commits attendance from JavaScript.
+    if(typeof window.setInterval==="function")
+      dashboardClockTimer=window.setInterval(tick,1000);
+  }
+
+  async function openUnpreparedCarryForward(){
+    const dialogs=window.AltamamDialog;
+    if(typeof dialogs?.unpreparedSelection!=="function")
+      return;
+    const date=STATE.date,site=STATE.siteId;
+    try{
+      const ids=await dialogs.unpreparedSelection(async page=>{
+        const response=parseData(await bridge().invoke("QueryDailyRoster",{
+          businessDate:date,siteId:site,statusId:"__UNPREPARED__",page,pageSize:50
+        }));
+        if(!response||!Array.isArray(response.items))
+          throw Error("لم يُرجع البرنامج قائمة غير المحضرين.");
+        return response;
+      });
+      if(!Array.isArray(ids)||ids.length===0)return;
+      if(STATE.date!==date||STATE.siteId!==site)
+        throw Error("تغير التاريخ أو الموقع أثناء الاختيار؛ أعد فتح غير المحضرين.");
+      const preview=parseData(await bridge().invoke("PreviewAttendanceChange",{
+        mode:"carry",businessDate:date,siteId:site,personIds:ids
+      }));
+      if(!preview||!preview.previewToken||!Array.isArray(preview.persons))
+        throw Error("تعذر عرض معاينة معتمدة من البرنامج.");
+      if(typeof dialogs.attendanceReview!=="function")
+        throw Error("نافذة المراجعة غير متاحة؛ لم تُحفظ أي حالة.");
+      const accepted=await dialogs.attendanceReview(preview,{
+        title:"معاينة اعتماد حالة أمس",
+        message:"تأكد من الحالة المقترحة لكل فرد (حالة أمس أو الحالة الافتراضية المعتمدة).",
+        confirmLabel:"تأكيد واعتماد حالات الأفراد"
+      });
+      if(!accepted)return;
+      const result=parseData(await bridge().invoke("SubmitAttendance",{
+        mode:"carry",previewToken:preview.previewToken
+      }));
+      if(!Number.isInteger(result?.count)||result.count!==ids.length)
+        throw Error("لم يؤكد الخادم اعتماد جميع الأفراد المحددين.");
+      STATE.dayPage=1;
+      await renderDashboard();
+    }catch(error){
+      await dialogs?.alert?.(error?.message||"فشل اعتماد حالات أمس؛ لم يُؤكد الحفظ.",{
+        title:"تعذر اعتماد حالة أمس"
+      });
+    }
+  }
+
   async function renderDashboard() {
+    stopDashboardClock();
     STATE.date=startOfToday();
     const container=view();
     container.replaceChildren(header("التمام اليومي"));
@@ -204,6 +284,7 @@
       const counts=parseData(countsResponse), rows=parseData(rosterResponse);
       feedback.replaceChildren(el("p","section-description","التحضير ليوم "+STATE.date+
         " — البيانات من قاعدة التطبيق المحلية."));
+      beginEightPmCountdown(feedback,STATE.date);
       // Keep the completion ratio read-only; the count chips still filter the roster.
       const percent=Number.isFinite(Number(counts.completionPercentage))?
         Math.max(0,Math.min(100,Math.round(Number(counts.completionPercentage)))):0;
@@ -225,6 +306,15 @@
       for(const item of stats) {
         const isActive=STATE.statusId===item.statusId;
         const card=button("",()=>{
+          if(item.statusId==="__UNPREPARED__"){
+            if(STATE.statusId!==item.statusId){
+              STATE.statusId=item.statusId;
+              STATE.dayPage=1;
+              void renderDashboard();
+            }
+            if(Number(item.count)>0)void openUnpreparedCarryForward();
+            return;
+          }
           if(STATE.statusId!==item.statusId){
             STATE.statusId=item.statusId;
             STATE.dayPage=1;
@@ -501,6 +591,7 @@
   }
 
   function render(section) {
+    if(section!=="dashboard")stopDashboardClock();
     if (!STATE.session) { loginGate();return; }
     if (!sections.has(section)) section="dashboard";
     applyMainNav(section);
