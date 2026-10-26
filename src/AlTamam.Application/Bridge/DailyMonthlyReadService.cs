@@ -166,11 +166,16 @@ public sealed class DailyMonthlyReadService
             SELECT p.PersonId, p.CurrentServiceNumberA, p.CurrentVisibleName,
                    COALESCE(s.VisibleName, 'غير محدد'),
                    ar.StatusId, ar.StatusNameSnapshot, ar.StatusColorSnapshot,
-                    m.MovementId, m.SourceSiteNameSnapshot, m.DestinationSiteNameSnapshot
+                    m.MovementId, m.SourceSiteNameSnapshot, m.DestinationSiteNameSnapshot,
+                   (SELECT prior.StatusId FROM AttendanceRecords prior
+                     WHERE prior.PersonId=p.PersonId AND prior.AttendanceLocalDate=$previousDay),
+                   (SELECT prior.StatusNameSnapshot FROM AttendanceRecords prior
+                     WHERE prior.PersonId=p.PersonId AND prior.AttendanceLocalDate=$previousDay)
             """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
         BindFilters(cmd, Iso(date), siteId, statusId, search);
+        cmd.Parameters.AddWithValue("$previousDay", Iso(date.AddDays(-1)));
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (long)(page - 1) * pageSize);
         var rows = new JsonArray();
@@ -192,6 +197,8 @@ public sealed class DailyMonthlyReadService
                 ["statusColor"] = reader.IsDBNull(7)
                     ? (reader.IsDBNull(6) ? null : reader.GetString(6))
                     : "#D8B4FE",
+                ["previousDayStatusId"] = reader.IsDBNull(10) ? null : reader.GetString(10),
+                ["previousDayStatusName"] = reader.IsDBNull(11) ? null : reader.GetString(11),
                 ["transferDay"] = !reader.IsDBNull(7)
             });
         }
