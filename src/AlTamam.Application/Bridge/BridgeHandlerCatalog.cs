@@ -151,14 +151,14 @@ public static class BridgeHandlerCatalog
         },
         "PreviewMonthlyExport" => async (req, principal, ct) =>
         {
-            var excel = new MonthlyExcelExportService(services.Db);
+            var excel = new MonthlyWorkbookSetService(services.Db,services.Time);
             var result = await excel.PreviewAsync(req.Payload, ct).ConfigureAwait(false);
             return result with { RequestId = req.RequestId };
         },
         "ExportMonthlyWorkbookSet" => async (req, principal, ct) =>
         {
-            var excel = new MonthlyExcelExportService(services.Db);
-            var result = await excel.ExportAsync(req.Payload, ct).ConfigureAwait(false);
+            var excel = new MonthlyWorkbookSetService(services.Db,services.Time);
+            var result = await excel.ExportAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return result with { RequestId = req.RequestId };
         },
         "GetMonthlyCellDetails" => async (req, principal, ct) =>
