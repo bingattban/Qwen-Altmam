@@ -630,6 +630,60 @@
       }
     },
     {
+      "action": "PreviewArchivedIdentity",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "ValidationError",
+        "DuplicateServiceNumber",
+        "ConflictStale",
+        "HistoricDayLocked"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitArchivedReturn",
+      "owningService": "PersonRosterService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "DuplicateServiceNumber",
+        "ConflictStale",
+        "HistoricDayLocked"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
       "action": "CreatePerson",
       "owningService": "PersonRosterService",
       "allowedRoles": [
