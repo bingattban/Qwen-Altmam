@@ -223,7 +223,7 @@ public sealed class ManualCarryForwardService
                     .ConfigureAwait(false);
                 if (current is null) return Error("تغيرت بيانات " + (error ?? personId) +
                     " بعد المعاينة؛ لم يُعتمد أي فرد.");
-                if (ToJson(current).ToJsonString() != expected.ToJsonString())
+                if (!JsonNode.DeepEquals(ToJson(current), expected))
                     return Error($"تغيرت حالة أمس أو موقع «{current.Name}» (الرقم (ع): {current.Number}) بعد المعاينة؛ أعد المراجعة.");
                 selected.Add(current);
             }
