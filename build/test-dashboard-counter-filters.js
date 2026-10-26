@@ -16,6 +16,7 @@ class El{
 const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
  badge=new El("span"),events={},calls=[],nav={};
 for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]=new El("button");
+let transferCount=0;
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
  invoke:async(action,payload)=>{
    calls.push({action,payload});
@@ -24,13 +25,14 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
    if(action==="QuerySites")
      return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
    if(action==="GetDashboardSummary")
-     return{data:{totalForce:3,unprepared:1,completionPercentage:67,statusCounts:[
+     return{data:{totalForce:3,unprepared:1,internalTransferDay:transferCount,completionPercentage:67,statusCounts:[
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
    if(action==="QueryDailyRoster"){
      const all=[{personId:"P1",statusId:null,statusName:"غير محضر"},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
-       {personId:"P3",statusId:"STS-ABSENT",statusName:"غياب"}];
+       {personId:"P3",statusId:"STS-ABSENT",statusName:"غياب"},
+       {personId:"P4",statusId:"__TRANSFER_DAY__",statusName:"تم نقله اليوم"}];
      const selected=all.filter(p=>!payload.statusId ||
        (payload.statusId==="__UNPREPARED__"?p.statusId===null:p.statusId===payload.statusId));
      return{data:{items:selected.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
@@ -55,6 +57,7 @@ async function main(){
  assert.ok(counter("all"),"total-force counter must be interactive");
  assert.ok(counter("__UNPREPARED__"),"unprepared counter must be interactive");
  assert.ok(counter("STS-PRESENT"),"saved attendance counter must be interactive");
+ assert.ok(!counter("__TRANSFER_DAY__"),"zero transfers must hide the movement card");
  assert.ok(!viewport.all().some(x=>x.className.includes("functional-status-filters")),
    "remove redundant status chips below counters");
  assert.equal(lastRoster().payload.statusId,"");
@@ -72,6 +75,13 @@ async function main(){
  counter("all").handlers.click();await settle();
  assert.equal(lastRoster().payload.statusId,"");
  assert.equal(counter("all").attrs["aria-pressed"],"true");
+ transferCount=1;
+ const refresh=viewport.all().find(x=>x.tag==="button"&&x.textContent==="تحديث البيانات");
+ assert.ok(refresh);refresh.handlers.click();await settle();
+ assert.ok(counter("__TRANSFER_DAY__"),"movement card appears automatically when one transfer exists");
+ counter("__TRANSFER_DAY__").handlers.click();await settle();
+ assert.equal(lastRoster().payload.statusId,"__TRANSFER_DAY__");
+ assert.ok(viewport.all().some(x=>x.textContent==="P4"));
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance"].includes(x.action)).length,0);
  console.log("DASHBOARD COUNTER FILTERS PASS: total/unprepared/status buttons, active states, no redundant chips");
 }

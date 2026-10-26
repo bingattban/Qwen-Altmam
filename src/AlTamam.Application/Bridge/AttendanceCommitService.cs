@@ -22,6 +22,7 @@ public sealed class AttendanceCommitService
     private static string Read(JsonObject? p,string key)
     { try{return p?[key]?.GetValue<string>()?.Trim()??"";}catch{return "";} }
     private string Today()=>_time.GetLocalNow().ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
+    private bool CutoffReached()=>_time.GetLocalNow().TimeOfDay>=TimeSpan.FromHours(20);
     private static BridgeResponse Fail(string code,string message)=>BridgeHelpers.Error(code,message);
     private static string[] PersonIds(JsonObject? data)
     {
@@ -130,6 +131,8 @@ public sealed class AttendanceCommitService
         var ids=PersonIds(payload);
         if(date!=Today())return Fail(BridgeErrorCodes.HistoricDayLocked,
             "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.");
+        if(CutoffReached())return Fail(BridgeErrorCodes.HistoricDayLocked,
+            "انتهى التحضير العادي الساعة الثامنة مساءً؛ اليوم بانتظار الاعتماد التلقائي أو أُعتمد بالفعل.");
         if(ids.Length==0||statusId.Length==0||mode is not("initial" or "revise"))
             return Fail(BridgeErrorCodes.ValidationError,"اختر الحالة وفرداً أو أكثر (حتى 100) ونوع العملية.");
         // A routine same-day status change requires an explicit, user-bound preview
@@ -191,6 +194,8 @@ public sealed class AttendanceCommitService
         if(token.Length<32)return Fail(BridgeErrorCodes.ValidationError,"معرّف المعاينة مطلوب.");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
+            if(CutoffReached())return Fail(BridgeErrorCodes.HistoricDayLocked,
+                "انتهت صلاحية معاينة التحضير بعد الساعة الثامنة مساءً؛ لا يُسمح بتعديل اليوم بالطريقة العادية.");
             using var find=c.CreateCommand();find.Transaction=t;
             find.CommandText="""
                 SELECT PayloadCanonicalJson FROM PreviewTokens

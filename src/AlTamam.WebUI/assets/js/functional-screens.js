@@ -215,8 +215,10 @@
       // The counters ARE the roster filters. No duplicate status chips below them.
       const stats=[{name:"إجمالي القوة",count:counts.totalForce,statusId:""},
         {name:"غير المحضرين",count:counts.unprepared,statusId:"__UNPREPARED__"},
-         {name:"نُقلوا اليوم",count:counts.internalTransferDay||0,
-           statusId:"__TRANSFER_DAY__",color:"#D8B4FE"}].concat(
+         ...(Number(counts.internalTransferDay)>0
+           ? [{name:"نُقلوا اليوم",count:counts.internalTransferDay,
+               statusId:"__TRANSFER_DAY__",color:"#D8B4FE"}]
+           : [])].concat(
           (counts.statusCounts||[]).map(st=>({
             name:st.name,count:st.count,statusId:st.statusId,color:st.color
           })));

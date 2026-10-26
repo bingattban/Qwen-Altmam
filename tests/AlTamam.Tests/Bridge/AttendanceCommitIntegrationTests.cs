@@ -62,7 +62,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     [Fact]
     public async Task BulkCommitAndRevision_AuditAtomicAndOneTimePreview()
     {
-        var service=new AttendanceCommitService(_db);
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
         var initial=await service.PreviewAsync(Payload("initial","STS-PRESENT",
             ["TST-ATTEND-P1","TST-ATTEND-P2"]),Actor,CancellationToken.None);
         string token=Token(initial);
@@ -91,7 +91,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     [Fact]
     public async Task ReviseTodayWithoutTypedReason_RequiresPreviewAndPreservesAutomaticAuditReason()
     {
-        var service=new AttendanceCommitService(_db);
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
         var initial=await service.PreviewAsync(Payload("initial","STS-PRESENT",
             ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
         var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(initial)},
@@ -121,7 +121,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     [Fact]
     public async Task PreviewRejectsAlreadyPreparedIndividualWithFullNameAndServiceNumber()
     {
-        var service=new AttendanceCommitService(_db);
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
         var first=await service.PreviewAsync(Payload("initial","STS-PRESENT",
             ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
         var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(first)},
@@ -152,7 +152,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
                 """;
             await command.ExecuteNonQueryAsync();
         }
-        var service=new AttendanceCommitService(_db);
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
         var rejected=await service.PreviewAsync(Payload("initial","STS-PRESENT",
             ["TST-ATTEND-P1","TST-ATTEND-P2"]),Actor,CancellationToken.None);
         Assert.False(rejected.Success);
@@ -165,7 +165,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     [Fact]
     public async Task StalePreviewIdentifiesIndividualWhoseAttendanceChanged()
     {
-        var service=new AttendanceCommitService(_db);
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
         var first=await service.PreviewAsync(Payload("initial","STS-PRESENT",
             ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
         var competing=await service.PreviewAsync(Payload("initial","STS-ABSENT",
@@ -187,7 +187,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     [Fact]
     public async Task InvalidBulkSelection_WritesNothing()
     {
-        var svc=new AttendanceCommitService(_db);
+        var svc=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
         var rejected=await svc.PreviewAsync(Payload("initial","STS-PRESENT",
             ["TST-ATTEND-P1","TST-PERSON-NONEXISTENT"]),Actor,CancellationToken.None);
         Assert.False(rejected.Success);
@@ -197,13 +197,34 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     [Fact]
     public async Task HistoricDateIsRejected()
     {
-        var svc=new AttendanceCommitService(_db);
+        var svc=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
         var data=Payload("initial","STS-PRESENT",["TST-ATTEND-P1"]);
         data["businessDate"]=DateOnly.FromDateTime(DateTime.Now).AddDays(-1).ToString("yyyy-MM-dd");
         var rejected=await svc.PreviewAsync(data,Actor,CancellationToken.None);
         Assert.False(rejected.Success);
         Assert.Equal(0L,Count("AttendanceRecords"));
     }
+    [Fact]
+    public async Task EightPm_LocalCutoffBlocksNewPreviewAndStaleApproval()
+    {
+        var clock=new SyntheticDaytimeClock(19,59);
+        var service=new AttendanceCommitService(_db,clock);
+        var valid=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True(valid.Success,valid.UserMessage);
+        string token=Token(valid);
+        clock.SetLocalTime(20,0);
+        var stopped=await service.PreviewAsync(Payload("initial","STS-ABSENT",
+            ["TST-ATTEND-P2"]),Actor,CancellationToken.None);
+        Assert.False(stopped.Success);
+        Assert.Equal(BridgeErrorCodes.HistoricDayLocked,stopped.ErrorCode);
+        var lateCommit=await service.CommitAsync(new JsonObject{["previewToken"]=token},
+            Actor,false,CancellationToken.None);
+        Assert.False(lateCommit.Success);
+        Assert.Equal(BridgeErrorCodes.HistoricDayLocked,lateCommit.ErrorCode);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {

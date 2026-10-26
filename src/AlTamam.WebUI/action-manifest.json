@@ -1999,6 +1999,56 @@
       }
     },
     {
+      "action": "GetAutoAttendancePolicy",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "SessionExpired"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "SetAutoAttendanceDefaultStatus",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "SessionExpired",
+        "ValidationError",
+        "CustomStatusInactive"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
       "action": "GetSettingsOverview",
       "owningService": "SettingsBackupService",
       "allowedRoles": [

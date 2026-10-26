@@ -50,6 +50,8 @@ const bridge = {
         backupDirectory:"E:\\AlTamamAlYawmi\\Backups", backupTime:"16:00",
         automaticBackupNote:"الجدولة غير نشطة", defaultDriveAvailable:false },
       GetApplicationVersion: { productNameAr:"التمام اليومي", version:"0.4.0" },
+      GetAutoAttendancePolicy: {configured:false,defaultStatusId:null,dueTimeLocal:"20:00"},
+      SetAutoAttendanceDefaultStatus: {defaultStatusId:"STS-ABSENT",defaultStatusName:"غياب",configured:true},
       RunDatabaseIntegrityCheck: { integrity:"ok" },
       GetAllowedRoles: [{ role:"Supervisor",name:"مشرف" }],
       ListUserAccounts: { items:[],total:0,hasNext:false },
@@ -183,8 +185,18 @@ async function run() {
   await controller.renderSettings(admin,()=>{});
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
     .map(x=>x.textContent);
-  assert.deepEqual(titles,["الحساب والبرنامج","النسخ الاحتياطي",
+  assert.deepEqual(titles,["الحساب والبرنامج","التحضير التلقائي — الساعة 8 مساءً","النسخ الاحتياطي",
     "سلامة قاعدة البيانات","الاستعادة والإعدادات المتقدمة"]);
+  const fallback=visible().find(x=>x.tag==="select"&&
+    x.attrs["aria-label"]==="الحالة الافتراضية عند عدم وجود تحضير أمس");
+  assert.ok(fallback,"administrators can choose the 20:00 fallback status");
+  assert.ok(!calls.some(x=>x.name==="SetAutoAttendanceDefaultStatus"),
+    "loading settings must not mutate policy");
+  fallback.value="STS-ABSENT";
+  await buttonNamed("حفظ الحالة الافتراضية").handlers.click();
+  assert.ok(calls.some(x=>x.name==="SetAutoAttendanceDefaultStatus"&&x.body.statusId==="STS-ABSENT"),
+    "explicit administrator confirmation writes the selected active status");
+
   assert.ok(buttonNamed("إنشاء نسخة احتياطية الآن").disabled,
     "manual backup disabled on a device without E: drive");
   assert.ok(!calls.some(x=>x.name==="CreateVerifiedBackup"),
@@ -195,6 +207,9 @@ async function run() {
   // The callback must be a real, asynchronously running bridge operation.
   await new Promise(resolve => setImmediate(resolve));
   assert.ok(calls.some(x=>x.name==="RunDatabaseIntegrityCheck"));
-  console.log("ADMIN SETTINGS UI PASS: 5 standalone cards, drill-down/back, supervisor RBAC, clear settings, backup safely disabled");
+  await controller.renderSettings({role:"Supervisor",username:"test-supervisor"},()=>{});
+  assert.ok(!buttonNamed("حفظ الحالة الافتراضية"),
+    "supervisors cannot see or invoke policy changes from settings");
+  console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
 run().catch(error => { console.error(error); process.exitCode=1; });

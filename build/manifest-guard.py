@@ -2,7 +2,7 @@
 """Phase 15 CI gate (15.01): validate action-manifest.json invariants BEFORE packaging.
 
 Fails the release pipeline (exit 1) on any violation:
-  * exactly 96 actions, unique names
+  * exactly 98 actions, unique names
   * every allowedRoles value is one of the 4 declared principal roles
   * manifest == compiled ActionManifest.cs table (name/service/roles/mutating)
     byte-for-byte after normalization — CI refuses drift before packaging
@@ -37,8 +37,8 @@ def main() -> int:
     errors = []
     actions = m.get("actions", [])
     names = [a["action"] for a in actions]
-    if len(actions) != 96:
-        errors.append(f"expected 96 actions, found {len(actions)}")
+    if len(actions) != 98:
+        errors.append(f"expected 98 actions, found {len(actions)}")
     dupes = {n for n in names if names.count(n) > 1}
     if dupes:
         errors.append(f"duplicate action names: {sorted(dupes)}")

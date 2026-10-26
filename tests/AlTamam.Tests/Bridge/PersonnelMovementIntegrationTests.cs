@@ -441,7 +441,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         }
 
         // On movement day even the destination cannot prepare the transferred person.
-        var forbidden = await new AttendanceCommitService(_db).PreviewAsync(new JsonObject
+        var forbidden = await new AttendanceCommitService(_db,new SyntheticDaytimeClock()).PreviewAsync(new JsonObject
         {
             ["businessDate"] = today, ["siteId"] = "SITE-DEST",
             ["statusId"] = "STS-PRESENT", ["mode"] = "initial",
