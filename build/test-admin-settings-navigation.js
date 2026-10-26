@@ -102,12 +102,12 @@ async function run() {
   byDataset("adminSection")[0].handlers.click();
   assert.equal(byDataset("adminSection").length,0,"top-level cards hidden in subgroup");
   assert.deepEqual(byDataset("adminScreen").map(x=>x.dataset.adminScreen),
-    ["attendance","persons","transfers","separation","archives","personReport"]);
+    ["attendance","persons","transfers","separation","personReport"]);
   byDataset("adminScreen")[0].handlers.click();
   assert.equal(byDataset("adminScreen").length,0,"only selected detail page is visible");
   assert.ok(buttonNamed("العودة إلى إدارة القوة"),"back from detail to parent");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  assert.equal(byDataset("adminScreen").length,6,"re-open six separate roster sections");
+  assert.equal(byDataset("adminScreen").length,5,"re-open five separate roster sections");
   buttonNamed("العودة إلى الإدارة").handlers.click();
   assert.equal(byDataset("adminSection").length,5,"return to clean admin landing");
 
@@ -115,22 +115,20 @@ async function run() {
   byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="transfers").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["transferInternal","transferExternal"]);
+    ["transferInternal","transferExternal","archiveInternal","archiveExternal"]);
   byDataset("adminNested")[0].handlers.click();
   assert.equal(byDataset("adminNested").length,0,"nested cards hidden after opening a leaf");
   buttonNamed("العودة إلى التنقلات").handlers.click();
-  assert.equal(byDataset("adminNested").length,2,"back restores transfer choices");
-  buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="archives").handlers.click();
-  assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["transferArchive","separatedArchive"],"archives are a separate card");
+  assert.equal(byDataset("adminNested").length,4,"back restores transfer and both archive choices");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="separation").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["separatePerson"],"dismissal is separate from report and archive");
+    ["separatePerson","separatedArchive"],"dismissal and its archive share the dismissal screen");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
   assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="personReport"),
     "one unified report card is present on roster landing");
+  assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="archives"),
+    "redundant top-level archive must be removed");
   assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="reports"),
     "retired combined Reports/Dismissal card must not return");
   buttonNamed("العودة إلى الإدارة").handlers.click();

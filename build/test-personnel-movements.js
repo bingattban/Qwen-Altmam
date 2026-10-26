@@ -11,7 +11,7 @@ class Element {
  addEventListener(event,cb){this.handlers[event]=cb;}
  all(){return [this,...this.children.flatMap(x=>x instanceof Element?x.all():[])];}
 }
-const root=new Element("div"),invoked=[],committed=[];
+const root=new Element("div"),invoked=[],committed=[],archiveRequests=[];
 let allow=false;
 const modalReviews=[];
 const responses={
@@ -24,10 +24,13 @@ const responses={
    persons:[{name:"فرد تجريبي",serviceNumberA:"001",sourceSiteName:"الموقع الأول"}]},
  CommitInternalTransfer:{count:1},
  QueryMovementArchive:{total:1,hasNext:false,items:[{serviceNumberA:"001",name:"فرد تجريبي",
-  type:"داخلي",sourceSite:"الموقع الأول",destination:"الموقع الثاني",date:"2026-10-23"}]}
+  type:"داخلي",sourceSite:"الموقع الأول",destination:"الموقع الثاني",date:"2026-10-23"}]},
+ ExportPersonLifetimeExcel:{filePath:"C:\\Reports\\نقل داخلي_2026-10-26.xlsx"}
 };
 const bridge={invoke:async(name,payload)=>{
  invoked.push(name);if(name==="CommitInternalTransfer")committed.push(payload);
+ if(name==="QueryMovementArchive"||name==="ExportPersonLifetimeExcel")
+    archiveRequests.push({name,payload});
  if(!(name in responses))throw Error("Unexpected action "+name);
  return {data:responses[name]};
 }};
@@ -66,8 +69,21 @@ async function run(){
  assert.equal(committed[0].previewToken,"SERVER-ONLY-TOKEN",
    "commit must send only the validated server preview token");
  const archiveRoot=new Element("div");
- await ctx.window.AltamamMovements.render(archiveRoot,"transferArchive");
+ await ctx.window.AltamamMovements.render(archiveRoot,"archiveInternal");
  assert.ok(invoked.includes("QueryMovementArchive"),"real movement archive read");
+ assert.equal(archiveRequests.at(-1).payload.type,"internal",
+   "internal archive MUST bind SQL type=internal, not rely on UI-only filtering");
+ const internalExport=archiveRoot.all().find(x=>x.tag==="button"&&
+  x.textContent.includes("تصدير أرشيف النقل الداخلي"));
+ assert.ok(internalExport);
+ await internalExport.handlers.click();await flush();
+ assert.equal(archiveRequests.at(-1).payload.mode,"movementArchive");
+ assert.equal(archiveRequests.at(-1).payload.type,"internal");
+ const externalRoot=new Element("div");
+ await ctx.window.AltamamMovements.render(externalRoot,"archiveExternal");
+ assert.equal(archiveRequests.at(-1).payload.type,"external",
+   "external archive MUST bind SQL type=external");
+ assert.ok(externalRoot.all().some(x=>x.textContent==="أرشيف النقل الخارجي"));
  console.log("MOVEMENTS UI PASS: source/target, review, cancel gate, token-only commit, archive");
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});

@@ -31,6 +31,12 @@ const bridge={
     if(action==="GetActiveAttendanceStatuses")
       return {data:[{statusId:"STS-ABSENT",name:"غياب"},
         {statusId:"STS-PRESENT",name:"موجود"}]};
+    if(action==="BuildPersonLifetimeReport"&&payload.exportPreview===true)
+      return {data:{fileName:"تقرير فرد_2026-10-26_aabbcc.xlsx",
+       exportId:"aabbcc",directory:"C:\\Reports",personCount:1,
+       worksheets:["ملخص التقرير","سجل التنقلات","تغييرات العمليات"]}};
+    if(action==="ExportPersonLifetimeExcel")
+      return {data:{filePath:"C:\\Reports\\تقرير فرد_2026-10-26_aabbcc.xlsx",format:"xlsx"}};
     if(action==="BuildPersonLifetimeReport"&&Array.isArray(payload.personIds))
       return {data:{
         mode:"group",personCount:2,dateFrom:payload.dateFrom,dateTo:payload.dateTo,
@@ -58,7 +64,8 @@ const bridge={
     throw Error("Unexpected report request "+action+" "+JSON.stringify(payload));
   }
 };
-const context={window:{AltamamBridge:bridge},document:{createElement:tag=>new El(tag)},console};
+const context={window:{AltamamBridge:bridge,
+   AltamamDialog:{confirm:async()=>true}},document:{createElement:tag=>new El(tag)},console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/js/personnel-report.js"),"utf8"),context);
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
@@ -88,6 +95,8 @@ async function main(){
   fields[0].value="2026-01-01";fields[1].value="2026-10-26";
   buttons("عرض التقرير الجماعي")[0].handlers.click();
   await settle();await settle();
+  const popup=viewport.all().find(x=>x.className==="person-report-modal");
+  assert.ok(popup&&!popup.hidden,"group report must open in a modal, not inline");
   const request=calls.find(x=>x.action==="BuildPersonLifetimeReport"&&x.payload.personIds);
   assert.ok(request,"C# report service must be invoked for a group");
   assert.equal(request.payload.personIds.length,2);
@@ -112,6 +121,16 @@ async function main(){
   assert.ok(viewport.all().some(x=>x.textContent==="الاسم: فرد جديد مستقل — الرقم (ع): 5151"));
   assert.ok(viewport.all().some(x=>x.textContent.includes("العودة إلى التقرير الجماعي")));
   assert.ok(viewport.all().some(x=>x.textContent==="تاريخ المواقع والفترات الفعلية"));
+  const exportButton=buttons("تصدير التقرير إلى Excel")[0];
+  assert.ok(exportButton,"modal must offer real XLSX export");
+  exportButton.handlers.click();await settle();await settle();
+  assert.ok(calls.some(x=>x.action==="BuildPersonLifetimeReport"&&x.payload.exportPreview),
+    "preview must be fetched before export");
+  const exported=calls.find(x=>x.action==="ExportPersonLifetimeExcel");
+  assert.ok(exported&&exported.payload.personId==="NEW-ID");
+  assert.equal(exported.payload.mode,"report");
+  buttons("إغلاق التقرير")[0].handlers.click();
+  assert.equal(popup.hidden,true,"close returns to existing multi-selection");
   console.log("UNIFIED REPORT UI PASS: person/group, historical vs new identity, exact PersonIds, date filter, drilldown");
 }
 main().catch(err=>{console.error(err);process.exitCode=1;});
