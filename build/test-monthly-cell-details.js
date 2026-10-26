@@ -119,7 +119,7 @@ async function main(){
   assert.equal(earlierCall.payload.month,oldMonth);
   assert.equal(earlierCall.payload.page,1);
   const earlierDays=viewport.all().filter(x=>x.tag==="th"&&
-    x.className.split(/\\s+/).includes("day-column"));
+    x.className.split(/\s+/).includes("day-column"));
   assert.equal(earlierDays.length,new Date(oldYear,oldMonth,0).getDate());
   assert.equal(earlierDays.filter(x=>x.className.includes("current-day-column")).length,0,
     "historic calendar must not mark a fake current day");
