@@ -278,12 +278,8 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
             ["identityResolutionToken"]=offered["previewToken"]!.GetValue<string>(),
             ["operationId"]="TST-DISMISSED-NUMBER-NEW-HUMAN-0001"
         };
-        // Preview is canonical ASCII; reject mismatched request text rather than
-        // silently accepting an altered preview payload.
-        var attempt=await new PersonRosterService(_db).CreatePersonAsync(
-            Actor.UserId,Actor.Username,command,default);
-        Assert.False(attempt.Success);
-        command["serviceNumberA"]="5151";
+        // Arabic-Indic digits normalize to the same canonical number and
+        // must never cause archived attendance to leak into the new identity.
         var created=Require(await new PersonRosterService(_db).CreatePersonAsync(
             Actor.UserId,Actor.Username,command,default));
         string newId=created["personId"]!.GetValue<string>();
