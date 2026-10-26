@@ -126,6 +126,7 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
         var accounts=new UserAccountManagementService(_db,_clock);
         var created=await accounts.CreateAsync(new JsonObject{
             ["username"]="separate-linked",["password"]="Abc123!secure",
+            ["passwordConfirmation"]="Abc123!secure",
             ["personId"]="TEST-SEP-P1",["role"]="Supervisor"
         },Actor,default);
         Assert.True(created.Success,created.UserMessage);

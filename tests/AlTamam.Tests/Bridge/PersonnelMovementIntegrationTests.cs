@@ -273,6 +273,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         var accounts=new UserAccountManagementService(_db);
         var created=await accounts.CreateAsync(new JsonObject{
             ["username"]="external-linked",["password"]="Abc123!secure",
+            ["passwordConfirmation"]="Abc123!secure",
             ["personId"]="TST-MOVEMENT-P3",["role"]="Supervisor"
         },Actor,default);
         Assert.True(created.Success,created.UserMessage);
