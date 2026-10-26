@@ -67,6 +67,11 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
     {
         DateTime local = _time.GetLocalNow().DateTime;
         DateTime due = local.Date.AddHours(AutoAttendanceService.DefaultDueHour);
+        // If the 20:00 run failed because the administrator has not yet chosen
+        // a default status, retry promptly after the setting is corrected.
+        // SQLCipher's day ledger makes each retry safe and idempotent.
+        if (local.TimeOfDay >= due.TimeOfDay && LastFailureMessage is not null)
+            return TickGranularity;
         if (local.TimeOfDay >= due.TimeOfDay)
             due = due.AddDays(1);
         TimeSpan untilDue = due - local;
