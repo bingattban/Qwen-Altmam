@@ -215,21 +215,59 @@ public sealed class DailyMonthlyReadService
 
     public async Task<BridgeResponse> ArchivePeriodsAsync(CancellationToken ct)
     {
+        // A personnel roster is an archive even when nobody was prepared yet.
+        // Attendance/movements alone omit entire months with real memberships
+        // but zero committed events. Include every calendar month intersecting
+        // a dated assignment [ValidFromLocalDate, ValidToLocalDate), capped at
+        // today for open assignments. Never invent attendance or future months.
+        var periods = new HashSet<string>(StringComparer.Ordinal);
         using var connection = _db.CreateOpenConnection();
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = """
-            SELECT DISTINCT SUBSTR(eventDate, 1, 7) AS period
-            FROM (
+        using (var events = connection.CreateCommand())
+        {
+            events.CommandText = """
                 SELECT AttendanceLocalDate AS eventDate FROM AttendanceRecords
                 UNION ALL
-                SELECT EffectiveLocalDate AS eventDate FROM PersonnelMovements
-            ) ORDER BY period DESC;
-            """;
-        var result = new JsonArray();
-        using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
-            result.Add(reader.GetString(0));
-        return BridgeHelpers.Ok(result);
+                SELECT EffectiveLocalDate AS eventDate FROM PersonnelMovements;
+                """;
+            using var reader = await events.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string date = reader.GetString(0);
+                if (date.Length >= 7) periods.Add(date[..7]);
+            }
+        }
+        DateOnly today = DateOnly.FromDateTime(DateTime.Now);
+        DateOnly tomorrow = today.AddDays(1);
+        using (var memberships = connection.CreateCommand())
+        {
+            memberships.CommandText = """
+                SELECT ValidFromLocalDate, ValidToLocalDate
+                FROM PersonAssignments ORDER BY ValidFromLocalDate;
+                """;
+            using var reader = await memberships.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!DateOnly.TryParseExact(reader.GetString(0), "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly start))
+                    continue;
+                DateOnly end = tomorrow;
+                if (!reader.IsDBNull(1) &&
+                    DateOnly.TryParseExact(reader.GetString(1), "yyyy-MM-dd",
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly closedAt) &&
+                    closedAt < end) end = closedAt;
+                if (start >= end) continue;
+                DateOnly lastIncluded = end.AddDays(-1);
+                DateOnly month = new(start.Year, start.Month, 1);
+                DateOnly lastMonth = new(lastIncluded.Year, lastIncluded.Month, 1);
+                for (; month <= lastMonth; month = month.AddMonths(1))
+                    periods.Add(month.ToString("yyyy-MM", CultureInfo.InvariantCulture));
+            }
+        }
+        var ordered = new JsonArray();
+        foreach (string period in periods.OrderByDescending(x => x, StringComparer.Ordinal))
+            ordered.Add(period);
+        return BridgeHelpers.Ok(ordered);
     }
 
     public async Task<BridgeResponse> MonthlyGridAsync(JsonObject? payload, CancellationToken ct)
@@ -282,7 +320,9 @@ public sealed class DailyMonthlyReadService
                       SELECT COALESCE((SELECT hn.VisibleNameSnapshot FROM SiteNameHistory hn
                                    WHERE hn.SiteId = a.SiteId AND hn.ValidFromLocalDate <= $end
                                      AND (hn.ValidToLocalDate IS NULL OR hn.ValidToLocalDate > $end)
-                                   ORDER BY hn.ValidFromLocalDate DESC LIMIT 1), 'غير موثق تاريخياً')
+                                   ORDER BY hn.ValidFromLocalDate DESC LIMIT 1),
+                                   CASE WHEN a.SiteId='SITE-UNSPECIFIED' THEN 'غير محدد'
+                                        ELSE 'غير موثق تاريخياً' END)
                       FROM PersonAssignments a
                       WHERE a.PersonId = p.PersonId AND a.ValidFromLocalDate < $next
                         AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $start)

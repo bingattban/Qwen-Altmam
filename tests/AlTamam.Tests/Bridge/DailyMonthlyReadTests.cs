@@ -195,11 +195,79 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
         var items = Assert.IsType<JsonArray>(content["items"]);
         Assert.Single(items);
         var days = Assert.IsType<JsonObject>(items[0]!["days"]);
+        Assert.Equal("غير محدد",items[0]!["siteName"]!.GetValue<string>());
         Assert.Equal("غياب", days["2026-10-19"]!["name"]!.GetValue<string>());
 
         var periods = await svc.ArchivePeriodsAsync(CancellationToken.None);
         Assert.Contains(Assert.IsType<JsonArray>(periods.Data),
             node => node!.GetValue<string>() == "2026-10");
+    }
+
+    [Fact]
+    public async Task ArchivePeriods_IncludeRosterOnlyMonths_ExcludeClosedEndMonthAndGaps()
+    {
+        // No attendance in 2026-08/09. A real membership still makes the
+        // complete monthly roster viewable in the archive.
+        using(var connection=_db.CreateOpenConnection())
+        using(var cmd=connection.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                    CurrentServiceNumberA,NormalizedServiceNumberA,
+                    FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                    ActiveFlag,RowVersion)
+                VALUES('TST-ARCHIVE-ONLY','فرد بلا تحضير','فرد بلا تحضير',
+                    '99111','99111','2026-06-15','2026-06-15T09:00:00Z',4,0,1);
+                INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                    ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+                VALUES('TST-ARCHIVE-ONLY','فرد بلا تحضير','99111',
+                    '2026-06-15',NULL,'TST-U','2026-06-15T09:00:00Z','سجل سابق');
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-ARCHIVE-JUNE','TST-ARCHIVE-ONLY','SITE-UNSPECIFIED',
+                    '2026-06-15','2026-08-01',NULL,'2026-06-15T09:00:00Z'),
+                  ('TST-ARCHIVE-SEPT','TST-ARCHIVE-ONLY','SITE-UNSPECIFIED',
+                    '2026-09-05','2026-10-01',NULL,'2026-09-05T09:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var read=new DailyMonthlyReadService(_db);
+        var periods=await read.ArchivePeriodsAsync(CancellationToken.None);
+        Assert.True(periods.Success,periods.UserMessage);
+        var values=Assert.IsType<JsonArray>(periods.Data)
+            .Select(node=>node!.GetValue<string>()).ToArray();
+        foreach(var month in new[]{"2026-06","2026-07","2026-09","2026-10"})
+            Assert.Contains(month,values);
+        Assert.Equal(values.Length,values.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(values.OrderByDescending(x=>x,StringComparer.Ordinal),values);
+        // The CLOSED first-of-month boundary must not create an August cell.
+        // If August is present for any other person, this person is still absent.
+        var august=await read.MonthlyGridAsync(new JsonObject{
+            ["year"]=2026,["month"]=8,["page"]=1,["pageSize"]=50
+        },CancellationToken.None);
+        Assert.True(august.Success,august.UserMessage);
+        Assert.DoesNotContain(Assert.IsType<JsonArray>(((JsonObject)august.Data!)["items"]),
+            x=>x!["personId"]!.GetValue<string>()=="TST-ARCHIVE-ONLY");
+        var september=await read.MonthlyGridAsync(new JsonObject{
+            ["year"]=2026,["month"]=9,["page"]=1,["pageSize"]=50
+        },CancellationToken.None);
+        Assert.True(september.Success,september.UserMessage);
+        var septemberItem=Assert.Single(Assert.IsType<JsonArray>(((JsonObject)september.Data!)["items"]));
+        Assert.Equal("TST-ARCHIVE-ONLY",septemberItem!["personId"]!.GetValue<string>());
+        Assert.Empty(Assert.IsType<JsonObject>(septemberItem["days"]));
+        Assert.Equal("غير محدد",septemberItem["siteName"]!.GetValue<string>());
+        var detail=await read.MonthlyCellDetailsAsync(new JsonObject{
+            ["personId"]="TST-ARCHIVE-ONLY",["businessDate"]="2026-09-05",
+            ["siteId"]="SITE-UNSPECIFIED"
+        },CancellationToken.None);
+        Assert.True(detail.Success,detail.UserMessage);
+        Assert.Equal("غير محدد",((JsonObject)detail.Data!)["siteName"]!.GetValue<string>());
+        Assert.Null(((JsonObject)detail.Data!)["attendance"]);
+        Assert.Null(((JsonObject)detail.Data!)["movement"]);
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId='TST-ARCHIVE-ONLY';";
+        Assert.Equal(0L,Convert.ToInt64(await q.ExecuteScalarAsync()));
     }
 
     [Fact]

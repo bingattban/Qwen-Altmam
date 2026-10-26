@@ -453,6 +453,21 @@
       if(STATE.monthEpoch!==epoch)return;
       STATE.archivePeriods=parseData(periodReply)||[];
       tool.appendChild(siteSelector(sites,showMonth));
+      // Navigate the real calendar, not an inferred count of prepared days.
+      // Empty-but-enrolled months must remain accessible from this screen.
+      const navigateMonth=offset=>{
+        const target=new Date(year,month-1+offset,1);
+        STATE.chosenYear=target.getFullYear();
+        STATE.chosenMonth=target.getMonth()+1;
+        STATE.monthPage=1;
+        void renderMonthly();
+      };
+      const previousMonth=button("الشهر السابق",()=>navigateMonth(-1),"btn btn-outline monthly-period-nav");
+      previousMonth.disabled=year===1900&&month===1;
+      const followingMonth=button("الشهر التالي",()=>navigateMonth(1),"btn btn-outline monthly-period-nav");
+      followingMonth.disabled=year>now.getFullYear()||
+        (year===now.getFullYear()&&month>=now.getMonth()+1);
+      append(tool,previousMonth,followingMonth);
       tool.appendChild(button("تحديث",renderMonthly,"btn btn-primary"));
       const previewExport=button("معاينة تصدير Excel",async()=>{
         const chosen={year,month,siteId:STATE.siteId};

@@ -34,15 +34,21 @@ const viewport=new El("main"),logoutAction=new El("button"),sidebar=new El("asid
   badge=new El("span"),events={},calls=[];
 const today=new Date(),year=today.getFullYear(),month=today.getMonth()+1;
 const firstDay=year+"-"+String(month).padStart(2,"0")+"-01";
+const older=new Date(year,month-2,1),oldYear=older.getFullYear(),
+  oldMonth=older.getMonth()+1;
+const oldPeriod=oldYear+"-"+String(oldMonth).padStart(2,"0");
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
   invoke:async(action,payload)=>{
     calls.push({action,payload});
     if(action==="GetCurrentSession")return{data:{sessionNonce:"A".repeat(32),username:"test",role:"Supervisor"}};
     if(action==="QuerySites")return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
-    if(action==="GetAvailableArchivePeriods")return{data:[firstDay.slice(0,7)]};
-    if(action==="QueryMonthlyGrid")return{data:{total:1,page:1,items:[
-      {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
-       days:{[firstDay]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
+    if(action==="GetAvailableArchivePeriods")return{data:[firstDay.slice(0,7),oldPeriod]};
+    if(action==="QueryMonthlyGrid"){
+      const chosen=payload.year+"-"+String(payload.month).padStart(2,"0")+"-01";
+      return{data:{total:1,page:payload.page,items:[
+        {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
+         days:{[chosen]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
+    }
     if(action==="GetMonthlyCellDetails")return{data:{personId:payload.personId,businessDate:payload.businessDate,
       personName:"شخص اختباري",serviceNumberA:"X1",siteName:"غير محدد",
       attendance:{statusName:"غياب",symbol:"غ",committedAtUtc:"2026-10-19T07:00:00Z",
@@ -101,9 +107,37 @@ async function main(){
   const close=viewport.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
   close.handlers.click();
   assert.equal(details.hidden,true,"close hides details without touching attendance");
+  // Browse the previous month without losing the fixed columns, footer, or
+  // chronological day order. The archive may have a roster but no preparations.
+  const previousMonth=viewport.all().find(x=>x.tag==="button"&&x.textContent==="الشهر السابق");
+  const followingMonth=viewport.all().find(x=>x.tag==="button"&&x.textContent==="الشهر التالي");
+  assert.ok(previousMonth&&!previousMonth.disabled);
+  assert.ok(followingMonth&&followingMonth.disabled,"future months disabled from current month");
+  previousMonth.handlers.click();await tick();await tick();
+  const earlierCall=calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1);
+  assert.equal(earlierCall.payload.year,oldYear);
+  assert.equal(earlierCall.payload.month,oldMonth);
+  assert.equal(earlierCall.payload.page,1);
+  const earlierDays=viewport.all().filter(x=>x.tag==="th"&&
+    x.className.split(/\s+/).includes("day-column"));
+  assert.equal(earlierDays.length,new Date(oldYear,oldMonth,0).getDate());
+  assert.equal(earlierDays.filter(x=>x.className.includes("current-day-column")).length,0,
+    "historic calendar must not mark a fake current day");
+  const visiblePager=viewport.all().find(x=>x.className.includes("functional-pager"));
+  assert.ok(visiblePager,"monthly prev/next pages must remain visible outside table scrolling");
+  assert.ok(visiblePager.all().some(x=>x.textContent==="السابق"));
+  assert.ok(visiblePager.all().some(x=>x.textContent==="التالي"));
+  const goForward=viewport.all().find(x=>x.tag==="button"&&x.textContent==="الشهر التالي");
+  assert.ok(goForward&&!goForward.disabled);
+  goForward.handlers.click();await tick();await tick();
+  const latest=calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1);
+  assert.equal(latest.payload.year,year);
+  assert.equal(latest.payload.month,month);
+  assert.equal(viewport.all().filter(x=>x.tag==="th"&&
+    x.className.includes("current-day-column")).length,1);
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
     "QueryMonthlyGrid","GetMonthlyCellDetails"].includes(x.action)).length,0,
-    "read-only click must never commit attendance or modify history");
+    "read-only navigation must never commit attendance or modify history");
   console.log("MONTHLY CELL DETAILS UI PASS: date-bound click, saved snapshot and revision, close, read-only");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
