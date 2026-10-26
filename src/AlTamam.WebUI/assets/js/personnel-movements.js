@@ -15,7 +15,7 @@ async function transfer(host,external){
   const from=el("select"),to=el("select"),outside=el("input"),search=el("input");
   from.setAttribute("aria-label","الموقع الحالي");to.setAttribute("aria-label","الموقع المنقول إليه");
   outside.setAttribute("aria-label","الجهة الخارجية");outside.placeholder="اسم الجهة الخارجية (إجباري)";
-  search.placeholder="بحث بالاسم أو الرقم (ع)";
+  search.placeholder="بحث بالاسم أو الرقم (ع)";search.className="form-input boxed-search";
   const note=el("div"),list=el("div"),confirmation=el("div"),counter=el("p","الأفراد المحددون: 0");
   const selected=new Set();let sites=[],page=1,serial=0;
   function reset(){selected.clear();counter.textContent="الأفراد المحددون: 0";confirmation.replaceChildren();}
