@@ -922,6 +922,32 @@
         }
         review.appendChild(t.wrap);
         const contested=candidates.some(x=>x.numberMatch);
+        const separatedOwner=candidates.length===1&&candidates[0].numberMatch&&
+          candidates[0].organizationalStatus===3&&candidates[0].exitType==="فصل"&&
+          candidates[0].name.trim()!==name;
+        if(separatedOwner){
+          const former=candidates[0];
+          review.appendChild(warning("الرقم (ع) «"+canonicalNumber+"» مقيد في الأرشيف باسم المفصول «"+
+            former.name+"». الاستبدال ينشئ فرداً جديداً بسجل تحضير فارغ من اليوم؛ تاريخ المفصول السابق "+
+            "يبقى محفوظاً باسمه في الأرشيف وسجل العمليات، ولا ينتقل للفرد الجديد."));
+          review.appendChild(btn("استبدال اسم المفصول بالاسم الجديد وتصفير سجل الرقم الجديد",()=>submitted(async()=>{
+            const prompt="الرقم (ع) «"+canonicalNumber+"» مقيد باسم مفصول: «"+former.name+
+              "»؛ تاريخ الفصل: "+former.exitDate+". هل تؤكد استبدال استخدام الرقم (ع) باسم «"+name+
+              "»؟ سيكون له معرّف جديد وتحضير يبدأ من الصفر، ولن تنتقل حالات المفصول السابقة إليه، "+
+              "مع إبقاء أرشيفه التاريخي محفوظاً.";
+            if(!await dialogs.confirm(prompt,{title:"تأكيد استبدال رقم (ع) لفرد مفصول",danger:true}))return;
+            const response=await api().invoke("CreatePerson",{
+              visibleName:name,serviceNumberA:canonicalNumber,siteId,
+              identityResolutionToken:scanned.previewToken,
+              identityDecision:"replaceSeparated",archivedPersonId:former.personId,
+              operationId:makeOperationId()
+            });
+            if(!response.data?.personId||response.data.separatedNumberReassigned!==true)
+              throw Error("لم يُثبت الخادم إتمام الاستبدال المصرح به.");
+            await resetForm("تم اعتماد الرقم (ع) للفرد الجديد بسجل تحضير يبدأ من الصفر، "+
+              "وحُفظ سجل المفصول السابق في الأرشيف.");
+          }),"btn btn-danger"));
+        }
         if(!contested){
           review.appendChild(btn("فرد آخر مختلف عن جميع المرشحين",()=>submitted(async()=>{
             const detail=candidates.map(x=>x.name+" (ع: "+x.serviceNumberA+
@@ -937,7 +963,9 @@
             await resetForm("أُنشئت هوية مستقلة بعد توثيق أنها مختلفة عن مرشحي الأرشيف.");
           }),"btn btn-outline"));
         }else{
-          review.appendChild(warning("الرقم (ع) يطابق هوية مؤرشفة؛ لا يمكن إنشاء شخص آخر بهذا الرقم. يجب إثبات العودة أو حل التعارض أولاً."));
+          review.appendChild(warning(separatedOwner
+            ?"يمكن استبدال الرقم للفرد الجديد بعد التأكيد أعلاه، دون حذف تاريخ المفصول."
+            :"الرقم (ع) يطابق هوية مؤرشفة لا تسمح بالاستبدال؛ يجب إثبات العودة أو حل التعارض أولاً."));
         }
         addMessage.replaceChildren(review);
       }catch(e){errors(addMessage,e);}
