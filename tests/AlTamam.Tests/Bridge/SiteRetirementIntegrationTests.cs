@@ -113,7 +113,7 @@ public sealed class SiteRetirementIntegrationTests : IAsyncLifetime,IDisposable
         Assert.Equal(2,data["reassignedCount"]!.GetValue<int>());
         Assert.Equal("2026-10-26",data["effectiveDate"]!.GetValue<string>());
         Assert.Equal("0",Scalar("SELECT ActiveFlag FROM Sites WHERE SiteId='SITE-RETIRE'"));
-        Assert.Equal(4L,Count("SELECT COUNT(*) FROM PersonAssignments"));
+        Assert.Equal(5L,Count("SELECT COUNT(*) FROM PersonAssignments"));
         Assert.Equal(2L,Count("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId='SITE-UNSPECIFIED' AND ValidToLocalDate IS NULL"));
         Assert.Equal(2L,Count("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId='SITE-RETIRE' AND ValidToLocalDate='2026-10-26'"));
         Assert.Equal("2026-10-02",Scalar("SELECT ValidToLocalDate FROM PersonAssignments WHERE AssignmentId='TST-SITE-ARCHIVED'"));
@@ -135,7 +135,7 @@ public sealed class SiteRetirementIntegrationTests : IAsyncLifetime,IDisposable
             (JsonObject)input.DeepClone(),Actor,CancellationToken.None);
         Assert.True(retried.Success,retried.UserMessage);
         Assert.Equal(3L,Count("SELECT COUNT(*) FROM AuditEvents"));
-        Assert.Equal(4L,Count("SELECT COUNT(*) FROM PersonAssignments"));
+        Assert.Equal(5L,Count("SELECT COUNT(*) FROM PersonAssignments"));
         var mismatch=Payload();
         mismatch["operationId"]="site-retirement-mismatched-id-26";
         Assert.False((await svc.RemoveSiteAndReassignCurrentPersonsAsync(
@@ -202,8 +202,8 @@ public sealed class SiteRetirementIntegrationTests : IAsyncLifetime,IDisposable
             q.CommandText="""
                 UPDATE PersonAssignments SET ValidFromLocalDate='2026-10-03'
                   WHERE AssignmentId='TST-SITE-A1';
-                INSERT INTO PeriodClosures(PeriodType,PeriodKey,IsClosed,ClosedAtUtc,ClosedByUserId)
-                VALUES('DAY','2026-10-26',1,'2026-10-26T20:00:00Z','TEST');
+                INSERT INTO PeriodClosures(PeriodType,PeriodKey,IsClosed,ClosedAtUtc,ClosedByActor,PolicyVersion)
+                VALUES('DAY','2026-10-26',1,'2026-10-26T20:00:00Z','TEST','site-retire-test');
                 """;
             await q.ExecuteNonQueryAsync();
         }
