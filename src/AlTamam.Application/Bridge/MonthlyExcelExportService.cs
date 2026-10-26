@@ -81,7 +81,7 @@ public sealed class MonthlyExcelExportService
         if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
             return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
                 "مجلد النسخ والتصدير غير متاح؛ غيّره من الإعدادات.");
-        string basename = $"AlTamam_Monthly_{year:D4}-{month:D2}_{Guid.NewGuid():N}.xlsx";
+        string basename = $"التمام الشهري_{year:D4}-{month:D2}_تصدير-{DateTime.Now:yyyy-MM-dd}_{Guid.NewGuid():N}.xlsx";
         string destination = Path.Combine(directory, basename);
         string partial = destination + ".part";
         try

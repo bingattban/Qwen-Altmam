@@ -129,7 +129,8 @@ public sealed class ExcelImportOutcomeService
         if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
             return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
                 "مجلد النسخ والتصدير غير متاح؛ غيّره من الإعدادات.");
-        string filename = "AlTamam_ImportIssues_" + Guid.NewGuid().ToString("N") + ".xlsx";
+        string filename = "أخطاء الاستيراد_" + DateTime.Now.ToString("yyyy-MM-dd",
+            CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N") + ".xlsx";
         string destination = Path.Combine(directory, filename);
         string partial = destination + ".part";
         try
