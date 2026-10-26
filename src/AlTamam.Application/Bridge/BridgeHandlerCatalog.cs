@@ -341,6 +341,15 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.RenameSiteAsync(req.Payload, principal!, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.SiteRenamed)) : Fail(req, inner);
         },
+        "RemoveSiteAndReassignCurrentPersons" => async (req, principal, ct) =>
+        {
+            var svc=new AdminConfigurationService(services.Db,services.Time);
+            BridgeResponse inner=await svc.RemoveSiteAndReassignCurrentPersonsAsync(
+                req.Payload,principal!,ct).ConfigureAwait(false);
+            return inner.Success
+                ? Done(req,inner.Data,Invalidation(UiInvalidationEvents.SiteRenamed))
+                : Fail(req,inner);
+        },
         "CreateAttendanceStatus" => async (req, principal, ct) =>
         {
             var svc = new AdminConfigurationService(services.Db);

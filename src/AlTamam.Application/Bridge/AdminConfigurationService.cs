@@ -266,7 +266,7 @@ public sealed class AdminConfigurationService
                 move.Parameters.AddWithValue("$old",p.Assignment);
                 move.Parameters.AddWithValue("$person",p.PersonId);
                 if(await move.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
-                    return Fail("تغير انتساب أحد الأفراد؛ أعد تحميل الموقع.",BridgeErrorCodes.ConflictStale);
+                    throw new InvalidOperationException("تغير انتساب أحد الأفراد أثناء التنفيذ؛ تراجعت العملية كاملة.");
                 using var create=c.CreateCommand();create.Transaction=t;
                 create.CommandText="""
                     INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
@@ -298,7 +298,7 @@ public sealed class AdminConfigurationService
             deactivate.Parameters.AddWithValue("$id",siteId);
             deactivate.Parameters.AddWithValue("$version",version);
             if(await deactivate.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
-                return Fail("تغير الموقع أثناء الإزالة.",BridgeErrorCodes.ConflictStale);
+                throw new InvalidOperationException("تغير الموقع أثناء التنفيذ؛ تراجعت العملية كاملة.");
             await Audit(c,t,actor,"SITE_RETIRE","إزالة موقع ونقل الأفراد",
                 "Site",siteId,name,
                 new JsonObject{["active"]=true,["affectedPersons"]=people.Count}.ToJsonString(),
