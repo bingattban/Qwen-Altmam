@@ -204,6 +204,27 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
         Assert.False(rejected.Success);
         Assert.Equal(0L,Count("AttendanceRecords"));
     }
+    [Fact]
+    public async Task EightPm_LocalCutoffBlocksNewPreviewAndStaleApproval()
+    {
+        var clock=new SyntheticDaytimeClock(19,59);
+        var service=new AttendanceCommitService(_db,clock);
+        var valid=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True(valid.Success,valid.UserMessage);
+        string token=Token(valid);
+        clock.SetLocalTime(20,0);
+        var stopped=await service.PreviewAsync(Payload("initial","STS-ABSENT",
+            ["TST-ATTEND-P2"]),Actor,CancellationToken.None);
+        Assert.False(stopped.Success);
+        Assert.Equal(BridgeErrorCodes.HistoricDayLocked,stopped.ErrorCode);
+        var lateCommit=await service.CommitAsync(new JsonObject{["previewToken"]=token},
+            Actor,false,CancellationToken.None);
+        Assert.False(lateCommit.Success);
+        Assert.Equal(BridgeErrorCodes.HistoricDayLocked,lateCommit.ErrorCode);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
