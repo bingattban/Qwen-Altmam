@@ -39,7 +39,7 @@ public sealed class PreviewTokenRetentionService
                     state.Parameters.AddWithValue("$key", LastSweepSetting);
                     string? last = await state.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
                     if (DateTimeOffset.TryParse(last, CultureInfo.InvariantCulture,
-                            DateTimeStyles.RoundtripKind, out DateTimeOffset previous) &&
+                            DateTimeStyles.None, out DateTimeOffset previous) &&
                         now - previous < TimeSpan.FromDays(1))
                         return 0;
                 }
