@@ -198,9 +198,10 @@ async function run() {
   const selection=addUserForm.all().find(x=>x.tag==="select"&&
     x.attrs["aria-label"]==="اختر فرداً من الكشف");
   selection.value="TST-ACTIVE-1";
-  const username=addUserForm.all().find(x=>x.tag==="input"&&x.type==="text"&&
-    x.value!==undefined);
-  if(username)username.value="tester-user";
+  const usernameField=addUserForm.all().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="اسم المستخدم");
+  assert.ok(usernameField,"a dedicated username field is required");
+  usernameField.children.find(x=>x.tag==="input").value="tester-user";
   secrets[0].value="Abc123!secure";secrets[1].value="Different123!";
   const beforeUserWrites=calls.filter(x=>x.name==="CreateUserAccount").length;
   await buttonNamed("تأكيد إضافة الحساب").handlers.click();
