@@ -1609,9 +1609,7 @@
         "هذه الإجراءات تحتاج إلى اختبارات حماية البيانات قبل السماح بتشغيلها."));
       const forthcoming=node("div","settings-properties");
       for(const [name,detail] of [
-        ["استيراد نسخة احتياطية","غير متاح حتى اكتمال فحص الاستعادة"],
-        ["النسخ التلقائي اليومي","الجدولة غير نشطة حالياً"],
-        ["تغيير وقت النسخ","غير متاح حتى تشغيل الجدولة"],
+        ["استيراد نسخة احتياطية","غير متاح حتى اكتمال اختبارات الاستعادة الآمنة"],
       ]) forthcoming.appendChild(settingsValue(name,detail));
       planned.appendChild(forthcoming);
       if(session.role==="GeneralAdministration"){
