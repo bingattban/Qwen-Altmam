@@ -23,30 +23,33 @@ public sealed class MonthlyExcelExportService
 
     public MonthlyExcelExportService(AlTamamDbContext db) { _db=db; _read = new DailyMonthlyReadService(db); }
 
-    private static bool ValidPeriod(JsonObject? input, out int year, out int month, out string siteId)
+    private static bool ValidPeriod(JsonObject? input, out int year, out int month,
+        out string siteId, out string term)
     {
-        year = 0; month = 0; siteId = "";
+        year = 0; month = 0; siteId = ""; term = "";
         try
         {
             year = input?["year"]?.GetValue<int>() ?? 0;
             month = input?["month"]?.GetValue<int>() ?? 0;
             siteId = input?["siteId"]?.GetValue<string>()?.Trim() ?? "";
+            term = input?["term"]?.GetValue<string>()?.Trim() ?? "";
         }
         catch { return false; }
         return year is >= 1900 and <= 2199 && month is >= 1 and <= 12
-            && siteId.Length <= 128 && !siteId.Any(char.IsControl);
+            && siteId.Length <= 128 && !siteId.Any(char.IsControl)
+            && term.Length <= 100 && !term.Any(char.IsControl);
     }
 
     public Task<BridgeResponse> PeriodsAsync(CancellationToken ct) => _read.ArchivePeriodsAsync(ct);
 
     public async Task<BridgeResponse> PreviewAsync(JsonObject? input, CancellationToken ct)
     {
-        if (!ValidPeriod(input, out int year, out int month, out string site))
+        if (!ValidPeriod(input, out int year, out int month, out string site, out string term))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "الشهر أو السنة أو الموقع غير صالح للتصدير.");
         var page = await _read.MonthlyGridAsync(new JsonObject
         {
             ["year"] = year, ["month"] = month, ["siteId"] = site,
-            ["page"] = 1, ["pageSize"] = 1
+            ["term"] = term, ["page"] = 1, ["pageSize"] = 1
         }, ct).ConfigureAwait(false);
         if (!page.Success) return page;
         long total = ((JsonObject)page.Data!)["total"]!.GetValue<long>();
@@ -54,7 +57,7 @@ public sealed class MonthlyExcelExportService
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "عدد الأفراد يتجاوز حد التصدير الآمن (100000).");
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["year"] = year, ["month"] = month, ["siteId"] = site,
+            ["year"] = year, ["month"] = month, ["siteId"] = site, ["term"] = term,
             ["personCount"] = total, ["daysInMonth"] = DateTime.DaysInMonth(year, month),
             ["format"] = "xlsx"
         });
@@ -72,6 +75,7 @@ public sealed class MonthlyExcelExportService
         int month = previewData["month"]!.GetValue<int>();
         int days = previewData["daysInMonth"]!.GetValue<int>();
         string site = previewData["siteId"]!.GetValue<string>();
+        string term = previewData["term"]!.GetValue<string>();
         // The same audited output folder is used by backups and all Excel reports.
         string selected = await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
         if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
@@ -137,7 +141,9 @@ public sealed class MonthlyExcelExportService
                 writer.WriteEndElement();
                 writer.WriteStartElement("sheetData", SpreadsheetNs);
                 WriteRow(writer, 1, new [] { "التمام الشهري — كشف محفوظ" });
-                WriteRow(writer, 2, new [] { $"الشهر: {year:D4}-{month:D2}", "الموقع:", site.Length == 0 ? "جميع المواقع" : site });
+                WriteRow(writer, 2, new [] { $"الشهر: {year:D4}-{month:D2}", "الموقع:",
+                    site.Length == 0 ? "جميع المواقع" : site, "البحث:",
+                    term.Length == 0 ? "جميع الأفراد" : term });
                 var headings = new List<string> { "م", "الرقم (ع)", "الاسم", "الموقع" };
                 for (int d = 1; d <= days; d++) headings.Add(d.ToString("00", CultureInfo.InvariantCulture));
                 WriteRow(writer, 3, headings);
@@ -148,7 +154,7 @@ public sealed class MonthlyExcelExportService
                     var data = await _read.MonthlyGridAsync(new JsonObject
                     {
                         ["year"] = year, ["month"] = month, ["siteId"] = site,
-                        ["page"] = pageNumber, ["pageSize"] = 100
+                        ["term"] = term, ["page"] = pageNumber, ["pageSize"] = 100
                     }, ct).ConfigureAwait(false);
                     if (!data.Success) throw new IOException("تعذر قراءة الصفحة المطلوبة من سجل التمام.");
                     var items = (JsonArray)((JsonObject)data.Data!)["items"]!;
@@ -183,7 +189,7 @@ public sealed class MonthlyExcelExportService
             return BridgeHelpers.Ok(new JsonObject
             {
                 ["filePath"] = destination, ["fileName"] = basename,
-                ["personCount"] = total, ["year"] = year, ["month"] = month,
+                ["personCount"] = total, ["year"] = year, ["month"] = month, ["term"] = term,
                 ["siteId"] = site, ["format"] = "xlsx"
             });
         }

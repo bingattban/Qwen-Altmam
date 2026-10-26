@@ -145,6 +145,83 @@ public sealed class MonthlyHistoryReuseTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task MonthlySearch_MatchesOnlyEffectiveHistoricalIdentity_NotLaterNameOrOtherPerson()
+    {
+        // A current display-name change after October must not retroactively
+        // affect October search; the stored historic identity owns each result.
+        using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.CommandText="""
+                UPDATE Persons SET CurrentVisibleName='اسم مختلف بعد الشهر',
+                    NormalizedName='اسم مختلف بعد الشهر'
+                WHERE PersonId='TST-HISTORY-OLD';
+                UPDATE PersonIdentityHistory SET ValidToLocalDate='2026-11-01'
+                WHERE PersonId='TST-HISTORY-OLD';
+                INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,
+                    ServiceNumberASnapshot,ValidFromLocalDate,ValidToLocalDate,
+                    ChangedByUserId,RecordedAtUtc,Reason)
+                VALUES('TST-HISTORY-OLD','اسم مختلف بعد الشهر','5151',
+                    '2026-11-01',NULL,'TEST','2026-11-01T09:00:00Z','تغيير لاحق');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var service=new DailyMonthlyReadService(_db);
+        async Task<JsonObject> Query(string term, string site="SITE-UNSPECIFIED",
+            int page=1, int pageSize=50)
+        {
+            var response=await service.MonthlyGridAsync(new JsonObject{
+                ["year"]=2026,["month"]=10,["siteId"]=site,
+                ["term"]=term,["page"]=page,["pageSize"]=pageSize
+            },CancellationToken.None);
+            Assert.True(response.Success,response.UserMessage);
+            return Assert.IsType<JsonObject>(response.Data);
+        }
+        var former=await Query("فرد مفصول سابق");
+        Assert.Equal(1L,former["total"]!.GetValue<long>());
+        Assert.Equal("TST-HISTORY-OLD",
+            former["items"]![0]!["personId"]!.GetValue<string>());
+        Assert.Equal("فرد مفصول سابق",
+            former["items"]![0]!["name"]!.GetValue<string>());
+        var later=await Query("اسم مختلف بعد الشهر");
+        Assert.Equal(0L,later["total"]!.GetValue<long>());
+        var fresh=await Query("فرد جَديد مستقل");
+        Assert.Equal(1L,fresh["total"]!.GetValue<long>());
+        Assert.Equal("TST-HISTORY-NEW",
+            fresh["items"]![0]!["personId"]!.GetValue<string>());
+
+        // Arabic/Persian digits and case-normalized literal SQL wildcards.
+        foreach(var text in new[]{"5151","٥١٥١","۵۱۵۱"})
+        {
+            var both=await Query(text);
+            Assert.Equal(2L,both["total"]!.GetValue<long>());
+            var all=Assert.IsType<JsonArray>(both["items"]);
+            Assert.Equal(2,all.Count);
+            Assert.NotEqual(all[0]!["personId"]!.GetValue<string>(),
+                            all[1]!["personId"]!.GetValue<string>());
+            // Paging is from the SAME historical identity sorting.
+            var first=await Query(text,page:1,pageSize:1);
+            var second=await Query(text,page:2,pageSize:1);
+            Assert.Equal(2L,first["total"]!.GetValue<long>());
+            Assert.Equal(2L,second["total"]!.GetValue<long>());
+            Assert.True(first["hasNext"]!.GetValue<bool>());
+            Assert.False(second["hasNext"]!.GetValue<bool>());
+            Assert.NotEqual(first["items"]![0]!["personId"]!.GetValue<string>(),
+                            second["items"]![0]!["personId"]!.GetValue<string>());
+        }
+        Assert.Equal(0L,(await Query("%"))["total"]!.GetValue<long>());
+        Assert.Equal(0L,(await Query("5151",site:"SITE-NOT-OWNED"))["total"]!.GetValue<long>());
+        var invalid=await service.MonthlyGridAsync(new JsonObject{
+            ["year"]=2026,["month"]=10,["term"]=new string('z',101)
+        },CancellationToken.None);
+        Assert.False(invalid.Success);
+        using var check=_db.CreateOpenConnection();
+        using var q=check.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AttendanceRecords;";
+        Assert.Equal(2L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task Periods_FollowDocumentedEnrollmentAndDismissal_NotTodayPersonNumber()
     {
         var reader=new DailyMonthlyReadService(_db);

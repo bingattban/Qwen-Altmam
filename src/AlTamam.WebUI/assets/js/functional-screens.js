@@ -4,7 +4,7 @@
 (function () {
   const sections = new Set(["dashboard", "monthly", "admin", "settings"]);
   const STATE = { session: null, siteId: "", statusId: "", dayTerm: "", date: "", dayPage: 1,
-    monthPage: 1, chosenYear: null, chosenMonth: null, archivePeriods: [] };
+    monthPage: 1, monthTerm: "", chosenYear: null, chosenMonth: null, archivePeriods: [] };
   const ar = new Intl.DateTimeFormat("ar", { month: "long" });
   const weekday = new Intl.DateTimeFormat("ar", { weekday: "short" });
   const nav = window.AltamamNavigation;
@@ -453,6 +453,22 @@
       if(STATE.monthEpoch!==epoch)return;
       STATE.archivePeriods=parseData(periodReply)||[];
       tool.appendChild(siteSelector(sites,showMonth));
+      const search=field("search","بحث بالاسم أو الرقم (ع) في الشهر");
+      search.input.value=STATE.monthTerm;
+      search.input.maxLength=100;
+      search.input.autocomplete="off";
+      const applySearch=()=>{
+        const term=search.input.value.trim();
+        if(term!==STATE.monthTerm){STATE.monthTerm=term;STATE.monthPage=1;}
+        void renderMonthly();
+      };
+      search.input.addEventListener("keydown",event=>{
+        if(event.key==="Enter"){event.preventDefault();applySearch();}
+      });
+      append(tool,search.wrapper,button("بحث في الكشف",applySearch),
+        button("مسح بحث الشهر",()=>{
+          STATE.monthTerm="";STATE.monthPage=1;void renderMonthly();
+        }));
       // Navigate the real calendar, not an inferred count of prepared days.
       // Empty-but-enrolled months must remain accessible from this screen.
       const navigateMonth=offset=>{
@@ -470,7 +486,7 @@
       append(tool,previousMonth,followingMonth);
       tool.appendChild(button("تحديث",renderMonthly,"btn btn-primary"));
       const previewExport=button("معاينة تصدير Excel",async()=>{
-        const chosen={year,month,siteId:STATE.siteId};
+        const chosen={year,month,siteId:STATE.siteId,term:STATE.monthTerm};
         previewExport.disabled=true;
         exportPanel.hidden=false;
         exportPanel.replaceChildren(message("جارٍ التحقق من سجلات الشهر قبل التصدير..."));
@@ -486,7 +502,8 @@
           const description=el("p","section-description",
             "سيتم حفظ "+preview.personCount+" فرد في ملف Excel لشهر "+
             year+"-"+String(month).padStart(2,"0")+
-            ". يتم حفظ ملف Excel في المجلد المحدد في الإعدادات، دون تعديل سجلات التحضير.");
+            (STATE.monthTerm?" وفق البحث «"+STATE.monthTerm+"»":"")+
+            ". يتم حفظ نفس كشف الموقع والبحث الظاهر في الصفحة في مجلد الإعدادات، دون تعديل التحضير.");
           const confirmSave=button("حفظ ملف Excel",async()=>{
             confirmSave.disabled=true;
             exportPanel.replaceChildren(description,message("جارٍ إنشاء ملف Excel..."));
@@ -540,7 +557,8 @@
         return;
       }
       const grid=parseData(await bridge().invoke("QueryMonthlyGrid",{
-        year,month,siteId:STATE.siteId,page:STATE.monthPage,pageSize:50
+        year,month,siteId:STATE.siteId,term:STATE.monthTerm,
+        page:STATE.monthPage,pageSize:50
       }));
       if(STATE.monthEpoch!==epoch)return;
       const dayCount=monthDays(year,month);
@@ -614,7 +632,8 @@
         tb.body.appendChild(tr);
       }
       if(!(grid.items||[]).length)tableHost.replaceChildren(message(
-        period!==current?"لا يوجد أرشيف لهذا الشهر":"لا توجد سجلات لهذا الشهر"));
+        STATE.monthTerm?"لا يوجد فرد مطابق للبحث في هذا الشهر والموقع":
+          period!==current?"لا يوجد أرشيف لهذا الشهر":"لا توجد سجلات لهذا الشهر"));
       else pager(tableHost,STATE.monthPage,grid.total||0,50,p=>{STATE.monthPage=p;renderMonthly();});
     } catch(e) { if(STATE.monthEpoch===epoch)showError(feedback,e); }
   }
