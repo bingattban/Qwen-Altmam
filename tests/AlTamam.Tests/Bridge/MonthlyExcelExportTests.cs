@@ -97,6 +97,51 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task ExportPeriodDiscovery_IncludesEnrollmentWithoutAttendance()
+    {
+        // A newly admitted workforce has a valid blank monthly report even
+        // before attendance is committed, including its site/name snapshots.
+        var svc=new MonthlyExcelExportService(_db);
+        using(var connection=_db.CreateOpenConnection())
+        using(var cmd=connection.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                    CurrentServiceNumberA,NormalizedServiceNumberA,
+                    FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('TST-EXPORT-NO-ATT','فرد مقيد فقط','فرد مقيد فقط','77221','77221',
+                    '2026-06-01','2026-06-01T08:00:00Z',4,0,1);
+                INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                    ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+                VALUES('TST-EXPORT-NO-ATT','فرد مقيد فقط','77221',
+                    '2026-06-01',NULL,'TST-U','2026-06-01T08:00:00Z','قيد بدون تحضير');
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-EXPORT-NO-ATT-A','TST-EXPORT-NO-ATT','SITE-UNSPECIFIED',
+                    '2026-06-01','2026-08-01',NULL,'2026-06-01T08:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var periods=await svc.PeriodsAsync(CancellationToken.None);
+        var options=Assert.IsType<JsonArray>(periods.Data)
+            .Select(x=>x!.GetValue<string>()).ToArray();
+        Assert.Contains("2026-06",options);
+        Assert.Contains("2026-07",options);
+        var preview=await svc.PreviewAsync(new JsonObject{
+            ["year"]=2026,["month"]=7,["siteId"]="SITE-UNSPECIFIED"
+        },CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        Assert.Equal(1L,((JsonObject)preview.Data!)["personCount"]!.GetValue<long>());
+        var grid=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=2026,["month"]=7,["siteId"]="SITE-UNSPECIFIED"
+        },CancellationToken.None);
+        var item=Assert.Single(Assert.IsType<JsonArray>(((JsonObject)grid.Data!)["items"]));
+        Assert.Equal("فرد مقيد فقط",item!["name"]!.GetValue<string>());
+        Assert.Equal("غير محدد",item["siteName"]!.GetValue<string>());
+        Assert.Empty(Assert.IsType<JsonObject>(item["days"]));
+    }
+
+    [Fact]
     public async Task ExcelArchive_IsReadableNativeXlsx_AllRowsEscapedAndHistoricalDaysRetained()
     {
         var excel = new MonthlyExcelExportService(_db);

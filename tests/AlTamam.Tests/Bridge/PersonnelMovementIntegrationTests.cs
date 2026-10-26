@@ -145,8 +145,25 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
             Assert.Equal(2,transferCells);
         }
         var archivePeriods=await month.ArchivePeriodsAsync(CancellationToken.None);
-        Assert.Contains(DateTime.Now.ToString("yyyy-MM"),
-            Assert.IsType<JsonArray>(archivePeriods.Data).Select(x=>x!.GetValue<string>()));
+        var archiveMonths=Assert.IsType<JsonArray>(archivePeriods.Data)
+            .Select(x=>x!.GetValue<string>()).ToArray();
+        Assert.Contains(DateTime.Now.ToString("yyyy-MM"),archiveMonths);
+        // Internal transfer day has no attendance, but its origin and
+        // destination are both independently documented for this PersonId.
+        foreach(var location in new[]{"SITE-UNSPECIFIED","SITE-DEST"})
+        {
+            var historic=await month.MonthlyCellDetailsAsync(new JsonObject{
+                ["personId"]="TST-MOVEMENT-P1",["businessDate"]=Today(),
+                ["siteId"]=location
+            },CancellationToken.None);
+            Assert.True(historic.Success,historic.UserMessage);
+            var details=Assert.IsType<JsonObject>(historic.Data);
+            Assert.Null(details["attendance"]);
+            var movement=Assert.IsType<JsonObject>(details["movement"]);
+            Assert.Equal(1,movement["type"]!.GetValue<int>());
+            Assert.Equal("SITE-UNSPECIFIED",movement["sourceSiteId"]!.GetValue<string>());
+            Assert.Equal("SITE-DEST",movement["destinationSiteId"]!.GetValue<string>());
+        }
         using(var c=_db.CreateOpenConnection())
         {
             using var cmd=c.CreateCommand();
