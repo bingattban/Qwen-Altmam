@@ -377,6 +377,7 @@ public sealed class DailyMonthlyReadService
                 // Separation must remain visible historically even though the
                 // person is no longer in today's active roster.
                 string label=movementType==3?"مفصول":
+                    movementType==4?"عاد إلى القوة في "+after:
                     siteId.Length==0
                         ?"تم نقله من "+before+" إلى "+after
                         :siteId==sourceId?"تم نقله إلى "+after:"تم نقله من "+before;
@@ -385,9 +386,9 @@ public sealed class DailyMonthlyReadService
                 if(days[movementDate] is null)
                     days[movementDate]=new JsonObject{
                         ["name"]=label,
-                        ["symbol"]=movementType==3?"ف":"نقل",
-                        ["color"]=movementType==3?"#64748B":"#D8B4FE",
-                        ["kind"]=movementType==3?"separation":"movement",
+                        ["symbol"]=movementType==3?"ف":movementType==4?"عودة":"نقل",
+                        ["color"]=movementType==3?"#64748B":movementType==4?"#16A34A":"#D8B4FE",
+                        ["kind"]=movementType==3?"separation":movementType==4?"return":"movement",
                         ["personName"]=movementReader.GetString(7),
                         ["serviceNumberA"]=movementReader.GetString(8),
                         ["siteName"]=siteId.Length>0 && siteId==targetId ? after : before
