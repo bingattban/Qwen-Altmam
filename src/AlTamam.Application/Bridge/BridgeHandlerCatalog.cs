@@ -202,6 +202,18 @@ public static class BridgeHandlerCatalog
             var result = await service.CommitAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
+        "PreviewUnpreparedCarryForward" => async (req,principal,ct) =>
+        {
+            var svc=new UnpreparedCarryForwardService(services.Db,services.Time);
+            var res=await svc.PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return res with {RequestId=req.RequestId};
+        },
+        "CommitUnpreparedCarryForward" => async (req,principal,ct) =>
+        {
+            var svc=new UnpreparedCarryForwardService(services.Db,services.Time);
+            var res=await svc.CommitAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return res with {RequestId=req.RequestId};
+        },
         "PreviewAttendanceChange" => async (req,principal,ct) =>
         {
             var svc=new AttendanceCommitService(services.Db,services.Time);
