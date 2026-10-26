@@ -27,11 +27,18 @@ public sealed class PersonnelReportService
     {
         public void Bind(SqliteCommand command)
         {
-            command.Parameters.AddWithValue("$from",From);
-            command.Parameters.AddWithValue("$to",To);
-            command.Parameters.AddWithValue("$site",SiteId);
-            command.Parameters.AddWithValue("$status",StatusId);
-            command.Parameters.AddWithValue("$moveType",MovementType);
+            // Microsoft.Data.Sqlite rejects unused named parameters. Only bind
+            // the predicates present in this particular projection.
+            void Add(string name,object value)
+            {
+                if(command.CommandText.Contains(name,StringComparison.Ordinal))
+                    command.Parameters.AddWithValue(name,value);
+            }
+            Add("$from",From);
+            Add("$to",To);
+            Add("$site",SiteId);
+            Add("$status",StatusId);
+            Add("$moveType",MovementType);
         }
     }
 
