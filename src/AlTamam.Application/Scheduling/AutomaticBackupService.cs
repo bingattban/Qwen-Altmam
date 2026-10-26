@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Application.Bridge;
+using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 
 namespace AlTamam.Application.Scheduling;
@@ -61,6 +62,9 @@ public sealed class AutomaticBackupService
     public async Task<BridgeResponse> ConfigureAsync(JsonObject? payload,
         BridgePrincipal actor,CancellationToken ct)
     {
+        if(actor.Role is not (UserRole.GeneralAdministration or UserRole.OrdinaryAdministration))
+            return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
+                "تغيير جدول النسخ الاحتياطي متاح للإدارة فقط.");
         bool enabled;
         string time;
         try
@@ -82,8 +86,11 @@ public sealed class AutomaticBackupService
                 return BridgeHelpers.Error(BridgeErrorCodes.ScheduleUnavailable,
                     "لا يمكن تفعيل النسخ التلقائي قبل اختيار مجلد محلي متاح وقابل للكتابة.");
         }
-        await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>
+        return await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>
         {
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,tx,"UpdateBackupSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var cmd=c.CreateCommand();
             cmd.Transaction=tx;
             cmd.CommandText="""
@@ -108,9 +115,11 @@ public sealed class AutomaticBackupService
                 "حفظ وقت النسخ التلقائي وتفعيل الجدولة أو إيقافها",
                 null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
                 .ConfigureAwait(false);
-            return 0;
+            var result=new JsonObject{["enabled"]=enabled,["backupTime"]=time};
+            await MutationIdempotency.StoreAsync(c,tx,receipt,result,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(result);
         },ct).ConfigureAwait(false);
-        return BridgeHelpers.Ok(new JsonObject{["enabled"]=enabled,["backupTime"]=time});
     }
 
     /// <returns>True only after the encrypted file and durable database audit
