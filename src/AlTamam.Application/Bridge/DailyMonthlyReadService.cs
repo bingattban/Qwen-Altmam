@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Domain.Policies;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -128,6 +129,7 @@ public sealed class DailyMonthlyReadService
         if (!TryBusinessDate(payload, out var date)) return BadDate();
         string siteId = ReadString(payload, "siteId");
         string statusId = ReadString(payload, "statusId");
+        string term = ReadString(payload, "term");
         int page = Math.Clamp(ReadInt(payload, "page", 1), 1, 100000);
         int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, 200);
         const string fromSql = """
@@ -145,6 +147,8 @@ public sealed class DailyMonthlyReadService
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
+              AND ($term = '' OR p.NormalizedName LIKE $like ESCAPE '\'
+                   OR p.NormalizedServiceNumberA LIKE $like ESCAPE '\')
               AND ($status = '' OR ar.StatusId = $status
                    OR ($status = '__UNPREPARED__' AND ar.StatusId IS NULL
                         AND m.MovementId IS NULL)
@@ -154,7 +158,7 @@ public sealed class DailyMonthlyReadService
         using var connection = _db.CreateOpenConnection();
         using var count = connection.CreateCommand();
         count.CommandText = "SELECT COUNT(*) " + fromSql;
-        BindFilters(count, Iso(date), siteId, statusId);
+        BindFilters(count, Iso(date), siteId, statusId, term);
         long total = Convert.ToInt64(await count.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
@@ -165,7 +169,7 @@ public sealed class DailyMonthlyReadService
             """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
-        BindFilters(cmd, Iso(date), siteId, statusId);
+        BindFilters(cmd, Iso(date), siteId, statusId, term);
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (long)(page - 1) * pageSize);
         var rows = new JsonArray();
@@ -197,11 +201,13 @@ public sealed class DailyMonthlyReadService
         });
     }
 
-    private static void BindFilters(SqliteCommand cmd, string date, string site, string status)
+    private static void BindFilters(SqliteCommand cmd, string date, string site, string status, string term)
     {
         cmd.Parameters.AddWithValue("$date", date);
         cmd.Parameters.AddWithValue("$site", site);
         cmd.Parameters.AddWithValue("$status", status);
+        cmd.Parameters.AddWithValue("$term", term);
+        cmd.Parameters.AddWithValue("$like", "%"+PersonRosterService.EscapeLike(ArabicTextNormalizer.NormalizeForSearch(term))+"%");
     }
 
     public async Task<BridgeResponse> ArchivePeriodsAsync(CancellationToken ct)
@@ -229,6 +235,7 @@ public sealed class DailyMonthlyReadService
         if (year < 1900 || year > 2200 || month < 1 || month > 12)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "اختر شهراً وسنة صالحين.");
         string siteId = ReadString(payload, "siteId");
+        string term = ReadString(payload, "term");
         int page = Math.Clamp(ReadInt(payload, "page", 1), 1, 100000);
         int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, 100);
         var start = new DateOnly(year, month, 1);
@@ -237,6 +244,8 @@ public sealed class DailyMonthlyReadService
         const string fromSql = """
             FROM Persons p
             WHERE p.FirstRecordedLocalDate < $next
+              AND ($term = '' OR p.NormalizedName LIKE $like ESCAPE '\'
+                   OR p.NormalizedServiceNumberA LIKE $like ESCAPE '\')
               AND (
                 EXISTS (SELECT 1 FROM PersonAssignments a
                         WHERE a.PersonId = p.PersonId
@@ -252,7 +261,7 @@ public sealed class DailyMonthlyReadService
         using var connection = _db.CreateOpenConnection();
         using var count = connection.CreateCommand();
         count.CommandText = "SELECT COUNT(*) " + fromSql;
-        BindPeriod(count, startIso, nextIso, siteId);
+        BindPeriod(count, startIso, nextIso, siteId, term);
         long total = Convert.ToInt64(await count.ExecuteScalarAsync(ct).ConfigureAwait(false));
 
         // A row per person for this page. Historical cells are sourced from the
@@ -282,7 +291,7 @@ public sealed class DailyMonthlyReadService
             """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
-        BindPeriod(cmd, startIso, nextIso, siteId);
+        BindPeriod(cmd, startIso, nextIso, siteId, term);
         cmd.Parameters.AddWithValue("$end", endIso);
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (long)(page - 1) * pageSize);
@@ -564,10 +573,12 @@ public sealed class DailyMonthlyReadService
         });
     }
 
-    private static void BindPeriod(SqliteCommand cmd, string start, string next, string site)
+    private static void BindPeriod(SqliteCommand cmd, string start, string next, string site, string term)
     {
         cmd.Parameters.AddWithValue("$start", start);
         cmd.Parameters.AddWithValue("$next", next);
         cmd.Parameters.AddWithValue("$site", site);
+        cmd.Parameters.AddWithValue("$term",term);
+        cmd.Parameters.AddWithValue("$like","%"+PersonRosterService.EscapeLike(ArabicTextNormalizer.NormalizeForSearch(term))+"%");
     }
 }
