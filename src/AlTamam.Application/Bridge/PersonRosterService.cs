@@ -240,7 +240,7 @@ public sealed class PersonRosterService
                     "توجد هويات كثيرة متطابقة في الأرشيف؛ يجب حل التعارض قبل الإضافة.");
             if(matches.Any(x=>x.NormalizedNumber==normalizedNumber))
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
-                    "«الرقم (ع)» يخص هوية مؤرشفة؛ لا يمكن إنشاء هوية ثانية به حتى لو رُفض تطابق الاسم.");
+                    "«الرقم (ع)» محفوظ لهوية سابقة في الأرشيف؛ لا يمكن إنشاء هوية ثانية به حتى لو رُفض تطابق الاسم.");
             if(matches.Count>0)
             {
                 if(decision!="different"||resolutionToken.Length!=64)
