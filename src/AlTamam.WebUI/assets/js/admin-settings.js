@@ -744,15 +744,50 @@
       const t=table(["اسم الموقع","الحالة","الإجراء"]);
       list.forEach(item=>{
         const sys=item.siteId==="SITE-UNSPECIFIED";
-        addRow(t.body,[item.name,item.active?"نشط":"موقوف"],
-          sys?"موقع محمي":"إعادة تسمية",async()=>{
-            if(sys){void dialogs.alert("موقع غير محدد محمي من التعديل والحذف.");return;}
+        const row=node("tr"),actions=node("td");
+        row.append(node("td","",item.name),node("td","",
+          item.active?"نشط":"موقوف"),actions);
+        if(sys)actions.append(node("span","section-description","موقع محمي"));
+        else if(!item.active)actions.append(node("span","section-description","موقع محفوظ تاريخيًا"));
+        else{
+          actions.append(btn("إعادة تسمية",async()=>{
             const next=await dialogs.prompt("اسم الموقع الجديد",item.name);
             if(!next||next.trim()===item.name)return;
-            if(!await dialogs.confirm("اعتماد تغيير اسم الموقع من «"+item.name+"» إلى «"+next+"»؟"))return;
-            api().invoke("RenameSite",{siteId:item.siteId,name:next.trim(),
-              expectedRevision:item.rowVersion}).then(sites).catch(e=>void dialogs.alert(e.message));
+            if(!await dialogs.confirm("اعتماد تغيير اسم الموقع من «"+
+                item.name+"» إلى «"+next+"»؟"))return;
+            try{
+              await api().invoke("RenameSite",{siteId:item.siteId,
+                name:next.trim(),expectedRevision:item.rowVersion});
+              await sites();
+            }catch(e){void dialogs.alert(e.message||"تعذرت إعادة التسمية.");}
+          }));
+          const remove=btn("إزالة الموقع",async()=>{
+            remove.disabled=true;
+            try{
+              const preview=(await api().invoke("QueryPersons",{
+                siteId:item.siteId,organizationalStatus:1,page:1,pageSize:1
+              })).data||{};
+              const count=Number(preview.total);
+              if(!Number.isSafeInteger(count)||count<0)
+                throw Error("تعذرت قراءة عدد الأفراد؛ أُلغيت الإزالة.");
+              const message="هل تؤكد إزالة موقع «"+item.name+"»؟ "+
+                "الأفراد النشطون الذين سيُنقلون إلى «غير محدد»: "+count+
+                ". ستبقى جميع التحضيرات والانتسابات والأسماء القديمة محفوظة، "+
+                "ولن تتم العملية إذا سُجل تحضير أو نقل اليوم أو تغير الكشف.";
+              if(!await dialogs.confirm(message,{title:"تأكيد إزالة الموقع"}))return;
+              const result=await api().invoke("RemoveSiteAndReassignCurrentPersons",{
+                siteId:item.siteId,expectedRevision:item.rowVersion,
+                expectedActiveCount:count,confirmed:true,operationId:makeOperationId()
+              });
+              await dialogs.alert("أزيل الموقع من المواقع النشطة، ونُقل "+
+                result.data.reassignedCount+" فردًا إلى غير محدد. السجلات السابقة محفوظة.");
+              await sites();
+            }catch(e){void dialogs.alert(e.message||"تعذرت إزالة الموقع؛ لم يُعتمد الحذف.");}
+            finally{remove.disabled=false;}
           });
+          actions.append(remove);
+        }
+        t.body.appendChild(row);
       });
       empty(t.body,3,"لا توجد مواقع مسجلة.");
       output.append(t.wrap,form);
