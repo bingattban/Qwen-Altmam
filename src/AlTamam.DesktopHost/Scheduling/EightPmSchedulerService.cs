@@ -30,6 +30,7 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
     /// <summary>Last completed run outcome surfaced to the EightPmScheduler screen (07.06).</summary>
     public IReadOnlyList<AutoAttendanceRunResult> LastRunResults { get; private set; } = [];
     public string? LastFailureMessage { get; private set; }
+    public string? LastRetentionFailureMessage { get; private set; }
 
     /// <summary>Runs startup catch-up immediately, then keeps the 20:00 schedule alive.</summary>
     public void Start()
@@ -69,9 +70,13 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
     private async Task SweepPreviewTokensSafelyAsync(CancellationToken ct)
     {
         if (_tokenRetention is null || ct.IsCancellationRequested) return;
-        try { await _tokenRetention.RunIfDueAsync(ct).ConfigureAwait(false); }
+        try
+        {
+            await _tokenRetention.RunIfDueAsync(ct).ConfigureAwait(false);
+            LastRetentionFailureMessage = null;
+        }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
-        catch (Exception) { /* Failed transaction rolls back; retry on the next scheduler tick. */ }
+        catch (Exception ex) { LastRetentionFailureMessage = ex.Message; }
     }
 
     /// <summary>
