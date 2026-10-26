@@ -59,9 +59,10 @@ public sealed class AutoAttendanceService
             throw new BridgeProtocolException(BridgeErrorCodes.ClockRollbackSuspected,
                 "رُصد ارتداد في ساعة النظام؛ أُوقف التحضير التلقائي حتى تصحيح الساعة.");
 
-        int dueHour = await GetSettingIntAsync("AutoAttendanceDueHourLocal", DefaultDueHour, ct).ConfigureAwait(false);
+        // The approved business cutoff is fixed at 20:00 local; old persisted hour
+        // overrides must not silently change this rule.
         int catchUpDays = await GetSettingIntAsync("AutoAttendanceCatchUpDays", DefaultCatchUpDays, ct).ConfigureAwait(false);
-        bool dayDue = localNow.TimeOfDay >= new TimeSpan(Math.Clamp(dueHour, 0, 23), 0, 0);
+        bool dayDue = localNow.TimeOfDay >= new TimeSpan(DefaultDueHour, 0, 0);
 
         List<DateOnly> pending = EnumeratePendingDates(today, dayDue, catchUpDays,
             await GetLastCompletedBusinessDateAsync(ct).ConfigureAwait(false), out int unrecoverable);
@@ -109,8 +110,27 @@ public sealed class AutoAttendanceService
                 }
             }
 
-            // One row per active person with an open assignment covering the date.
-            int copied = 0, skipNoYesterday = 0, skipTransfer = 0, skipManual = 0;
+            // Resolve the administrator's active fallback StatusId inside the SAME
+            // transaction as attendance, so deactivation/renaming cannot race.
+            (string Id,string Name,string Symbol,string Color)? configuredDefault = null;
+            using (var setting = connection.CreateCommand())
+            {
+                setting.Transaction = tx;
+                setting.CommandText = """
+                    SELECT s.StatusId,s.VisibleName,s.ShortSymbol,s.ChosenColorHex
+                    FROM AppSettings a
+                    JOIN AttendanceStatusDefinitions s ON s.StatusId=a.SettingValue AND s.ActiveFlag=1
+                    WHERE a.SettingKey=$key;
+                    """;
+                setting.Parameters.AddWithValue("$key",Bridge.AutoAttendancePolicyService.DefaultStatusKey);
+                using var chosen = await setting.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if (await chosen.ReadAsync(ct).ConfigureAwait(false))
+                    configuredDefault=(chosen.GetString(0),chosen.GetString(1),
+                        chosen.GetString(2),chosen.GetString(3));
+            }
+
+            // One row per eligible active person with an open assignment covering the date.
+            int copied = 0, defaulted = 0, skipNoYesterday = 0, skipTransfer = 0, skipManual = 0;
             var people = new List<(string PersonId, string AssignmentId, string SiteId, string SiteName)>();
             using (var roster = connection.CreateCommand())
             {
@@ -122,7 +142,8 @@ public sealed class AutoAttendanceService
                        AND a.ValidFromLocalDate <= $date
                        AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
                       JOIN Sites s ON s.SiteId = a.SiteId
-                     WHERE p.ActiveFlag = 1
+                     WHERE p.ActiveFlag = 1 AND p.OrganizationalStatus=1
+                       AND p.FirstRecordedLocalDate <= $date
                      ORDER BY p.PersonId;";
                 roster.Parameters.AddWithValue("$date", Iso(businessDate));
                 using SqliteDataReader readers = await roster.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -175,13 +196,27 @@ public sealed class AutoAttendanceService
                     using SqliteDataReader yReader = await yesterday.ExecuteReaderAsync(ct).ConfigureAwait(false);
                     if (!await yReader.ReadAsync(ct).ConfigureAwait(false))
                     {
-                        skipNoYesterday++;
-                        continue;
+                        if (configuredDefault is null)
+                        {
+                            // Do not close the ledger or partially commit the day.
+                            // When the administrator selects a fallback, the next
+                            // scheduler tick can retry the same date safely.
+                            throw new InvalidOperationException(
+                                "تعذر التحضير التلقائي: يجب أن تحدد الإدارة حالة افتراضية نشطة في الإعدادات لعدم وجود تحضير أمس.");
+                        }
+                        statusId = configuredDefault.Value.Id;
+                        statusName = configuredDefault.Value.Name;
+                        statusSymbol = configuredDefault.Value.Symbol;
+                        statusColor = configuredDefault.Value.Color;
+                        defaulted++;
                     }
-                    statusId = yReader.GetString(0);
-                    statusName = yReader.GetString(1);
-                    statusSymbol = yReader.GetString(2);
-                    statusColor = yReader.GetString(3);
+                    else
+                    {
+                        statusId = yReader.GetString(0);
+                        statusName = yReader.GetString(1);
+                        statusSymbol = yReader.GetString(2);
+                        statusColor = yReader.GetString(3);
+                    }
                 }
 
                 using var insert = connection.CreateCommand();
@@ -209,7 +244,7 @@ public sealed class AutoAttendanceService
             }
 
             DateTimeOffset completedUtc = _time.GetUtcNow();
-            string summary = $"تشغيل {source} ليوم {Iso(businessDate)}: نُسخ {copied}، بلا سجل سابق {skipNoYesterday}، استثناء نقل {skipTransfer}، تحضّر يدوياً مسبقاً {skipManual}.";
+            string summary = $"تشغيل {source} ليوم {Iso(businessDate)}: اعتُمد {copied}، منها {defaulted} بالحالة الافتراضية لعدم وجود تحضير أمس، استثناء نقل {skipTransfer}، تحضّر يدوياً مسبقاً {skipManual}.";
 
             // Actor attribution + tamper-evident audit event inside the SAME transaction (07.03).
             await Bridge.BridgeAuditWriter.WriteAsync(connection, tx, _time,
@@ -227,6 +262,8 @@ public sealed class AutoAttendanceService
                     ["businessDate"] = Iso(businessDate),
                     ["source"] = source,
                     ["copied"] = copied,
+                    ["defaultedNoYesterday"] = defaulted,
+                    ["defaultStatusId"] = configuredDefault?.Id,
                     ["skippedNoYesterday"] = skipNoYesterday,
                     ["skippedTransferExempt"] = skipTransfer,
                     ["skippedManual"] = skipManual
