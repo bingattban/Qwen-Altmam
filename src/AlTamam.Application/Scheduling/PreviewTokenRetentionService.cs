@@ -102,6 +102,22 @@ public sealed class PreviewTokenRetentionService
                 {
                     ct.ThrowIfCancellationRequested();
                     bool referenced = false;
+                    // A different live or historical preview may itself store a
+                    // referenced token inside its payload or summary.
+                    using (var nested = connection.CreateCommand())
+                    {
+                        nested.Transaction = tx;
+                        nested.CommandText = """
+                            SELECT EXISTS(SELECT 1 FROM PreviewTokens
+                                WHERE Token <> $token
+                                  AND (instr(PayloadCanonicalJson, $token) > 0
+                                       OR instr(SummaryJson, $token) > 0));
+                            """;
+                        nested.Parameters.AddWithValue("$token", token);
+                        referenced = Convert.ToInt32(
+                            await nested.ExecuteScalarAsync(ct).ConfigureAwait(false)) != 0;
+                    }
+                    if (referenced) continue;
                     foreach (string sql in referencePredicates)
                     {
                         using var check = connection.CreateCommand();
