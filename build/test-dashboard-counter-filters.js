@@ -3,7 +3,7 @@ const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("n
 class El{
  constructor(tag){this.tag=tag;this.children=[];this.handlers={};this.attrs={};
    this.className="";this.textContent="";this.style={};this.value="";this.dataset={};this.disabled=false;}
- get classList(){return{toggle:(name,on)=>{const tags=this.className.split(/\s+/).filter(Boolean).filter(x=>x!==name);if(on)tags.push(name);this.className=tags.join(" ");}};}
+ get classList(){const toggle=(name,on)=>{const tags=this.className.split(/\s+/).filter(Boolean).filter(x=>x!==name);if(on)tags.push(name);this.className=tags.join(" ");};return{toggle,add:name=>toggle(name,true),remove:name=>toggle(name,false)};}
  get tBodies(){return this.children.filter(x=>x.tag==="tbody");}
  append(...nodes){this.children.push(...nodes);}
  appendChild(node){this.children.push(node);return node;}
@@ -38,6 +38,12 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
      return{data:{items:selected.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
        total:selected.length,hasNext:false}};
    }
+   if(action==="PreviewAttendanceChange" && payload.mode==="carry")
+     return {data:{mode:"carry",businessDate:payload.businessDate,previewToken:"a".repeat(64),
+       persons:[{personId:"P1",name:"P1",serviceNumberA:"12345",siteName:"غير محدد",
+         previousStatusName:"غير محضر",proposedStatusName:"غياب"}]}};
+   if(action==="SubmitAttendance" && payload.mode==="carry")
+     return {data:{count:1,carriedForward:true}};
    throw Error("Unexpected action "+action);
  }};
 const document={createElement:tag=>new El(tag),
@@ -83,6 +89,28 @@ async function main(){
  assert.equal(lastRoster().payload.statusId,"__TRANSFER_DAY__");
  assert.ok(viewport.all().some(x=>x.textContent==="P4"));
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance"].includes(x.action)).length,0);
+ assert.ok(viewport.all().some(x=>x.className==="dashboard-eight-clock"),
+   "20:00 clock absent. DOM classes: "+viewport.all().map(x=>x.className).filter(Boolean).join(", "));
+ let selectionCalled=0,reviewCalled=0;
+ context.window.AltamamDialog={
+   unpreparedSelection:async loader=>{
+     selectionCalled++;
+     const data=await loader(1);
+     assert.equal(data.items.length,1);
+     return ["P1"];
+   },
+   attendanceReview:async plan=>{
+     reviewCalled++;
+     assert.equal(plan.persons[0].proposedStatusName,"غياب");
+     return true;
+   },
+   alert:async error=>{throw Error("Unexpected modal error "+error);}
+ };
+ counter("__UNPREPARED__").handlers.click();await settle();
+ assert.equal(selectionCalled,1,"counter click must open the independent selector");
+ assert.equal(reviewCalled,1,"a separate confirmable preview is mandatory");
+ assert.equal(calls.filter(x=>x.action==="SubmitAttendance"&&x.payload.mode==="carry").length,1,
+   "write must happen only after both the picker and confirmation");
  console.log("DASHBOARD COUNTER FILTERS PASS: total/unprepared/status buttons, active states, no redundant chips");
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

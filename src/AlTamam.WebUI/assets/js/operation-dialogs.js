@@ -30,6 +30,73 @@
       body.replaceChildren();
       const text=make("p","app-dialog-copy",options.message||"");
       body.appendChild(text);
+      // Individual/bulk picker, entirely separate from the dashboard counter.
+      // Selection is only a draft: no write occurs until the server-side
+      // carry-forward preview is displayed and explicitly confirmed.
+      let selectedPeople=null;
+      if(options.unprepared){
+        selectedPeople=new Map();
+        const pick=make("section","attendance-review");
+        const summary=make("p","attendance-review-summary","اختر فرداً أو مجموعة لاعتماد حالة أمس؛ الحد الأقصى 100 فرد لكل دفعة.");
+        const loading=make("p","app-dialog-copy");
+        const scrolling=make("div","attendance-review-scroll");
+        const controls=make("div","app-dialog-actions");
+        const prev=make("button","btn btn-outline","السابق");
+        const next=make("button","btn btn-outline","التالي");
+        const pageText=make("span","");
+        prev.type=next.type="button";
+        controls.append(prev,pageText,next);
+        pick.append(summary,loading,scrolling,controls);
+        body.appendChild(pick);
+        let page=1, requestSerial=0;
+        async function loadPage(){
+          const serial=++requestSerial;
+          scrolling.replaceChildren();
+          loading.textContent="جارٍ قراءة غير المحضرين من قاعدة البيانات…";
+          prev.disabled=next.disabled=true;
+          try{
+            const data=await options.unprepared.loadPage(page);
+            if(!current||serial!==requestSerial)return;
+            const people=Array.isArray(data.items)?data.items:[];
+            const count=Number(data.total)||0;
+            const table=make("table","data-table attendance-review-table");
+            const head=make("thead"),tr=make("tr");
+            for(const label of ["تحديد","الرقم (ع)","اسم الفرد","الموقع"])
+              tr.appendChild(make("th","",label));
+            head.appendChild(tr);
+            const rows=make("tbody");
+            for(const person of people){
+              const line=make("tr"),cell=make("td");
+              const checkbox=make("input");checkbox.type="checkbox";
+              checkbox.checked=selectedPeople.has(person.personId);
+              checkbox.setAttribute("aria-label","تحديد "+person.name);
+              checkbox.addEventListener("change",()=>{
+                if(checkbox.checked&&selectedPeople.size>=100){
+                  checkbox.checked=false;
+                  loading.textContent="الحد الأقصى 100 فرد لكل دفعة.";
+                  return;
+                }
+                if(checkbox.checked)selectedPeople.set(person.personId,person);
+                else selectedPeople.delete(person.personId);
+                summary.textContent="المحددون: "+selectedPeople.size+" — اعتمد حالة كل فرد من أمس بعد المعاينة.";
+              });
+              cell.appendChild(checkbox);line.appendChild(cell);
+              for(const value of [person.serviceNumberA,person.name,person.siteName])
+                line.appendChild(make("td","",value));
+              rows.appendChild(line);
+            }
+            table.append(head,rows);scrolling.appendChild(table);
+            loading.textContent=count?"إجمالي غير المحضرين: "+count:"لا يوجد أفراد غير محضرين.";
+            pageText.textContent="صفحة "+page+" من "+Math.max(1,Math.ceil(count/50));
+            prev.disabled=page<=1;next.disabled=page*50>=count;
+          }catch(error){
+            loading.textContent=error?.message||"تعذرت قراءة القائمة؛ أعد المحاولة.";
+          }
+        }
+        prev.addEventListener("click",()=>{if(page>1){page--;void loadPage();}});
+        next.addEventListener("click",()=>{page++;void loadPage();});
+        void loadPage();
+      }
       if(options.review){
         const detail=make("section","attendance-review");
         const overview=make("p","attendance-review-summary",
@@ -47,7 +114,7 @@
         for(const person of options.review.persons){
           const tr=make("tr");
           for(const value of [person.serviceNumberA,person.name,person.siteName,
-            person.previousStatusName,options.review.status])
+            person.previousStatusName,person.proposedStatusName||options.review.status])
             tr.appendChild(make("td","",value||"غير محضر"));
           rows.appendChild(tr);
         }
@@ -116,6 +183,13 @@
             field.focus();return;
           }
           close(value);
+        }else if(selectedPeople){
+          if(selectedPeople.size===0){
+            const notice=make("p","app-dialog-error","اختر فرداً واحداً على الأقل قبل المتابعة.");
+            body.appendChild(notice);
+            return;
+          }
+          close(Array.from(selectedPeople.keys()));
         }else close(true);
       });
       actions.append(cancel,accept);body.appendChild(actions);
@@ -169,6 +243,12 @@
         confirmLabel:"تأكيد النقل النهائي",transferReview:review
       }).then(result=>result===true);
     },
+    unpreparedSelection:loadPage=>show({
+      title:"اعتماد حالة أمس لغير المحضرين",
+      message:"اختر فردياً أو جماعياً، ثم راجع الحالة التي ستُعتمد. من لم تحضره يدوياً سيعالجه النظام الساعة 8 مساءً.",
+      confirmLabel:"معاينة حالة الأمس",
+      unprepared:{loadPage}
+    }),
     attendanceReview:(review,opts={})=>{
       if(!review||!Array.isArray(review.persons)||!review.persons.length||
          review.persons.length>100||!review.persons.every(p=>

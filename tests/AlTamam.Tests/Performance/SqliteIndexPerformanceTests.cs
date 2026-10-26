@@ -395,6 +395,10 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
                 people.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
         }
 
+        var baselineSamples = new List<double>();
+        var optimizedSamples = new List<double>();
+        for(int pass=0;pass<6;pass++)
+        {
         var oldResult = new SortedDictionary<string, string>(StringComparer.Ordinal);
         var sw = System.Diagnostics.Stopwatch.StartNew();
         foreach (var person in people)
@@ -470,10 +474,18 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
         double optimizedMs = sw.Elapsed.TotalMilliseconds;
         Assert.Equal(PersonCount, people.Count);
         Assert.Equal(oldResult.ToArray(), batchedResult.ToArray());
+        if(pass>0) // disregard the cold JIT/SQLite cache warm-up sample
+        {
+            baselineSamples.Add(baselineMs);
+            optimizedSamples.Add(optimizedMs);
+        }
+        }
+        double baselineMedian=baselineSamples.OrderBy(v=>v).ElementAt(2);
+        double optimizedMedian=optimizedSamples.OrderBy(v=>v).ElementAt(2);
         Console.WriteLine(
-            $"ALTAMAM_ATTENDANCE_SELECTION personCount={PersonCount} baselineCommands={1+PersonCount*3} optimizedCommands=4 baselineMs={baselineMs:F3} optimizedMs={optimizedMs:F3}");
-        Assert.True(optimizedMs < baselineMs,
-            $"Measured four-read selection must be faster on synthetic corpus: old {baselineMs:F3} ms / new {optimizedMs:F3} ms.");
+            $"ALTAMAM_ATTENDANCE_SELECTION personCount={PersonCount} baselineCommands={1+PersonCount*3} optimizedCommands=4 baselineSamplesMs={string.Join(",",baselineSamples.Select(x=>x.ToString("F1")))} optimizedSamplesMs={string.Join(",",optimizedSamples.Select(x=>x.ToString("F1")))} baselineMedianMs={baselineMedian:F3} optimizedMedianMs={optimizedMedian:F3}");
+        Assert.True(optimizedMedian < baselineMedian,
+            $"Repeated measured bulk selection must be faster (median of five warm samples): old {baselineMedian:F3} ms / new {optimizedMedian:F3} ms.");
     }
 
     private static string ReadAll(SqliteCommand cmd)

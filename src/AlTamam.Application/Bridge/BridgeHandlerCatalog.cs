@@ -204,14 +204,20 @@ public static class BridgeHandlerCatalog
         },
         "PreviewAttendanceChange" => async (req,principal,ct) =>
         {
-            var svc=new AttendanceCommitService(services.Db,services.Time);
-            BridgeResponse result=await svc.PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            BridgeResponse result = req.Payload?["mode"]?.GetValue<string>() == "carry"
+                ? await new ManualCarryForwardService(services.Db,services.Time)
+                    .PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false)
+                : await new AttendanceCommitService(services.Db,services.Time)
+                    .PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
         "SubmitAttendance" => async (req,principal,ct) =>
         {
-            var svc=new AttendanceCommitService(services.Db,services.Time);
-            BridgeResponse result=await svc.CommitAsync(req.Payload,principal!,false,ct).ConfigureAwait(false);
+            BridgeResponse result = req.Payload?["mode"]?.GetValue<string>() == "carry"
+                ? await new ManualCarryForwardService(services.Db,services.Time)
+                    .CommitAsync(req.Payload,principal!,ct).ConfigureAwait(false)
+                : await new AttendanceCommitService(services.Db,services.Time)
+                    .CommitAsync(req.Payload,principal!,false,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
         "ReviseTodayAttendance" => async (req,principal,ct) =>

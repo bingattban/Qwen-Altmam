@@ -81,6 +81,26 @@ async function run(){
  assert.equal(overlay.classList.open,false);
  const invalidReview=await dialog.attendanceReview({...reviewData,persons:[]});
  assert.equal(invalidReview,false,"never approve an empty or missing server preview");
+ const perPerson=dialog.attendanceReview({
+   businessDate:"2026-10-26",statusName:"الحالة حسب أمس",
+   persons:[{name:"فرد اختباري",serviceNumberA:"1234",siteName:"الموقع",
+     previousStatusName:"غير محضر",proposedStatusName:"إجازة"}]
+ });
+ assert.ok(body.all().some(x=>x.textContent==="إجازة"),
+   "manual carry-forward preview must display each person's own proposed status");
+ button("إلغاء").click();
+ assert.equal(await perPerson,false);
+ const selection=dialog.unpreparedSelection(async page=>({
+   items:[{personId:"P1",name:"فرد",serviceNumberA:"1234",siteName:"الموقع"}],
+   total:1
+ }));
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(overlay.classList.open,true);
+ const check=body.all().find(x=>x.tag==="input"&&x.type==="checkbox");
+ assert.ok(check,"unprepared modal has an individual checkbox");
+ check.checked=true;check.handlers.change();
+ button("معاينة حالة الأمس").click();
+ assert.deepEqual([...await selection],["P1"]);
  const transferPlan={businessDate:"2026-10-25",destinationName:"موقع حضرموت",
    external:false,persons:[
      {name:"محمد صالح",serviceNumberA:"12345",sourceSiteName:"الموقع الأول"},
