@@ -137,6 +137,19 @@ public sealed class WebView2BridgeDispatcher
                 string replaySessionKey = principal is null ? "__unauthenticated__" : request.SessionNonce;
                 if (!_replaySessions.TryGetValue(replaySessionKey, out var tracked))
                 {
+                    // Some sessions expire through the five-minute idle deadline
+                    // without a Logout cancellation signal. Recheck database
+                    // authority only when at capacity; do not discard any nonce
+                    // that the host still considers authenticated.
+                    if (_replaySessions.Count >= MaxTrackedSessions)
+                    {
+                        foreach (string oldNonce in _replaySessions.Keys.ToArray())
+                        {
+                            if (oldNonce == "__unauthenticated__" || oldNonce == replaySessionKey) continue;
+                            if (await authenticate(oldNonce).ConfigureAwait(false) is null)
+                                _replaySessions.Remove(oldNonce);
+                        }
+                    }
                     if (_replaySessions.Count >= MaxTrackedSessions)
                         return Fail(request.RequestId, BridgeErrorCodes.ConflictStale,
                             "بلغت حماية الجلسات حدها الآمن. سجّل الخروج وأعد الدخول.", BridgeOutcomeKind.Conflict);
