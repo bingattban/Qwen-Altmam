@@ -245,6 +245,15 @@ public sealed class AdminConfigurationService
                 name=reader.GetString(0);current=reader.GetInt64(1);
             }
             if(current!=ver)return Fail("الحالة تغيرت منذ عرضها.",BridgeErrorCodes.ConflictStale);
+            using(var configured=c.CreateCommand())
+            {
+                configured.Transaction=t;
+                configured.CommandText="SELECT EXISTS(SELECT 1 FROM AppSettings WHERE SettingKey=$key AND SettingValue=$id);";
+                configured.Parameters.AddWithValue("$key",AutoAttendancePolicyService.DefaultStatusKey);
+                configured.Parameters.AddWithValue("$id",id);
+                if(Convert.ToInt64(await configured.ExecuteScalarAsync(ct).ConfigureAwait(false))>0)
+                    return Fail("لا يمكن تعطيل الحالة الافتراضية للتحضير التلقائي. اختر حالة أخرى من الإعدادات أولاً.");
+            }
             using var count=c.CreateCommand();count.Transaction=t;
             count.CommandText="SELECT COUNT(*) FROM AttendanceRecords WHERE StatusId=$id;";
             count.Parameters.AddWithValue("$id",id);
