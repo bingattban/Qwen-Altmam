@@ -64,6 +64,7 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
                 NULL,NULL,$external,$reason,$exit,'2026-01-01T00:00:00Z','TST-SEED',$move);
             """;
         q.Parameters.AddWithValue("$id",id);
+        q.Parameters.AddWithValue("$status",status);
         q.Parameters.AddWithValue("$name",name);
         q.Parameters.AddWithValue("$normalized",normalized);
         q.Parameters.AddWithValue("$num",number);
