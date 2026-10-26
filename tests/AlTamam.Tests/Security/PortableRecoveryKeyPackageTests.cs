@@ -78,12 +78,14 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         Assert.Throws<IOException>(()=>
             sourceStore.ExportPortableRecoveryKey(sourcePath,recoveryPath,Phrase));
         File.Copy(backup,targetDb);
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         byte[] before=File.ReadAllBytes(targetDb);
         var targetStore=new WindowsDatabaseKeyStore(targetKey);
         Assert.Throws<CryptographicException>(()=>
             targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,
                 "Incorrect password long enough to be accepted"));
         Assert.False(File.Exists(targetKey));
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         Assert.Equal(before,File.ReadAllBytes(targetDb));
         targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,Phrase);
         Assert.Equal(secret,targetStore.LoadOrCreate(targetDb));
@@ -91,6 +93,7 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
             Assert.True(db.HasValidIntegrity());
         Assert.Throws<InvalidOperationException>(()=>
             targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,Phrase));
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         Assert.Equal(before,File.ReadAllBytes(targetDb));
     }
 
@@ -108,16 +111,21 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         store.ExportPortableRecoveryKey(first,package,Phrase);
         string wrongKey=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         using(var other=new AlTamamDbContext(encrypted,wrongKey))await other.InitializeAsync();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         byte[] originalFile=File.ReadAllBytes(encrypted);
         Assert.Throws<CryptographicException>(()=>
             new WindowsDatabaseKeyStore(otherProtected)
                 .RecoverExistingDatabaseKey(encrypted,package,Phrase));
         Assert.False(File.Exists(otherProtected));
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         Assert.Equal(originalFile,File.ReadAllBytes(encrypted));
     }
 
     public void Dispose()
     {
+        // The test-only materialized databases use Microsoft.Data.Sqlite pooling.
+        // Release idle handles before byte-for-byte assertions and cleanup.
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         if(Directory.Exists(_root))Directory.Delete(_root,true);
     }
 }
