@@ -238,14 +238,25 @@ public sealed class PersonRosterService
             if(matches.Count>50)
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                     "توجد هويات كثيرة متطابقة في الأرشيف؛ يجب حل التعارض قبل الإضافة.");
-            if(matches.Any(x=>x.NormalizedNumber==normalizedNumber))
+            // A number owned by an externally transferred or removed/archive-only
+            // person remains reserved. ONLY a separated human (Org=3) can have
+            // the number assigned to an explicitly DIFFERENT new PersonId. Prior
+            // attendance stays permanently attached to the separated PersonId,
+            // and this new PersonId starts with an empty history.
+            var numberOwners=matches.Where(x=>x.NormalizedNumber==normalizedNumber).ToArray();
+            bool replaceSeparated=decision=="replaceSeparated";
+            string previousPersonId=ReadString(payload,"archivedPersonId").Trim();
+            bool singleSeparatedOwner=numberOwners.Length==1 && numberOwners[0].Org==3 &&
+                numberOwners[0].Id==previousPersonId && matches.Count==1 &&
+                ArabicTextNormalizer.NormalizeForSearch(numberOwners[0].Name)!=normalizedName;
+            if(numberOwners.Length>0 && (!replaceSeparated||!singleSeparatedOwner))
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
-                    "«الرقم (ع)» محفوظ لهوية سابقة في الأرشيف؛ لا يمكن إنشاء هوية ثانية به حتى لو رُفض تطابق الاسم.");
+                    "«الرقم (ع)» محفوظ في الأرشيف. يُسمح باستبداله لفرد مفصول واحد فقط، باسم مختلف، وبعد موافقة صريحة؛ ولا يُسمح باستبدال المنقول خارجياً أو هوية متنازع عليها.");
             if(matches.Count>0)
             {
-                if(decision!="different"||resolutionToken.Length!=64)
+                if((decision!="different"&&!singleSeparatedOwner)||resolutionToken.Length!=64)
                     return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
-                        "يوجد تطابق اسم في الأرشيف؛ يلزم إثبات أن الفرد الجديد شخص مختلف من نافذة التحقق من الهوية.");
+                        "يوجد تطابق في الأرشيف؛ يجب اعتماد اختلاف الهوية أو الاستبدال الخاص بفرد مفصول بعد المعاينة.");
                 using var resolve=connection.CreateCommand();
                 resolve.Transaction=tx;
                 resolve.CommandText="""
@@ -363,11 +374,16 @@ public sealed class PersonRosterService
                     ["serviceNumberA"] = serviceNumber,
                     ["differentFromArchivedPersonIds"] = matches.Count>0
                         ? new JsonArray(matches.Select(x=>(JsonNode?)JsonValue.Create(x.Id)).ToArray())
-                        : null }.ToJsonString(),
+                        : null,
+                    ["reusedSeparatedNumberFromPersonId"] = replaceSeparated?previousPersonId:null,
+                    ["newIdentityStartsWithBlankAttendance"] = replaceSeparated }.ToJsonString(),
                 description: $"أُنشئ سجل الفرد «{visibleName}» بالمعرف الثابت {personId}.",
                 reason: null, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
 
-            var outcome=new JsonObject { ["personId"] = personId, ["siteId"] = siteId, ["revision"] = 1L };
+            var outcome=new JsonObject { ["personId"] = personId, ["siteId"] = siteId,
+                ["revision"] = 1L, ["separatedNumberReassigned"] = replaceSeparated,
+                ["previousArchivedPersonId"] = replaceSeparated?previousPersonId:null,
+                ["newAttendanceHistoryStartsEmpty"] = replaceSeparated };
             await MutationIdempotency.StoreAsync(connection,tx,receipt,outcome,_time,ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(
                 outcome,
