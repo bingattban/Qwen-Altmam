@@ -77,8 +77,8 @@ public sealed class AutomaticBackupService
                 "وقت النسخ التلقائي يجب أن يكون بصيغة 24 ساعة، مثل 16:00.");
         if(enabled)
         {
-            string folder=await new Bridge.OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
-            if(!Bridge.OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
+            string folder=await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
+            if(!OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
                 return BridgeHelpers.Error(BridgeErrorCodes.ScheduleUnavailable,
                     "لا يمكن تفعيل النسخ التلقائي قبل اختيار مجلد محلي متاح وقابل للكتابة.");
         }
@@ -100,7 +100,7 @@ public sealed class AutomaticBackupService
             cmd.Parameters.AddWithValue("$time",time);
             cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-            await Bridge.BridgeAuditWriter.WriteAsync(c,tx,_time,
+            await BridgeAuditWriter.WriteAsync(c,tx,_time,
                 "AUTO_BACKUP_SCHEDULE_CHANGED","تعديل جدولة النسخ الاحتياطي",
                 actor.UserId,actor.Username,null,"AppSettings","AutoBackupTimeLocal",
                 "النسخ التلقائي",null,
@@ -138,9 +138,9 @@ public sealed class AutomaticBackupService
                 if(Convert.ToInt32(await q.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
                     return false;
             }
-            var output=new Bridge.OutputDirectorySettings(_db);
+            var output=new OutputDirectorySettings(_db);
             string folder=await output.GetAsync(ct).ConfigureAwait(false);
-            if(!Bridge.OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
+            if(!OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
                 throw new IOException("مجلد النسخ التلقائي غير متاح؛ لم تُسجَّل نسخة ناجحة.");
             string filename="AlTamam-Auto-"+now.ToString("yyyyMMdd",CultureInfo.InvariantCulture)
                 +"-"+Guid.NewGuid().ToString("N")+".dbbackup";
@@ -168,7 +168,7 @@ public sealed class AutomaticBackupService
                     insert.Parameters.AddWithValue("$schema",AlTamamDbContext.CurrentSchemaVersion);
                     insert.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
                     await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                    await Bridge.BridgeAuditWriter.WriteAsync(c,tx,_time,
+                    await BridgeAuditWriter.WriteAsync(c,tx,_time,
                         "AUTO_BACKUP_CREATE","نسخ احتياطي تلقائي",
                         "USR-SYSTEM","النظام",null,"Backup",id,filename,
                         null,new JsonObject{["sha256"]=hash,["path"]=path}.ToJsonString(),
