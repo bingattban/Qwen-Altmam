@@ -209,38 +209,81 @@ public sealed class PersonRosterService
                 return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
                     "«الرقم (ع)» مستخدم بالفعل لفرد نشط بعد التطبيع؛ لا يمكن تكراره.");
 
-            // Prevent creating a NEW permanent PersonId for a possible human
-            // already present in the dismissal or external-transfer archive.
-            // A verified return must reuse the original PersonId, never a
-            // second "new" record. Even a name-only match requires resolution.
+            // Archived number conflicts may NEVER be waived; a name-only
+            // coincidence can be explicitly declared a different human, but
+            // only with an actor-bound one-time identity-resolution preview
+            // matching EVERY current archived candidate.
+            string resolutionToken=ReadString(payload,"identityResolutionToken").Trim();
+            string decision=ReadString(payload,"identityDecision").Trim();
+            var matches=new List<(string Id,string Name,string Number,long Revision,int Org)>();
             using(var archived = connection.CreateCommand())
             {
                 archived.Transaction = tx;
                 archived.CommandText = """
                     SELECT p.PersonId,p.CurrentVisibleName,p.CurrentServiceNumberA,
-                           p.OrganizationalStatus,COALESCE((
-                               SELECT m.EffectiveLocalDate FROM PersonnelMovements m
-                               WHERE m.PersonId=p.PersonId AND m.MovementType IN (2,3)
-                               ORDER BY m.EffectiveLocalDate DESC LIMIT 1
-                           ),'غير موثق')
+                           p.RowVersion,p.OrganizationalStatus
                     FROM Persons p
                     WHERE p.ActiveFlag=0 AND p.OrganizationalStatus IN (2,3,4)
                       AND (p.NormalizedServiceNumberA=$number OR p.NormalizedName=$name)
-                    ORDER BY p.CurrentVisibleName,p.PersonId LIMIT 6;
+                    ORDER BY p.PersonId LIMIT 51;
                     """;
                 archived.Parameters.AddWithValue("$number",normalizedNumber);
                 archived.Parameters.AddWithValue("$name",normalizedName);
                 using var candidates=await archived.ExecuteReaderAsync(ct).ConfigureAwait(false);
-                var matches=new List<string>();
                 while(await candidates.ReadAsync(ct).ConfigureAwait(false))
-                    matches.Add($"{candidates.GetString(1)} (ع: {candidates.GetString(2)})، " +
-                        (candidates.GetInt32(3)==2?"نقل خارجي":"أرشيف الفصل") +
-                        " بتاريخ " + candidates.GetString(4));
-                if(matches.Count>0)
-                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
-                        "يوجد تطابق محتمل في الأرشيف. أوقف إنشاء هوية جديدة حتى التحقق من عودة نفس الشخص أو اختلاف الهوية: " +
-                        string.Join("؛ ",matches));
+                    matches.Add((candidates.GetString(0),candidates.GetString(1),
+                        candidates.GetString(2),candidates.GetInt64(3),candidates.GetInt32(4)));
             }
+            if(matches.Count>50)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                    "توجد هويات كثيرة متطابقة في الأرشيف؛ يجب حل التعارض قبل الإضافة.");
+            if(matches.Any(x=>x.Number==normalizedNumber))
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                    "«الرقم (ع)» يخص هوية مؤرشفة؛ لا يمكن إنشاء هوية ثانية به حتى لو رُفض تطابق الاسم.");
+            if(matches.Count>0)
+            {
+                if(decision!="different"||resolutionToken.Length!=64)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                        "يوجد تطابق اسم في الأرشيف؛ يلزم إثبات أن الفرد الجديد شخص مختلف من نافذة التحقق من الهوية.");
+                using var resolve=connection.CreateCommand();
+                resolve.Transaction=tx;
+                resolve.CommandText="""
+                    SELECT PayloadCanonicalJson FROM PreviewTokens
+                    WHERE Token=$token AND Operation=$op AND ActorUserId=$actor
+                      AND ConsumedFlag=0 AND ExpiresAtUtc>$now;
+                    """;
+                resolve.Parameters.AddWithValue("$token",resolutionToken);
+                resolve.Parameters.AddWithValue("$op",ArchivedReturnService.PreviewOperation);
+                resolve.Parameters.AddWithValue("$actor",userId);
+                resolve.Parameters.AddWithValue("$now",nowUtc.ToString("O"));
+                string? raw=await resolve.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+                JsonObject? plan=raw is null?null:JsonNode.Parse(raw) as JsonObject;
+                if(plan is null||ReadString(plan,"businessDate")!=Today()||
+                   ReadString(plan,"visibleName")!=visibleName||
+                   ReadString(plan,"serviceNumberA")!=normalizedNumber||
+                   ReadString(plan,"siteId")!=(siteIdRequested.Length>0?siteIdRequested:"SITE-UNSPECIFIED")||
+                   plan["candidates"] is not JsonArray prior||prior.Count!=matches.Count)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                        "انتهت معاينة اختلاف الهوية أو تغيّرت البيانات؛ أعد البحث عن الاسم.");
+                foreach(var current in matches)
+                {
+                    var oldCandidate=prior.OfType<JsonObject>().FirstOrDefault(
+                        x=>ReadString(x,"personId")==current.Id);
+                    if(oldCandidate is null || ReadLong(oldCandidate,"revision",-1)!=current.Revision ||
+                       ReadString(oldCandidate,"name")!=current.Name||
+                       ReadString(oldCandidate,"serviceNumberA")!=current.Number)
+                        return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                            "تغيّر مرشح في الأرشيف؛ أعد قرار اختلاف الهوية من جديد.");
+                }
+                long? used=await BridgePreviewTokens.ConsumeAsync(_db,_time,connection,tx,
+                    resolutionToken,ArchivedReturnService.PreviewOperation,userId,0,ct)
+                    .ConfigureAwait(false);
+                if(used!=0)return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                    "معاينة الهوية مستخدمة أو منتهية.");
+            }
+            else if(resolutionToken.Length>0||decision.Length>0)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                    "لم يعد هناك تعارض في الأرشيف؛ أعد إضافة الفرد دون بيانات معاينة قديمة.");
 
             // Add Person may choose EXISTING active sites only. Import Excel
             // has its own explicit site-creation process and remains unchanged.
@@ -315,7 +358,11 @@ public sealed class PersonRosterService
                 operationCode: "PERSON_CREATE", operationArabicName: "إنشاء فرد",
                 actorUserId: userId, actorUsername: username, actorDisplayName: visibleName,
                 targetEntityType: "Person", targetEntityId: personId, targetDisplay: $"{visibleName} ({serviceNumber})",
-                oldValueJson: null, newValueJson: new JsonObject { ["personId"] = personId, ["name"] = visibleName, ["serviceNumberA"] = serviceNumber }.ToJsonString(),
+                oldValueJson: null, newValueJson: new JsonObject { ["personId"] = personId, ["name"] = visibleName,
+                    ["serviceNumberA"] = serviceNumber,
+                    ["differentFromArchivedPersonIds"] = matches.Count>0
+                        ? new JsonArray(matches.Select(x=>(JsonNode?)JsonValue.Create(x.Id)).ToArray())
+                        : null }.ToJsonString(),
                 description: $"أُنشئ سجل الفرد «{visibleName}» بالمعرف الثابت {personId}.",
                 reason: null, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
 
