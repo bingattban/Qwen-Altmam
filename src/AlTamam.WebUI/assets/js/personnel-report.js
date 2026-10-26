@@ -45,17 +45,59 @@
    const results=el("div"),report=el("div"),status=el("div"),selectedPanel=el("div");
    const dateFrom=el("input"),dateTo=el("input");
    dateFrom.type="date";dateTo.type="date";
-   dateFrom.setAttribute("aria-label","بداية فترة التقرير الجماعي");
-   dateTo.setAttribute("aria-label","نهاية فترة التقرير الجماعي");
+   dateFrom.setAttribute("aria-label","بداية فترة التقرير");
+   dateTo.setAttribute("aria-label","نهاية فترة التقرير");
+   const site=el("select"),statusFilter=el("select"),movement=el("select");
+   site.setAttribute("aria-label","فلتر الموقع التاريخي");
+   statusFilter.setAttribute("aria-label","فلتر حالة التحضير التاريخية");
+   movement.setAttribute("aria-label","فلتر نوع الحركة التاريخية");
+   const addOption=(select,value,label)=>{
+     const option=el("option",label);option.value=value;
+     select.appendChild(option);
+   };
+   addOption(site,"","جميع المواقع التاريخية");
+   addOption(statusFilter,"","كل حالات التحضير");
+   [["0","كل الحركات"],["1","النقل الداخلي"],["2","النقل الخارجي"],
+    ["3","الفصل"],["4","العودة للخدمة"]].forEach(([value,label])=>
+      addOption(movement,value,label));
+   movement.value="0";
+   async function loadHistoricalFilters(){
+     try{
+       const [sites,statuses]=await Promise.all([
+         api().invoke("QuerySites",{}),api().invoke("GetActiveAttendanceStatuses",{})
+       ]);
+       if(!root.isConnected)return;
+       for(const entry of sites.data||[]){
+         if(entry.siteId)addOption(site,entry.siteId,entry.name||entry.siteId);
+       }
+       for(const entry of statuses.data||[]){
+         const id=entry.statusId||entry.id;
+         if(id)addOption(statusFilter,id,entry.name||entry.displayName||id);
+       }
+     }catch(e){alert(status,e);}
+   }
+   const filters=()=>({
+     dateFrom:dateFrom.value,dateTo:dateTo.value,
+     siteId:site.value,statusId:statusFilter.value,
+     movementType:Number(movement.value||0)
+   });
    const fromLabel=el("label",undefined,"من تاريخ"),toLabel=el("label",undefined,"إلى تاريخ");
    fromLabel.appendChild(dateFrom);toLabel.appendChild(dateTo);
    const selected=new Map();
    controls.append(term,btn("بحث",search),
      btn("عرض التقرير الجماعي",()=>{void loadGroupReport();}));
+   const siteLabel=el("label",undefined,"الموقع التاريخي");
+   siteLabel.appendChild(site);
+   const statusLabel=el("label",undefined,"حالة التحضير");
+   statusLabel.appendChild(statusFilter);
+   const movementLabel=el("label",undefined,"نوع الحركة");
+   movementLabel.appendChild(movement);
    searchCard.append(controls,el("p","حدد الأشخاص من نتائج البحث؛ يمكن الاختيار عبر أكثر من عملية بحث، بحد أقصى 100 فرد.","section-description"),
-     selectedPanel,fromLabel,toLabel,status,results);
+     selectedPanel,fromLabel,toLabel,siteLabel,statusLabel,movementLabel,status,results);
    root.append(searchCard,report);
-   let chosen=null,serial=0,attendancePage=1,auditPage=1,identityPage=1,movementPage=1;
+   void loadHistoricalFilters();
+   let chosen=null,serial=0,attendancePage=1,auditPage=1,identityPage=1,
+     movementPage=1,sitePage=1;
    function renderSelected(){
      const box=card("الأفراد المحددون للمجموعة: "+selected.size);
      if(!selected.size)box.appendChild(el("p","لم تحدد أفراداً بعد."));
@@ -77,7 +119,7 @@
      report.replaceChildren(el("p","جارٍ إعداد التقرير الجماعي من السجلات المعتمدة..."));
      try{
        const reply=await api().invoke("BuildPersonLifetimeReport",{
-         personIds:ids,dateFrom:dateFrom.value,dateTo:dateTo.value
+         personIds:ids,...filters()
        });
        if(ticket!==serial||!root.isConnected)return;
        const data=reply.data||{};
@@ -106,7 +148,7 @@
          const action=el("td");
          action.appendChild(btn("عرض سجل الفرد",()=>{
            chosen=person.personId;
-           attendancePage=auditPage=identityPage=movementPage=1;
+           attendancePage=auditPage=identityPage=movementPage=sitePage=1;
            void loadReport();
          }));
          tr.appendChild(action);t.body.appendChild(tr);
@@ -148,7 +190,7 @@
            .forEach(v=>tr.appendChild(el("td",v)));
          const cell=el("td");
          cell.appendChild(btn("عرض التقرير",()=>{
-           chosen=person.personId;attendancePage=1;auditPage=1;identityPage=1;movementPage=1;
+           chosen=person.personId;attendancePage=1;auditPage=1;identityPage=1;movementPage=1;sitePage=1;
            void loadReport();
          }));
          tr.appendChild(cell);t.body.appendChild(tr);
@@ -175,7 +217,8 @@
      report.replaceChildren(el("p","جارٍ قراءة تاريخ الفرد من قاعدة البيانات المشفرة..."));
      try{
        const reply=await api().invoke("BuildPersonLifetimeReport",{
-         personId:chosen,attendancePage,auditPage,identityPage,movementPage
+         personId:chosen,attendancePage,auditPage,identityPage,movementPage,sitePage,
+         ...filters()
        });
        if(ticket!==serial||!root.isConnected)return;
        const d=reply.data||{},person=d.person||{};
@@ -202,6 +245,12 @@
        pageBar(daily,"أيام التحضير",d.attendancePage,d.attendanceTotal,d.attendanceHasNext,
          p=>{attendancePage=p;void loadReport();});
        report.appendChild(daily);
+       const memberships=card("تاريخ المواقع والفترات الفعلية");
+       rows(memberships,["الموقع التاريخي","بداية الانتساب","نهاية الانتساب"],
+         d.siteHistory,x=>[x.siteName,x.from,x.to]);
+       pageBar(memberships,"فترات المواقع",d.sitePage||1,d.siteTotal||0,d.siteHasNext,
+         p=>{sitePage=p;void loadReport();});
+       report.appendChild(memberships);
        const history=card("تاريخ الاسم والرقم (ع)");
        rows(history,["الاسم السابق أو الحالي","الرقم (ع)","بداية النفاذ","نهاية النفاذ",
          "سبب التعديل"],d.identityHistory,
@@ -216,13 +265,16 @@
          p=>{movementPage=p;void loadReport();});
        report.appendChild(moves);
        const audit=card("سجل العمليات المرتبطة بالفرد");
-       rows(audit,["العملية","من قام بالتنفيذ","الاسم الكامل","التاريخ","الوصف"],
-         d.audit,x=>[x.operation,x.username,x.fullName,x.executedAtUtc,x.description]);
+       rows(audit,["العملية","المنفّذ (المستخدم - الاسم المحفوظ)","التاريخ",
+          "الوصف","القيمة السابقة","القيمة الجديدة","السبب"],
+         d.audit,x=>[x.operation,x.executor||x.username+" - "+x.fullName,
+           x.executedAtUtc,x.description,x.oldValueJson,x.newValueJson,x.reason]);
        pageBar(audit,"سجل العمليات",d.auditPage,d.auditTotal,d.auditHasNext,
          p=>{auditPage=p;void loadReport();});
        report.appendChild(audit);
-       const note=el("p","هذا التقرير للقراءة فقط. تصديره بصيغة Excel "+
-         "يحتاج إلى خدمة التصدير المعتمدة ولا يُعتبر متاحاً حاليًا.","section-description");
+       const note=el("p","التقرير للقراءة فقط؛ المرشحات تعتمد على تاريخ التحضير "+
+         "وموقعه المؤرخ، وتبقى فترات الهوية والمواقع كاملة. "+
+         "تصدير Excel التفصيلي بحاجة إلى ربط الخدمة المعتمدة.","section-description");
        report.appendChild(note);
      }catch(e){if(ticket===serial&&root.isConnected)alert(report,e);}
    }

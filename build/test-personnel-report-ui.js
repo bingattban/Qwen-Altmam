@@ -25,6 +25,12 @@ const bridge={
     calls.push({action,payload});
     if(action==="QueryPersons")
       return {data:{items:records,total:2}};
+    if(action==="QuerySites")
+      return {data:[{siteId:"SITE-OLD",name:"الموقع السابق"},
+        {siteId:"SITE-NEW",name:"الموقع الحالي"}]};
+    if(action==="GetActiveAttendanceStatuses")
+      return {data:[{statusId:"STS-ABSENT",name:"غياب"},
+        {statusId:"STS-PRESENT",name:"موجود"}]};
     if(action==="BuildPersonLifetimeReport"&&Array.isArray(payload.personIds))
       return {data:{
         mode:"group",personCount:2,dateFrom:payload.dateFrom,dateTo:payload.dateTo,
@@ -43,7 +49,10 @@ const bridge={
       return {data:{person:{name:"فرد جديد مستقل",serviceNumberA:"5151",
         active:true,firstRecordedDate:"2026-10-26"},
         statusTotals:[],monthlyTotals:[],attendance:[],attendancePage:1,
-        attendanceTotal:0,attendanceHasNext:false,identityHistory:[],identityPage:1,
+        attendanceTotal:0,attendanceHasNext:false,
+        siteHistory:[{siteId:"SITE-NEW",siteName:"الموقع الحالي",
+          from:"2026-10-26",to:null}],siteTotal:1,sitePage:1,siteHasNext:false,
+        identityHistory:[],identityPage:1,
         identityTotal:0,identityHasNext:false,movements:[],movementPage:1,movementTotal:0,
         movementHasNext:false,audit:[],auditPage:1,auditTotal:0,auditHasNext:false}};
     throw Error("Unexpected report request "+action+" "+JSON.stringify(payload));
@@ -56,6 +65,15 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
 const buttons=label=>viewport.all().filter(x=>x.tag==="button"&&x.textContent===label);
 async function main(){
   context.window.AltamamReports.render(viewport,()=>{});
+  await settle();await settle();
+  const dropdowns=viewport.all().filter(x=>x.tag==="select");
+  assert.equal(dropdowns.length,3,
+    "site/status/movement dropdowns must be inside the one report screen");
+  assert.ok(dropdowns[0].all().some(x=>x.textContent==="الموقع السابق"));
+  assert.ok(dropdowns[1].all().some(x=>x.textContent==="غياب"));
+  dropdowns[0].value="SITE-OLD";
+  dropdowns[1].value="STS-ABSENT";
+  dropdowns[2].value="3";
   const term=viewport.all().find(x=>x.tag==="input"&&x.type==="search");
   assert.ok(term,"search must be present in the ONE report screen");
   term.value="5151";
@@ -77,6 +95,9 @@ async function main(){
   assert.equal(request.payload.personIds[1],"NEW-ID");
   assert.equal(request.payload.dateFrom,"2026-01-01");
   assert.equal(request.payload.dateTo,"2026-10-26");
+  assert.equal(request.payload.siteId,"SITE-OLD");
+  assert.equal(request.payload.statusId,"STS-ABSENT");
+  assert.equal(request.payload.movementType,3);
   assert.ok(viewport.all().some(x=>x.textContent==="فرد جديد مستقل"));
   assert.ok(viewport.all().some(x=>x.textContent==="مفصول سابق"));
   assert.ok(viewport.all().some(x=>x.textContent==="إجمالي التحضيرات المعتمدة: 2 — إجمالي الحركات: 1"));
@@ -85,8 +106,12 @@ async function main(){
   await settle();await settle();
   assert.equal(calls.at(-1).payload.personId,"NEW-ID",
     "the new person must be loaded by immutable PersonId, never by 5151");
+  assert.equal(calls.at(-1).payload.siteId,"SITE-OLD");
+  assert.equal(calls.at(-1).payload.statusId,"STS-ABSENT");
+  assert.equal(calls.at(-1).payload.movementType,3);
   assert.ok(viewport.all().some(x=>x.textContent==="الاسم: فرد جديد مستقل — الرقم (ع): 5151"));
   assert.ok(viewport.all().some(x=>x.textContent.includes("العودة إلى التقرير الجماعي")));
+  assert.ok(viewport.all().some(x=>x.textContent==="تاريخ المواقع والفترات الفعلية"));
   console.log("UNIFIED REPORT UI PASS: person/group, historical vs new identity, exact PersonIds, date filter, drilldown");
 }
 main().catch(err=>{console.error(err);process.exitCode=1;});
