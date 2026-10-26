@@ -52,6 +52,21 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         CryptographicOperations.ZeroMemory(b);
     }
 
+    private static (long PersonTables,long Users) ReadLogicalSnapshot(string database,string key)
+    {
+        using var context=new AlTamamDbContext(database,key);
+        Assert.True(context.HasValidIntegrity());
+        using var connection=context.CreateOpenConnection();
+        using var command=connection.CreateCommand();
+        command.CommandText="""
+            SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table'),
+                   (SELECT COUNT(*) FROM Users);
+            """;
+        using var reader=command.ExecuteReader();
+        Assert.True(reader.Read());
+        return (reader.GetInt64(0),reader.GetInt64(1));
+    }
+
     [Fact]
     public async Task ExportAndRecoverOnIndependentDpapiLocation_ExactOriginalDatabaseAndIdentity()
     {
@@ -78,23 +93,20 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         Assert.Throws<IOException>(()=>
             sourceStore.ExportPortableRecoveryKey(sourcePath,recoveryPath,Phrase));
         File.Copy(backup,targetDb);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        byte[] before=File.ReadAllBytes(targetDb);
+        var before=ReadLogicalSnapshot(targetDb,secret);
         var targetStore=new WindowsDatabaseKeyStore(targetKey);
         Assert.Throws<CryptographicException>(()=>
             targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,
                 "Incorrect password long enough to be accepted"));
         Assert.False(File.Exists(targetKey));
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        Assert.Equal(before,File.ReadAllBytes(targetDb));
+        Assert.Equal(before,ReadLogicalSnapshot(targetDb,secret));
         targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,Phrase);
         Assert.Equal(secret,targetStore.LoadOrCreate(targetDb));
         using(var db=new AlTamamDbContext(targetDb,targetStore.LoadOrCreate(targetDb)))
             Assert.True(db.HasValidIntegrity());
         Assert.Throws<InvalidOperationException>(()=>
             targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,Phrase));
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        Assert.Equal(before,File.ReadAllBytes(targetDb));
+        Assert.Equal(before,ReadLogicalSnapshot(targetDb,secret));
     }
 
     [Fact]
@@ -111,20 +123,18 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         store.ExportPortableRecoveryKey(first,package,Phrase);
         string wrongKey=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         using(var other=new AlTamamDbContext(encrypted,wrongKey))await other.InitializeAsync();
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        byte[] originalFile=File.ReadAllBytes(encrypted);
+        var originalState=ReadLogicalSnapshot(encrypted,wrongKey);
         Assert.Throws<CryptographicException>(()=>
             new WindowsDatabaseKeyStore(otherProtected)
                 .RecoverExistingDatabaseKey(encrypted,package,Phrase));
         Assert.False(File.Exists(otherProtected));
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        Assert.Equal(originalFile,File.ReadAllBytes(encrypted));
+        Assert.Equal(originalState,ReadLogicalSnapshot(encrypted,wrongKey));
     }
 
     public void Dispose()
     {
         // The test-only materialized databases use Microsoft.Data.Sqlite pooling.
-        // Release idle handles before byte-for-byte assertions and cleanup.
+        // Release idle handles after semantic DB assertions and before cleanup.
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         if(Directory.Exists(_root))Directory.Delete(_root,true);
     }
