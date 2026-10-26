@@ -331,6 +331,60 @@
       }
     },
     {
+      "action": "PreviewUnpreparedCarryForward",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "ValidationError",
+        "HistoricDayLocked",
+        "ConflictStale",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitUnpreparedCarryForward",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "HistoricDayLocked",
+        "ConflictStale",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
       "action": "PreviewAttendanceChange",
       "owningService": "AttendanceService",
       "allowedRoles": [
