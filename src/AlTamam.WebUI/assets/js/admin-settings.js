@@ -1604,7 +1604,7 @@
       integrity.append(checkButton,result);
       grid.appendChild(integrity);
 
-      const planned=settingsCard("الاستعادة والإعدادات المتقدمة","⚙");
+      const planned=settingsCard("التحقق من النسخ والاستعادة","⚙");
       planned.appendChild(node("p","settings-copy",
         "هذه الإجراءات تحتاج إلى اختبارات حماية البيانات قبل السماح بتشغيلها."));
       const forthcoming=node("div","settings-properties");
@@ -1612,6 +1612,32 @@
         ["استيراد نسخة احتياطية","غير متاح حتى اكتمال اختبارات الاستعادة الآمنة"],
       ]) forthcoming.appendChild(settingsValue(name,detail));
       planned.appendChild(forthcoming);
+      const inspectFeedback=node("div","settings-feedback");
+      inspectFeedback.setAttribute("aria-live","polite");
+      const inspect=btn("اختيار نسخة مشفرة وفحص سلامتها",async()=>{
+        inspect.disabled=true;
+        inspectFeedback.replaceChildren(warning("جارٍ اختيار الملف والتحقق من التشفير والبيانات..."));
+        try{
+          const result=await api().invoke("InspectBackup",{}, {timeoutMs:180000});
+          if(token!==currentRequest)return;
+          const data=result.data||{};
+          if(data.verified!==true)throw Error("لم ينجح فحص النسخة.");
+          const detail=node("div","settings-properties");
+          for(const [label,value] of [
+            ["اسم النسخة",data.fileName],
+            ["الحجم بالبايت",data.fileSizeBytes],
+            ["إصدار قاعدة البيانات",data.schemaVersion],
+            ["الأفراد",data.people],
+            ["التحضير المسجل",data.attendance],
+            ["سجلات العمليات",data.auditEvents],
+            ["الحسابات",data.users],
+            ["بصمة SHA-256",data.sha256]
+          ])detail.appendChild(settingsValue(label,value));
+          inspectFeedback.replaceChildren(node("p","settings-success",data.message),detail);
+        }catch(e){if(token===currentRequest)errors(inspectFeedback,e);}
+        finally{inspect.disabled=false;}
+      },"btn btn-outline settings-action");
+      planned.append(inspect,inspectFeedback);
       if(session.role==="GeneralAdministration"){
         const resetBox=node("section","settings-danger-zone");
         const notice=node("p","settings-copy",

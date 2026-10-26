@@ -299,6 +299,52 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
         Assert.False(await service.RunIfDueAsync());
     }
 
+
+    [Fact]
+    public async Task BackupInspection_ValidEncryptionSchemaAndCounts_WithoutChangingLiveRecords()
+    {
+        string backup=Path.Combine(_output,"inspect-"+Guid.NewGuid().ToString("N")+".dbbackup");
+        await _db.CreateVerifiedEncryptedBackupAsync(backup);
+        var service=new BackupInspectionService(_db);
+        var inspection=await service.VerifyAsync(backup,CancellationToken.None);
+        Assert.True(inspection.Success,inspection.UserMessage);
+        var data=Assert.IsType<JsonObject>(inspection.Data);
+        Assert.True(data["verified"]!.GetValue<bool>());
+        Assert.True(data["schemaCompatible"]!.GetValue<bool>());
+        Assert.False(data["restoreEnabled"]!.GetValue<bool>());
+        Assert.True(data["users"]!.GetValue<long>()>=1);
+        Assert.Equal(64,data["sha256"]!.GetValue<string>().Length);
+        using var current=_db.CreateOpenConnection();
+        using var q=current.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM Users;";
+        Assert.Equal(1L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+    }
+
+    [Fact]
+    public async Task BackupInspection_RejectsTamperedWrongKeyPlaintextAndLiveDb_FailClosed()
+    {
+        string backup=Path.Combine(_output,"backup-"+Guid.NewGuid().ToString("N")+".dbbackup");
+        await _db.CreateVerifiedEncryptedBackupAsync(backup);
+        var inspect=new BackupInspectionService(_db);
+        using(var different=new AlTamamDbContext(_dbPath,new string('A',64)))
+        {
+            var wrong=await new BackupInspectionService(different)
+                .VerifyAsync(backup,CancellationToken.None);
+            Assert.False(wrong.Success);
+        }
+        Assert.False((await inspect.VerifyAsync(_dbPath,CancellationToken.None)).Success);
+        string plaintext=Path.Combine(_output,"plaintext.dbbackup");
+        await File.WriteAllBytesAsync(plaintext, "SQLite format 3\0".Select(c=>(byte)c)
+            .Concat(new byte[2048]).ToArray());
+        Assert.False((await inspect.VerifyAsync(plaintext,CancellationToken.None)).Success);
+        var bytes=await File.ReadAllBytesAsync(backup);
+        bytes[0]=(byte)(bytes[0]^0xA5); // SQLCipher salt: corruption must invalidate the key
+        string broken=Path.Combine(_output,"broken.dbbackup");
+        await File.WriteAllBytesAsync(broken,bytes);
+        Assert.False((await inspect.VerifyAsync(broken,CancellationToken.None)).Success);
+        Assert.True(_db.HasValidIntegrity());
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {

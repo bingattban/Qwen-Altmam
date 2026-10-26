@@ -54,6 +54,10 @@ const bridge = {
       GetAutoAttendancePolicy: {configured:false,defaultStatusId:null,dueTimeLocal:"20:00"},
       SetAutoAttendanceDefaultStatus: {defaultStatusId:"STS-ABSENT",defaultStatusName:"غياب",configured:true},
       RunDatabaseIntegrityCheck: { integrity:"ok" },
+      InspectBackup: {verified:true,fileName:"verified.dbbackup",fileSizeBytes:4096,
+        schemaVersion:9,schemaCompatible:true,people:5,attendance:8,
+        auditEvents:9,users:1,sha256:"a".repeat(64),
+        message:"النسخة المشفرة سليمة؛ الاستعادة ليست مفعلة بعد."},
       GetAllowedRoles: [{ role:"Supervisor",name:"مشرف" }],
       ListUserAccounts: { items:[],total:0,hasNext:false },
       QueryAuditLog: { items:[],total:0,hasNext:false },
@@ -312,7 +316,7 @@ async function run() {
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
     .map(x=>x.textContent);
   assert.deepEqual(titles,["الحساب والبرنامج","التحضير التلقائي — الساعة 8 مساءً","النسخ الاحتياطي",
-    "سلامة قاعدة البيانات","الاستعادة والإعدادات المتقدمة"]);
+    "سلامة قاعدة البيانات","التحقق من النسخ والاستعادة"]);
   const fallback=visible().find(x=>x.tag==="select"&&
     x.attrs["aria-label"]==="الحالة الافتراضية عند عدم وجود تحضير أمس");
   assert.ok(fallback,"administrators can choose the 20:00 fallback status");
@@ -333,6 +337,13 @@ async function run() {
   // The callback must be a real, asynchronously running bridge operation.
   await new Promise(resolve => setImmediate(resolve));
   assert.ok(calls.some(x=>x.name==="RunDatabaseIntegrityCheck"));
+  assert.ok(buttonNamed("اختيار نسخة مشفرة وفحص سلامتها"),
+    "native backup inspection must be exposed as a real settings action");
+  await buttonNamed("اختيار نسخة مشفرة وفحص سلامتها").handlers.click();
+  assert.ok(calls.some(x=>x.name==="InspectBackup"),
+    "backup verification must invoke the C# + native file picker");
+  assert.ok(visible().some(x=>x.textContent==="verified.dbbackup"),
+    "verified metadata is displayed only after real native inspection");
   await controller.renderSettings({role:"Supervisor",username:"test-supervisor"},()=>{});
   assert.ok(!buttonNamed("حفظ الحالة الافتراضية"),
     "supervisors cannot see or invoke policy changes from settings");

@@ -498,6 +498,30 @@ public static class BridgeHandlerCatalog
             var result=await svc.ConfigureBackupScheduleAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
+        "VerifyBackup" => async(req,principal,ct) =>
+        {
+            string? path;
+            try{path=req.Payload?["path"]?.GetValue<string>();}
+            catch{path=null;}
+            var result=await new BackupInspectionService(services.Db)
+                .VerifyAsync(path,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "InspectBackup" => async(req,principal,ct) =>
+        {
+            if(services.PickBackupFileAsync is null)
+                return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                    "منتقي ملف النسخة غير متاح في هذه الجلسة."));
+            string folder=await new OutputDirectorySettings(services.Db)
+                .GetAsync(ct).ConfigureAwait(false);
+            string? selected=await services.PickBackupFileAsync(folder).ConfigureAwait(false);
+            if(string.IsNullOrWhiteSpace(selected))
+                return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                    "تم إلغاء اختيار ملف النسخة الاحتياطية."));
+            var result=await new BackupInspectionService(services.Db)
+                .VerifyAsync(selected,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "RunDatabaseIntegrityCheck" => (req, principal, ct) =>
         {
             var svc = new SettingsReadBackupService(services.Db);

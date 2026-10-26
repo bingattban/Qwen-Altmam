@@ -245,6 +245,12 @@ public sealed class AlTamamDbContext : IDisposable
         }
     }
 
+    /// <summary>Read-only SQLCipher backup verification using the already opened
+    /// installation key. No key is exported or passed to JavaScript.</summary>
+    public Task<EncryptedBackupInspection> InspectEncryptedBackupAsync(string path,
+        CancellationToken ct=default)
+        => EncryptedBackupInspector.VerifyAsync(path,_databasePath,_databaseKey,ct);
+
     public bool HasValidIntegrity()
     {
         using var connection = CreateOpenConnection();
