@@ -117,9 +117,10 @@ public sealed class MonthlyHistoryReuseTests : IAsyncLifetime, IDisposable
             ["siteId"]="SITE-UNSPECIFIED"
         }, CancellationToken.None);
         Assert.True(newDetail.Success, newDetail.UserMessage);
-        Assert.Equal("فرد جديد مستقل", newDetail.Data!["personName"]!.GetValue<string>());
-        Assert.Equal("موجود", newDetail.Data!["attendance"]!["statusName"]!.GetValue<string>());
-        Assert.Null(newDetail.Data!["movement"]);
+        var newJson = Assert.IsType<JsonObject>(newDetail.Data);
+        Assert.Equal("فرد جديد مستقل", newJson["personName"]!.GetValue<string>());
+        Assert.Equal("موجود", newJson["attendance"]!["statusName"]!.GetValue<string>());
+        Assert.Null(newJson["movement"]);
 
         var earlyNew = await service.MonthlyCellDetailsAsync(new JsonObject
         {
@@ -134,11 +135,13 @@ public sealed class MonthlyHistoryReuseTests : IAsyncLifetime, IDisposable
             ["personId"]="TST-HISTORY-NEW"
         }, CancellationToken.None);
         Assert.True(oldHistory.Success && newHistory.Success);
-        Assert.Equal(1L, oldHistory.Data!["attendanceTotal"]!.GetValue<long>());
-        Assert.Equal(1L, newHistory.Data!["attendanceTotal"]!.GetValue<long>());
-        Assert.Equal(1L, oldHistory.Data!["movementTotal"]!.GetValue<long>());
-        Assert.Equal(0L, newHistory.Data!["movementTotal"]!.GetValue<long>());
-        Assert.DoesNotContain("فرد مفصول سابق", newHistory.Data!.ToJsonString());
+        var historical = Assert.IsType<JsonObject>(oldHistory.Data);
+        var newlyAdmitted = Assert.IsType<JsonObject>(newHistory.Data);
+        Assert.Equal(1L, historical["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(1L, newlyAdmitted["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(1L, historical["movementTotal"]!.GetValue<long>());
+        Assert.Equal(0L, newlyAdmitted["movementTotal"]!.GetValue<long>());
+        Assert.DoesNotContain("فرد مفصول سابق", newlyAdmitted.ToJsonString());
     }
 
     [Fact]
