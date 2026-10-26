@@ -149,8 +149,8 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             Assert.All(movements.Skip(1),x=>Assert.Equal("TST-XLSX-OLD",x[0]));
             var audits=Rows(zip,4).Select(Text).ToArray();
             Assert.Equal(2,audits.Length);
-            Assert.Equal("""{"name":"الاسم السابق"}""",audits[1][8]);
-            Assert.Equal("""{"name":"الاسم الجديد"}""",audits[1][9]);
+            Assert.Equal("""{"name":"الاسم السابق"}""",audits[1][7]);
+            Assert.Equal("""{"name":"الاسم الجديد"}""",audits[1][8]);
             var names=Rows(zip,5).Select(Text).ToArray();
             Assert.Contains(names,x=>x.Contains("=HYPERLINK(\"http://evil.example\")"));
             foreach(var entry in zip.Entries.Where(e=>e.FullName.StartsWith("xl/worksheets/")))
