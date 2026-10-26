@@ -39,7 +39,7 @@
    searchCard.append(el("p","بحث بالاسم أو الرقم (ع) في بيانات البرنامج؛ التقرير للقراءة فقط.",
      "section-description"));
    const term=el("input");
-   term.type="search";term.placeholder="بحث بالاسم أو الرقم (ع)";
+   term.type="search";term.placeholder="بحث بالاسم أو الرقم (ع)";term.className="form-input boxed-search";
    term.setAttribute("aria-label","البحث عن فرد");
    const controls=el("div",undefined,"functional-toolbar");
    const results=el("div"),report=el("div"),status=el("div");
