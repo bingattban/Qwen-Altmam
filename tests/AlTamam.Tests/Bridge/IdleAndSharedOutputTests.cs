@@ -338,7 +338,7 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
             .Concat(new byte[2048]).ToArray());
         Assert.False((await inspect.VerifyAsync(plaintext,CancellationToken.None)).Success);
         var bytes=await File.ReadAllBytesAsync(backup);
-        bytes[256]=(byte)(bytes[256]^0xA5);
+        bytes[0]=(byte)(bytes[0]^0xA5); // SQLCipher salt: corruption must invalidate the key
         string broken=Path.Combine(_output,"broken.dbbackup");
         await File.WriteAllBytesAsync(broken,bytes);
         Assert.False((await inspect.VerifyAsync(broken,CancellationToken.None)).Success);
