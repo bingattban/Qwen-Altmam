@@ -314,6 +314,10 @@
           }));
       }catch(e){if(request===epoch)showError(results,e);}
     }
+    function showChooseActions(){
+      actions.replaceChildren(button("معاينة حالة أمس للمحددين",()=>{void preview();},
+        "btn btn-primary"),closeButton);
+    }
     async function preview(){
       if(busy||!chosen.size)return messageBox.replaceChildren(
         message("حدد فرداً واحداً على الأقل من كشف غير المحضرين.",true));
@@ -346,7 +350,7 @@
         results.replaceChildren(review);
         choiceBar.replaceChildren();
         actions.replaceChildren(button("العودة للتحديد",()=>{
-          stage="choose";lastPreview=null;void load();
+          stage="choose";lastPreview=null;showChooseActions();void load();
         }),button("تأكيد اعتماد "+response.persons.length+" فرد",async()=>{
           if(!lastPreview||busy)return;
           busy=true;
@@ -357,8 +361,9 @@
             }));
             if(!done?.approvedBeforeEight||done.count!==lastPreview.persons.length)
               throw Error("لم يؤكد الخادم اعتماد جميع الأفراد.");
+            const refresh=!!STATE.session&&STATE.date===day&&STATE.siteId===siteId;
             await close(true);
-            if(sameSession())void renderDashboard();
+            if(refresh)void renderDashboard();
           }catch(e){showError(messageBox,e);}
           finally{busy=false;}
         },"btn btn-primary"));
@@ -366,8 +371,7 @@
       }catch(e){showError(messageBox,e);}
       finally{busy=false;}
     }
-    actions.append(button("معاينة حالة أمس للمحددين",()=>{void preview();},
-      "btn btn-primary"),closeButton);
+    showChooseActions();
     choiceBar.appendChild(search);
     summary();await load();search.focus?.();
   }
