@@ -916,3 +916,39 @@ body{min-width:0}
 @media(max-height:720px){
   .attendance-review-scroll{max-height:35dvh}
 }
+
+/* SECTION 04: boxed roster search, unobtrusive live 20:00 clock, focused
+   single/bulk unprepared selection with a distinct per-person review. */
+.boxed-search-wrapper{display:flex;align-items:center;gap:7px;min-width:220px;max-width:430px;flex:1 1 235px}
+.boxed-search{font:inherit;font-size:14px;flex:1 1 185px;min-width:0;padding:10px 12px;
+  border:1px solid var(--border-color);border-radius:6px;background:var(--bg-surface);color:var(--text-main)}
+.boxed-search:focus{outline:2px solid var(--accent-teal);outline-offset:1px}
+.eight-pm-banner{flex:1 1 100%;display:grid;grid-template-columns:auto auto 1fr;align-items:center;
+  gap:12px;min-width:0;padding:10px 16px;border-right:4px solid var(--accent-teal);border-radius:8px}
+.eight-pm-banner .section-description{margin:0;font-size:13px}
+.eight-pm-clock{font:800 22px/1.5 "AlTamam Cairo","AlTamam Tajawal",sans-serif;
+  direction:ltr;unicode-bidi:isolate;white-space:nowrap;font-variant-numeric:tabular-nums}
+.unprepared-popup-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.67);z-index:1150;
+  display:flex;align-items:center;justify-content:center;padding:14px}
+.unprepared-popup{width:min(94vw,960px);max-height:90dvh;display:flex;flex-direction:column;
+  overflow:hidden;gap:10px;border:2px solid var(--accent-teal);
+  border-radius:12px;background:var(--bg-surface);color:var(--text-main);
+  padding:18px;box-shadow:0 22px 65px rgba(0,0,0,.38)}
+.unprepared-popup .section-description{margin:0;line-height:1.8}
+.unprepared-popup .boxed-search{max-width:330px}
+.unprepared-modal-results{flex:1 1 auto;min-height:120px;max-height:55dvh;overflow:auto;
+  border:1px solid var(--border-color);border-radius:8px}
+.unprepared-modal-results .functional-table-wrap{max-height:none;overflow:auto}
+.unprepared-modal-results .functional-pager{position:sticky;bottom:0;z-index:2;
+  padding:9px;background:var(--bg-surface);border-top:1px solid var(--border-color)}
+.unprepared-modal-actions,.unprepared-popup .functional-toolbar{display:flex;flex-wrap:wrap;
+  gap:9px;align-items:center}
+.unprepared-modal-actions{padding-top:10px;border-top:1px solid var(--border-color)}
+.unprepared-select-summary{font-weight:800;font-size:13px}
+.unprepared-review .functional-table-wrap{max-height:45dvh;overflow:auto}
+@media(max-width:740px){
+  .eight-pm-banner{grid-template-columns:1fr auto}
+  .eight-pm-banner .section-description{grid-column:1/-1}
+  .unprepared-popup{width:100%;padding:11px;max-height:93dvh}
+  .unprepared-popup .functional-toolbar>.boxed-search{max-width:none;flex:1 1 100%}
+}
