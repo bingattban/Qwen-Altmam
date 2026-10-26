@@ -617,7 +617,7 @@
         finally{save.disabled=false;}
       },"btn btn-primary");
       form.append(personSearch.wrap,searchButton,personPick,selected,
-        username.wrap,password.wrap,node("p","section-description",
+        username.wrap,password.wrap,passwordConfirm.wrap,node("p","section-description",
           "كلمة المرور: 8 خانات على الأقل، 3 أحرف إنجليزية، 3 أرقام ورمز خاص دون مسافات."),
         node("label","","نوع الحساب"),role,save,
         btn("إلغاء",()=>form.remove()),message);
