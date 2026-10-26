@@ -921,3 +921,64 @@ body{min-width:0}
 @media(max-height:720px){
   .attendance-review-scroll{max-height:35dvh}
 }
+
+
+/* Search sizing across dashboard, roster, archives, reports and admin dialogs.
+   Match the existing button height and scale responsively without hard widths. */
+:is(.functional-toolbar,.admin-card,.person-report-page,.separation-screen)
+  input[type="search"]{
+  box-sizing:border-box;flex:1 1 285px;width:min(100%,420px);
+  min-width:min(100%,230px);min-height:46px;
+  padding:10px 15px;font-size:16px;font-weight:600;line-height:1.5;
+  border:1px solid var(--border-color);border-radius:9px;
+  background:var(--bg-surface);color:var(--text-main);
+}
+:is(.functional-toolbar,.admin-card) .admin-input:has(input[type="search"]),
+.functional-toolbar .form-field:has(input[type="search"]){
+  flex:1 1 300px;min-width:min(100%,230px);max-width:580px;
+}
+:is(.functional-toolbar,.admin-card) .admin-input input[type="search"]{
+  width:100%;max-width:none;
+}
+@media(max-width:680px){
+  .functional-toolbar input[type="search"]{
+    width:100%;flex-basis:100%;min-width:0;
+  }
+}
+
+/* Fixed monthly headers must remain clearly legible against sticky columns. */
+.monthly-scroll .functional-table thead th.pinned{
+  background:var(--primary-navy);color:#fff;opacity:1;
+  font-size:16px;font-weight:900;letter-spacing:0;
+  line-height:1.65;padding:12px 9px;min-height:48px;
+  border-bottom:3px solid var(--accent-teal);
+  box-shadow:inset 0 -3px 0 var(--accent-teal);
+  text-shadow:0 1px 1px rgba(0,0,0,.22);
+}
+/* Dedicated scrollable report overlay: result tables never replace selection. */
+.person-report-modal:not([hidden]){
+  position:fixed;inset:0;z-index:1200;
+  display:flex;align-items:center;justify-content:center;
+  padding:clamp(8px,2vw,22px);background:rgba(0,0,0,.68);
+}
+.person-report-modal[hidden]{display:none!important}
+.person-report-dialog{
+  box-sizing:border-box;display:flex;flex-direction:column;gap:12px;
+  background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--accent-teal);border-radius:15px;
+  box-shadow:0 20px 65px rgba(0,0,0,.34);
+  width:min(96vw,1300px);max-height:min(94dvh,980px);
+  padding:clamp(12px,2vw,22px);overflow:hidden;
+}
+.person-report-dialog>.person-report-actions{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  flex-shrink:0;border-bottom:1px solid var(--border-color);padding-bottom:10px;
+}
+.person-report-actions>.section-title{margin:0;flex:1 1 230px}
+.person-report-dialog>.functional-feedback{flex-shrink:0;overflow-wrap:anywhere}
+.person-report-dialog>.person-report-content{overflow-y:auto;min-height:0;min-width:0}
+.person-report-dialog .functional-table-wrap{max-height:50dvh}
+@media(max-width:650px){
+ .person-report-dialog{width:100%;max-height:96dvh;padding:12px}
+ .person-report-dialog>.person-report-actions>*{flex:1 1 auto}
+}
