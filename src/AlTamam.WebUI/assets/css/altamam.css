@@ -982,3 +982,8 @@ body{min-width:0}
  .person-report-dialog{width:100%;max-height:96dvh;padding:12px}
  .person-report-dialog>.person-report-actions>*{flex:1 1 auto}
 }
+
+/* Uniform field scale also covers the older admin search forms using text inputs. */
+.admin-input .form-control{min-height:46px;font-size:16px;padding:10px 13px;line-height:1.5}
+.functional-toolbar input[placeholder*="بحث"],
+.functional-toolbar input[aria-label*="بحث"]{min-height:46px;font-size:16px;flex:1 1 285px;max-width:580px}

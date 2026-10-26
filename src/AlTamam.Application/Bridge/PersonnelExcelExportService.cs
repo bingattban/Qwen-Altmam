@@ -135,7 +135,8 @@ public sealed class PersonnelExcelExportService
     {
         var service=new PersonnelReportService(_db);
         var summary=Start("ملخص التقرير","PersonId","الرقم (ع)","الاسم","حالة القيد",
-            "تاريخ الإدراج","عدد أيام التحضير","عدد الحركات","الفترة من","الفترة إلى");
+            "تاريخ الإدراج","عدد أيام التحضير","عدد الحركات","الفترة من","الفترة إلى",
+            "حالات التحضير وأعداد الأيام");
         var daily=Start("التفاصيل التاريخية","PersonId","الرقم (ع) التاريخي",
             "الاسم التاريخي","تاريخ التحضير","الحالة","الموقع المسجل",
             "مصدر التحضير","رقم المراجعة","زمن الاعتماد");
@@ -153,8 +154,7 @@ public sealed class PersonnelExcelExportService
         {
             ct.ThrowIfCancellationRequested();
             string personId=ids[i];
-            JsonObject? first=null;
-            var per=ids.Length<=12?Start("فرد "+(i+1).ToString("D2",CultureInfo.InvariantCulture),
+             var per=ids.Length<=12?Start("فرد "+(i+1).ToString("D2",CultureInfo.InvariantCulture),
                 "PersonId","الرقم (ع)","الاسم","نوع القيد","التاريخ","الحالة / العملية","الموقع","التفاصيل"):null;
             for(int page=1;;page++)
             {
@@ -168,15 +168,17 @@ public sealed class PersonnelExcelExportService
                 var response=await service.ReportAsync(request,ct).ConfigureAwait(false);
                 if(!response.Success)throw new InvalidDataException(response.UserMessage ?? "تعذر قراءة التقرير.");
                 var data=(JsonObject)response.Data!;
-                first??=data;
-                var person=(JsonObject)data["person"]!;
+                 var person=(JsonObject)data["person"]!;
                 string name=Val(person,"name"),number=Val(person,"serviceNumberA");
                 if(page==1)
                     summary.Add(personId,number,name,
                         Val(person,"active")=="true"?"نشط":"مؤرشف",
                         Val(person,"firstRecordedDate"),Number(data,"attendanceTotal").ToString(CultureInfo.InvariantCulture),
                         Number(data,"movementTotal").ToString(CultureInfo.InvariantCulture),
-                        Read(payload,"dateFrom"),Read(payload,"dateTo"));
+                        Read(payload,"dateFrom"),Read(payload,"dateTo"),
+                        string.Join("، ",(Array(data,"statusTotals")??new JsonArray())
+                            .Select(st=>Val(st,"statusName")+" ("+
+                                Number(st,"count").ToString(CultureInfo.InvariantCulture)+")")));
                 foreach(var record in Array(data,"attendance")??new JsonArray())
                 {
                     daily.Add(personId,Val(record,"serviceNumberA"),Val(record,"name"),
@@ -232,6 +234,26 @@ public sealed class PersonnelExcelExportService
                     throw new InvalidDataException("تجاوز التصدير عدد الصفحات الآمن دون حذف بيانات.");
             }
             if(per is not null)sheets.Add(per);
+        }
+        // The summary must show BOTH independent person rows and the combined
+        // status tally; identities are still never joined by displayed number.
+        if(ids.Length>1)
+        {
+            var group=(JsonObject)payload.DeepClone();
+            group.Remove("mode");group.Remove("personId");
+            group.Remove("exportId");group.Remove("exportPreview");
+            group["personIds"]=new JsonArray(ids.Select(id=>(JsonNode?)JsonValue.Create(id)).ToArray());
+            var merged=await service.ReportAsync(group,ct).ConfigureAwait(false);
+            if(!merged.Success)
+                throw new InvalidDataException(merged.UserMessage ?? "تعذر احتساب إجمالي المجموعة.");
+            var data=(JsonObject)merged.Data!;
+            summary.Add("إجمالي المجموعة","","","","",
+                Number(data,"attendanceTotal").ToString(CultureInfo.InvariantCulture),
+                Number(data,"movementTotal").ToString(CultureInfo.InvariantCulture),
+                Read(payload,"dateFrom"),Read(payload,"dateTo"),
+                string.Join("، ",(Array(data,"statusTotals")??new JsonArray())
+                    .Select(st=>Val(st,"statusName")+" ("+
+                        Number(st,"count").ToString(CultureInfo.InvariantCulture)+")")));
         }
         return sheets;
     }

@@ -133,11 +133,15 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             Assert.Equal(7,zip.Entries.Count(e=>e.FullName.StartsWith("xl/worksheets/sheet")&&
                 e.FullName.EndsWith(".xml")));
             var people=Rows(zip,1).Select(Text).ToArray();
-            Assert.Equal(3,people.Length);
+            Assert.Equal(4,people.Length);
             Assert.Equal("TST-XLSX-OLD",people[1][0]);
             Assert.Equal("TST-XLSX-NEW",people[2][0]);
             Assert.Equal("3333",people[1][1]);
             Assert.Equal("3333",people[2][1]);
+            Assert.Equal("إجمالي المجموعة",people[3][0]);
+            Assert.Equal("2",people[3][5]);
+            Assert.Contains("غياب (1)",people[3][9]);
+            Assert.Contains("موجود (1)",people[3][9]);
             var history=Rows(zip,2).Select(Text).ToArray();
             Assert.Equal(3,history.Length);
             Assert.Equal("TST-XLSX-OLD",history[1][0]);
@@ -167,9 +171,11 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             q.CommandText="SELECT NewValueJson FROM AuditEvents WHERE OperationCode='PERSONNEL_EXCEL_EXPORT';";
             var evidence=(string?)await q.ExecuteScalarAsync();
             Assert.NotNull(evidence);
-            Assert.Contains("تقرير جماعي_",evidence);
-            Assert.DoesNotContain("الموظف السابق",evidence);
-            Assert.DoesNotContain("الاسم الجديد",evidence);
+            var meta=Assert.IsType<JsonObject>(JsonNode.Parse(evidence));
+            Assert.StartsWith("تقرير جماعي_",meta["fileName"]!.GetValue<string>());
+            Assert.Equal(2,meta["personCount"]!.GetValue<int>());
+            Assert.DoesNotContain("الموظف السابق",meta.ToJsonString());
+            Assert.DoesNotContain("الاسم الجديد",meta.ToJsonString());
         }
         Assert.False((await svc.ExportAsync(request,Actor,CancellationToken.None)).Success);
     }
