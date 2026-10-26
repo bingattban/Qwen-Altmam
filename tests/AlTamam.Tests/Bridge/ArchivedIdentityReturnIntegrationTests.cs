@@ -233,7 +233,7 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         var service=new ArchivedReturnService(_db);
         var requested=Input("شخص سابق مفصول","6262");
         var preview=Require(await service.PreviewAsync(requested,Actor,default));
-        Assert.Equal(1,Assert.IsType<JsonArray>(preview["candidates"]).Count);
+        Assert.Single(Assert.IsType<JsonArray>(preview["candidates"]));
         Assert.False(preview["numberContested"]!.GetValue<bool>());
         var roster=new PersonRosterService(_db);
         var direct=await roster.CreatePersonAsync(Actor.UserId,Actor.Username,
