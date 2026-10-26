@@ -18,6 +18,7 @@ class Element {
     this.disabled = false;
     this.style = {};
   }
+  get firstChild() { return this.children[0]||null; }
   get classList() {
     return {
       add: (...tokens) => { this.className += " " + tokens.join(" "); },
@@ -57,6 +58,17 @@ const bridge = {
       ListUserAccounts: { items:[],total:0,hasNext:false },
       QueryAuditLog: { items:[],total:0,hasNext:false },
       GetActiveAttendanceStatuses: [{statusId:"STS-ABSENT",displayName:"غياب"}],
+      QuerySites:[{siteId:"SITE-RETURN",name:"الموقع الجديد",active:true}],
+      QueryPersons:{items:[],total:0,hasNext:false},
+      PreviewArchivedIdentity:body.serviceNumberA==="4141"
+        ?{requiresResolution:true,previewToken:"T".repeat(64),
+          candidates:[{personId:"TST-ARCHIVED-P1",name:"شخص تجريبي قديم",
+            serviceNumberA:"4141",exitDate:"2026-10-12",exitType:"نقل خارجي",numberMatch:true,nameMatch:false}]}
+        :{requiresResolution:true,previewToken:"U".repeat(64),
+          candidates:[{personId:"TST-ARCHIVED-P2",name:"شخص جديد مكرر",
+            serviceNumberA:"5151",exitDate:"2026-10-12",exitType:"فصل",numberMatch:false,nameMatch:true}]},
+      CommitArchivedReturn:{returned:true,personId:"TST-ARCHIVED-P1"},
+      CreatePerson:{personId:"PRN-NEW-DIFFERENT"},
       SearchPersons: {items:[{personId:"TST-CLOSED-P1",displayName:"اختبار",serviceNumberA:"C-1"}]},
       SetClosedDayCorrectionPolicy: {enabled:true},
       PreviewClosedDayCorrection: {previewToken:"T".repeat(64),requiresExplicitConfirmation:true,
@@ -181,6 +193,39 @@ async function run() {
   assert.ok(calls.some(x=>x.name==="QueryAuditLog"),
     "opening audit must request actual operation records");
   buttonNamed("العودة إلى الإدارة").handlers.click();
+
+  controller.renderAdmin(admin);
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="persons").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const form=visible().find(x=>x.className.includes("admin-create-person"));
+  assert.ok(form,"single-person form is available");
+  const inputs=form.all().filter(x=>x.tag==="input");
+  const location=form.all().find(x=>x.tag==="select");
+  assert.equal(inputs.length,2);
+  inputs[0].value="شخص تجريبي راجع";inputs[1].value="4141";
+  location.value="SITE-RETURN";
+  await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
+  assert.ok(buttonNamed("عاد نفس الفرد"),"archived identity list shows explicit return choice");
+  assert.ok(visible().some(x=>x.textContent==="2026-10-12"),
+    "candidate exit date is visible before identity decision");
+  assert.equal(calls.filter(x=>x.name==="CreatePerson").length,0,
+    "matching archived number must not silently create a new identity");
+  await buttonNamed("عاد نفس الفرد").handlers.click();
+  assert.ok(calls.some(x=>x.name==="CommitArchivedReturn"&&
+    x.body.personId==="TST-ARCHIVED-P1"&&x.body.decision==="same"),
+    "return binds explicit candidate ID and actor-bound preview");
+  assert.equal(calls.filter(x=>x.name==="CreatePerson").length,0);
+
+  inputs[0].value="شخص جديد مكرر";inputs[1].value="6262";
+  location.value="SITE-RETURN";
+  await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
+  assert.ok(buttonNamed("فرد آخر مختلف عن جميع المرشحين"),
+    "name-only candidate requires explicit different-human resolution");
+  await buttonNamed("فرد آخر مختلف عن جميع المرشحين").handlers.click();
+  assert.ok(calls.some(x=>x.name==="CreatePerson"&&x.body.identityDecision==="different"&&
+    x.body.identityResolutionToken==="U".repeat(64)),
+    "independent identity requires the token-bound archived-name resolution");
 
   await controller.renderSettings(admin,()=>{});
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))

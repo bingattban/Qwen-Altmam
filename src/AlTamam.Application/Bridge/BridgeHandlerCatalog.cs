@@ -261,6 +261,18 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.QueryPersonsAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
+        "PreviewArchivedIdentity" => async (req,principal,ct) =>
+        {
+            var service=new ArchivedReturnService(services.Db,services.Time);
+            var result=await service.PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "CommitArchivedReturn" => async (req,principal,ct) =>
+        {
+            var service=new ArchivedReturnService(services.Db,services.Time);
+            var result=await service.CommitReturnAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "CreatePerson" => async (req, principal, ct) =>
         {
             var svc = new PersonRosterService(services.Db);

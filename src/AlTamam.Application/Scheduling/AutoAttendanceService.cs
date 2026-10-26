@@ -158,7 +158,8 @@ public sealed class AutoAttendanceService
                 {
                     movement.Transaction = tx;
                     movement.CommandText = @"SELECT EXISTS(SELECT 1 FROM PersonnelMovements
-                                               WHERE PersonId = $p AND EffectiveLocalDate = $date);";
+                                               WHERE PersonId = $p AND EffectiveLocalDate = $date
+                                                 AND MovementType IN(1,2,3));";
                     movement.Parameters.AddWithValue("$p", person.PersonId);
                     movement.Parameters.AddWithValue("$date", Iso(businessDate));
                     if (Convert.ToInt32(await movement.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)

@@ -852,22 +852,94 @@
         siteName=Array.from(selectSite.children).find(option=>option.value===siteId)?.textContent||"غير محدد";
       if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || !siteId)
         return errors(addMessage,new Error("أدخل الاسم والرقم (ع) بأربع خانات رقمية على الأقل والموقع."));
-      if(!await dialogs.confirm("تأكيد إضافة «"+name+"» بالرقم (ع) «"+number+
-        "» في الموقع «"+siteName+"»؟"))return;
-      saveNew.disabled=true;
-      try{
-        const createKey=JSON.stringify([name,number,siteId]);
-        if(lastPersonPayload!==createKey){
-          lastPersonPayload=createKey;lastPersonOperation=makeOperationId();
-        }
-        const response=await api().invoke("CreatePerson",{visibleName:name,
-          serviceNumberA:number,siteId,operationId:lastPersonOperation});
+      const canonicalNumber=number.replace(/[٠-٩۰-۹]/g,c=>
+        String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0)));
+      const identityKey=()=>JSON.stringify([nameField.input.value.trim(),
+        numberField.input.value.trim().replace(/[٠-٩۰-۹]/g,c=>
+          String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0))),
+        siteField.input.value||"SITE-UNSPECIFIED"]);
+      const proposed=JSON.stringify([name,canonicalNumber,siteId]);
+      const unchanged=()=>identityKey()===proposed;
+      const resetForm=async(message)=>{
+        nameField.input.value="";numberField.input.value="";
+        selectSite.value="SITE-UNSPECIFIED";
         lastPersonPayload=null;lastPersonOperation=null;
-        if(!response.data?.personId)throw Error("لم يتم تأكيد إنشاء السجل.");
-        nameField.input.value="";numberField.input.value="";selectSite.value="SITE-UNSPECIFIED";
-        addMessage.replaceChildren(node("p","settings-success",
-          "تمت إضافة الفرد بنجاح. رقم (ع): "+number+" — الموقع: "+siteName));
+        addMessage.replaceChildren(node("p","settings-success",message));
         await load();
+      };
+      saveNew.disabled=true;
+      addMessage.replaceChildren(warning("جارٍ فحص تطابق الاسم والرقم (ع) مع الأرشيف..."));
+      try{
+        const scanned=(await api().invoke("PreviewArchivedIdentity",{
+          visibleName:name,serviceNumberA:canonicalNumber,siteId
+        })).data||{};
+        if(!unchanged())throw Error("تغيرت بيانات الفرد أثناء فحص الأرشيف؛ أعد التحقق.");
+        const candidates=Array.isArray(scanned.candidates)?scanned.candidates:[];
+        if(!candidates.length){
+          if(!await dialogs.confirm("تأكيد إضافة «"+name+"» بالرقم (ع) «"+canonicalNumber+
+            "» في الموقع «"+siteName+"»؟")){addMessage.replaceChildren();return;}
+          const createKey=proposed;
+          if(lastPersonPayload!==createKey){
+            lastPersonPayload=createKey;lastPersonOperation=makeOperationId();
+          }
+          const response=await api().invoke("CreatePerson",{visibleName:name,
+            serviceNumberA:canonicalNumber,siteId,operationId:lastPersonOperation});
+          if(!response.data?.personId)throw Error("لم يتم تأكيد إنشاء السجل.");
+          await resetForm("تمت إضافة الفرد بنجاح. رقم (ع): "+canonicalNumber+" — الموقع: "+siteName);
+          return;
+        }
+        if(!scanned.previewToken)throw Error("تعذر توثيق معاينة هوية الأرشيف.");
+        const review=card("تحقق من هوية محفوظة في الأرشيف");
+        review.appendChild(warning("يوجد تطابق محتمل؛ راجع كل مرشح وحدد هل الفرد نفسه عاد للخدمة أم شخص مختلف. لن تُنشأ هوية جديدة تلقائياً."));
+        const t=table(["الاسم المؤرشف","الرقم (ع)","نوع الخروج","تاريخ الخروج","سبب التطابق","قرار الهوية"]);
+        const submitted=async(fn)=>{
+          if(!unchanged())return errors(addMessage,new Error("تغيرت بيانات الفرد؛ أعد التحقق قبل الحفظ."));
+          saveNew.disabled=true;
+          try{await fn();}catch(e){errors(addMessage,e);}
+          finally{saveNew.disabled=false;}
+        };
+        for(const candidate of candidates){
+          const tr=node("tr");
+          for(const value of [candidate.name,candidate.serviceNumberA,
+            candidate.exitType,candidate.exitDate,
+            candidate.numberMatch?"تطابق الرقم (ع)":"تطابق الاسم فقط"])
+            tr.appendChild(node("td","",value));
+          const action=node("td","admin-row-buttons");
+          action.appendChild(btn("عاد نفس الفرد",()=>submitted(async()=>{
+            const agreement="أؤكد أن «"+name+"» (ع: "+canonicalNumber+
+              ") هو الشخص نفسه المسجل سابقاً باسم «"+candidate.name+
+              "» (ع: "+candidate.serviceNumberA+")؛ خروج: "+candidate.exitType+
+              " بتاريخ "+candidate.exitDate+". ستُحفظ هويته وتاريخه القديمان. متابعة العودة إلى «"+siteName+"»؟";
+            if(!await dialogs.confirm(agreement))return;
+            const result=await api().invoke("CommitArchivedReturn",{
+              previewToken:scanned.previewToken,personId:candidate.personId,
+              decision:"same",operationId:makeOperationId()
+            });
+            if(!result.data?.returned)throw Error("لم يتم توثيق عودة الفرد المؤرشف.");
+            await resetForm("أُعيد تفعيل الفرد بالمعرف الأصلي، وحُفظ تاريخ خروجه وعودته. رقم (ع): "+canonicalNumber);
+          })));
+          tr.appendChild(action);t.body.appendChild(tr);
+        }
+        review.appendChild(t.wrap);
+        const contested=candidates.some(x=>x.numberMatch);
+        if(!contested){
+          review.appendChild(btn("فرد آخر مختلف عن جميع المرشحين",()=>submitted(async()=>{
+            const detail=candidates.map(x=>x.name+" (ع: "+x.serviceNumberA+
+              "، "+x.exitType+" "+x.exitDate+")").join("؛ ");
+            if(!await dialogs.confirm("تأكيد نهائي: «"+name+"» شخص مختلف عن جميع الهويات المؤرشفة التالية: "+
+              detail+". إنشاء هوية جديدة مستقلة بهذا الرقم المختلف؟"))return;
+            const response=await api().invoke("CreatePerson",{
+              visibleName:name,serviceNumberA:canonicalNumber,siteId,
+              identityResolutionToken:scanned.previewToken,identityDecision:"different",
+              operationId:makeOperationId()
+            });
+            if(!response.data?.personId)throw Error("لم يتم تأكيد الهوية المستقلة الجديدة.");
+            await resetForm("أُنشئت هوية مستقلة بعد توثيق أنها مختلفة عن مرشحي الأرشيف.");
+          }),"btn btn-outline"));
+        }else{
+          review.appendChild(warning("الرقم (ع) يطابق هوية مؤرشفة؛ لا يمكن إنشاء شخص آخر بهذا الرقم. يجب إثبات العودة أو حل التعارض أولاً."));
+        }
+        addMessage.replaceChildren(review);
       }catch(e){errors(addMessage,e);}
       finally{saveNew.disabled=false;}
     },"btn btn-primary");
