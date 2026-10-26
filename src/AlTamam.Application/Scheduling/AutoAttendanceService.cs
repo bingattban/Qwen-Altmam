@@ -232,6 +232,9 @@ public sealed class AutoAttendanceService
                 copied++;
             }
 
+            DateTimeOffset completedUtc = _time.GetUtcNow();
+            string summary = $"تشغيل {source} ليوم {Iso(businessDate)}: اعتُمد {copied}، منها {defaulted} بالحالة الافتراضية لعدم وجود تحضير أمس، استثناء نقل {skipTransfer}، تحضّر يدوياً مسبقاً {skipManual}.";
+
             // Actor attribution + tamper-evident audit event inside the SAME transaction (07.03).
             await Bridge.BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 operationCode: "AUTO_ATTENDANCE_20H",
