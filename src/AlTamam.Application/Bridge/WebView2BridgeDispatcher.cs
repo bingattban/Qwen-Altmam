@@ -186,15 +186,17 @@ public sealed class WebView2BridgeDispatcher
                  await authenticate(request.SessionNonce).ConfigureAwait(false) is null))
                 return Fail(request.RequestId, BridgeErrorCodes.SessionExpired,
                     "انتهت صلاحية الجلسة، يجب تسجيل الدخول من جديد.", BridgeOutcomeKind.Unauthorized);
-            // Revoked/logout sessions no longer need replay history; their nonces
-            // cannot authenticate again. Successful login ends the anonymous flow.
-            if (response.Success && (request.Action == "Logout" || request.Action == "AuthenticateLocalUser"))
+            // Explicit logout revokes the old nonce, so its replay history may be
+            // discarded. A successful login does not clear anonymous history.
+            if (response.Success && request.Action == "Logout")
             {
                 await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
                 try
                 {
-                    _replaySessions.Remove(request.Action == "Logout"
-                        ? request.SessionNonce : "__unauthenticated__");
+                    _replaySessions.Remove(request.SessionNonce);
+                    // A new unauthenticated login after explicit logout is a
+                    // new flow. Never clear its replay cache on mere login success.
+                    _replaySessions.Remove("__unauthenticated__");
                 }
                 finally { _gate.Release(); }
             }
