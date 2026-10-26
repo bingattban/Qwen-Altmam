@@ -209,10 +209,12 @@ public sealed class PersonRosterService
                 return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
                     "«الرقم (ع)» مستخدم بالفعل لفرد نشط بعد التطبيع؛ لا يمكن تكراره.");
 
-            // Archived number conflicts may NEVER be waived; a name-only
-            // coincidence can be explicitly declared a different human, but
-            // only with an actor-bound one-time identity-resolution preview
-            // matching EVERY current archived candidate.
+            // The ONLY exception to an archived-number conflict is a verified,
+            // explicitly approved reuse of ONE dismissed person's number for a
+            // DIFFERENT human. The new person receives a fresh PersonId and NO
+            // records or relationships are copied from the dismissed person.
+            // Other archived collisions fail closed. Every archived candidate
+            // must match the actor-bound, one-use preview under this transaction.
             string resolutionToken=ReadString(payload,"identityResolutionToken").Trim();
             string decision=ReadString(payload,"identityDecision").Trim();
             var matches=new List<(string Id,string Name,string Number,string NormalizedNumber,long Revision,int Org)>();
@@ -238,12 +240,20 @@ public sealed class PersonRosterService
             if(matches.Count>50)
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                     "توجد هويات كثيرة متطابقة في الأرشيف؛ يجب حل التعارض قبل الإضافة.");
-            if(matches.Any(x=>x.NormalizedNumber==normalizedNumber))
+            var numberMatches=matches.Where(x=>x.NormalizedNumber==normalizedNumber).ToArray();
+            bool replaceDismissed=decision=="replaceDismissed";
+            string dismissedPersonId=ReadString(payload,"dismissedPersonId").Trim();
+            if(numberMatches.Length>0 &&
+                (!replaceDismissed || numberMatches.Length!=1 ||
+                 numberMatches[0].Org!=3 || dismissedPersonId!=numberMatches[0].Id))
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
-                    "«الرقم (ع)» محفوظ لهوية سابقة في الأرشيف؛ لا يمكن إنشاء هوية ثانية به حتى لو رُفض تطابق الاسم.");
+                    "الرقم (ع) موجود في الأرشيف؛ الاستبدال مسموح فقط لفرد مفصول واحد بعد معاينة وموافقة صريحة، وليس للمنقول خارجياً.");
+            if(replaceDismissed && numberMatches.Length!=1)
+                return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                    "لا توجد هوية مفصولة واحدة مطابقة للرقم (ع) يمكن الموافقة على استبدالها.");
             if(matches.Count>0)
             {
-                if(decision!="different"||resolutionToken.Length!=64)
+                if((decision!="different"&&!replaceDismissed)||resolutionToken.Length!=64)
                     return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                         "يوجد تطابق اسم في الأرشيف؛ يلزم إثبات أن الفرد الجديد شخص مختلف من نافذة التحقق من الهوية.");
                 using var resolve=connection.CreateCommand();
@@ -275,6 +285,20 @@ public sealed class PersonRosterService
                        ReadString(oldCandidate,"serviceNumberA")!=current.Number)
                         return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                             "تغيّر مرشح في الأرشيف؛ أعد قرار اختلاف الهوية من جديد.");
+                }
+                // An active person, external transfer, later return, or changed
+                // dismissal invalidates the preview even if a UI sends a forged
+                // replaceDismissed decision.
+                if(replaceDismissed)
+                {
+                    var selected=prior.OfType<JsonObject>().SingleOrDefault(
+                        x=>ReadString(x,"personId")==dismissedPersonId);
+                    if(selected is null ||
+                       ReadString(selected,"exitType")!="فصل" ||
+                       !ReadBool(selected,"numberMatch",false) ||
+                       ReadInt(selected,"organizationalStatus",0)!=3)
+                        return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                            "الرقم (ع) لا يطابق حالة فصل مؤكدة في المعاينة؛ أعد التحقق.");
                 }
                 long? used=await BridgePreviewTokens.ConsumeAsync(_db,_time,connection,tx,
                     resolutionToken,ArchivedReturnService.PreviewOperation,userId,0,ct)
@@ -361,12 +385,28 @@ public sealed class PersonRosterService
                 targetEntityType: "Person", targetEntityId: personId, targetDisplay: $"{visibleName} ({serviceNumber})",
                 oldValueJson: null, newValueJson: new JsonObject { ["personId"] = personId, ["name"] = visibleName,
                     ["serviceNumberA"] = serviceNumber,
-                    ["differentFromArchivedPersonIds"] = matches.Count>0
-                        ? new JsonArray(matches.Select(x=>(JsonNode?)JsonValue.Create(x.Id)).ToArray())
-                        : null }.ToJsonString(),
+                    ["independentFromArchivedIdentity"] = matches.Count>0,
+                    ["reusedDismissedNumber"] = replaceDismissed }.ToJsonString(),
                 description: $"أُنشئ سجل الفرد «{visibleName}» بالمعرف الثابت {personId}.",
                 reason: null, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
 
+            if(replaceDismissed)
+            {
+                // Keep the mapping ONLY in a separate number-reuse audit event.
+                // It is not a Person relationship and is never included in either
+                // person's lifetime report (which filters strictly on PersonId).
+                await BridgeAuditWriter.WriteAsync(connection, tx, _time,
+                    operationCode: "DISMISSED_NUMBER_REUSED",
+                    operationArabicName: "إعادة استخدام رقم فرد مفصول لشخص جديد مستقل",
+                    actorUserId: userId, actorUsername: username, actorDisplayName: null,
+                    targetEntityType: "PersonnelNumberAssignment",
+                    targetEntityId: normalizedNumber, targetDisplay: normalizedNumber,
+                    oldValueJson: new JsonObject { ["dismissedPersonId"] = dismissedPersonId }.ToJsonString(),
+                    newValueJson: new JsonObject { ["newPersonId"] = personId }.ToJsonString(),
+                    description: "أُعيد استخدام الرقم (ع) بعد الفصل لهوية جديدة مستقلة دون نقل أي سجلات تاريخية.",
+                    reason: "موافقة صريحة بعد معاينة هوية مفصولة", effectiveLocalDate: effectiveDate,
+                    correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
+            }
             var outcome=new JsonObject { ["personId"] = personId, ["siteId"] = siteId, ["revision"] = 1L };
             await MutationIdempotency.StoreAsync(connection,tx,receipt,outcome,_time,ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(
@@ -403,6 +443,20 @@ public sealed class PersonRosterService
         if (await reader.ReadAsync(ct).ConfigureAwait(false))
             return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
                 $"«الرقم (ع)» المطبَّع مطابق لسجل الفرد «{reader.GetString(1)}»؛ عدّل أحدهما.");
+        reader.Close();
+        if(normalizedNumber!=loaded.Row.NormalizedNumber)
+        {
+            using var archivedNumber=connection.CreateCommand();
+            archivedNumber.CommandText="""
+                SELECT EXISTS(SELECT 1 FROM Persons
+                  WHERE NormalizedServiceNumberA=$number AND ActiveFlag=0
+                    AND OrganizationalStatus IN(2,3,4));
+                """;
+            archivedNumber.Parameters.AddWithValue("$number",normalizedNumber);
+            if(Convert.ToInt32(await archivedNumber.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
+                return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
+                    "الرقم (ع) مؤرشف لشخص سابق؛ استخدم إضافة فرد مع تحقق الهوية ولا تتجاوزه بتعديل الرقم.");
+        }
 
         return BridgeHelpers.Ok(new JsonObject
         {
@@ -453,6 +507,24 @@ public sealed class PersonRosterService
             if (clash is not null and not DBNull)
                 return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
                     $"«الرقم (ع)» المطبَّع مطابق للفرد النشط «{clash}» بعد التدقيق داخل المعاملة.");
+
+            // A routine identity edit cannot bypass the explicit dismissed-number
+            // replacement workflow. It must not change the owner of an archived
+            // number without a separate person's first admission.
+            if(normalizedNumber!=loaded.Row.NormalizedNumber)
+            {
+                using var archivedNumber=connection.CreateCommand();
+                archivedNumber.Transaction=tx;
+                archivedNumber.CommandText="""
+                    SELECT EXISTS(SELECT 1 FROM Persons
+                      WHERE NormalizedServiceNumberA=$number AND ActiveFlag=0
+                        AND OrganizationalStatus IN(2,3,4));
+                    """;
+                archivedNumber.Parameters.AddWithValue("$number",normalizedNumber);
+                if(Convert.ToInt32(await archivedNumber.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
+                    return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
+                        "الرقم (ع) محفوظ لهوية مؤرشفة؛ لا يمكن إعادة استخدامه عبر تعديل فرد نشط.");
+            }
 
             // A single calendar day cannot hold two identity snapshots: refuse a
             // same-day/backdated edit before any write, rather than relying on a

@@ -124,8 +124,12 @@ public sealed class ExcelPersonnelImportService
         using var exists = connection.CreateCommand();
         exists.Transaction = tx;
         exists.CommandText = """
-            SELECT CurrentVisibleName FROM Persons
-            WHERE NormalizedServiceNumberA=$number AND ActiveFlag=1 LIMIT 1;
+            SELECT CASE
+              WHEN EXISTS(SELECT 1 FROM Persons WHERE NormalizedServiceNumberA=$number
+                           AND ActiveFlag=1) THEN 1
+              WHEN EXISTS(SELECT 1 FROM Persons WHERE NormalizedServiceNumberA=$number
+                           AND ActiveFlag=0 AND OrganizationalStatus IN (2,3,4)) THEN 2
+              ELSE 0 END;
             """;
         var param = exists.Parameters.Add("$number", SqliteType.Text);
         foreach (var item in rows)
@@ -145,8 +149,11 @@ public sealed class ExcelPersonnelImportService
             else
             {
                 param.Value = item.NormalizedNumber;
-                if (await exists.ExecuteScalarAsync(ct).ConfigureAwait(false) is string)
+                int clash=Convert.ToInt32(await exists.ExecuteScalarAsync(ct).ConfigureAwait(false));
+                if(clash==1)
                     reason = "«الرقم (ع)» موجود مسبقاً في القوة؛ لن يتم استبداله.";
+                else if(clash==2)
+                    reason = "«الرقم (ع)» محفوظ لهوية مؤرشفة؛ أضف الفرد يدوياً بعد التحقق والموافقة. لا يُسمح بالاستبدال عبر Excel.";
             }
             if (reason is not null)
                 issues.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
