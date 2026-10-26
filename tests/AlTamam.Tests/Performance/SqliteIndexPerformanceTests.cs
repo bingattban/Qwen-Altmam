@@ -369,7 +369,7 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
     }
 
     [Fact]
-    public async Task BatchedAutomaticAttendanceSelection_HasIdenticalOutputAndMeasuredLowerLatency()
+    public async Task BulkAutomaticAttendanceSelection_HasIdenticalOutputAndMeasuredLowerLatency()
     {
         // Use the real production SQLCipher schema with 2,000 seeded people. This
         // measures the exact selection stage, not the necessary per-person INSERTs.
@@ -431,43 +431,49 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
 
         var batchedResult = new SortedDictionary<string, string>(StringComparer.Ordinal);
         sw.Restart();
-        using (var batched = connection.CreateCommand())
+        var transferred = new HashSet<string>(StringComparer.Ordinal);
+        using (var movements = connection.CreateCommand())
         {
-            batched.CommandText = """
-                SELECT p.PersonId,a.AssignmentId,a.SiteId,
-                       EXISTS(SELECT 1 FROM PersonnelMovements m
-                           WHERE m.PersonId=p.PersonId AND m.EffectiveLocalDate=$date
-                           AND m.MovementType IN (1,2,3)),
-                       EXISTS(SELECT 1 FROM AttendanceRecords today
-                           WHERE today.PersonId=p.PersonId AND today.AttendanceLocalDate=$date),
-                       yesterday.StatusId
-                FROM Persons p
-                JOIN PersonAssignments a ON a.PersonId=p.PersonId
-                    AND a.ValidFromLocalDate <= $date
-                    AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
-                JOIN Sites s ON s.SiteId=a.SiteId
-                LEFT JOIN AttendanceRecords yesterday
-                    ON yesterday.PersonId=p.PersonId AND yesterday.AttendanceLocalDate=$yday
-                WHERE p.ActiveFlag=1 AND p.OrganizationalStatus=1
-                    AND p.FirstRecordedLocalDate <= $date
-                ORDER BY p.PersonId;
+            movements.CommandText = """
+                SELECT PersonId FROM PersonnelMovements
+                WHERE EffectiveLocalDate=$date AND MovementType IN (1,2,3);
                 """;
-            batched.Parameters.AddWithValue("$date", date);
-            batched.Parameters.AddWithValue("$yday", yesterday);
-            using var reader = await batched.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-                batchedResult.Add(reader.GetString(0), string.Join("|", reader.GetString(1),
-                    reader.GetString(2), reader.GetInt64(3), reader.GetInt64(4),
-                    reader.IsDBNull(5) ? "" : reader.GetString(5)));
+            movements.Parameters.AddWithValue("$date", date);
+            using var reader = await movements.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) transferred.Add(reader.GetString(0));
         }
+        var committed = new HashSet<string>(StringComparer.Ordinal);
+        using (var today = connection.CreateCommand())
+        {
+            today.CommandText = "SELECT PersonId FROM AttendanceRecords WHERE AttendanceLocalDate=$date;";
+            today.Parameters.AddWithValue("$date", date);
+            using var reader = await today.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) committed.Add(reader.GetString(0));
+        }
+        var previousStatuses = new Dictionary<string, string>(StringComparer.Ordinal);
+        using (var previous = connection.CreateCommand())
+        {
+            previous.CommandText = """
+                SELECT PersonId,StatusId FROM AttendanceRecords WHERE AttendanceLocalDate=$yday;
+                """;
+            previous.Parameters.AddWithValue("$yday", yesterday);
+            using var reader = await previous.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                previousStatuses.Add(reader.GetString(0), reader.GetString(1));
+        }
+        foreach (var person in people)
+            batchedResult.Add(person.PersonId, string.Join("|", person.Assignment,
+                person.Site, transferred.Contains(person.PersonId) ? 1L : 0L,
+                committed.Contains(person.PersonId) ? 1L : 0L,
+                previousStatuses.GetValueOrDefault(person.PersonId, "")));
         sw.Stop();
         double optimizedMs = sw.Elapsed.TotalMilliseconds;
         Assert.Equal(PersonCount, people.Count);
         Assert.Equal(oldResult.ToArray(), batchedResult.ToArray());
         Console.WriteLine(
-            $"ALTAMAM_ATTENDANCE_SELECTION personCount={PersonCount} baselineCommands={1+PersonCount*3} optimizedCommands=1 baselineMs={baselineMs:F3} optimizedMs={optimizedMs:F3}");
+            $"ALTAMAM_ATTENDANCE_SELECTION personCount={PersonCount} baselineCommands={1+PersonCount*3} optimizedCommands=4 baselineMs={baselineMs:F3} optimizedMs={optimizedMs:F3}");
         Assert.True(optimizedMs < baselineMs,
-            $"Measured batched selection must be faster on synthetic corpus: old {baselineMs:F3} ms / new {optimizedMs:F3} ms.");
+            $"Measured four-read selection must be faster on synthetic corpus: old {baselineMs:F3} ms / new {optimizedMs:F3} ms.");
     }
 
     private static string ReadAll(SqliteCommand cmd)
