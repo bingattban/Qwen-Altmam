@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Infrastructure.Persistence;
@@ -20,8 +21,150 @@ public sealed class PersonnelReportService
     { try{return Math.Clamp(node?[key]?.GetValue<int>()??1,1,100000);}catch{return 1;} }
     private static BridgeResponse NotFound()=>BridgeHelpers.Error(
         BridgeErrorCodes.MissingData,"لم يُعثر على الفرد في سجلات البرنامج.");
+
+    /// <summary>
+    /// Combined read-only historical report. Each row is isolated by immutable
+    /// PersonId even when two people have reused the same displayed الرقم (ع).
+    /// The chosen date boundaries are inclusive; only committed facts are counted.
+    /// </summary>
+    private async Task<BridgeResponse> GroupReportAsync(JsonObject payload,CancellationToken ct)
+    {
+        if(payload["personIds"] is not JsonArray selected || selected.Count is <1 or >100)
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "اختر من فرد إلى 100 فرد لإعداد التقرير الجماعي.");
+        var ids=new List<string>(selected.Count);
+        var unique=new HashSet<string>(StringComparer.Ordinal);
+        foreach(var node in selected)
+        {
+            string id;
+            try{id=node?.GetValue<string>()??"";}
+            catch{return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"معرف فرد غير صالح.");}
+            if(id.Length is <3 or >128 || !unique.Add(id))
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "حدد أفراداً بمعرفات داخلية صحيحة وغير مكررة.");
+            ids.Add(id);
+        }
+
+        string from=Text(payload,"dateFrom"),to=Text(payload,"dateTo");
+        static bool ValidDate(string value)=>DateOnly.TryParseExact(value,"yyyy-MM-dd",
+            CultureInfo.InvariantCulture,DateTimeStyles.None,out _);
+        if((from.Length>0&&!ValidDate(from))||(to.Length>0&&!ValidDate(to))||
+           (from.Length>0&&to.Length>0&&string.CompareOrdinal(from,to)>0))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "حدد فترة صحيحة: من تاريخ لا يتجاوز تاريخ النهاية (yyyy-MM-dd).");
+
+        string placeholders=string.Join(",",ids.Select((_,i)=>"$person"+i));
+        using var connection=_db.CreateOpenConnection();
+        void BindPeople(SqliteCommand command)
+        {
+            for(int i=0;i<ids.Count;i++)
+                command.Parameters.AddWithValue("$person"+i,ids[i]);
+        }
+        void BindRange(SqliteCommand command)
+        {
+            BindPeople(command);
+            command.Parameters.AddWithValue("$from",from);
+            command.Parameters.AddWithValue("$to",to);
+        }
+        var people=new Dictionary<string,JsonObject>(StringComparer.Ordinal);
+        using(var query=connection.CreateCommand())
+        {
+            query.CommandText=$"""
+                SELECT PersonId,CurrentVisibleName,CurrentServiceNumberA,
+                       FirstRecordedLocalDate,OrganizationalStatus,ActiveFlag
+                FROM Persons WHERE PersonId IN ({placeholders});
+                """;
+            BindPeople(query);
+            using var reader=await query.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string id=reader.GetString(0);
+                people.Add(id,new JsonObject
+                {
+                    ["personId"]=id,["name"]=reader.GetString(1),
+                    ["serviceNumberA"]=reader.GetString(2),
+                    ["firstRecordedDate"]=reader.GetString(3),
+                    ["organizationalStatus"]=reader.GetInt32(4),
+                    ["active"]=reader.GetInt32(5)==1,
+                    ["attendanceTotal"]=0L,["movementTotal"]=0L,
+                    ["statusTotals"]=new JsonArray()
+                });
+            }
+        }
+        // All-or-nothing: never silently omit an unknown or stale selected ID.
+        if(people.Count!=ids.Count)return NotFound();
+
+        var totals=new Dictionary<(string StatusId,string Snapshot),long>();
+        long allAttendance=0,allMovements=0;
+        using(var query=connection.CreateCommand())
+        {
+            query.CommandText=$"""
+                SELECT PersonId,StatusId,StatusNameSnapshot,COUNT(*)
+                FROM AttendanceRecords
+                WHERE PersonId IN ({placeholders})
+                  AND ($from='' OR AttendanceLocalDate >= $from)
+                  AND ($to='' OR AttendanceLocalDate <= $to)
+                GROUP BY PersonId,StatusId,StatusNameSnapshot
+                ORDER BY PersonId,StatusNameSnapshot,StatusId;
+                """;
+            BindRange(query);
+            using var reader=await query.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string id=reader.GetString(0),statusId=reader.GetString(1),
+                    snapshot=reader.GetString(2);
+                long count=reader.GetInt64(3);
+                var row=people[id];
+                row["attendanceTotal"]=row["attendanceTotal"]!.GetValue<long>()+count;
+                ((JsonArray)row["statusTotals"]!).Add(new JsonObject{
+                    ["statusId"]=statusId,["statusName"]=snapshot,["count"]=count
+                });
+                totals[(statusId,snapshot)]=totals.GetValueOrDefault((statusId,snapshot))+count;
+                allAttendance+=count;
+            }
+        }
+        using(var query=connection.CreateCommand())
+        {
+            query.CommandText=$"""
+                SELECT PersonId,COUNT(*) FROM PersonnelMovements
+                WHERE PersonId IN ({placeholders})
+                  AND ($from='' OR EffectiveLocalDate >= $from)
+                  AND ($to='' OR EffectiveLocalDate <= $to)
+                GROUP BY PersonId;
+                """;
+            BindRange(query);
+            using var reader=await query.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                var count=reader.GetInt64(1);
+                people[reader.GetString(0)]["movementTotal"]=count;
+                allMovements+=count;
+            }
+        }
+        var statusTotals=new JsonArray();
+        foreach(var entry in totals.OrderBy(x=>x.Key.Snapshot,StringComparer.Ordinal)
+                                   .ThenBy(x=>x.Key.StatusId,StringComparer.Ordinal))
+            statusTotals.Add(new JsonObject{
+                ["statusId"]=entry.Key.StatusId,
+                ["statusName"]=entry.Key.Snapshot,["count"]=entry.Value
+            });
+        return BridgeHelpers.Ok(new JsonObject
+        {
+            ["mode"]="group",["personCount"]=ids.Count,
+            ["dateFrom"]=from,["dateTo"]=to,
+            ["persons"]=new JsonArray(ids.Select(id=>(JsonNode?)people[id]).ToArray()),
+            ["attendanceTotal"]=allAttendance,
+            ["movementTotal"]=allMovements,
+            ["statusTotals"]=statusTotals
+        });
+    }
+
     public async Task<BridgeResponse> ReportAsync(JsonObject? payload,CancellationToken ct)
     {
+        // Keep the ONE canonical reporting action and screen. A group request is
+        // explicit, bounded, read-only, and keyed EXCLUSIVELY by immutable PersonId.
+        if(payload?.ContainsKey("personIds")==true)
+            return await GroupReportAsync(payload,ct).ConfigureAwait(false);
         string personId=Text(payload,"personId");
         if(personId.Length<3||personId.Length>128)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"حدد الفرد من كشف البرنامج.");

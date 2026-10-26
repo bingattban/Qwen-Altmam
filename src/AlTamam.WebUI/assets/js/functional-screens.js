@@ -3,7 +3,7 @@
    No demo data, fake success, network calls, or editable month cells. */
 (function () {
   const sections = new Set(["dashboard", "monthly", "admin", "settings"]);
-  const STATE = { session: null, siteId: "", statusId: "", date: "", dayPage: 1,
+  const STATE = { session: null, siteId: "", statusId: "", dayTerm: "", date: "", dayPage: 1,
     monthPage: 1, chosenYear: null, chosenMonth: null, archivePeriods: [] };
   const ar = new Intl.DateTimeFormat("ar", { month: "long" });
   const weekday = new Intl.DateTimeFormat("ar", { weekday: "short" });
@@ -274,11 +274,25 @@
     try {
       const sites=await loadSites();
       if(STATE.dashboardEpoch!==epoch)return;
-      append(controls,siteSelector(sites,renderDashboard),button("تحديث البيانات",renderDashboard,"btn btn-primary"));
+      const search=field("search","بحث بالاسم أو الرقم (ع)");
+      search.input.value=STATE.dayTerm;
+      search.input.autocomplete="off";
+      const submitSearch=()=>{
+        const next=search.input.value.trim();
+        if(next!==STATE.dayTerm){STATE.dayTerm=next;STATE.dayPage=1;}
+        void renderDashboard();
+      };
+      search.input.addEventListener("keydown",event=>{
+        if(event.key==="Enter"){event.preventDefault();submitSearch();}
+      });
+      append(controls,siteSelector(sites,renderDashboard),search.wrapper,
+        button("بحث",submitSearch),button("مسح البحث",()=>{
+          STATE.dayTerm="";STATE.dayPage=1;void renderDashboard();
+        }),button("تحديث البيانات",renderDashboard,"btn btn-primary"));
       const [countsResponse,rosterResponse]=await Promise.all([
         bridge().invoke("GetDashboardSummary",{businessDate:STATE.date,siteId:STATE.siteId}),
         bridge().invoke("QueryDailyRoster",{businessDate:STATE.date,siteId:STATE.siteId,
-          statusId:STATE.statusId,page:STATE.dayPage,pageSize:50})
+          statusId:STATE.statusId,term:STATE.dayTerm,page:STATE.dayPage,pageSize:50})
       ]);
       if(STATE.dashboardEpoch!==epoch)return;
       const counts=parseData(countsResponse), rows=parseData(rosterResponse);

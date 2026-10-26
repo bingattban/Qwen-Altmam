@@ -82,6 +82,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
           node build/test-personnel-separation.js
           if ($LASTEXITCODE -ne 0) { throw 'Personnel separation UI regression' }
+          node build/test-personnel-report-ui.js
+          if ($LASTEXITCODE -ne 0) { throw 'Unified individual/group report UI regression' }
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'

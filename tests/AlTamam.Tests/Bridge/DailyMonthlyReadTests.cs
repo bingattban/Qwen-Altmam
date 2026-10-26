@@ -127,6 +127,61 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task DashboardSearch_MatchesNameAndArabicDigitsWithCombinedFiltersWithoutWriting()
+    {
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                    CurrentServiceNumberA,NormalizedServiceNumberA,
+                    FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('TST-SEARCH','فرد بحث جديد','فرد بحث جديد','12345','12345',
+                    '2026-10-01','2026-10-01T07:00:00Z',1,1,1);
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-A-SEARCH','TST-SEARCH','SITE-UNSPECIFIED','2026-10-01',
+                    NULL,NULL,'2026-10-01T07:00:00Z');
+                """;
+            await q.ExecuteNonQueryAsync();
+        }
+        var service=new DailyMonthlyReadService(_db);
+        async Task<JsonObject> Run(string term,string status="",string site="SITE-UNSPECIFIED")
+        {
+            var result=await service.DailyRosterAsync(new JsonObject{
+                ["businessDate"]="2026-10-19",["term"]=term,["statusId"]=status,
+                ["siteId"]=site,["page"]=1,["pageSize"]=50
+            },CancellationToken.None);
+            Assert.True(result.Success,result.UserMessage);
+            return Assert.IsType<JsonObject>(result.Data);
+        }
+        var name=await Run("شخص إختباري","STS-ABSENT");
+        Assert.Equal("TST-P-1",name["items"]![0]!["personId"]!.GetValue<string>());
+        Assert.Equal(1L,name["total"]!.GetValue<long>());
+        foreach(var numeral in new[]{"١٢٣","۱۲۳","123"})
+        {
+            var found=await Run(numeral,"__UNPREPARED__");
+            Assert.Equal(1L,found["total"]!.GetValue<long>());
+            Assert.Equal("TST-SEARCH",found["items"]![0]!["personId"]!.GetValue<string>());
+        }
+        Assert.Equal(0L,(await Run("123","STS-ABSENT"))["total"]!.GetValue<long>());
+        Assert.Equal(0L,(await Run("123","__UNPREPARED__","SITE-UNKNOWN"))["total"]!.GetValue<long>());
+        Assert.Equal(0L,(await Run("%"))["total"]!.GetValue<long>());
+        var tooLong=await service.DailyRosterAsync(new JsonObject{
+            ["businessDate"]="2026-10-19",["term"]=new string('z',101)
+        },CancellationToken.None);
+        Assert.False(tooLong.Success);
+        var dashboard=await service.DashboardSummaryAsync(new JsonObject{
+            ["businessDate"]="2026-10-19",["siteId"]="SITE-UNSPECIFIED"
+        },CancellationToken.None);
+        Assert.Equal(2L,Assert.IsType<JsonObject>(dashboard.Data)["totalForce"]!.GetValue<long>());
+        using var verify=_db.CreateOpenConnection();
+        using var check=verify.CreateCommand();
+        check.CommandText="SELECT COUNT(*) FROM AttendanceRecords;";
+        Assert.Equal(1L,Convert.ToInt64(await check.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task Monthly_IsReadOnlyAndRetainsSavedDailySnapshot()
     {
         var svc = new DailyMonthlyReadService(_db);

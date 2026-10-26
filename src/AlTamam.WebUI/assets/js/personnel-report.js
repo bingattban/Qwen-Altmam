@@ -34,18 +34,87 @@
  function render(container,onBack){
    const root=el("div",undefined,"person-report-page");
    container.replaceChildren(root);
-   root.appendChild(btn("العودة إلى التقارير والفصل",onBack));
-   const searchCard=card("التقرير التاريخي للفرد");
+   root.appendChild(btn("العودة إلى إدارة القوة",onBack));
+   const searchCard=card("التقرير — فرد أو مجموعة");
    searchCard.append(el("p","بحث بالاسم أو الرقم (ع) في بيانات البرنامج؛ التقرير للقراءة فقط.",
      "section-description"));
    const term=el("input");
    term.type="search";term.placeholder="بحث بالاسم أو الرقم (ع)";
    term.setAttribute("aria-label","البحث عن فرد");
    const controls=el("div",undefined,"functional-toolbar");
-   const results=el("div"),report=el("div"),status=el("div");
-   controls.append(term,btn("بحث",search));
-   searchCard.append(controls,status,results);root.append(searchCard,report);
+   const results=el("div"),report=el("div"),status=el("div"),selectedPanel=el("div");
+   const dateFrom=el("input"),dateTo=el("input");
+   dateFrom.type="date";dateTo.type="date";
+   dateFrom.setAttribute("aria-label","بداية فترة التقرير الجماعي");
+   dateTo.setAttribute("aria-label","نهاية فترة التقرير الجماعي");
+   const fromLabel=el("label",undefined,"من تاريخ"),toLabel=el("label",undefined,"إلى تاريخ");
+   fromLabel.appendChild(dateFrom);toLabel.appendChild(dateTo);
+   const selected=new Map();
+   controls.append(term,btn("بحث",search),
+     btn("عرض التقرير الجماعي",()=>{void loadGroupReport();}));
+   searchCard.append(controls,el("p","حدد الأشخاص من نتائج البحث؛ يمكن الاختيار عبر أكثر من عملية بحث، بحد أقصى 100 فرد.","section-description"),
+     selectedPanel,fromLabel,toLabel,status,results);
+   root.append(searchCard,report);
    let chosen=null,serial=0,attendancePage=1,auditPage=1,identityPage=1,movementPage=1;
+   function renderSelected(){
+     const box=card("الأفراد المحددون للمجموعة: "+selected.size);
+     if(!selected.size)box.appendChild(el("p","لم تحدد أفراداً بعد."));
+     for(const person of selected.values()){
+       const line=el("div",undefined,"functional-toolbar");
+       line.append(el("span",person.displayName+" — الرقم (ع): "+person.serviceNumberA+
+         (person.active?" — نشط":" — سجل مؤرشف")),
+         btn("إزالة",()=>{selected.delete(person.personId);renderSelected();}));
+       box.appendChild(line);
+     }
+     selectedPanel.replaceChildren(box);
+   }
+   renderSelected();
+   async function loadGroupReport(){
+     if(!selected.size)return alert(status,new Error("حدد فرداً أو مجموعة من نتائج البحث أولاً."));
+     const ids=Array.from(selected.keys());
+     const ticket=++serial;
+     status.replaceChildren();
+     report.replaceChildren(el("p","جارٍ إعداد التقرير الجماعي من السجلات المعتمدة..."));
+     try{
+       const reply=await api().invoke("BuildPersonLifetimeReport",{
+         personIds:ids,dateFrom:dateFrom.value,dateTo:dateTo.value
+       });
+       if(ticket!==serial||!root.isConnected)return;
+       const data=reply.data||{};
+       if(data.mode!=="group"||!Array.isArray(data.persons)||data.persons.length!==ids.length)
+         throw Error("لم يتم اعتماد تقرير المجموعة من قاعدة البيانات.");
+       report.replaceChildren();
+       const summary=card("ملخص التقرير الجماعي — "+data.personCount+" فرد");
+       summary.append(el("p","فترة التقرير: "+(data.dateFrom||"من بداية السجل")+" إلى "+
+         (data.dateTo||"آخر سجل محفوظ")),
+         el("p","إجمالي التحضيرات المعتمدة: "+data.attendanceTotal+
+           " — إجمالي الحركات: "+data.movementTotal));
+       rows(summary,["الحالة","عدد الأيام المعتمدة"],data.statusTotals,
+         x=>[x.statusName,x.count],"لا توجد حالات تحضير معتمدة في هذه الفترة.");
+       report.appendChild(summary);
+       const perPerson=card("تفصيل كل فرد في المجموعة — دون دمج السجلات المتشابهة");
+       const t=table(["الرقم (ع)","اسم الفرد","نوع السجل","أيام التحضير","التنقلات","الحالات","التفاصيل"]);
+       for(const person of data.persons){
+         const tr=el("tr");
+         const kind=person.active?"نشط":person.organizationalStatus===3?
+           "مفصول":person.organizationalStatus===2?"منقول خارجيًا":"مؤرشف";
+         const states=(person.statusTotals||[])
+           .map(x=>x.statusName+" ("+x.count+")").join("، ")||"لا توجد";
+         [person.serviceNumberA,person.name,kind,person.attendanceTotal,
+           person.movementTotal,states]
+           .forEach(x=>tr.appendChild(el("td",x)));
+         const action=el("td");
+         action.appendChild(btn("عرض سجل الفرد",()=>{
+           chosen=person.personId;
+           attendancePage=auditPage=identityPage=movementPage=1;
+           void loadReport();
+         }));
+         tr.appendChild(action);t.body.appendChild(tr);
+       }
+       perPerson.appendChild(t.wrap);
+       report.appendChild(perPerson);
+     }catch(e){if(ticket===serial&&root.isConnected)alert(report,e);}
+   }
    async function search(){
      const value=term.value.trim();
      if(!value)return alert(status,new Error("أدخل اسم الفرد أو الرقم (ع)."));
@@ -58,9 +127,20 @@
        });
        if(ticket!==serial||!root.isConnected)return;
        const items=reply.data?.items||[];
-       const t=table(["الرقم (ع)","الاسم","حالة السجل","الموقع","التقرير"]);
+       const t=table(["اختيار","الرقم (ع)","الاسم","حالة السجل","الموقع","التقرير"]);
        for(const person of items){
          const tr=el("tr");
+         const selectCell=el("td");
+         const toggle=btn(selected.has(person.personId)?"إلغاء الاختيار":"إضافة للمجموعة",()=>{
+           if(selected.has(person.personId))selected.delete(person.personId);
+           else {
+             if(selected.size>=100)return alert(status,new Error("الحد الأقصى 100 فرد لكل تقرير."));
+             selected.set(person.personId,person);
+           }
+           toggle.textContent=selected.has(person.personId)?"إلغاء الاختيار":"إضافة للمجموعة";
+           renderSelected();
+         });
+         selectCell.appendChild(toggle);tr.appendChild(selectCell);
          const lifecycle=person.active?"نشط":person.organizationalStatus===3?
            "مفصول — سجل تاريخي":person.organizationalStatus===2?
            "منقول خارجيًا — سجل تاريخي":"مؤرشف — سجل تاريخي";
@@ -75,7 +155,7 @@
        }
        if(!items.length){
          const tr=el("tr"),cell=el("td","لا يوجد فرد مطابق للبحث");
-         cell.colSpan=5;tr.appendChild(cell);t.body.appendChild(tr);
+         cell.colSpan=6;tr.appendChild(cell);t.body.appendChild(tr);
        }
        results.replaceChildren(t.wrap);
      }catch(e){if(ticket===serial&&root.isConnected)alert(results,e);}
@@ -100,6 +180,7 @@
        if(ticket!==serial||!root.isConnected)return;
        const d=reply.data||{},person=d.person||{};
        report.replaceChildren();
+       if(selected.size)report.appendChild(btn("العودة إلى التقرير الجماعي",()=>{void loadGroupReport();}));
        const identity=card("بيانات الفرد");
        identity.append(
          el("p","الاسم: "+person.name+" — الرقم (ع): "+person.serviceNumberA),
