@@ -138,6 +138,9 @@ public sealed class UserAccountManagementService
     {
         string username=Read(payload,"username"), personId=Read(payload,"personId");
         string password=ReadSecret(payload),roleText=Read(payload,"role");
+        string confirmation;
+        try{confirmation=payload?["passwordConfirmation"]?.GetValue<string>()??"";}
+        catch{confirmation="";}
         if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
             return Error("ليست لديك صلاحية إضافة مستخدم.",BridgeErrorCodes.Unauthorized);
         if(!Enum.TryParse<UserRole>(roleText,false,out var role)
@@ -145,6 +148,8 @@ public sealed class UserAccountManagementService
             return Error("لا يسمح لك بإنشاء حساب من هذا النوع.",BridgeErrorCodes.Unauthorized);
         if(username.Length is <3 or >64 || username.Any(char.IsWhiteSpace) || personId.Length==0)
             return Error("اسم مستخدم من 3 إلى 64 حرفاً بلا مسافات واختيار فرد مسجل مطلوبان.");
+        if(password.Length==0||!string.Equals(password,confirmation,StringComparison.Ordinal))
+            return Error("يجب إعادة كتابة كلمة المرور للتأكيد ويجب أن تتطابق الخانتان تمامًا.");
         var policy=PasswordPolicyValidator.Validate(password);
         if(!policy.IsValid)return Error(policy.ArabicErrorMessage??"كلمة المرور غير صالحة.");
         string normalized=BridgeSharedServices.NormalizeUsername(username);
