@@ -154,7 +154,7 @@ public sealed class RosterColumnStructureIntegrationTests : IAsyncLifetime, IDis
         Assert.True(replay.Success,replay.UserMessage);
         Assert.Equal(1L,Count("SELECT COUNT(*) FROM CustomFieldValues WHERE FieldValueText='007'"));
         Assert.Equal(0L,Count("SELECT COUNT(*) FROM CustomFieldDefinitions WHERE FieldDefinitionId='"+id+"' AND ActiveFlag=1"));
-        Assert.Single((await Items(svc,true)).Where(x=>Id(x)==id));
+        Assert.Single(await Items(svc,true),x=>Id(x)==id);
         Assert.Equal(1L,Count("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='ROSTER_COLUMN_DEACTIVATE'"));
         using var conn=_db.CreateOpenConnection();using var integrity=conn.CreateCommand();
         integrity.CommandText="PRAGMA foreign_key_check;";
