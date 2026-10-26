@@ -235,6 +235,18 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     public async Task AutomaticBackup_InvalidOutputOrDisabledSchedule_NeverProducesFalseSuccess()
     {
         var service=new AutomaticBackupService(_db,_time);
+        // Never depend on a runner's E: drive being mounted or writable.
+        using(var connection=_db.CreateOpenConnection())
+        using(var invalid=connection.CreateCommand())
+        {
+            invalid.CommandText="""
+                UPDATE AppSettings SET SettingValue=$missing
+                WHERE SettingKey='PreferredBackupDirectory';
+                """;
+            invalid.Parameters.AddWithValue("$missing",
+                Path.Combine(_output,"missing-unwritable-folder"));
+            await invalid.ExecuteNonQueryAsync();
+        }
         var noDirectory=await service.ConfigureAsync(new JsonObject{
             ["enabled"]=true,["backupTime"]="09:00"
         },_actor,CancellationToken.None);
