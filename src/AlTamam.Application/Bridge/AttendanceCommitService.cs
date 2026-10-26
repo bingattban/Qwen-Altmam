@@ -83,7 +83,8 @@ public sealed class AttendanceCommitService
             WHERE p.PersonId=$id AND p.ActiveFlag=1 AND p.OrganizationalStatus=1
                 AND p.FirstRecordedLocalDate<=$date
                 AND NOT EXISTS(SELECT 1 FROM PersonnelMovements m
-                    WHERE m.PersonId=p.PersonId AND m.EffectiveLocalDate=$date);
+                    WHERE m.PersonId=p.PersonId AND m.EffectiveLocalDate=$date
+                       AND m.MovementType IN(1,2,3));
             """;
         cmd.Parameters.AddWithValue("$date",date);
         cmd.Parameters.AddWithValue("$id",personId);
