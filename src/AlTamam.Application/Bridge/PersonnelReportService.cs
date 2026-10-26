@@ -22,6 +22,44 @@ public sealed class PersonnelReportService
     private static BridgeResponse NotFound()=>BridgeHelpers.Error(
         BridgeErrorCodes.MissingData,"لم يُعثر على الفرد في سجلات البرنامج.");
 
+    private sealed record ReportFilters(string From,string To,string SiteId,
+        string StatusId,int MovementType)
+    {
+        public void Bind(SqliteCommand command)
+        {
+            command.Parameters.AddWithValue("$from",From);
+            command.Parameters.AddWithValue("$to",To);
+            command.Parameters.AddWithValue("$site",SiteId);
+            command.Parameters.AddWithValue("$status",StatusId);
+            command.Parameters.AddWithValue("$moveType",MovementType);
+        }
+    }
+
+    private static bool TryReadFilters(JsonObject? payload,out ReportFilters filters,
+        out BridgeResponse? problem)
+    {
+        string from=Text(payload,"dateFrom"),to=Text(payload,"dateTo"),
+            site=Text(payload,"siteId"),status=Text(payload,"statusId");
+        int movementType=0;
+        try {movementType=payload?["movementType"]?.GetValue<int>()??0;}
+        catch {movementType=-1;}
+        static bool ValidDate(string text)=>DateOnly.TryParseExact(text,
+            "yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out _);
+        filters=new ReportFilters(from,to,site,status,movementType);
+        problem=null;
+        if ((from.Length>0&&!ValidDate(from))||(to.Length>0&&!ValidDate(to))||
+            (from.Length>0&&to.Length>0&&string.CompareOrdinal(from,to)>0)||
+            site.Length>128||status.Length>128||
+            site.Any(char.IsControl)||status.Any(char.IsControl)||
+            movementType is <0 or >4)
+        {
+            problem=BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "مرشحات التقرير غير صالحة؛ تحقق من الفترة والموقع والحالة ونوع الحركة.");
+            return false;
+        }
+        return true;
+    }
+
     /// <summary>
     /// Combined read-only historical report. Each row is isolated by immutable
     /// PersonId even when two people have reused the same displayed الرقم (ع).
@@ -45,13 +83,9 @@ public sealed class PersonnelReportService
             ids.Add(id);
         }
 
-        string from=Text(payload,"dateFrom"),to=Text(payload,"dateTo");
-        static bool ValidDate(string value)=>DateOnly.TryParseExact(value,"yyyy-MM-dd",
-            CultureInfo.InvariantCulture,DateTimeStyles.None,out _);
-        if((from.Length>0&&!ValidDate(from))||(to.Length>0&&!ValidDate(to))||
-           (from.Length>0&&to.Length>0&&string.CompareOrdinal(from,to)>0))
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "حدد فترة صحيحة: من تاريخ لا يتجاوز تاريخ النهاية (yyyy-MM-dd).");
+        if(!TryReadFilters(payload,out var filters,out var problem))
+            return problem!;
+        string from=filters.From,to=filters.To;
 
         string placeholders=string.Join(",",ids.Select((_,i)=>"$person"+i));
         using var connection=_db.CreateOpenConnection();
@@ -63,8 +97,7 @@ public sealed class PersonnelReportService
         void BindRange(SqliteCommand command)
         {
             BindPeople(command);
-            command.Parameters.AddWithValue("$from",from);
-            command.Parameters.AddWithValue("$to",to);
+            filters.Bind(command);
         }
         var people=new Dictionary<string,JsonObject>(StringComparer.Ordinal);
         using(var query=connection.CreateCommand())
@@ -104,6 +137,8 @@ public sealed class PersonnelReportService
                 WHERE PersonId IN ({placeholders})
                   AND ($from='' OR AttendanceLocalDate >= $from)
                   AND ($to='' OR AttendanceLocalDate <= $to)
+                  AND ($site='' OR SiteIdAtEffectiveDate=$site)
+                  AND ($status='' OR StatusId=$status)
                 GROUP BY PersonId,StatusId,StatusNameSnapshot
                 ORDER BY PersonId,StatusNameSnapshot,StatusId;
                 """;
@@ -130,6 +165,8 @@ public sealed class PersonnelReportService
                 WHERE PersonId IN ({placeholders})
                   AND ($from='' OR EffectiveLocalDate >= $from)
                   AND ($to='' OR EffectiveLocalDate <= $to)
+                  AND ($site='' OR SourceSiteId=$site OR DestinationSiteId=$site)
+                  AND ($moveType=0 OR MovementType=$moveType)
                 GROUP BY PersonId;
                 """;
             BindRange(query);
@@ -152,6 +189,8 @@ public sealed class PersonnelReportService
         {
             ["mode"]="group",["personCount"]=ids.Count,
             ["dateFrom"]=from,["dateTo"]=to,
+            ["siteId"]=filters.SiteId,["statusId"]=filters.StatusId,
+            ["movementType"]=filters.MovementType,
             ["persons"]=new JsonArray(ids.Select(id=>(JsonNode?)people[id]).ToArray()),
             ["attendanceTotal"]=allAttendance,
             ["movementTotal"]=allMovements,
@@ -165,11 +204,14 @@ public sealed class PersonnelReportService
         // explicit, bounded, read-only, and keyed EXCLUSIVELY by immutable PersonId.
         if(payload?.ContainsKey("personIds")==true)
             return await GroupReportAsync(payload,ct).ConfigureAwait(false);
+        if(!TryReadFilters(payload,out var filters,out var invalid))
+            return invalid!;
         string personId=Text(payload,"personId");
         if(personId.Length<3||personId.Length>128)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"حدد الفرد من كشف البرنامج.");
         int attendPage=Page(payload,"attendancePage"),auditPage=Page(payload,"auditPage"),
-            identityPage=Page(payload,"identityPage"),movementPage=Page(payload,"movementPage");
+            identityPage=Page(payload,"identityPage"),movementPage=Page(payload,"movementPage"),
+            sitePage=Page(payload,"sitePage");
         const int limit=100;
         using var conn=_db.CreateOpenConnection();
         using var person=conn.CreateCommand();
@@ -197,10 +239,15 @@ public sealed class PersonnelReportService
         status.CommandText="""
             SELECT StatusId,StatusNameSnapshot,COUNT(*),MIN(AttendanceLocalDate),MAX(AttendanceLocalDate)
             FROM AttendanceRecords WHERE PersonId=$id
+              AND ($from='' OR AttendanceLocalDate >= $from)
+              AND ($to='' OR AttendanceLocalDate <= $to)
+              AND ($site='' OR SiteIdAtEffectiveDate=$site)
+              AND ($status='' OR StatusId=$status)
             GROUP BY StatusId,StatusNameSnapshot
             ORDER BY SUM(1) DESC,StatusNameSnapshot;
             """;
         status.Parameters.AddWithValue("$id",personId);
+        filters.Bind(status);
         var totals=new JsonArray();
         using(var r=await status.ExecuteReaderAsync(ct).ConfigureAwait(false))
             while(await r.ReadAsync(ct).ConfigureAwait(false))
@@ -216,10 +263,15 @@ public sealed class PersonnelReportService
             SELECT SUBSTR(AttendanceLocalDate,1,7),StatusId,
                    StatusNameSnapshot,COUNT(*)
             FROM AttendanceRecords WHERE PersonId=$id
+              AND ($from='' OR AttendanceLocalDate >= $from)
+              AND ($to='' OR AttendanceLocalDate <= $to)
+              AND ($site='' OR SiteIdAtEffectiveDate=$site)
+              AND ($status='' OR StatusId=$status)
             GROUP BY SUBSTR(AttendanceLocalDate,1,7),StatusId,StatusNameSnapshot
             ORDER BY 1 DESC,3;
             """;
         months.Parameters.AddWithValue("$id",personId);
+        filters.Bind(months);
         var monthly=new JsonArray();
         using(var r=await months.ExecuteReaderAsync(ct).ConfigureAwait(false))
             while(await r.ReadAsync(ct).ConfigureAwait(false))
@@ -230,8 +282,15 @@ public sealed class PersonnelReportService
                 });
 
         using var attendanceCount=conn.CreateCommand();
-        attendanceCount.CommandText="SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId=$id;";
+        attendanceCount.CommandText="""
+            SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId=$id
+              AND ($from='' OR AttendanceLocalDate >= $from)
+              AND ($to='' OR AttendanceLocalDate <= $to)
+              AND ($site='' OR SiteIdAtEffectiveDate=$site)
+              AND ($status='' OR StatusId=$status);
+            """;
         attendanceCount.Parameters.AddWithValue("$id",personId);
+        filters.Bind(attendanceCount);
         long totalDays=Convert.ToInt64(await attendanceCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var attendance=conn.CreateCommand();
         attendance.CommandText="""
@@ -246,9 +305,14 @@ public sealed class PersonnelReportService
                       AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate>ar.AttendanceLocalDate)
                     ORDER BY h.ValidFromLocalDate DESC LIMIT 1)
             FROM AttendanceRecords ar WHERE ar.PersonId=$id
+              AND ($from='' OR ar.AttendanceLocalDate >= $from)
+              AND ($to='' OR ar.AttendanceLocalDate <= $to)
+              AND ($site='' OR ar.SiteIdAtEffectiveDate=$site)
+              AND ($status='' OR ar.StatusId=$status)
             ORDER BY AttendanceLocalDate DESC LIMIT $size OFFSET $offset;
             """;
         attendance.Parameters.AddWithValue("$id",personId);
+        filters.Bind(attendance);
         attendance.Parameters.AddWithValue("$size",limit);
         attendance.Parameters.AddWithValue("$offset",(long)(attendPage-1)*limit);
         var daily=new JsonArray();
@@ -291,8 +355,15 @@ public sealed class PersonnelReportService
                 });
 
         using var movementCount=conn.CreateCommand();
-        movementCount.CommandText="SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId=$id;";
+        movementCount.CommandText="""
+            SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId=$id
+              AND ($from='' OR EffectiveLocalDate >= $from)
+              AND ($to='' OR EffectiveLocalDate <= $to)
+              AND ($site='' OR SourceSiteId=$site OR DestinationSiteId=$site)
+              AND ($moveType=0 OR MovementType=$moveType);
+            """;
         movementCount.Parameters.AddWithValue("$id",personId);
+        filters.Bind(movementCount);
         long totalMovements=Convert.ToInt64(await movementCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var movements=conn.CreateCommand();
         movements.CommandText="""
@@ -301,9 +372,14 @@ public sealed class PersonnelReportService
                    SeparationReason,EffectiveLocalDate,CommittedAtUtc,ActorUserId,
                    PersonNameSnapshot,ServiceNumberASnapshot
             FROM PersonnelMovements WHERE PersonId=$id
+              AND ($from='' OR EffectiveLocalDate >= $from)
+              AND ($to='' OR EffectiveLocalDate <= $to)
+              AND ($site='' OR SourceSiteId=$site OR DestinationSiteId=$site)
+              AND ($moveType=0 OR MovementType=$moveType)
             ORDER BY EffectiveLocalDate DESC,CommittedAtUtc DESC LIMIT $size OFFSET $offset;
             """;
         movements.Parameters.AddWithValue("$id",personId);
+        filters.Bind(movements);
         movements.Parameters.AddWithValue("$size",limit);
         movements.Parameters.AddWithValue("$offset",(long)(movementPage-1)*limit);
         var moves=new JsonArray();
@@ -312,7 +388,8 @@ public sealed class PersonnelReportService
                 moves.Add(new JsonObject
                 {
                     ["type"]=r.GetInt32(0)==1?"نقل داخلي":
-                        r.GetInt32(0)==2?"نقل خارجي":"فصل",
+                        r.GetInt32(0)==2?"نقل خارجي":
+                    r.GetInt32(0)==3?"فصل":"عودة للخدمة",
                     ["source"]=r.GetString(1),["destination"]=r.GetString(2),
                     ["reason"]=r.IsDBNull(3)?null:r.GetString(3),
                     ["date"]=r.GetString(4),["committedAtUtc"]=r.GetString(5),
@@ -323,20 +400,31 @@ public sealed class PersonnelReportService
         using var auditCount=conn.CreateCommand();
         auditCount.CommandText="""
             SELECT COUNT(*) FROM AuditEvents
-            WHERE TargetEntityType='Person' AND TargetEntityId=$id;
+            WHERE TargetEntityType='Person' AND TargetEntityId=$id
+              AND ($from='' OR COALESCE(NULLIF(EffectiveLocalDate,''),
+                  SUBSTR(ExecutedAtUtc,1,10)) >= $from)
+              AND ($to='' OR COALESCE(NULLIF(EffectiveLocalDate,''),
+                  SUBSTR(ExecutedAtUtc,1,10)) <= $to);
             """;
         auditCount.Parameters.AddWithValue("$id",personId);
+        filters.Bind(auditCount);
         long audits=Convert.ToInt64(await auditCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var audit=conn.CreateCommand();
         audit.CommandText="""
             SELECT OperationArabicName,ActorUsernameSnapshot,
                    COALESCE(ActorRosterFullNameSnapshot,''),
-                   EffectiveLocalDate,ExecutedAtUtc,DefaultArabicDescription,Reason
+                   EffectiveLocalDate,ExecutedAtUtc,DefaultArabicDescription,Reason,
+                   OldValueJson,NewValueJson
             FROM AuditEvents
             WHERE TargetEntityType='Person' AND TargetEntityId=$id
+              AND ($from='' OR COALESCE(NULLIF(EffectiveLocalDate,''),
+                  SUBSTR(ExecutedAtUtc,1,10)) >= $from)
+              AND ($to='' OR COALESCE(NULLIF(EffectiveLocalDate,''),
+                  SUBSTR(ExecutedAtUtc,1,10)) <= $to)
             ORDER BY ExecutedAtUtc DESC,AuditEventId DESC LIMIT $size OFFSET $offset;
             """;
         audit.Parameters.AddWithValue("$id",personId);
+        filters.Bind(audit);
         audit.Parameters.AddWithValue("$size",limit);
         audit.Parameters.AddWithValue("$offset",(long)(auditPage-1)*limit);
         var events=new JsonArray();
@@ -345,13 +433,53 @@ public sealed class PersonnelReportService
                 events.Add(new JsonObject
                 {
                     ["operation"]=r.GetString(0),["username"]=r.GetString(1),
-                    ["fullName"]=r.GetString(2),["effectiveDate"]=r.GetString(3),
+                    ["fullName"]=r.GetString(2),
+                    ["executor"]=r.GetString(1)+" - "+r.GetString(2),
+                    ["effectiveDate"]=r.IsDBNull(3)?null:r.GetString(3),
                     ["executedAtUtc"]=r.GetString(4),["description"]=r.GetString(5),
-                    ["reason"]=r.IsDBNull(6)?null:r.GetString(6)
+                    ["reason"]=r.IsDBNull(6)?null:r.GetString(6),
+                    ["oldValueJson"]=r.IsDBNull(7)?null:r.GetString(7),
+                    ["newValueJson"]=r.IsDBNull(8)?null:r.GetString(8)
+                });
+        // Historical site memberships are independently effective-dated and
+        // keyed by the same immutable PersonId, never by mutable personnel no.
+        using var assignmentCount=conn.CreateCommand();
+        assignmentCount.CommandText="SELECT COUNT(*) FROM PersonAssignments WHERE PersonId=$id;";
+        assignmentCount.Parameters.AddWithValue("$id",personId);
+        long totalSites=Convert.ToInt64(await assignmentCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
+        using var assignments=conn.CreateCommand();
+        assignments.CommandText="""
+            SELECT a.SiteId,a.ValidFromLocalDate,a.ValidToLocalDate,
+                   COALESCE((
+                      SELECT n.VisibleNameSnapshot FROM SiteNameHistory n
+                      WHERE n.SiteId=a.SiteId AND n.ValidFromLocalDate<=a.ValidFromLocalDate
+                        AND (n.ValidToLocalDate IS NULL OR n.ValidToLocalDate>a.ValidFromLocalDate)
+                      ORDER BY n.ValidFromLocalDate DESC LIMIT 1),
+                      CASE WHEN a.SiteId='SITE-UNSPECIFIED' THEN 'غير محدد'
+                           ELSE 'غير موثق تاريخياً' END)
+            FROM PersonAssignments a WHERE a.PersonId=$id
+            ORDER BY a.ValidFromLocalDate DESC,a.AssignmentId DESC
+            LIMIT $size OFFSET $offset;
+            """;
+        assignments.Parameters.AddWithValue("$id",personId);
+        assignments.Parameters.AddWithValue("$size",limit);
+        assignments.Parameters.AddWithValue("$offset",(long)(sitePage-1)*limit);
+        var sites=new JsonArray();
+        using(var r=await assignments.ExecuteReaderAsync(ct).ConfigureAwait(false))
+            while(await r.ReadAsync(ct).ConfigureAwait(false))
+                sites.Add(new JsonObject{
+                    ["siteId"]=r.GetString(0),["from"]=r.GetString(1),
+                    ["to"]=r.IsDBNull(2)?null:r.GetString(2),
+                    ["siteName"]=r.GetString(3)
                 });
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["person"]=identity,["statusTotals"]=totals,["monthlyTotals"]=monthly,
+            ["person"]=identity,["dateFrom"]=filters.From,["dateTo"]=filters.To,
+            ["siteId"]=filters.SiteId,["statusId"]=filters.StatusId,
+            ["movementType"]=filters.MovementType,
+            ["siteHistory"]=sites,["siteTotal"]=totalSites,
+            ["sitePage"]=sitePage,["siteHasNext"]=(long)sitePage*limit<totalSites,
+            ["statusTotals"]=totals,["monthlyTotals"]=monthly,
             ["attendance"]=daily,["attendanceTotal"]=totalDays,
             ["attendancePage"]=attendPage,["attendanceHasNext"]=(long)attendPage*limit<totalDays,
             ["identityHistory"]=names,["identityTotal"]=totalIdentities,
