@@ -67,6 +67,17 @@ async function main(){
     "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
   assert.ok(styles.includes(".monthly-scroll .current-day-column"),
     "today's non-sticky chronological column remains highlighted");
+  const search=viewport.all().find(x=>x.tag==="input"&&x.type==="search");
+  assert.ok(search,"monthly screen has a real historical name/number search");
+  search.value="EX٠٠١";
+  const searchButton=viewport.all().find(x=>x.tag==="button"&&x.textContent==="بحث في الكشف");
+  assert.ok(searchButton);
+  searchButton.handlers.click();await tick();await tick();
+  const lastFilteredGrid=calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1);
+  assert.equal(lastFilteredGrid.payload.term,"EX٠٠١");
+  assert.equal(lastFilteredGrid.payload.page,1);
+  assert.equal(lastFilteredGrid.payload.year,year);
+  assert.equal(lastFilteredGrid.payload.month,month);
   const previewButton=viewport.all().find(x=>x.tag==="button"&&x.textContent==="معاينة تصدير Excel");
   assert.ok(previewButton,"monthly Excel preview is visible");
   const todayHeading=viewport.all().find(x=>x.tag==="th"&&
@@ -91,6 +102,7 @@ async function main(){
     "initial display must not export");
   await previewButton.handlers.click();await tick();
   assert.equal(calls.filter(x=>x.action==="PreviewMonthlyExport").length,1);
+  assert.equal(calls.find(x=>x.action==="PreviewMonthlyExport").payload.term,"EX٠٠١");
   assert.equal(calls.filter(x=>x.action==="ExportMonthlyWorkbookSet").length,0,
     "preview never writes file");
   const save=viewport.all().find(x=>x.tag==="button"&&x.textContent==="حفظ ملف Excel");
@@ -100,6 +112,8 @@ async function main(){
   assert.equal(exported.length,1,"save invokes real native Excel export exactly once");
   assert.equal(exported[0].payload.year,year);
   assert.equal(exported[0].payload.month,month);
+  assert.equal(exported[0].payload.term,"EX٠٠١");
+  assert.equal(exported[0].payload.siteId,lastFilteredGrid.payload.siteId);
   const confirmation=viewport.all().map(x=>String(x.textContent)).join(" | ");
   assert.ok(confirmation.includes("sample.xlsx"),"completed export path is rendered");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
@@ -120,6 +134,10 @@ async function main(){
   const close=viewport.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
   close.handlers.click();
   assert.equal(details.hidden,true,"close hides details without touching attendance");
+  const clear=viewport.all().find(x=>x.tag==="button"&&x.textContent==="مسح بحث الشهر");
+  assert.ok(clear);
+  clear.handlers.click();await tick();await tick();
+  assert.equal(calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1).payload.term,"");
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
     "QueryMonthlyGrid","GetMonthlyCellDetails","PreviewMonthlyExport","ExportMonthlyWorkbookSet",
     "GetSettingsOverview"].includes(x.action)).length,0,
