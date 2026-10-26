@@ -58,8 +58,11 @@ const bridge = {
       ListUserAccounts: { items:[],total:0,hasNext:false },
       QueryAuditLog: { items:[],total:0,hasNext:false },
       GetActiveAttendanceStatuses: [{statusId:"STS-ABSENT",displayName:"غياب"}],
-      QuerySites:[{siteId:"SITE-RETURN",name:"الموقع الجديد",active:true}],
-      QueryPersons:{items:[],total:0,hasNext:false},
+      QuerySites:[{siteId:"SITE-RETURN",name:"الموقع الجديد",active:true},
+        {siteId:"SITE-REMOVABLE",name:"موقع تجريبي قابل للإزالة",active:true,rowVersion:3},
+        {siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true,rowVersion:1}],
+      QueryPersons:{items:[],total:body?.siteId==="SITE-REMOVABLE"?2:0,hasNext:false},
+      RemoveSiteAndReassignCurrentPersons:{siteId:"SITE-REMOVABLE",reassignedCount:2,active:false},
       PreviewArchivedIdentity:body.serviceNumberA==="4141"
         ?{requiresResolution:true,previewToken:"T".repeat(64),
           candidates:[{personId:"TST-ARCHIVED-P1",name:"شخص تجريبي قديم",
@@ -225,6 +228,28 @@ async function run() {
     x.body.identityResolutionToken==="U".repeat(64)),
     "independent identity requires the token-bound archived-name resolution");
 
+  controller.renderAdmin(admin);
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="sites").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(buttonNamed("إزالة الموقع")!==undefined,true,
+    "active non-system site is removable only by explicit operation");
+  assert.equal(visible().filter(x=>x.textContent==="موقع محمي").length,1,
+    "the Unspecified site can never display a remove action");
+  context.window.AltamamDialog={confirm:async()=>true,alert:async()=>true};
+  const selectedRow=visible().find(x=>x.tag==="tr"&&
+    x.children[0]?.textContent==="موقع تجريبي قابل للإزالة");
+  assert.ok(selectedRow,"expected removable site row must exist");
+  const removeSiteButton=selectedRow.all().find(x=>x.tag==="button"&&x.textContent==="إزالة الموقع");
+  assert.ok(removeSiteButton,"remove action belongs to the specific site");
+  await removeSiteButton.handlers.click();
+  const mutation=calls.find(x=>x.name==="RemoveSiteAndReassignCurrentPersons");
+  assert.ok(mutation,"site removal must call authoritative C# service");
+  assert.equal(mutation.body.siteId,"SITE-REMOVABLE");
+  assert.equal(mutation.body.expectedRevision,3);
+  assert.equal(mutation.body.expectedActiveCount,2);
+  assert.equal(mutation.body.confirmed,true);
+  assert.ok(mutation.body.operationId.length>=16);
   await controller.renderSettings(admin,()=>{});
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
     .map(x=>x.textContent);
