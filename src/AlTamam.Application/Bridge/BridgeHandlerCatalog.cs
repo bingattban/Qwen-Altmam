@@ -468,6 +468,12 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.ScheduleAsync(ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
+        "UpdateBackupSchedule" => async (req,principal,ct) =>
+        {
+            var svc=new SettingsReadBackupService(services.Db,services.Time);
+            var result=await svc.ConfigureBackupScheduleAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "RunDatabaseIntegrityCheck" => (req, principal, ct) =>
         {
             var svc = new SettingsReadBackupService(services.Db);

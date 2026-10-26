@@ -1316,7 +1316,7 @@
         }catch(e){if(token===currentRequest)errors(feedback,e);}
       }
 
-      // The stored 16:00 schedule is explicitly NOT an operational scheduler.
+      // The daily schedule is executed by the native Windows host, never by JS timers.
       const backup=settingsCard("النسخ الاحتياطي","▣");
       backup.append(
         node("p","settings-copy","اختر مجلداً مشتركاً للنسخ الاحتياطي المشفر وجميع ملفات Excel، مع التحقق من سلامة كل نسخة.")
@@ -1324,7 +1324,7 @@
       const backupInfo=node("div","settings-properties");
       backupInfo.append(
         settingsValue("مجلد النسخ الاحتياطي والتصدير",info.backupDirectory),
-        settingsValue("الوقت المسجل للنسخ التلقائي",info.backupTime||"16:00"),
+        settingsValue("وقت النسخ التلقائي",info.backupTime||"16:00"),
         settingsValue("حالة المجلد",info.defaultDriveAvailable?"متاح":"غير متاح")
       );
       backup.appendChild(backupInfo);
@@ -1377,9 +1377,44 @@
           if(confirmed && token===currentRequest)void pickOutputFolder();
         });
       }
-      const scheduleNote=warning(info.automaticBackupNote||
-        "النسخ الاحتياطي التلقائي غير مفعل بعد، حتى لو كان وقت الجدولة محفوظاً.");
-      backup.appendChild(scheduleNote);
+      const scheduleInfo=node("p","section-description",info.automaticBackupNote||
+        "الجدولة غير مفعلة بعد.");
+      backup.appendChild(scheduleInfo);
+      if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
+        const scheduleControls=node("div","functional-toolbar");
+        const dailyTime=node("input","form-control");
+        dailyTime.type="time";dailyTime.value=info.backupTime||"16:00";
+        dailyTime.setAttribute("aria-label","وقت النسخ التلقائي اليومي");
+        const checkbox=node("input");checkbox.type="checkbox";
+        checkbox.checked=info.automaticBackupEnabled===true;
+        const label=node("label","admin-input");
+        label.append(node("span","","تفعيل النسخ التلقائي اليومي"),checkbox);
+        const timeLabel=node("label","admin-input");
+        timeLabel.append(node("span","","ساعة النسخ بتوقيت Windows المحلي"),dailyTime);
+        const scheduleFeedback=node("div","settings-feedback");
+        const apply=btn("حفظ جدول النسخ التلقائي",async()=>{
+          if(!await dialogs.confirm("هل تؤكد "+(checkbox.checked?"تفعيل":"إيقاف")+
+            " النسخ التلقائي في الساعة "+dailyTime.value+"؟"))return;
+          apply.disabled=true;
+          try{
+            const answer=await api().invoke("UpdateBackupSchedule",{
+              backupTime:dailyTime.value,enabled:checkbox.checked,
+              operationId:makeOperationId()
+            });
+            if(token!==currentRequest)return;
+            info.backupTime=answer.data.backupTime;
+            info.automaticBackupEnabled=answer.data.enabled;
+            scheduleInfo.textContent=answer.data.enabled
+              ?"جدولة النسخ التلقائي مفعلة الساعة "+answer.data.backupTime+
+                " أثناء تشغيل البرنامج، بعد التحقق من المجلد وسلامة النسخة."
+              :"جدولة النسخ التلقائي متوقفة.";
+            scheduleFeedback.replaceChildren(node("p","settings-success","حُفظ جدول النسخ في قاعدة البيانات."));
+          }catch(e){if(token===currentRequest)errors(scheduleFeedback,e);}
+          finally{apply.disabled=false;}
+        },"btn btn-primary settings-action");
+        scheduleControls.append(label,timeLabel,apply);
+        backup.append(scheduleControls,scheduleFeedback);
+      }
       const backupResult=node("div","settings-feedback");
       backupResult.setAttribute("aria-live","polite");
       const save=btn("إنشاء نسخة احتياطية الآن",async()=>{

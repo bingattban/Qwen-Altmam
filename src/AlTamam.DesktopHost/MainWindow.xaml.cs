@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private AlTamamDbContext? _dbContext;
     private DesktopBridgeGateway? _gateway;
     private Scheduling.EightPmSchedulerService? _scheduler;
+    private Scheduling.AutomaticBackupSchedulerService? _backupScheduler;
 
     public MainWindow()
     {
@@ -56,6 +57,8 @@ public partial class MainWindow : Window
             {
                 if (_scheduler is not null)
                     await _scheduler.DisposeAsync();
+                if (_backupScheduler is not null)
+                    await _backupScheduler.DisposeAsync();
             }
             finally
             {
@@ -133,7 +136,8 @@ public partial class MainWindow : Window
 
     private sealed record PreparedServices(
         AlTamamDbContext Database, DesktopBridgeGateway Gateway,
-        Scheduling.EightPmSchedulerService Scheduler);
+        Scheduling.EightPmSchedulerService Scheduler,
+        Scheduling.AutomaticBackupSchedulerService BackupScheduler);
 
     /// <summary>
     /// SQLCipher key validation, migrations and bridge construction are independent of WPF.
@@ -156,7 +160,9 @@ public partial class MainWindow : Window
             var attendance = new AlTamam.Application.Scheduling.AutoAttendanceService(database);
             return new PreparedServices(database, gateway,
                 new Scheduling.EightPmSchedulerService(attendance,
-                    tokenRetention: new AlTamam.Application.Scheduling.PreviewTokenRetentionService(database)));
+                    tokenRetention: new AlTamam.Application.Scheduling.PreviewTokenRetentionService(database)),
+                new Scheduling.AutomaticBackupSchedulerService(
+                    new AlTamam.Application.Scheduling.AutomaticBackupService(database)));
         }
         catch
         {
@@ -240,6 +246,7 @@ public partial class MainWindow : Window
                     return dialog.ShowDialog(this) == true ? dialog.FolderName : null;
                 }).Task;
                 _scheduler = ready.Scheduler;
+                _backupScheduler = ready.BackupScheduler;
             }
         }
         catch
@@ -306,6 +313,7 @@ public partial class MainWindow : Window
             {
                 startupPanel.Visibility = Visibility.Collapsed;
                 _scheduler?.Start(); // start catch-up after UI is ready; never delay first paint
+                _backupScheduler?.Start(); // independent verified automatic snapshots
                 return;
             }
             if (!_recoveredOnce)
