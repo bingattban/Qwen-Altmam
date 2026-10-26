@@ -14,13 +14,16 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
     private static readonly TimeSpan TickGranularity = TimeSpan.FromSeconds(30);
     private readonly AutoAttendanceService _attendance;
     private readonly TimeProvider _time;
+    private readonly PreviewTokenRetentionService? _tokenRetention;
     private readonly CancellationTokenSource _cancel = new();
     private Task? _loop;
 
-    public EightPmSchedulerService(AutoAttendanceService attendance, TimeProvider? timeProvider = null)
+    public EightPmSchedulerService(AutoAttendanceService attendance, TimeProvider? timeProvider = null,
+        PreviewTokenRetentionService? tokenRetention = null)
     {
         ArgumentNullException.ThrowIfNull(attendance);
         _attendance = attendance;
+        _tokenRetention = tokenRetention;
         _time = timeProvider ?? TimeProvider.System;
     }
 
@@ -44,6 +47,7 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
         }
         catch (OperationCanceledException) { return; }
         catch (Exception ex) { LastFailureMessage = ex.Message; }
+        await SweepPreviewTokensSafelyAsync(ct).ConfigureAwait(false);
 
         while (!ct.IsCancellationRequested)
         {
@@ -56,7 +60,18 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { LastFailureMessage = ex.Message; }
+            await SweepPreviewTokensSafelyAsync(ct).ConfigureAwait(false);
         }
+    }
+
+    // Maintenance never suppresses the 20:00 job, alters its durable ledger or
+    // changes LastFailureMessage (which controls its catch-up retry policy).
+    private async Task SweepPreviewTokensSafelyAsync(CancellationToken ct)
+    {
+        if (_tokenRetention is null || ct.IsCancellationRequested) return;
+        try { await _tokenRetention.RunIfDueAsync(ct).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception) { /* Failed transaction rolls back; retry on the next scheduler tick. */ }
     }
 
     /// <summary>
