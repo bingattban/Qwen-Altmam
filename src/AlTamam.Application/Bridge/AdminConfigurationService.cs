@@ -315,6 +315,25 @@ public sealed class AdminConfigurationService
         },ct).ConfigureAwait(false);
     }
 
+    /// <summary>Unique active symbols are compared after Arabic/Latin/digit normalization.
+    /// Previously deactivated definitions are historical evidence, not active reservations.</summary>
+    private static async Task<bool> ActiveStatusSymbolExists(SqliteConnection c,
+        SqliteTransaction tx,string symbol,string? excludedId,CancellationToken ct)
+    {
+        string normalized=ArabicTextNormalizer.NormalizeForSearch(symbol);
+        using var query=c.CreateCommand();query.Transaction=tx;
+        query.CommandText="""
+            SELECT StatusId,ShortSymbol FROM AttendanceStatusDefinitions
+            WHERE ActiveFlag=1;
+            """;
+        using var reader=await query.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            if(reader.GetString(0)!=excludedId &&
+               ArabicTextNormalizer.NormalizeForSearch(reader.GetString(1))==normalized)
+                return true;
+        return false;
+    }
+
     public async Task<BridgeResponse> CreateStatusAsync(JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
     {
         string name=Read(payload,"name"),symbol=Read(payload,"symbol"),color=Read(payload,"color");
@@ -330,6 +349,8 @@ public sealed class AdminConfigurationService
             dup.Parameters.AddWithValue("$name",norm);
             if(Convert.ToInt64(await dup.ExecuteScalarAsync(ct).ConfigureAwait(false))>0)
                 return Fail("توجد حالة نشطة بنفس الاسم.");
+            if(await ActiveStatusSymbolExists(c,t,symbol,null,ct).ConfigureAwait(false))
+                return Fail("رمز الحالة مستخدم في حالة نشطة أخرى؛ اختر اختصارًا مختلفًا.");
             using var insert=c.CreateCommand();insert.Transaction=t;
             insert.CommandText="""
                 INSERT INTO AttendanceStatusDefinitions (StatusId,VisibleName,NormalizedName,ShortSymbol,
@@ -375,6 +396,8 @@ public sealed class AdminConfigurationService
             dup.CommandText="SELECT COUNT(*) FROM AttendanceStatusDefinitions WHERE NormalizedName=$name AND StatusId<>$id AND ActiveFlag=1;";
             dup.Parameters.AddWithValue("$name",norm);dup.Parameters.AddWithValue("$id",id);
             if(Convert.ToInt64(await dup.ExecuteScalarAsync(ct).ConfigureAwait(false))>0)return Fail("اسم الحالة مستخدم.");
+            if(await ActiveStatusSymbolExists(c,t,symbol,id,ct).ConfigureAwait(false))
+                return Fail("رمز الحالة مستخدم في حالة نشطة أخرى؛ اختر اختصارًا مختلفًا.");
             using var hist=c.CreateCommand();hist.Transaction=t;
             hist.CommandText="SELECT ValidFromLocalDate FROM AttendanceStatusNameHistory WHERE StatusId=$id AND ValidToLocalDate IS NULL ORDER BY HistoryId DESC LIMIT 1;";
             hist.Parameters.AddWithValue("$id",id);
