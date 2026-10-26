@@ -33,7 +33,7 @@ const bridge={
         {statusId:"STS-PRESENT",name:"موجود"}]};
     if(action==="BuildPersonLifetimeReport"&&payload.exportPreview===true)
       return {data:{fileName:"تقرير فرد_2026-10-26_aabbcc.xlsx",
-       exportId:"aabbcc",directory:"C:\\Reports",personCount:1,
+       exportId:"feca3d1a-0123-4567-89ab-cdef98765432",directory:"C:\\Reports",personCount:1,
        worksheets:["ملخص التقرير","سجل التنقلات","تغييرات العمليات"]}};
     if(action==="ExportPersonLifetimeExcel")
       return {data:{filePath:"C:\\Reports\\تقرير فرد_2026-10-26_aabbcc.xlsx",format:"xlsx"}};
@@ -129,6 +129,8 @@ async function main(){
   const exported=calls.find(x=>x.action==="ExportPersonLifetimeExcel");
   assert.ok(exported&&exported.payload.personId==="NEW-ID");
   assert.equal(exported.payload.mode,"report");
+  assert.equal(exported.payload.exportId,"feca3d1a-0123-4567-89ab-cdef98765432",
+    "save must use the SAME server-proposed filename identifier");
   buttons("إغلاق التقرير")[0].handlers.click();
   assert.equal(popup.hidden,true,"close returns to existing multi-selection");
   console.log("UNIFIED REPORT UI PASS: person/group, historical vs new identity, exact PersonIds, date filter, drilldown");

@@ -78,7 +78,8 @@
          await Promise.resolve(window.confirm?.(description)||false);
        if(!confirm)return exportFeedback.replaceChildren();
        exportFeedback.replaceChildren(el("p","جارٍ إنشاء ملف Excel والتأكد من اكتمال الصفوف..."));
-       const reply=await api().invoke("ExportPersonLifetimeExcel",payload);
+       const reply=await api().invoke("ExportPersonLifetimeExcel",
+         {...payload,exportId:preview.exportId});
        if(!popup.hidden)exportFeedback.replaceChildren(el("p",
          "تم حفظ Excel: "+reply.data.filePath,"settings-success"));
      }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
