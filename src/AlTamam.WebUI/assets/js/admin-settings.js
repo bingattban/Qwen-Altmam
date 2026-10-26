@@ -1134,6 +1134,53 @@
       account.append(accountData,logoutButton);
       grid.appendChild(account);
 
+      if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
+        const automatic=settingsCard("التحضير التلقائي — الساعة 8 مساءً","◷");
+        automatic.appendChild(node("p","settings-copy",
+          "من بقي غير محضر حتى 20:00 تُعتمد له حالة أمس. وإذا لم تكن له حالة أمس، تُستخدم الحالة الافتراضية التي تحددها الإدارة هنا. لا يشمل ذلك يوم النقل."));
+        const label=node("label","admin-input"),picker=node("select","form-control");
+        picker.setAttribute("aria-label","الحالة الافتراضية عند عدم وجود تحضير أمس");
+        const empty=node("option","","اختر الحالة الافتراضية");empty.value="";
+        picker.appendChild(empty);
+        label.append(node("span","","الحالة الافتراضية عند عدم وجود تحضير أمس"),picker);
+        const feedback=node("div","settings-feedback");
+        automatic.append(label,feedback);
+        grid.appendChild(automatic);
+        try{
+          const [policyResult,statusResult]=await Promise.all([
+            api().invoke("GetAutoAttendancePolicy",{}),
+            api().invoke("GetActiveAttendanceStatuses",{})
+          ]);
+          if(token!==currentRequest)return;
+          const policy=policyResult.data||{};
+          const choices=Array.isArray(statusResult.data)?statusResult.data:[];
+          for(const entry of choices){
+            const option=node("option","",entry.displayName);
+            option.value=entry.statusId;picker.appendChild(option);
+          }
+          picker.value=policy.defaultStatusId||"";
+          if(!choices.some(x=>x.statusId===picker.value))picker.value="";
+          automatic.appendChild(node("p","section-description",
+            policy.configured?"الحالة المعتمدة حالياً: "+policy.defaultStatusName:
+              "لم تُحدد حالة افتراضية بعد؛ لن تُنشأ حالة دون مرجع حتى تختارها الإدارة."));
+          const saveDefault=btn("حفظ الحالة الافتراضية",async()=>{
+            if(!picker.value)return errors(feedback,new Error("اختر حالة نشطة أولاً."));
+            if(!await dialogs.confirm("تأكيد اعتماد الحالة المختارة عند غياب تحضير أمس؟"))return;
+            saveDefault.disabled=true;
+            try{
+              const result=await api().invoke("SetAutoAttendanceDefaultStatus",{
+                statusId:picker.value,operationId:makeOperationId()
+              });
+              if(token!==currentRequest)return;
+              feedback.replaceChildren(node("p","settings-success",
+                "تم اعتماد الحالة الافتراضية: "+result.data.defaultStatusName));
+            }catch(e){if(token===currentRequest)errors(feedback,e);}
+            finally{saveDefault.disabled=false;}
+          },"btn btn-primary settings-action");
+          automatic.appendChild(saveDefault);
+        }catch(e){if(token===currentRequest)errors(feedback,e);}
+      }
+
       // The stored 16:00 schedule is explicitly NOT an operational scheduler.
       const backup=settingsCard("النسخ الاحتياطي","▣");
       backup.append(
