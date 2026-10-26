@@ -90,7 +90,7 @@ async function main(){
  assert.ok(viewport.all().some(x=>x.textContent==="P4"));
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance"].includes(x.action)).length,0);
  assert.ok(viewport.all().some(x=>x.className==="dashboard-eight-clock"),
-   "20:00 counter must be present even when the native scheduler is offline");
+   "20:00 clock absent. DOM classes: "+viewport.all().map(x=>x.className).filter(Boolean).join(", "));
  let selectionCalled=0,reviewCalled=0;
  context.window.AltamamDialog={
    unpreparedSelection:async loader=>{
