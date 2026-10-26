@@ -236,8 +236,13 @@ async function run() {
     "active non-system site is removable only by explicit operation");
   assert.equal(visible().filter(x=>x.textContent==="موقع محمي").length,1,
     "the Unspecified site can never display a remove action");
-  context.window.AltamamDialog={alert:async()=>true};
-  await buttonNamed("إزالة الموقع").handlers.click();
+  context.window.AltamamDialog={confirm:async()=>true,alert:async()=>true};
+  const selectedRow=visible().find(x=>x.tag==="tr"&&
+    x.children[0]?.textContent==="موقع تجريبي قابل للإزالة");
+  assert.ok(selectedRow,"expected removable site row must exist");
+  const removeSiteButton=selectedRow.all().find(x=>x.tag==="button"&&x.textContent==="إزالة الموقع");
+  assert.ok(removeSiteButton,"remove action belongs to the specific site");
+  await removeSiteButton.handlers.click();
   const mutation=calls.find(x=>x.name==="RemoveSiteAndReassignCurrentPersons");
   assert.ok(mutation,"site removal must call authoritative C# service");
   assert.equal(mutation.body.siteId,"SITE-REMOVABLE");
