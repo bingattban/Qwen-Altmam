@@ -463,7 +463,7 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
         sw.Stop();
         double optimizedMs = sw.Elapsed.TotalMilliseconds;
         Assert.Equal(PersonCount, people.Count);
-        Assert.Equal(oldResult, batchedResult);
+        Assert.Equal(oldResult.ToArray(), batchedResult.ToArray());
         Console.WriteLine(
             $"ALTAMAM_ATTENDANCE_SELECTION personCount={PersonCount} baselineCommands={1+PersonCount*3} optimizedCommands=1 baselineMs={baselineMs:F3} optimizedMs={optimizedMs:F3}");
         Assert.True(optimizedMs < baselineMs,
