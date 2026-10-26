@@ -154,6 +154,123 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task HistoricalReportFilters_ComposeDatesSitesAndStatuses_BeforeAggregating()
+    {
+        // Reassign P1 after the first saved attendance date. Historical site
+        // filtering MUST use the event's SiteIdAtEffectiveDate, NOT today's site.
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO Sites(SiteId,CurrentVisibleName,ActiveFlag,RowVersion)
+                VALUES('SITE-REPORT-NEW','موقع التقرير الجديد',1,1);
+                INSERT INTO SiteNameHistory(SiteId,VisibleNameSnapshot,ValidFromLocalDate,
+                    ValidToLocalDate,ChangedByUserId,RecordedAtUtc)
+                VALUES('SITE-REPORT-NEW','موقع التقرير الجديد','2026-01-01',
+                    NULL,'TEST','2026-01-01T00:00:00Z');
+                UPDATE PersonAssignments SET ValidToLocalDate='2026-01-16'
+                  WHERE AssignmentId='TST-R-A1';
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-R-NEW-SITE','TST-REPORT-1','SITE-REPORT-NEW',
+                    '2026-01-16',NULL,NULL,'2026-01-16T07:00:00Z');
+                UPDATE AttendanceRecords SET
+                  AssignmentIdAtEffectiveDate='TST-R-NEW-SITE',
+                  SiteIdAtEffectiveDate='SITE-REPORT-NEW',
+                  SiteNameSnapshot='موقع التقرير الجديد'
+                WHERE PersonId='TST-REPORT-1' AND AttendanceLocalDate='2026-01-16';
+                """;
+            await q.ExecuteNonQueryAsync();
+        }
+        var svc=new PersonnelReportService(_db);
+        var oldSite=await svc.ReportAsync(new JsonObject{
+            ["personId"]="TST-REPORT-1",["siteId"]="SITE-UNSPECIFIED"
+        },CancellationToken.None);
+        Assert.True(oldSite.Success,oldSite.UserMessage);
+        var oldData=Assert.IsType<JsonObject>(oldSite.Data);
+        Assert.Equal(1L,oldData["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal("موجود",oldData["attendance"]![0]!["statusName"]!.GetValue<string>());
+        Assert.Equal("2026-01-15",oldData["attendance"]![0]!["date"]!.GetValue<string>());
+        Assert.Equal(2L,oldData["siteTotal"]!.GetValue<long>());
+        Assert.Equal(2,Assert.IsType<JsonArray>(oldData["siteHistory"]).Count);
+
+        var recent=await svc.ReportAsync(new JsonObject{
+            ["personId"]="TST-REPORT-1",["siteId"]="SITE-REPORT-NEW",
+            ["dateFrom"]="2026-01-16",["dateTo"]="2026-01-16",
+            ["statusId"]="STS-ABSENT"
+        },CancellationToken.None);
+        Assert.True(recent.Success,recent.UserMessage);
+        var data=Assert.IsType<JsonObject>(recent.Data);
+        Assert.Equal(1L,data["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal("غياب",data["attendance"]![0]!["statusName"]!.GetValue<string>());
+        Assert.Single(Assert.IsType<JsonArray>(data["statusTotals"]));
+        Assert.Single(Assert.IsType<JsonArray>(data["monthlyTotals"]));
+
+        var wrongStatus=await svc.ReportAsync(new JsonObject{
+            ["personId"]="TST-REPORT-1",["siteId"]="SITE-REPORT-NEW",
+            ["statusId"]="STS-PRESENT"
+        },CancellationToken.None);
+        Assert.Equal(0L,Assert.IsType<JsonObject>(wrongStatus.Data)["attendanceTotal"]!.GetValue<long>());
+
+        var group=await svc.ReportAsync(new JsonObject{
+            ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
+            ["siteId"]="SITE-UNSPECIFIED",["statusId"]="STS-PRESENT"
+        },CancellationToken.None);
+        Assert.True(group.Success,group.UserMessage);
+        var grouped=Assert.IsType<JsonObject>(group.Data);
+        Assert.Equal(2L,grouped["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(1L,grouped["persons"]![0]!["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(1L,grouped["persons"]![1]!["attendanceTotal"]!.GetValue<long>());
+        Assert.All(Assert.IsType<JsonArray>(grouped["statusTotals"]),
+            x=>Assert.Equal("STS-PRESENT",x!["statusId"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public async Task HistoricalReportFilters_MovementTypeAuditValuesAndInvalidInput()
+    {
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
+                    ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                    DestinationExternalName,EffectiveLocalDate,CommittedAtUtc,ActorUserId,
+                    IdempotencyKey,SeparationReason)
+                VALUES('TST-RPT-MOV-1','TST-REPORT-1','فرد التقرير','R001',2,
+                    'SITE-UNSPECIFIED','غير محدد','شركة أخرى','2026-01-18',
+                    '2026-01-18T09:00:00Z','TEST','RPT-MOV-ONE',NULL),
+                      ('TST-RPT-MOV-2','TST-REPORT-1','فرد التقرير','R001',4,
+                    'SITE-UNSPECIFIED','غير محدد',NULL,'2026-01-19',
+                    '2026-01-19T09:00:00Z','TEST','RPT-MOV-TWO',NULL);
+                """;
+            await q.ExecuteNonQueryAsync();
+        }
+        var svc=new PersonnelReportService(_db);
+        var returned=await svc.ReportAsync(new JsonObject{
+            ["personId"]="TST-REPORT-1",["movementType"]=4
+        },CancellationToken.None);
+        Assert.True(returned.Success,returned.UserMessage);
+        var data=Assert.IsType<JsonObject>(returned.Data);
+        Assert.Equal(1L,data["movementTotal"]!.GetValue<long>());
+        Assert.Equal("عودة للخدمة",data["movements"]![0]!["type"]!.GetValue<string>());
+        var byDate=await svc.ReportAsync(new JsonObject{
+            ["personIds"]=new JsonArray("TST-REPORT-1"),
+            ["dateFrom"]="2026-01-18",["dateTo"]="2026-01-18",
+            ["movementType"]=2,["siteId"]="SITE-UNSPECIFIED"
+        },CancellationToken.None);
+        Assert.True(byDate.Success,byDate.UserMessage);
+        Assert.Equal(1L,Assert.IsType<JsonObject>(byDate.Data)["movementTotal"]!.GetValue<long>());
+        foreach(var bad in new[]{
+            new JsonObject{["personId"]="TST-REPORT-1",["movementType"]=5},
+            new JsonObject{["personId"]="TST-REPORT-1",["siteId"]=new string('x',129)},
+            new JsonObject{["personId"]="TST-REPORT-1",["dateFrom"]="2026-02-01",
+                ["dateTo"]="2026-01-01"},
+            new JsonObject{["personIds"]=new JsonArray("TST-REPORT-1"),["movementType"]=-1}
+        })
+            Assert.False((await svc.ReportAsync(bad,CancellationToken.None)).Success);
+    }
+
+    [Fact]
     public async Task InvalidPersonIsNeverReplacedWithAnUnrelatedIdentity()
     {
         var result=await new PersonnelReportService(_db).ReportAsync(
