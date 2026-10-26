@@ -151,14 +151,27 @@
     await search();
   }
   async function archive(root) {
-    root.replaceChildren(el("h2","أرشيف الأفراد المفصولين","section-title"),
+    root.replaceChildren(el("h2","أرشيف الفصل","section-title"),
       el("p","الأرشيف للقراءة فقط، ولا يحذف سجلات الأفراد أو تحضيراتهم السابقة.","section-description"));
     const query=el("input");query.type="search";query.placeholder="بحث بالاسم أو الرقم (ع)";
     const sites=el("select");sites.appendChild(option("","جميع المواقع"));
     const bar=el("div",undefined,"functional-toolbar");
-    const out=el("div");
-    root.append(bar,out);
-    bar.append(query,sites,button("بحث",()=>{page=1;load();},"btn btn-primary"));
+    const out=el("div"),feedback=el("div");
+    root.append(bar,feedback,out);
+    bar.append(query,sites,button("بحث",()=>{page=1;load();},"btn btn-primary"),
+      button("تصدير أرشيف الفصل إلى Excel",async()=>{
+        const confirm=await dialogs.confirm("هل تؤكد تصدير أرشيف الفصل حسب الاسم والموقع المحددين؟ "+
+          "سيُحفظ الملف في مجلد التصدير المعرّف بالإعدادات.");
+        if(!confirm)return;
+        feedback.replaceChildren(el("p","جارٍ إعداد ملف Excel..."));
+        try{
+          const result=await api().invoke("ExportPersonLifetimeExcel",{
+            mode:"separationArchive",term:query.value.trim(),siteId:sites.value
+          });
+          if(root.isConnected)feedback.replaceChildren(el("p",
+            "تم حفظ أرشيف الفصل: "+result.data.filePath,"settings-success"));
+        }catch(e){if(root.isConnected)error(feedback,e);}
+      },"btn btn-outline"));
     let page=1,sequence=0;
     try{
       const response=await api().invoke("QuerySites",{});

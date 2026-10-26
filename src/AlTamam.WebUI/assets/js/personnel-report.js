@@ -42,7 +42,59 @@
    term.type="search";term.placeholder="بحث بالاسم أو الرقم (ع)";
    term.setAttribute("aria-label","البحث عن فرد");
    const controls=el("div",undefined,"functional-toolbar");
-   const results=el("div"),report=el("div"),status=el("div"),selectedPanel=el("div");
+   const results=el("div"),report=el("div",undefined,"person-report-content"),status=el("div"),selectedPanel=el("div");
+   const popup=el("section",undefined,"person-report-modal");
+   popup.hidden=true;popup.setAttribute("role","dialog");
+   popup.setAttribute("aria-modal","true");
+   popup.setAttribute("aria-label","معاينة تقرير التمام");
+   const modalBox=el("div",undefined,"person-report-dialog");
+   const modalHeading=el("div",undefined,"person-report-actions");
+   const modalTitle=el("h2","معاينة تقرير التمام","section-title");
+   const exportFeedback=el("div",undefined,"functional-feedback");
+   let reportMode="person";
+   const closePopup=()=>{popup.hidden=true;report.replaceChildren();};
+   const closeButton=btn("إغلاق التقرير",closePopup);
+   function reportPayload(){
+     return reportMode==="group"?
+       {mode:"report",personIds:Array.from(selected.keys()),...filters()}:
+       {mode:"report",personId:chosen,...filters()};
+   }
+   async function exportExcel(){
+     const payload=reportPayload();
+     if(reportMode==="group"&&!payload.personIds.length)
+       return alert(exportFeedback,new Error("اختر أفراد المجموعة أولًا."));
+     exportFeedback.replaceChildren(el("p","جارٍ إعداد معاينة ملف Excel..."));
+     try{
+       const preview=(await api().invoke("BuildPersonLifetimeReport",
+         {...payload,exportPreview:true})).data||{};
+       if(popup.hidden)return;
+       if(!preview.fileName||!preview.directory)
+         throw Error("لم تصل بيانات معاينة التصدير.");
+       const description="الملف: "+preview.fileName+" — المجلد: "+
+         preview.directory+" — عدد الأفراد: "+preview.personCount+
+         " — الأوراق: "+(preview.worksheets||[]).join("، ");
+       const confirm=window.AltamamDialog?.confirm?
+         await window.AltamamDialog.confirm(description+" — هل تؤكد التصدير؟"):
+         await Promise.resolve(window.confirm?.(description)||false);
+       if(!confirm)return exportFeedback.replaceChildren();
+       exportFeedback.replaceChildren(el("p","جارٍ إنشاء ملف Excel والتأكد من اكتمال الصفوف..."));
+       const reply=await api().invoke("ExportPersonLifetimeExcel",
+         {...payload,exportId:preview.exportId});
+       if(!popup.hidden)exportFeedback.replaceChildren(el("p",
+         "تم حفظ Excel: "+reply.data.filePath,"settings-success"));
+     }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
+   }
+   const exportButton=btn("تصدير التقرير إلى Excel",()=>{void exportExcel();});
+   modalHeading.append(modalTitle,exportButton,closeButton);
+   modalBox.append(modalHeading,exportFeedback,report);
+   popup.appendChild(modalBox);
+   popup.addEventListener("keydown",e=>{
+     if(e.key==="Escape"){e.preventDefault?.();closePopup();}
+   });
+   popup.addEventListener("click",e=>{if(e.target===popup)closePopup();});
+   const showPopup=mode=>{
+     reportMode=mode;popup.hidden=false;exportFeedback.replaceChildren();
+   };
    const dateFrom=el("input"),dateTo=el("input");
    dateFrom.type="date";dateTo.type="date";
    dateFrom.setAttribute("aria-label","بداية فترة التقرير");
@@ -94,7 +146,7 @@
    movementLabel.appendChild(movement);
    searchCard.append(controls,el("p","حدد الأشخاص من نتائج البحث؛ يمكن الاختيار عبر أكثر من عملية بحث، بحد أقصى 100 فرد.","section-description"),
      selectedPanel,fromLabel,toLabel,siteLabel,statusLabel,movementLabel,status,results);
-   root.append(searchCard,report);
+   root.append(searchCard,popup);
    void loadHistoricalFilters();
    let chosen=null,serial=0,attendancePage=1,auditPage=1,identityPage=1,
      movementPage=1,sitePage=1;
@@ -115,6 +167,7 @@
      if(!selected.size)return alert(status,new Error("حدد فرداً أو مجموعة من نتائج البحث أولاً."));
      const ids=Array.from(selected.keys());
      const ticket=++serial;
+     showPopup("group");
      status.replaceChildren();
      report.replaceChildren(el("p","جارٍ إعداد التقرير الجماعي من السجلات المعتمدة..."));
      try{
@@ -160,7 +213,7 @@
    async function search(){
      const value=term.value.trim();
      if(!value)return alert(status,new Error("أدخل اسم الفرد أو الرقم (ع)."));
-     chosen=null;report.replaceChildren();
+     chosen=null;closePopup();
      const ticket=++serial;
      results.replaceChildren(el("p","جارٍ البحث عن الأفراد..."));
      try{
@@ -213,6 +266,7 @@
    async function loadReport(){
      if(!chosen)return;
      const ticket=++serial;
+     showPopup("person");
      status.replaceChildren();
      report.replaceChildren(el("p","جارٍ قراءة تاريخ الفرد من قاعدة البيانات المشفرة..."));
      try{

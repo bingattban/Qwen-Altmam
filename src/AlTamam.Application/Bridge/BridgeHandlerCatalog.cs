@@ -257,8 +257,17 @@ public static class BridgeHandlerCatalog
         // contracts instead of accidentally routing QueryPersons to a 25-row search.
         "BuildPersonLifetimeReport" => async (req, principal, ct) =>
         {
-            var service=new PersonnelReportService(services.Db);
-            BridgeResponse result=await service.ReportAsync(req.Payload,ct).ConfigureAwait(false);
+            BridgeResponse result=req.Payload?["exportPreview"]?.GetValue<bool>()==true
+                ? await new PersonnelExcelExportService(services.Db)
+                    .PreviewReportAsync(req.Payload,ct).ConfigureAwait(false)
+                : await new PersonnelReportService(services.Db)
+                    .ReportAsync(req.Payload,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
+        "ExportPersonLifetimeExcel" => async (req, principal, ct) =>
+        {
+            var service=new PersonnelExcelExportService(services.Db);
+            BridgeResponse result=await service.ExportAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
         "QueryPersons" => async (req, principal, ct) =>
