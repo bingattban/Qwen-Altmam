@@ -4,7 +4,25 @@
 (function () {
   const sections = new Set(["dashboard", "monthly", "admin", "settings"]);
   const STATE = { session: null, siteId: "", statusId: "", date: "", dayPage: 1,
-    monthPage: 1, chosenYear: null, chosenMonth: null, archivePeriods: [] };
+    dayTerm:"", monthTerm:"", monthPage: 1, chosenYear: null, chosenMonth: null, archivePeriods: [] };
+  let countdownTimer=null;
+  function stopCountdown(){
+    if(countdownTimer!=null&&typeof window.clearInterval==="function")
+      window.clearInterval(countdownTimer);
+    countdownTimer=null;
+  }
+  function searchSquare(value,submit,placeholder="بحث بالاسم أو الرقم (ع)"){
+    const wrapper=el("div","boxed-search-wrapper");
+    const input=el("input","form-input boxed-search");
+    input.type="search";input.value=value||"";input.placeholder=placeholder;
+    input.setAttribute("aria-label",placeholder);
+    input.autocomplete="off";
+    input.addEventListener("keydown",ev=>{
+      if(ev.key==="Enter"){ev.preventDefault();submit(input.value.trim());}
+    });
+    append(wrapper,input,button("بحث",()=>submit(input.value.trim()),"btn btn-outline"));
+    return wrapper;
+  }
   const ar = new Intl.DateTimeFormat("ar", { month: "long" });
   const weekday = new Intl.DateTimeFormat("ar", { weekday: "short" });
   const nav = window.AltamamNavigation;
@@ -181,7 +199,212 @@
     return Array.isArray(data)?data:[];
   }
 
+
+  // A real centered selection/review dialog. C# is the only authority for
+  // yesterday's closed attendance, eligibility and the 20:00 deadline.
+  async function openUnpreparedPopup(){
+    if(!STATE.session||location.hash.slice(1)!=="dashboard")return;
+    const day=STATE.date,siteId=STATE.siteId;
+    const shade=el("div","unprepared-popup-backdrop");
+    const panel=el("section","unprepared-popup");
+    panel.setAttribute("role","dialog");panel.setAttribute("aria-modal","true");
+    panel.setAttribute("aria-label","اعتماد الحالات السابقة لغير المحضرين");
+    const heading=el("h2","section-title","غير المحضرين — اعتماد حالة اليوم السابق");
+    const info=el("p","section-description",
+      "حدد الأفراد، ثم راجع لكل فرد حالة أمس المغلق قبل التأكيد. "+
+      "عند الساعة 8 مساءً يعتمد النظام الحالات تلقائياً؛ ولا تتغير أي حالة معتمدة مسبقاً.");
+    const messageBox=el("div","functional-feedback");
+    const choiceBar=el("div","functional-toolbar");
+    const search=el("input","form-input boxed-search");search.type="search";
+    search.placeholder="بحث بالاسم أو الرقم (ع)";
+    search.setAttribute("aria-label","بحث بين غير المحضرين");
+    search.autocomplete="off";
+    const selection=el("div","unprepared-select-summary");
+    const results=el("div","unprepared-modal-results");
+    const actions=el("div","unprepared-modal-actions");
+    const closeButton=button("إغلاق",()=>{void close();});
+    closeButton.setAttribute("aria-label","إغلاق نافذة غير المحضرين");
+    append(panel,heading,info,choiceBar,selection,messageBox,results,actions);
+    shade.appendChild(panel);
+    const host=document.body||view();
+    host.appendChild(shade);
+    const focusBack=document.activeElement, chosen=new Set();
+    let page=1,term="",epoch=0,stage="choose",busy=false,lastPreview=null;
+    const sameSession=()=>STATE.session && STATE.date===day &&
+       STATE.siteId===siteId && shade.isConnected!==false;
+    const confirm=async text=>typeof window.AltamamDialog?.confirm==="function"
+      ? window.AltamamDialog.confirm(text,{title:"تأكيد إلغاء التحديد"}):false;
+    async function close(force=false){
+      if(busy&&!force)return;
+      if(!force&&(chosen.size||stage==="review") &&
+         !await confirm("هناك اختيارات أو معاينة لم تُحفظ. إلغاء العملية وإغلاق النافذة؟"))return;
+      ++epoch;
+      if(shade.parentNode)shade.parentNode.removeChild(shade);
+      else if(typeof shade.remove==="function")shade.remove();
+      focusBack?.focus?.();
+    }
+    shade.addEventListener("click",ev=>{
+      if(ev.target===shade)void close();
+    });
+    const keyHandler=ev=>{
+      if(!shade.isConnected){document.removeEventListener("keydown",keyHandler);return;}
+      if(ev.key==="Escape"){ev.preventDefault();void close();}
+      if(ev.key==="Tab"){
+        const targets=Array.from(panel.querySelectorAll(
+          'button:not([disabled]),input:not([disabled])'));
+        const first=targets[0],last=targets[targets.length-1];
+        if(first&&last){
+          if(ev.shiftKey&&document.activeElement===first){ev.preventDefault();last.focus();}
+          else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first.focus();}
+        }
+      }
+    };
+    document.addEventListener("keydown",keyHandler);
+    function summary(){
+      selection.textContent="المحدد للاعتماد: "+chosen.size+" من 100 فرد كحد أقصى";
+    }
+    async function load(){
+      const request=++epoch;
+      results.replaceChildren(message("جارٍ تحميل غير المحضرين..."));
+      messageBox.replaceChildren();
+      try{
+        const reply=parseData(await bridge().invoke("QueryDailyRoster",{
+          businessDate:day,siteId,statusId:"__UNPREPARED__",term,
+          page,pageSize:50
+        }));
+        if(request!==epoch||!sameSession())return;
+        const items=Array.isArray(reply?.items)?reply.items:[];
+        const tb=createTable([{label:"تحديد"},{label:"الرقم (ع)"},{label:"اسم الفرد"},{label:"الموقع"}]);
+        for(const person of items){
+          const tr=el("tr"),cell=el("td"),check=el("input");
+          check.type="checkbox";check.checked=chosen.has(person.personId);
+          check.setAttribute("aria-label","تحديد "+person.name);
+          check.addEventListener("change",()=>{
+            if(check.checked&&chosen.size>=100){check.checked=false;
+              messageBox.replaceChildren(message("الحد الأقصى 100 فرد للعملية الواحدة.",true));return;}
+            if(check.checked)chosen.add(person.personId);else chosen.delete(person.personId);
+            summary();
+          });
+          cell.appendChild(check);tr.appendChild(cell);
+          for(const value of [person.serviceNumberA,person.name,person.siteName])
+            tr.appendChild(el("td","",value));
+          tb.body.appendChild(tr);
+        }
+        if(!items.length){
+          const tr=el("tr"),td=el("td","","لا يوجد أفراد غير محضرين مطابقون للبحث.");
+          td.colSpan=4;tr.appendChild(td);tb.body.appendChild(tr);
+        }
+        const navigation=el("div","functional-pager");
+        const previous=button("السابق",()=>{page--;void load();});
+        const next=button("التالي",()=>{page++;void load();});
+        previous.disabled=page<=1;next.disabled=!reply?.hasNext;
+        append(navigation,el("span","","إجمالي النتائج: "+(reply?.total||0)+" — صفحة "+page),
+          previous,next);
+        results.replaceChildren(tb.wrap,navigation);
+        choiceBar.replaceChildren(search,
+          button("بحث",()=>{
+            term=search.value.trim();page=1;chosen.clear();summary();void load();
+          }),button("تحديد الصفحة",()=>{
+            for(const person of items){
+              if(chosen.size>=100)break;chosen.add(person.personId);
+            }
+            summary();void load();
+          }),button("إلغاء التحديد",()=>{
+            chosen.clear();summary();void load();
+          }));
+      }catch(e){if(request===epoch)showError(results,e);}
+    }
+    async function preview(){
+      if(busy||!chosen.size)return messageBox.replaceChildren(
+        message("حدد فرداً واحداً على الأقل من كشف غير المحضرين.",true));
+      if(new Date().getHours()>=20)return messageBox.replaceChildren(
+        message("انتهت فترة الاعتماد المبكر الساعة 8 مساءً.",true));
+      busy=true;
+      messageBox.replaceChildren(message("جارٍ إعداد معاينة الحالات السابقة..."));
+      try{
+        const response=parseData(await bridge().invoke("PreviewUnpreparedCarryForward",{
+          businessDate:day,siteId,personIds:Array.from(chosen).sort()
+        }));
+        if(!sameSession()||!response?.previewToken||
+          !Array.isArray(response.persons)||!response.persons.length)
+          throw Error("لم يُرجع البرنامج معاينة صالحة.");
+        lastPreview=response;stage="review";
+        const review=el("div","unprepared-review");
+        review.appendChild(el("p","attendance-review-summary",
+          "راجع أسماء الأفراد وأرقامهم وحالة أمس "+response.referenceDate+
+          " قبل اعتماد اليوم "+day+"."));
+        const tb=createTable([{label:"الرقم (ع)"},{label:"الفرد"},{label:"الموقع"},
+          {label:"الحالة المعتمدة"},{label:"المصدر"}]);
+        for(const p of response.persons){
+          const tr=el("tr");
+          for(const value of [p.serviceNumberA,p.name,p.siteName,p.statusName,
+            p.fromYesterday?"تحضير أمس المغلق":"الحالة الافتراضية من إعدادات الإدارة"])
+            tr.appendChild(el("td","",value));
+          tb.body.appendChild(tr);
+        }
+        review.appendChild(tb.wrap);
+        results.replaceChildren(review);
+        choiceBar.replaceChildren();
+        actions.replaceChildren(button("العودة للتحديد",()=>{
+          stage="choose";lastPreview=null;void load();
+        }),button("تأكيد اعتماد "+response.persons.length+" فرد",async()=>{
+          if(!lastPreview||busy)return;
+          busy=true;
+          messageBox.replaceChildren(message("جارٍ اعتماد الحالات وحفظ سجل العمليات..."));
+          try{
+            const done=parseData(await bridge().invoke("CommitUnpreparedCarryForward",{
+              previewToken:lastPreview.previewToken
+            }));
+            if(!done?.approvedBeforeEight||done.count!==lastPreview.persons.length)
+              throw Error("لم يؤكد الخادم اعتماد جميع الأفراد.");
+            await close(true);
+            if(sameSession())void renderDashboard();
+          }catch(e){showError(messageBox,e);}
+          finally{busy=false;}
+        },"btn btn-primary"));
+        messageBox.replaceChildren();
+      }catch(e){showError(messageBox,e);}
+      finally{busy=false;}
+    }
+    actions.append(button("معاينة حالة أمس للمحددين",()=>{void preview();},
+      "btn btn-primary"),closeButton);
+    choiceBar.appendChild(search);
+    summary();await load();search.focus?.();
+  }
+
+  function installEightOclockCountdown(host,epoch){
+    stopCountdown();
+    const banner=el("section","card eight-pm-banner");
+    banner.setAttribute("aria-label","الوقت المتبقي حتى الاعتماد التلقائي الساعة 8 مساءً");
+    const heading=el("strong","","موعد الاعتماد التلقائي — الساعة ٨:٠٠ مساءً");
+    const counter=el("strong","eight-pm-clock");
+    const note=el("p","section-description",
+      "في تمام الساعة ٨ مساءً ستُعتمد حالة اليوم السابق للأفراد غير المحضرين تلقائياً، "+
+      "أو الحالة الافتراضية المعتمدة من الإدارة عند عدم وجود حالة أمس.");
+    append(banner,heading,counter,note);host.appendChild(banner);
+    const paint=()=>{
+      if(STATE.dashboardEpoch!==epoch){stopCountdown();return;}
+      const now=new Date(),due=new Date(now);
+      due.setHours(20,0,0,0);
+      const remaining=Math.max(0,due.getTime()-now.getTime());
+      if(!remaining){
+        counter.textContent="حان موعد الاعتماد الآلي";
+        counter.setAttribute("aria-label","حان موعد الاعتماد التلقائي، راجع حالة تشغيل الجدولة");
+      }else{
+        const secs=Math.floor(remaining/1000);
+        const hh=String(Math.floor(secs/3600)).padStart(2,"0"),
+          mm=String(Math.floor(secs%3600/60)).padStart(2,"0"),
+          ss=String(secs%60).padStart(2,"0");
+        counter.textContent=hh+":"+mm+":"+ss;
+      }
+    };
+    paint();
+    if(typeof window.setInterval==="function")
+      countdownTimer=window.setInterval(paint,1000);
+  }
+
   async function renderDashboard() {
+    stopCountdown();
     STATE.date=startOfToday();
     const container=view();
     container.replaceChildren(header("التمام اليومي"));
@@ -194,11 +417,14 @@
     try {
       const sites=await loadSites();
       if(STATE.dashboardEpoch!==epoch)return;
-      append(controls,siteSelector(sites,renderDashboard),button("تحديث البيانات",renderDashboard,"btn btn-primary"));
+      append(controls,siteSelector(sites,renderDashboard),
+        searchSquare(STATE.dayTerm,term=>{STATE.dayTerm=term;STATE.dayPage=1;void renderDashboard();}),
+        button("تحديث البيانات",renderDashboard,"btn btn-primary"));
+      installEightOclockCountdown(controls,epoch);
       const [countsResponse,rosterResponse]=await Promise.all([
         bridge().invoke("GetDashboardSummary",{businessDate:STATE.date,siteId:STATE.siteId}),
         bridge().invoke("QueryDailyRoster",{businessDate:STATE.date,siteId:STATE.siteId,
-          statusId:STATE.statusId,page:STATE.dayPage,pageSize:50})
+          statusId:STATE.statusId,term:STATE.dayTerm,page:STATE.dayPage,pageSize:50})
       ]);
       if(STATE.dashboardEpoch!==epoch)return;
       const counts=parseData(countsResponse), rows=parseData(rosterResponse);
@@ -225,6 +451,11 @@
       for(const item of stats) {
         const isActive=STATE.statusId===item.statusId;
         const card=button("",()=>{
+          if(item.statusId==="__UNPREPARED__"){
+            STATE.statusId=item.statusId;STATE.dayPage=1;
+            void renderDashboard().then(()=>openUnpreparedPopup());
+            return;
+          }
           if(STATE.statusId!==item.statusId){
             STATE.statusId=item.statusId;
             STATE.dayPage=1;
@@ -390,6 +621,9 @@
         }finally{previewExport.disabled=false;}
       });
       tool.appendChild(previewExport);
+      tool.appendChild(searchSquare(STATE.monthTerm,term=>{
+        STATE.monthTerm=term;STATE.monthPage=1;void renderMonthly();
+      }));
       const yearPick=el("select","form-select"),monthPick=el("select","form-select");
       const noneYear=el("option","","السنة (الحالية عند الفراغ)");
       noneYear.value="";yearPick.appendChild(noneYear);
@@ -421,7 +655,8 @@
         return;
       }
       const grid=parseData(await bridge().invoke("QueryMonthlyGrid",{
-        year,month,siteId:STATE.siteId,page:STATE.monthPage,pageSize:50
+        year,month,siteId:STATE.siteId,term:STATE.monthTerm,
+        page:STATE.monthPage,pageSize:50
       }));
       if(STATE.monthEpoch!==epoch)return;
       const dayCount=monthDays(year,month);
@@ -501,6 +736,7 @@
   }
 
   function render(section) {
+    stopCountdown();
     if (!STATE.session) { loginGate();return; }
     if (!sections.has(section)) section="dashboard";
     applyMainNav(section);
@@ -545,6 +781,7 @@
   }
 
   async function logout(){
+    stopCountdown();
     try { await bridge().invoke("Logout",{}); }
     catch(e) { /* Do not continue using a possibly expired session. */ }
     finally {
