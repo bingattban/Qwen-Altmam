@@ -37,7 +37,7 @@ public sealed class PreviewTokenRetentionTests
                 using (var nested = c.CreateCommand())
                 {
                     nested.CommandText = "UPDATE PreviewTokens SET PayloadCanonicalJson=$json WHERE Token=$token;";
-                    nested.Parameters.AddWithValue("$json", "{" + referencedByAnotherToken + "}");
+                    nested.Parameters.AddWithValue("$json", "{\"ref\":\"" + referencedByAnotherToken + "\"}");
                     nested.Parameters.AddWithValue("$token", newerPreview);
                     nested.ExecuteNonQuery();
                 }
