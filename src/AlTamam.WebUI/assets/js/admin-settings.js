@@ -202,6 +202,7 @@
     if(screen==="accounts")return accounts();
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
+    if(screen==="layout")return rosterLayout();
     if(screen==="persons")return persons();
     if(screen==="log")return audit();
     if(screen==="transfers")return renderNested(screen,"التنقلات");
@@ -722,6 +723,145 @@
       wrapper.scrollIntoView?.({block:"nearest"});
     }
     await load();
+  }
+
+  // The one canonical roster-column editor. No presentation label is a data key.
+  // Service returns immutable ColumnId, optimistic snapshot and stored-value count.
+  async function rosterLayout() {
+    const page=start("الإدارة / الكشوفات / تعديل هيكل الكشف");
+    const panel=card("إدارة أعمدة الكشف"),feedback=node("div","admin-note");
+    panel.appendChild(node("p","section-description",
+      "الاسم والرقم (ع) والموقع ورقم التسلسل أعمدة أساسية محمية. "+
+      "الأعمدة الإضافية ترتبط بالمعرف ColumnId الثابت، وليس بعنوان العمود. "+
+      "إخفاء العمود أو تعطيله لا يحذف بيانات الأفراد القديمة."));
+    page.appendChild(panel);
+    const token=++currentRequest;
+    const types=[["1","نص"],["2","رقم"],["3","تاريخ"],["4","نعم / لا"]];
+    function kindPicker(value) {
+      const picker=node("select","form-control");
+      picker.setAttribute("aria-label","نوع العمود");
+      for(const [type,title] of types){
+        const opt=node("option","",title);opt.value=type;
+        picker.appendChild(opt);
+      }
+      picker.value=String(value??1);return picker;
+    }
+    function typeLabel(code) {
+      return types.find(x=>Number(x[0])===code)?.[1]||"غير معروف";
+    }
+    const add=card("إضافة عمود اختياري");
+    const caption=field("عنوان العمود الجديد");
+    caption.input.maxLength=80;
+    const kind=kindPicker(1),label=node("label","admin-input");
+    label.append(node("span","","نوع البيانات"),kind);
+    const addButton=btn("إضافة العمود",async()=>{
+      if(caption.input.value.trim().length<2)return errors(feedback,
+        new Error("اكتب عنوانًا واضحًا لا يقل عن حرفين."));
+      if(!await dialogs.confirm("إضافة عمود «"+caption.input.value.trim()+
+         "» إلى هيكل الكشف؟"))return;
+      addButton.disabled=true;feedback.replaceChildren();
+      try{
+        await api().invoke("CreateCustomFieldDefinition",{
+          caption:caption.input.value.trim(),fieldType:Number(kind.value),
+          operationId:makeOperationId()
+        });
+        await rosterLayout();
+      }catch(e){errors(feedback,e);}
+      finally{addButton.disabled=false;}
+    },"btn btn-primary");
+    add.append(caption.wrap,label,addButton);
+    panel.append(add,feedback);
+    try{
+      const response=await api().invoke("GetCustomFieldDefinitions",{});
+      if(token!==currentRequest)return;
+      const items=Array.isArray(response.data?.items)?response.data.items:[];
+      const active=items.filter(item=>item.active!==false);
+      const custom=active.filter(item=>!item.isSystemProtected);
+      const tableView=table(["عنوان العمود","نوع البيانات","الترتيب","الظهور","الإجراءات"]);
+      const editor=node("div","admin-note");
+      const explanation=node("p","section-description",
+        "الأعمدة المحمية لا تُحذف. تغيير نوع عمود يحتوي قيمًا مسجلة يُرفض "+
+        "حتى لا يُغيّر تفسير البيانات التاريخية دون ترحيل موثق.");
+      const apply=async(item,changes)=>{
+        const payload={
+          columnId:item.columnId,expectedSnapshot:item.snapshot,
+          caption:item.caption,fieldType:item.fieldType,
+          displayOrder:item.displayOrder,visible:item.visible,
+          ...changes,operationId:makeOperationId()
+        };
+        await api().invoke("UpdateCustomFieldMetadata",payload);
+        await rosterLayout();
+      };
+      const showEditor=item=>{
+        editor.replaceChildren();
+        const box=card("تعديل العمود: "+item.caption);
+        const name=field("عنوان العمود",item.caption);
+        name.input.maxLength=80;
+        const type=kindPicker(item.fieldType);
+        const typeWrap=node("label","admin-input");
+        typeWrap.append(node("span","","نوع البيانات"),type);
+        const order=field("ترتيب العمود",String(item.displayOrder),"number");
+        order.input.min=5;order.input.max=custom.length+4;
+        const shown=node("label","admin-input"),check=node("input");
+        check.type="checkbox";check.checked=item.visible;
+        shown.append(node("span","","إظهار العمود في الكشف"),check);
+        const save=btn("حفظ تغييرات العمود",async()=>{
+          save.disabled=true;feedback.replaceChildren();
+          try{
+            await apply(item,{caption:name.input.value.trim(),
+              fieldType:Number(type.value),displayOrder:Number(order.input.value),
+              visible:check.checked});
+          }catch(e){errors(feedback,e);}
+          finally{save.disabled=false;}
+        },"btn btn-primary");
+        box.append(name.wrap,typeWrap,order.wrap,shown,save,
+          btn("إلغاء التعديل",()=>editor.replaceChildren()));
+        editor.replaceChildren(box);
+      };
+      for(const item of active){
+        const row=node("tr");
+        const text=node("td");
+        text.append(node("strong","",item.caption),
+          node("p","section-description","ColumnId: "+item.columnId));
+        row.append(text,
+          node("td","",typeLabel(item.fieldType)),
+          node("td","",item.displayOrder),
+          node("td","",item.visible?"ظاهر":"مخفي"));
+        const action=node("td","admin-row-buttons");
+        if(item.isSystemProtected)action.append(node("span","section-description","عمود محمي"));
+        else{
+          action.append(btn("تعديل",()=>showEditor(item)));
+          action.append(btn(item.visible?"إخفاء":"إظهار",async()=>{
+            try{await apply(item,{visible:!item.visible});}
+            catch(e){errors(feedback,e);}
+          }));
+          if(item.displayOrder>5)action.append(btn("أعلى",async()=>{
+            try{await apply(item,{displayOrder:item.displayOrder-1});}
+            catch(e){errors(feedback,e);}
+          }));
+          if(item.displayOrder<custom.length+4)action.append(btn("أسفل",async()=>{
+            try{await apply(item,{displayOrder:item.displayOrder+1});}
+            catch(e){errors(feedback,e);}
+          }));
+          action.append(btn("تعطيل العمود",async()=>{
+            const message="تعطيل عمود «"+item.caption+"»؟ عدد القيم المحفوظة: "+
+              (item.storedValueCount||0)+". لن تُحذف قيم الأفراد أو السجلات القديمة.";
+            if(!await dialogs.confirm(message))return;
+            try{
+              await api().invoke("DeactivateCustomField",{
+                columnId:item.columnId,expectedSnapshot:item.snapshot,
+                confirmed:true,operationId:makeOperationId()
+              });
+              await rosterLayout();
+            }catch(e){errors(feedback,e);}
+          }));
+        }
+        row.appendChild(action);
+        tableView.body.appendChild(row);
+      }
+      empty(tableView.body,5,"لا توجد أعمدة في الكشف.");
+      panel.append(explanation,tableView.wrap,editor);
+    }catch(e){errors(feedback,e);}
   }
 
   async function sites() {
