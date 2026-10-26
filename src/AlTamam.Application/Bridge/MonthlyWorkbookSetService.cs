@@ -192,6 +192,7 @@ public sealed class MonthlyWorkbookSetService
                 "لا توجد أسماء مطابقة للتصدير.");
         var completed=new List<string>();
         var resultRows=new JsonArray();
+        bool success=false;
         try
         {
             foreach(var node in files)
@@ -233,6 +234,7 @@ public sealed class MonthlyWorkbookSetService
                     data["exportId"]!.GetValue<string>(),ct).ConfigureAwait(false);
                 return 0;
             },ct).ConfigureAwait(false);
+            success=true;
             return BridgeHelpers.Ok(new JsonObject{
                 ["format"]="xlsx",["filePath"]=completed[0],
                 ["directory"]=data["directory"]!.GetValue<string>(),
@@ -253,9 +255,13 @@ public sealed class MonthlyWorkbookSetService
         }
         finally
         {
-            // Only completed, fully audited sets are kept. A partial set must
-            // never appear as a successful group export.
-            // Rollback is executed in the catch branches via success flag below.
+            // Delete only this attempt's newly generated files if even one site
+            // failed or audit could not be committed. Never touch earlier exports.
+            if(!success)
+                foreach(string path in completed)
+                    try{File.Delete(path);}
+                    catch(IOException){}
+                    catch(UnauthorizedAccessException){}
         }
     }
 }
