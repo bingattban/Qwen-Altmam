@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AlTamam.Application.Scheduling;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
@@ -7,8 +8,8 @@ using AlTamam.Infrastructure.Persistence;
 namespace AlTamam.Application.Bridge;
 
 /// <summary>
-/// Settings overview and verified manual encrypted backups. Restore and destructive
-/// reset remain unavailable until separate preview/confirm + clean-machine tests.
+/// Settings overview, verified encrypted manual backups, and the opt-in local daily
+/// backup scheduler. Restore stays unavailable until atomic recovery is proven.
 /// </summary>
 public sealed class SettingsReadBackupService
 {
@@ -29,7 +30,9 @@ public sealed class SettingsReadBackupService
     public async Task<BridgeResponse> OverviewAsync(BridgePrincipal person,CancellationToken ct)
     {
         string backupPath=await new OutputDirectorySettings(_db).GetAsync(ct);
-        string schedule=await Setting("AutoBackupTimeLocal","16:00",ct);
+        var backup=new AutomaticBackupService(_db,_time);
+        var (enabled,schedule)=await backup.ReadSettingsAsync(ct).ConfigureAwait(false);
+        string? lastDate=await backup.LastSuccessfulDateAsync(ct).ConfigureAwait(false);
         string theme=await Setting("Theme","light",ct);
         return BridgeHelpers.Ok(new JsonObject
         {
@@ -37,20 +40,31 @@ public sealed class SettingsReadBackupService
             ["roleLabelAr"]=person.Role.ToArabicLabel(),
             ["backupDirectory"]=backupPath,["defaultDriveAvailable"]=OutputDirectorySettings.IsUsableDirectory(backupPath,_db.DatabasePath),
             ["backupTime"]=schedule,
-            ["automaticBackupOperational"]=false,
-            ["automaticBackupNote"]="الجدولة اليومية ليست نشطة بعد؛ لا تعتمد عليها قبل إكمال اختبار تشغيلها.",
+            ["automaticBackupOperational"]=enabled,
+            ["automaticBackupEnabled"]=enabled,
+            ["lastAutoBackupDate"]=lastDate,
+            ["automaticBackupNote"]=enabled
+                ? "النسخ اليومي مفعل أثناء تشغيل البرنامج. آخر نسخة ناجحة: "+(lastDate??"لم يتم إنشاء نسخة بعد")
+                : "النسخ التلقائي متوقف؛ فعّله من الإعدادات بعد اختيار مجلد صالح.",
             ["theme"]=theme
         });
     }
     public async Task<BridgeResponse> ScheduleAsync(CancellationToken ct)
     {
+        var scheduler=new AutomaticBackupService(_db,_time);
+        var (enabled,time)=await scheduler.ReadSettingsAsync(ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["backupTime"]=await Setting("AutoBackupTimeLocal","16:00",ct),
-            ["operational"]=false,
-            ["message"]="وقت النسخ محفوظ، لكن الجدولة الآلية لم تُربط حتى الآن بخدمة Windows."
+            ["backupTime"]=time,["enabled"]=enabled,
+            ["lastAutoBackupDate"]=await scheduler.LastSuccessfulDateAsync(ct).ConfigureAwait(false),
+            ["operational"]=enabled,
+            ["message"]=enabled?"الجدولة تعمل محلياً أثناء تشغيل البرنامج.":"الجدولة متوقفة."
         });
     }
+    public Task<BridgeResponse> ConfigureBackupScheduleAsync(JsonObject? input,
+        BridgePrincipal actor,CancellationToken ct)
+        => new AutomaticBackupService(_db,_time).ConfigureAsync(input,actor,ct);
+
     public BridgeResponse Integrity()
     {
         bool healthy=_db.HasValidIntegrity();

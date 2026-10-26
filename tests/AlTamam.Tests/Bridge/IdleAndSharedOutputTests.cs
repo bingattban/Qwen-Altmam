@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
+using AlTamam.Application.Scheduling;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
@@ -179,6 +180,123 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
         Assert.Contains("dbbackup",Path.GetExtension(filename));
         using var restored=new AlTamamDbContext(filename,SyntheticFixtures.TestKeyHex);
         Assert.True(restored.HasValidIntegrity());
+    }
+
+
+    [Fact]
+    public async Task AutomaticBackup_OnlyAfterDue_ExactlyOncePerDate_EncryptedAndAudited()
+    {
+        var outputSettings=new OutputDirectorySettings(_db);
+        var destination=await outputSettings.SaveAsync(_output,_actor,CancellationToken.None);
+        Assert.True(destination.Success,destination.UserMessage);
+        var service=new AutomaticBackupService(_db,_time);
+        var bad=await service.ConfigureAsync(new JsonObject{
+            ["enabled"]=true,["backupTime"]="25:99"
+        },_actor,CancellationToken.None);
+        Assert.False(bad.Success);
+        var configured=await service.ConfigureAsync(new JsonObject{
+            ["enabled"]=true,["backupTime"]="11:00"
+        },_actor,CancellationToken.None);
+        Assert.True(configured.Success,configured.UserMessage);
+        Assert.False(await service.RunIfDueAsync());
+        _time.Forward(TimeSpan.FromHours(1));
+        Assert.True(await service.RunIfDueAsync());
+        Assert.False(await service.RunIfDueAsync());
+        Assert.Equal("2026-10-24",await service.LastSuccessfulDateAsync());
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                SELECT BackupFilePath FROM BackupHistory
+                WHERE BackupId='AUTO-20261024' AND IsAutomatic=1 AND VerificationPassed=1;
+                """;
+            var path=(string?)await q.ExecuteScalarAsync();
+            Assert.NotNull(path);
+            Assert.True(File.Exists(path));
+            Assert.DoesNotContain("SQLite format 3",System.Text.Encoding.ASCII.GetString(
+                File.ReadAllBytes(path).Take(16).ToArray()));
+            using var copy=new AlTamamDbContext(path,SyntheticFixtures.TestKeyHex);
+            Assert.True(copy.HasValidIntegrity());
+            q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='AUTO_BACKUP_CREATE';";
+            Assert.Equal(1L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+        }
+        _time.Forward(TimeSpan.FromDays(1));
+        Assert.True(await service.RunIfDueAsync());
+        Assert.False(await service.RunIfDueAsync());
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT COUNT(*) FROM BackupHistory WHERE IsAutomatic=1 AND VerificationPassed=1";
+            Assert.Equal(2L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+        }
+    }
+
+    [Fact]
+    public async Task AutomaticBackupSchedule_IdenticalRetryIsIdempotentAndChangedIntentIsRejected()
+    {
+        var path=await new OutputDirectorySettings(_db).SaveAsync(_output,_actor,CancellationToken.None);
+        Assert.True(path.Success);
+        var service=new AutomaticBackupService(_db,_time);
+        const string id="SCHEDULE-TEST-INTENT-00001";
+        var request=new JsonObject{
+            ["enabled"]=true,["backupTime"]="12:35",["operationId"]=id
+        };
+        var first=await service.ConfigureAsync(request,_actor,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var replay=await service.ConfigureAsync((JsonObject)request.DeepClone(),_actor,CancellationToken.None);
+        Assert.True(replay.Success,replay.UserMessage);
+        var changed=(JsonObject)request.DeepClone();changed["backupTime"]="14:00";
+        var conflict=await service.ConfigureAsync(changed,_actor,CancellationToken.None);
+        Assert.False(conflict.Success);
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='AUTO_BACKUP_SCHEDULE_CHANGED';";
+        Assert.Equal(1L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+        q.CommandText="SELECT COUNT(*) FROM MutationReceipts WHERE OperationId=$id;";
+        q.Parameters.AddWithValue("$id",id);
+        Assert.Equal(1L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+    }
+
+    [Fact]
+    public async Task AutomaticBackup_InvalidOutputOrDisabledSchedule_NeverProducesFalseSuccess()
+    {
+        var service=new AutomaticBackupService(_db,_time);
+        // Never depend on a runner's E: drive being mounted or writable.
+        using(var connection=_db.CreateOpenConnection())
+        using(var invalid=connection.CreateCommand())
+        {
+            invalid.CommandText="""
+                UPDATE AppSettings SET SettingValue=$missing
+                WHERE SettingKey='PreferredBackupDirectory';
+                """;
+            invalid.Parameters.AddWithValue("$missing",
+                Path.Combine(_output,"missing-unwritable-folder"));
+            await invalid.ExecuteNonQueryAsync();
+        }
+        var noDirectory=await service.ConfigureAsync(new JsonObject{
+            ["enabled"]=true,["backupTime"]="09:00"
+        },_actor,CancellationToken.None);
+        Assert.False(noDirectory.Success);
+        Assert.False(await service.RunIfDueAsync());
+        var selected=await new OutputDirectorySettings(_db).SaveAsync(_output,_actor,CancellationToken.None);
+        Assert.True(selected.Success);
+        var saved=await service.ConfigureAsync(new JsonObject{
+            ["enabled"]=true,["backupTime"]="09:00"
+        },_actor,CancellationToken.None);
+        Assert.True(saved.Success);
+        Directory.Delete(_output,recursive:true);
+        await Assert.ThrowsAsync<IOException>(()=>service.RunIfDueAsync());
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT COUNT(*) FROM BackupHistory WHERE IsAutomatic=1";
+            Assert.Equal(0L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+        }
+        var disabled=await service.ConfigureAsync(new JsonObject{
+            ["enabled"]=false,["backupTime"]="09:00"
+        },_actor,CancellationToken.None);
+        Assert.True(disabled.Success);
+        Assert.False(await service.RunIfDueAsync());
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;
