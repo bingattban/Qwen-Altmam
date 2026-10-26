@@ -215,13 +215,13 @@ public sealed class PersonRosterService
             // matching EVERY current archived candidate.
             string resolutionToken=ReadString(payload,"identityResolutionToken").Trim();
             string decision=ReadString(payload,"identityDecision").Trim();
-            var matches=new List<(string Id,string Name,string Number,long Revision,int Org)>();
+            var matches=new List<(string Id,string Name,string Number,string NormalizedNumber,long Revision,int Org)>();
             using(var archived = connection.CreateCommand())
             {
                 archived.Transaction = tx;
                 archived.CommandText = """
                     SELECT p.PersonId,p.CurrentVisibleName,p.CurrentServiceNumberA,
-                           p.RowVersion,p.OrganizationalStatus
+                           p.NormalizedServiceNumberA,p.RowVersion,p.OrganizationalStatus
                     FROM Persons p
                     WHERE p.ActiveFlag=0 AND p.OrganizationalStatus IN (2,3,4)
                       AND (p.NormalizedServiceNumberA=$number OR p.NormalizedName=$name)
@@ -232,12 +232,13 @@ public sealed class PersonRosterService
                 using var candidates=await archived.ExecuteReaderAsync(ct).ConfigureAwait(false);
                 while(await candidates.ReadAsync(ct).ConfigureAwait(false))
                     matches.Add((candidates.GetString(0),candidates.GetString(1),
-                        candidates.GetString(2),candidates.GetInt64(3),candidates.GetInt32(4)));
+                        candidates.GetString(2),candidates.GetString(3),
+                        candidates.GetInt64(4),candidates.GetInt32(5)));
             }
             if(matches.Count>50)
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                     "توجد هويات كثيرة متطابقة في الأرشيف؛ يجب حل التعارض قبل الإضافة.");
-            if(matches.Any(x=>x.Number==normalizedNumber))
+            if(matches.Any(x=>x.NormalizedNumber==normalizedNumber))
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                     "«الرقم (ع)» يخص هوية مؤرشفة؛ لا يمكن إنشاء هوية ثانية به حتى لو رُفض تطابق الاسم.");
             if(matches.Count>0)
