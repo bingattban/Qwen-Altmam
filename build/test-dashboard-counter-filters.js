@@ -33,8 +33,9 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
        {personId:"P3",statusId:"STS-ABSENT",statusName:"غياب"},
        {personId:"P4",statusId:"__TRANSFER_DAY__",statusName:"تم نقله اليوم"}];
-     const selected=all.filter(p=>!payload.statusId ||
-       (payload.statusId==="__UNPREPARED__"?p.statusId===null:p.statusId===payload.statusId));
+     const selected=all.filter(p=>(!payload.statusId ||
+       (payload.statusId==="__UNPREPARED__"?p.statusId===null:p.statusId===payload.statusId))
+       &&(!payload.term || p.personId.toLowerCase().includes(payload.term.toLowerCase())));
      return{data:{items:selected.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
        total:selected.length,hasNext:false}};
    }
@@ -67,6 +68,20 @@ async function main(){
  assert.ok(!viewport.all().some(x=>x.className.includes("functional-status-filters")),
    "remove redundant status chips below counters");
  assert.equal(lastRoster().payload.statusId,"");
+ assert.equal(counter("all").attrs["aria-pressed"],"true");
+ const search=viewport.all().find(x=>x.tag==="input"&&x.type==="search");
+ assert.ok(search,"dashboard needs a search field");
+ search.value="P2";
+ const submit=viewport.all().find(x=>x.tag==="button"&&x.textContent==="بحث");
+ assert.ok(submit);submit.handlers.click();await settle();
+ assert.equal(lastRoster().payload.term,"P2");
+ assert.equal(lastRoster().payload.page,1);
+ assert.equal(lastRoster().payload.statusId,"");
+ assert.ok(viewport.all().some(x=>x.textContent==="P2"));
+ assert.ok(!viewport.all().some(x=>x.textContent==="P1"));
+ const clear=viewport.all().find(x=>x.tag==="button"&&x.textContent==="مسح البحث");
+ clear.handlers.click();await settle();
+ assert.equal(lastRoster().payload.term,"");
  assert.equal(counter("all").attrs["aria-pressed"],"true");
  counter("__UNPREPARED__").handlers.click();await settle();
  assert.equal(lastRoster().payload.statusId,"__UNPREPARED__");
