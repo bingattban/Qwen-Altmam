@@ -186,8 +186,8 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         var people=Assert.IsType<JsonArray>(grid["items"]).OfType<JsonObject>().ToArray();
         Assert.Equal(2,people.Length);
         Assert.All(people,p=>Assert.Equal("EX001",p["serviceNumberA"]!.GetValue<string>()));
-        Assert.Single(people.Where(p=>p["personId"]!.GetValue<string>()=="TST-EX-ARCHIVED"));
-        Assert.Single(people.Where(p=>p["personId"]!.GetValue<string>()=="TST-EX-1"));
+        Assert.Single(people,p=>p["personId"]!.GetValue<string>()=="TST-EX-ARCHIVED");
+        Assert.Single(people,p=>p["personId"]!.GetValue<string>()=="TST-EX-1");
 
         var exporter=new MonthlyExcelExportService(_db);
         var preview=await exporter.PreviewAsync((JsonObject)selected.DeepClone(),CancellationToken.None);
