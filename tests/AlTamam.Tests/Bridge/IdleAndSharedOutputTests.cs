@@ -232,6 +232,32 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task AutomaticBackupSchedule_IdenticalRetryIsIdempotentAndChangedIntentIsRejected()
+    {
+        var path=await new OutputDirectorySettings(_db).SaveAsync(_output,_actor,CancellationToken.None);
+        Assert.True(path.Success);
+        var service=new AutomaticBackupService(_db,_time);
+        const string id="SCHEDULE-TEST-INTENT-00001";
+        var request=new JsonObject{
+            ["enabled"]=true,["backupTime"]="12:35",["operationId"]=id
+        };
+        var first=await service.ConfigureAsync(request,_actor,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var replay=await service.ConfigureAsync((JsonObject)request.DeepClone(),_actor,CancellationToken.None);
+        Assert.True(replay.Success,replay.UserMessage);
+        var changed=(JsonObject)request.DeepClone();changed["backupTime"]="14:00";
+        var conflict=await service.ConfigureAsync(changed,_actor,CancellationToken.None);
+        Assert.False(conflict.Success);
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='AUTO_BACKUP_SCHEDULE_CHANGED';";
+        Assert.Equal(1L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+        q.CommandText="SELECT COUNT(*) FROM MutationReceipts WHERE OperationId=$id;";
+        q.Parameters.AddWithValue("$id",id);
+        Assert.Equal(1L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task AutomaticBackup_InvalidOutputOrDisabledSchedule_NeverProducesFalseSuccess()
     {
         var service=new AutomaticBackupService(_db,_time);
