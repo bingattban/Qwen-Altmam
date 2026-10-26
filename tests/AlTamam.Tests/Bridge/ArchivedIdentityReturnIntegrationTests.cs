@@ -236,9 +236,9 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         // These MUST survive and MUST NOT appear in the new person's report.
         string oldDate=DateOnly.Parse(Today).AddDays(-5).ToString("yyyy-MM-dd");
         using(var connection=_db.CreateOpenConnection())
-        using(var command=connection.CreateCommand())
+        using(var seedCommand=connection.CreateCommand())
         {
-            command.CommandText="""
+            seedCommand.CommandText="""
                 INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
                     StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
                     AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
@@ -247,8 +247,8 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
                     'ASG-TST-RETURN-SEP','SITE-UNSPECIFIED','غير محدد',
                     'manual','TST-SEED','2026-01-01T00:00:00Z',1,'TST-OLD-PERSON-ABSENT');
                 """;
-            command.Parameters.AddWithValue("$date",oldDate);
-            await command.ExecuteNonQueryAsync();
+            seedCommand.Parameters.AddWithValue("$date",oldDate);
+            await seedCommand.ExecuteNonQueryAsync();
         }
         await _db.ExecuteInWriteTransactionAsync(async(connection,tx)=>
         {
