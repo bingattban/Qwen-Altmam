@@ -170,6 +170,30 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
     }
 
     [Fact]
+    public async Task SeparationReturn_WithNewNumber_KeepsOldPeriodAndChangesIdentityOnlyFromToday()
+    {
+        var service=new ArchivedReturnService(_db);
+        var preview=Require(await service.PreviewAsync(Input("شخص سابق مفصول","5152"),Actor,default));
+        var match=Assert.IsType<JsonObject>(Assert.Single(Assert.IsType<JsonArray>(preview["candidates"])));
+        Assert.Equal("TST-RETURN-SEP",match["personId"]!.GetValue<string>());
+        Assert.True(match["nameMatch"]!.GetValue<bool>());
+        Assert.False(match["numberMatch"]!.GetValue<bool>());
+        var returned=Require(await service.CommitReturnAsync(new JsonObject
+        {
+            ["previewToken"]=preview["previewToken"]!.GetValue<string>(),
+            ["personId"]="TST-RETURN-SEP",["decision"]="same"
+        },Actor,default));
+        Assert.True(returned["returned"]!.GetValue<bool>());
+        Assert.Equal("5152",Value("SELECT CurrentServiceNumberA FROM Persons WHERE PersonId='TST-RETURN-SEP'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId='TST-RETURN-SEP' AND MovementType=4"));
+        Assert.Equal("5151",Value("SELECT ServiceNumberASnapshot FROM PersonIdentityHistory WHERE PersonId='TST-RETURN-SEP' ORDER BY ValidFromLocalDate LIMIT 1"));
+        Assert.Equal("5152",Value("SELECT ServiceNumberASnapshot FROM PersonIdentityHistory WHERE PersonId='TST-RETURN-SEP' ORDER BY ValidFromLocalDate DESC LIMIT 1"));
+        Assert.Equal(Today,Value("SELECT ValidFromLocalDate FROM PersonIdentityHistory WHERE PersonId='TST-RETURN-SEP' ORDER BY ValidFromLocalDate DESC LIMIT 1"));
+        Assert.Equal(0L,Scalar("SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId='TST-RETURN-SEP'"));
+        Assert.Equal(2L,Scalar("SELECT COUNT(*) FROM Persons"));
+    }
+
+    [Fact]
     public async Task ArchivedNumberCannotCreateAnotherIdentity_EvenWithDifferentDecision()
     {
         var service=new ArchivedReturnService(_db);
