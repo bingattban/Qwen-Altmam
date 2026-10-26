@@ -31,7 +31,10 @@
    header.append(make("h2","التمام اليومي","section-title"),
        make("p","تحضير فردي أو جماعي لليوم الحالي. لا يحفظ أي تعديل قبل المراجعة.","section-description"));
    const filters=make("div",undefined,"functional-toolbar");
-   const site=make("select"),status=make("select"),mode=make("select");
+   const site=make("select"),status=make("select"),mode=make("select"),search=make("input");
+   search.type="search";search.className="form-input boxed-search";
+   search.placeholder="بحث بالاسم أو الرقم (ع)";search.autocomplete="off";
+   search.setAttribute("aria-label","بحث في كشف التحضير");
    site.setAttribute("aria-label","الموقع");
    status.setAttribute("aria-label","الحالة الجديدة");
    mode.setAttribute("aria-label","نوع العملية");
@@ -45,7 +48,7 @@
    draftPanel.append(make("h3","مسودات التمام المحفوظة","section-title"),draftResults);
    const selected=new Set();
    let activeDraftId=null;
-   let pageNo=1,loading=false,nonce=0,previewVersion=0;
+   let pageNo=1,loading=false,nonce=0,previewVersion=0,term="";
    const summary=()=>choice.textContent="الأفراد المحددون: "+selected.size+" من 100";
    const clearReview=()=>{previewVersion++;};
    const reset=()=>{selected.clear();activeDraftId=null;clearReview();summary();};
@@ -55,7 +58,9 @@
    });
    status.addEventListener("change",clearReview);
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
-   filters.append(site,status,mode);
+   const applySearch=()=>{term=search.value.trim();pageNo=1;reset();void load();};
+   search.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();applySearch();}});
+   filters.append(site,status,mode,search,button("بحث",applySearch));
    header.append(filters,choice,info,list);
    host.appendChild(draftPanel);
    host.insertBefore(header,draftPanel);
@@ -76,7 +81,7 @@
      try{
        const response=await bridge.invoke("QueryDailyRoster",{
          businessDate:day,siteId:site.value,statusId:"__ELIGIBLE__",
-         page:pageNo,pageSize:50
+         term,page:pageNo,pageSize:50
        });
        if(current!==nonce||!host.isConnected)return;
        const d=response.data||{},t=table(fields);
