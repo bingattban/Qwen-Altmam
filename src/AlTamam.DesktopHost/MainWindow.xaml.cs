@@ -245,6 +245,19 @@ public partial class MainWindow : Window
                     };
                     return dialog.ShowDialog(this) == true ? dialog.FolderName : null;
                 }).Task;
+                _gateway.BackupFilePicker = current => Dispatcher.InvokeAsync(() =>
+                {
+                    var dialog=new Microsoft.Win32.OpenFileDialog
+                    {
+                        Title="اختر نسخة احتياطية مشفرة للتحقق منها",
+                        Filter="Encrypted AlTamam backups (*.dbbackup)|*.dbbackup|Encrypted SQLite (*.db)|*.db",
+                        CheckFileExists=true,CheckPathExists=true,
+                        Multiselect=false,RestoreDirectory=true,
+                        InitialDirectory=Directory.Exists(current)?current:
+                            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                    };
+                    return dialog.ShowDialog(this)==true?dialog.FileName:null;
+                }).Task;
                 _scheduler = ready.Scheduler;
                 _backupScheduler = ready.BackupScheduler;
             }

@@ -27,6 +27,7 @@ public sealed class BridgeSharedServices
     private readonly ConcurrentDictionary<string, byte> _logoutStarted =
         new(StringComparer.Ordinal);
     public Func<string?,Task<string?>>? PickOutputDirectoryAsync { get; set; }
+    public Func<string?,Task<string?>>? PickBackupFileAsync { get; set; }
 
     public BridgeSharedServices(AlTamamDbContext database, TimeProvider? timeProvider = null)
     {

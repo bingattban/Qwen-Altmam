@@ -75,6 +75,8 @@ public sealed class DesktopBridgeGateway
 
     public Func<string?,Task<string?>>? FolderPicker
     { get => _services.PickOutputDirectoryAsync; set => _services.PickOutputDirectoryAsync = value; }
+    public Func<string?,Task<string?>>? BackupFilePicker
+    { get => _services.PickBackupFileAsync; set => _services.PickBackupFileAsync = value; }
 
     public DesktopBridgeGateway(WebView2BridgeDispatcher dispatcher, BridgeSharedServices services)
     {
