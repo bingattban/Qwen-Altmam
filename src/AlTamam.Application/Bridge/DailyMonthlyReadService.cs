@@ -276,6 +276,11 @@ public sealed class DailyMonthlyReadService
         if (year < 1900 || year > 2200 || month < 1 || month > 12)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "اختر شهراً وسنة صالحين.");
         string siteId = ReadString(payload, "siteId");
+        string rawTerm = ReadString(payload, "term");
+        if (rawTerm.Length > 100 || rawTerm.Any(char.IsControl))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "البحث الشهري لا يتجاوز 100 حرف ولا يقبل أحرف التحكم.");
+        string term = ArabicTextNormalizer.NormalizeForSearch(rawTerm);
         int page = Math.Clamp(ReadInt(payload, "page", 1), 1, 100000);
         int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, 100);
         var start = new DateOnly(year, month, 1);
@@ -295,11 +300,27 @@ public sealed class DailyMonthlyReadService
                            AND m.EffectiveLocalDate < $next
                            AND ($site='' OR m.SourceSiteId=$site OR m.DestinationSiteId=$site))
               )
+              -- Match the identity actually displayed for the selected month,
+              -- NEVER today's mutable name/number. Two people who later reuse
+              -- الرقم (ع) remain separate because the key is immutable PersonId.
+              AND ($term = '' OR EXISTS(
+                  SELECT 1 FROM PersonIdentityHistory h
+                  WHERE h.PersonId=p.PersonId
+                    AND h.ValidFromLocalDate <= $end
+                    AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate > $end)
+                    AND (instr(altamam_normalize_search(h.NameSnapshot),$term)>0
+                      OR instr(altamam_normalize_search(h.ServiceNumberASnapshot),$term)>0)
+              ))
             """;
         using var connection = _db.CreateOpenConnection();
+        // Register this read-only function on this connection ONLY. A portable
+        // SQLite scalar avoids schema migrations or lossy search-time snapshots.
+        connection.CreateFunction<string, string>(
+            "altamam_normalize_search", text => ArabicTextNormalizer.NormalizeForSearch(text),
+            isDeterministic: true);
         using var count = connection.CreateCommand();
         count.CommandText = "SELECT COUNT(*) " + fromSql;
-        BindPeriod(count, startIso, nextIso, siteId);
+        BindPeriod(count, startIso, nextIso, siteId, term, endIso);
         long total = Convert.ToInt64(await count.ExecuteScalarAsync(ct).ConfigureAwait(false));
 
         // A row per person for this page. Historical cells are sourced from the
@@ -329,10 +350,11 @@ public sealed class DailyMonthlyReadService
                         AND ($site = '' OR a.SiteId = $site)
                       ORDER BY a.ValidFromLocalDate DESC LIMIT 1), 'غير محدد')
             """ + "\n" + fromSql + "\n" + """
-            ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
+            -- Sort by the projected historical name (third selected column).
+            -- The immutable tie-break keeps all Excel pages in matching order.
+            ORDER BY 3 COLLATE NOCASE, p.PersonId LIMIT $limit OFFSET $offset;
             """;
-        BindPeriod(cmd, startIso, nextIso, siteId);
-        cmd.Parameters.AddWithValue("$end", endIso);
+        BindPeriod(cmd, startIso, nextIso, siteId, term, endIso);
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (long)(page - 1) * pageSize);
         var people = new List<(string Id, JsonObject Row)>();
@@ -613,10 +635,13 @@ public sealed class DailyMonthlyReadService
         });
     }
 
-    private static void BindPeriod(SqliteCommand cmd, string start, string next, string site)
+    private static void BindPeriod(SqliteCommand cmd, string start, string next,
+        string site, string term, string end)
     {
         cmd.Parameters.AddWithValue("$start", start);
         cmd.Parameters.AddWithValue("$next", next);
         cmd.Parameters.AddWithValue("$site", site);
+        cmd.Parameters.AddWithValue("$term", term);
+        cmd.Parameters.AddWithValue("$end", end);
     }
 }
