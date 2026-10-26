@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Contracts.Events;
 using AlTamam.Infrastructure.Persistence;
+using AlTamam.Domain.Policies;
 using Microsoft.Data.Sqlite;
 
 namespace AlTamam.Application.Bridge;
