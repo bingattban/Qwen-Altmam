@@ -24,12 +24,23 @@ public sealed class PreviewTokenRetentionTests
             string unused = new('a', 64);
             string usedByAnyOtherTable = new('b', 64);
             string consumedUnused = new('c', 64);
+            string referencedByAnotherToken = new('e', 64);
+            string newerPreview = new('f', 64);
             string recentlyExpired = new('d', 64);
             using (var c = db.CreateOpenConnection())
             {
                 Insert(c, unused, "2026-09-01T00:00:00.0000000+00:00", "2026-09-01T00:15:00.0000000+00:00", 0);
                 Insert(c, usedByAnyOtherTable, "2026-08-01T00:00:00.0000000+00:00", "2026-08-01T00:15:00.0000000+00:00", 0);
                 Insert(c, consumedUnused, "2026-09-01T00:00:00.0000000+00:00", "2026-09-01T00:15:00.0000000+00:00", 1);
+                Insert(c, referencedByAnotherToken, "2026-09-01T00:00:00.0000000+00:00", "2026-09-01T00:15:00.0000000+00:00", 0);
+                Insert(c, newerPreview, "2026-10-25T00:00:00.0000000+00:00", "2026-10-25T00:15:00.0000000+00:00", 0);
+                using (var nested = c.CreateCommand())
+                {
+                    nested.CommandText = "UPDATE PreviewTokens SET PayloadCanonicalJson=$json WHERE Token=$token;";
+                    nested.Parameters.AddWithValue("$json", "{" + referencedByAnotherToken + "}");
+                    nested.Parameters.AddWithValue("$token", newerPreview);
+                    nested.ExecuteNonQuery();
+                }
                 Insert(c, recentlyExpired, "2026-10-25T00:00:00.0000000+00:00", "2026-10-25T00:15:00.0000000+00:00", 0);
                 using var evidence = c.CreateCommand();
                 evidence.CommandText = """
@@ -51,7 +62,7 @@ public sealed class PreviewTokenRetentionTests
                 using var reader = read.ExecuteReader();
                 var retained = new List<string>();
                 while (reader.Read()) retained.Add(reader.GetString(0));
-                Assert.Equal(new[] { usedByAnyOtherTable, recentlyExpired }, retained);
+                Assert.Equal(new[] { usedByAnyOtherTable, recentlyExpired, referencedByAnotherToken, newerPreview }.OrderBy(x => x, StringComparer.Ordinal).ToArray(), retained);
             }
         }
         finally { SyntheticFixtures.DeleteTempDatabase(path); }
