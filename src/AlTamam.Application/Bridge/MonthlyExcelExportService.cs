@@ -63,7 +63,27 @@ public sealed class MonthlyExcelExportService
         });
     }
 
-    public async Task<BridgeResponse> ExportAsync(JsonObject? input, CancellationToken ct)
+    public Task<BridgeResponse> ExportAsync(JsonObject? input,CancellationToken ct)
+        => ExportCoreAsync(input,null,ct);
+
+    // Internal server-only naming: a caller cannot supply a filesystem path or
+    // suppress the Arabic operation name, and every export uses one safe folder.
+    internal Task<BridgeResponse> ExportNamedAsync(JsonObject? input,
+        string fileName,CancellationToken ct)
+    {
+        if(string.IsNullOrWhiteSpace(fileName)||
+           Path.GetFileName(fileName)!=fileName||
+           !fileName.StartsWith("التمام الشهري_",StringComparison.Ordinal)||
+           !fileName.EndsWith(".xlsx",StringComparison.OrdinalIgnoreCase)||
+           fileName.Length>170||fileName.Any(char.IsControl)||
+           fileName.IndexOfAny(Path.GetInvalidFileNameChars())>=0)
+            return Task.FromResult(BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "اسم الملف المقترح غير آمن."));
+        return ExportCoreAsync(input,fileName,ct);
+    }
+
+    private async Task<BridgeResponse> ExportCoreAsync(JsonObject? input,
+        string? proposedFileName,CancellationToken ct)
     {
         var preview = await PreviewAsync(input, ct).ConfigureAwait(false);
         if (!preview.Success) return preview;
@@ -81,7 +101,8 @@ public sealed class MonthlyExcelExportService
         if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
             return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
                 "مجلد النسخ والتصدير غير متاح؛ غيّره من الإعدادات.");
-        string basename = $"التمام الشهري_{year:D4}-{month:D2}_تصدير-{DateTime.Now:yyyy-MM-dd}_{Guid.NewGuid():N}.xlsx";
+        string basename = proposedFileName ??
+            $"التمام الشهري_{year:D4}-{month:D2}_تصدير-{DateTime.Now:yyyy-MM-dd}_{Guid.NewGuid():N}.xlsx";
         string destination = Path.Combine(directory, basename);
         string partial = destination + ".part";
         try
