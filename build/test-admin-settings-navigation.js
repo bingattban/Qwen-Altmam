@@ -64,11 +64,16 @@ const bridge = {
         ?{requiresResolution:true,previewToken:"T".repeat(64),
           candidates:[{personId:"TST-ARCHIVED-P1",name:"شخص تجريبي قديم",
             serviceNumberA:"4141",exitDate:"2026-10-12",exitType:"نقل خارجي",numberMatch:true,nameMatch:false}]}
-        :{requiresResolution:true,previewToken:"U".repeat(64),
-          candidates:[{personId:"TST-ARCHIVED-P2",name:"شخص جديد مكرر",
-            serviceNumberA:"5151",exitDate:"2026-10-12",exitType:"فصل",numberMatch:false,nameMatch:true}]},
+        :body.serviceNumberA==="5151"
+         ?{requiresResolution:true,previewToken:"S".repeat(64),
+           candidates:[{personId:"TST-ARCHIVED-SEP",name:"مفصول سابق",
+             serviceNumberA:"5151",exitDate:"2026-10-12",exitType:"فصل",
+             organizationalStatus:3,numberMatch:true,nameMatch:false}]}
+         :{requiresResolution:true,previewToken:"U".repeat(64),
+           candidates:[{personId:"TST-ARCHIVED-P2",name:"شخص جديد مكرر",
+             serviceNumberA:"5151",exitDate:"2026-10-12",exitType:"فصل",numberMatch:false,nameMatch:true}]},
       CommitArchivedReturn:{returned:true,personId:"TST-ARCHIVED-P1"},
-      CreatePerson:{personId:"PRN-NEW-DIFFERENT"},
+      CreatePerson:{personId:"PRN-NEW-DIFFERENT",separatedNumberReassigned:true},
       SearchPersons: {items:[{personId:"TST-CLOSED-P1",displayName:"اختبار",serviceNumberA:"C-1"}]},
       SetClosedDayCorrectionPolicy: {enabled:true},
       PreviewClosedDayCorrection: {previewToken:"T".repeat(64),requiresExplicitConfirmation:true,
@@ -226,6 +231,21 @@ async function run() {
   assert.ok(calls.some(x=>x.name==="CreatePerson"&&x.body.identityDecision==="different"&&
     x.body.identityResolutionToken==="U".repeat(64)),
     "independent identity requires the token-bound archived-name resolution");
+
+  inputs[0].value="فرد جديد مستقل";inputs[1].value="5151";
+  location.value="SITE-RETURN";
+  await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
+  const replaceButton=buttonNamed("استبدال اسم المفصول بالاسم الجديد وتصفير سجل الرقم الجديد");
+  assert.ok(replaceButton,"separated matching number opens explicit replacement choice");
+  assert.ok(visible().some(x=>x.textContent.includes("مفصول سابق")),
+    "old separated person's name is shown before confirmation");
+  assert.ok(!calls.some(x=>x.name==="CreatePerson"&&x.body.identityDecision==="replaceSeparated"),
+    "replacement must never occur when only the preview is displayed");
+  await replaceButton.handlers.click();
+  assert.ok(calls.some(x=>x.name==="CreatePerson"&&x.body.identityDecision==="replaceSeparated"&&
+    x.body.archivedPersonId==="TST-ARCHIVED-SEP"&&
+    x.body.identityResolutionToken==="S".repeat(64)),
+    "confirmed replacement creates independent blank ledger with archive-bound token");
 
   await controller.renderSettings(admin,()=>{});
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
