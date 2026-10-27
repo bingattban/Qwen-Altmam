@@ -7,6 +7,7 @@
     monthPage: 1, monthTerm: "", chosenYear: null, chosenMonth: null, archivePeriods: [] };
   const ar = new Intl.DateTimeFormat("ar", { month: "long" });
   const weekday = new Intl.DateTimeFormat("ar", { weekday: "short" });
+  const DAILY_PAGE_SIZE=10;
   const nav = window.AltamamNavigation;
   const view = () => document.getElementById("appViewport");
   const bridge = () => window.AltamamBridge;
@@ -268,7 +269,7 @@
     const controls=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
     const counters=el("div","functional-counters");
-    const tableHost=el("section","card");
+    const tableHost=el("section","card daily-roster-panel");
     append(container,controls,feedback,counters,tableHost);
     const epoch=Symbol("dashboard-request"); STATE.dashboardEpoch=epoch;
     try {
@@ -292,7 +293,7 @@
       const [countsResponse,rosterResponse]=await Promise.all([
         bridge().invoke("GetDashboardSummary",{businessDate:STATE.date,siteId:STATE.siteId}),
         bridge().invoke("QueryDailyRoster",{businessDate:STATE.date,siteId:STATE.siteId,
-          statusId:STATE.statusId,term:STATE.dayTerm,page:STATE.dayPage,pageSize:50})
+          statusId:STATE.statusId,term:STATE.dayTerm,page:STATE.dayPage,pageSize:DAILY_PAGE_SIZE})
       ]);
       if(STATE.dashboardEpoch!==epoch)return;
       const counts=parseData(countsResponse), rows=parseData(rosterResponse);
@@ -349,7 +350,7 @@
       tableHost.replaceChildren(tb.wrap);
       (rows.items||[]).forEach((person,i)=>{
         const tr=el("tr");
-        const data=[(STATE.dayPage-1)*50+i+1, person.serviceNumberA,
+        const data=[(STATE.dayPage-1)*DAILY_PAGE_SIZE+i+1, person.serviceNumberA,
           person.name,person.siteName,person.statusName];
         data.forEach((v,j)=> {
           const td=el("td","",v);
@@ -363,7 +364,7 @@
         const tr=el("tr"),td=el("td","","لا توجد بيانات مطابقة للفلاتر المحددة.");
         td.colSpan=5;tr.appendChild(td);tb.body.appendChild(tr);
       }
-      pager(tableHost,STATE.dayPage,rows.total||0,50,p=>{STATE.dayPage=p;renderDashboard();});
+      pager(tableHost,STATE.dayPage,rows.total||0,DAILY_PAGE_SIZE,p=>{STATE.dayPage=p;renderDashboard();});
     } catch(e) { if(STATE.dashboardEpoch===epoch)showError(feedback,e); }
   }
 
