@@ -15,7 +15,8 @@ class Node {
  get classList(){return {add:x=>this.className+=" "+x};}
 }
 const root=new Node("div"),calls=[],commits=[],timers=[];
-let confirmDecision=false,reasonDialogCalls=0,confirmationDialogCalls=0;
+let confirmDecision=false,reasonDialogCalls=0;
+const previews=[];
 const data={
  QueryPersons:{items:[{personId:"PERSON-1",displayName:"فرد من الكشف",serviceNumberA:"999",
     siteName:"موقع مختبر",active:true}],total:1,hasNext:false},
@@ -37,7 +38,7 @@ const api={invoke:async(name,payload)=>{
 }};
 const context={window:{AltamamBridge:api,AltamamDialog:{
  reason:async()=>{reasonDialogCalls++;return "سبب فصل مسجل";},
- confirm:async()=>{confirmationDialogCalls++;return confirmDecision;}
+ detailsReview:async(details,options)=>{previews.push({details,options});return confirmDecision;}
 }},document:{createElement:tag=>new Node(tag)},
  setInterval:(fn)=>{timers.push(fn);return timers.length;},clearInterval:()=>{},
  Intl,Date,console,confirm:()=>confirmDecision};
@@ -55,25 +56,20 @@ async function run(){
    "reason must be collected in a centered popup, not an inline textarea");
  await byText("تحديد سبب الفصل والمعاينة").handlers.click();
  assert.equal(reasonDialogCalls,1,"separation asks for reason in modal");
- await tick();
- const save=byText("تأكيد الفصل");
- assert.ok(save);
- assert.equal(save.disabled,true,"five-second countdown is mandatory");
- assert.equal(commits.length,0,"preview must never write");
- for(let i=0;i<5;i++)timers[0]();
- assert.equal(save.disabled,false);
- await save.handlers.click();
- assert.equal(commits.length,0,"declining confirmation must never write");
+ assert.equal(commits.length,0,"declining a preview must not commit");
+ assert.equal(previews.length,1,"the entire separation preview is modal");
+ assert.ok(previews[0].details.rows.some(pair=>pair[0]==="سبب الفصل"));
+ assert.ok(previews[0].options.delaySeconds>=5,"modal enforces five-second safety gate");
  confirmDecision=true;
- await save.handlers.click();
- assert.equal(commits.length,1);
- assert.equal(confirmationDialogCalls,2,"both final approval attempts use modal");
+ await byText("تحديد سبب الفصل والمعاينة").handlers.click();
+ assert.equal(commits.length,1,"explicitly accepting the verified modal commits once");
+ assert.equal(previews.length,2);
  assert.equal(commits[0].previewToken,"ONLY_SERVER_TOKEN");
  const archive=new Node("div");
  await ui.render(archive,"separatedArchive");
  assert.ok(archive.all().some(x=>x.textContent.includes("فرد مفصول")));
  assert.ok(calls.includes("QuerySeparationArchive"));
  assert.ok(calls.includes("CommitSeparation"));
- console.log("SEPARATION UI PASS: reason, five-second gate, one-use commit payload, searchable archive");
+ console.log("SEPARATION UI PASS: reason, timed modal preview, cancel gate, one-use commit, archive");
 }
 run().catch(err=>{console.error(err);process.exitCode=1;});

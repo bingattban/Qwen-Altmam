@@ -54,18 +54,17 @@ async function run(){
  assert.ok(cb,"active source person is selectable");
  cb.checked=true;cb.handlers.change();selects[1].value="SITE-DEST";
  await find("button","معاينة النقل والتأكيد").handlers.click();
- assert.ok(find("button","تأكيد النقل النهائي"),"preview visible before mutation");
- assert.equal(committed.length,0,"no commit on preview");
- await find("button","تأكيد النقل النهائي").handlers.click();
- assert.equal(committed.length,0,"declined confirmation cannot move person");
- assert.equal(modalReviews.length,1,"one full transfer review must precede any mutation");
+ assert.equal(committed.length,0,"declining modal preview cannot move person");
+ assert.equal(modalReviews.length,1,"the first preview opens a centered modal directly");
  assert.equal(modalReviews[0].businessDate,"2026-10-25");
  assert.equal(modalReviews[0].persons[0].sourceSiteName,"الموقع الأول");
  assert.equal(modalReviews[0].persons[0].serviceNumberA,"001");
+ assert.ok(!find("button","تأكيد النقل النهائي"),
+   "no duplicate inline preview or confirmation screen");
  allow=true;
- await find("button","تأكيد النقل النهائي").handlers.click();
+ await find("button","معاينة النقل والتأكيد").handlers.click();
  assert.equal(committed.length,1);
- assert.equal(modalReviews.length,2,"final approval must pass through transfer dialog");
+ assert.equal(modalReviews.length,2,"final approval happens inside transfer modal");
  assert.equal(committed[0].previewToken,"SERVER-ONLY-TOKEN",
    "commit must send only the validated server preview token");
  const archiveRoot=new Element("div");

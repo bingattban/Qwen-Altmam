@@ -17,6 +17,7 @@
     if(!current)return;
     const previous=current;current=null;
     backdrop.classList.remove("open");
+    if(previous.timer && typeof window.clearInterval==="function")window.clearInterval(previous.timer);
     body.replaceChildren();
     document.removeEventListener("keydown",previous.key);
     previous.resolve(result);
@@ -152,6 +153,32 @@
             :"تظهر حركة النقل اليوم في الموقعين، ويبدأ التحضير العادي في الموقع الجديد غداً."));
         body.appendChild(detail);
       }
+      if(options.details){
+        const detail=make("section","attendance-review");
+        const properties=make("dl","app-preview-properties");
+        for(const [label,value] of options.details.rows){
+          const pair=make("div","app-preview-property");
+          pair.append(make("dt","",label),make("dd","",value==null?"—":value));
+          properties.appendChild(pair);
+        }
+        detail.appendChild(properties);
+        if(options.details.columns?.length && options.details.items?.length){
+          const scrolling=make("div","attendance-review-scroll");
+          const grid=make("table","data-table attendance-review-table");
+          const head=make("thead"),heading=make("tr");
+          for(const colTitle of options.details.columns)
+            heading.appendChild(make("th","",colTitle));
+          head.appendChild(heading);
+          const tbody=make("tbody");
+          for(const line of options.details.items.slice(0,100)){
+            const tr=make("tr");
+            for(const value of line)tr.appendChild(make("td","",value==null?"—":value));
+            tbody.appendChild(tr);
+          }
+          grid.append(head,tbody);scrolling.appendChild(grid);detail.appendChild(scrolling);
+        }
+        body.appendChild(detail);
+      }
       let field=null,feedback=null;
       if(options.input){
         const wrapper=make("label","app-dialog-field");
@@ -193,6 +220,19 @@
         }else close(true);
       });
       actions.append(cancel,accept);body.appendChild(actions);
+      let timer=null;
+      if(Number(options.delaySeconds)>0 && typeof window.setInterval==="function"){
+        let remaining=Math.max(1,Math.ceil(options.delaySeconds));
+        const countdown=make("p","app-dialog-copy","مهلة التأكيد: "+remaining+" ثوانٍ");
+        body.insertBefore(countdown,actions);
+        accept.disabled=true;
+        timer=window.setInterval(()=>{
+          remaining--;
+          countdown.textContent=remaining>0?"مهلة التأكيد: "+remaining+" ثوانٍ":
+            "انتهت المهلة؛ يمكنك التأكيد الآن.";
+          if(remaining<=0){accept.disabled=false;window.clearInterval(timer);timer=null;}
+        },1000);
+      }
       const key=ev=>{
         if(ev.key==="Escape"){ev.preventDefault();close(null);}
         if(ev.key==="Enter" && (!field || !options.input.multiline)){
@@ -206,7 +246,7 @@
           else if(!ev.shiftKey&&document.activeElement===last){ev.preventDefault();first?.focus();}
         }
       };
-      current={resolve,focus:previous,key};
+      current={resolve,focus:previous,key,timer};
       document.addEventListener("keydown",key);
       backdrop.classList.add("open");
       (field||accept).focus();
@@ -231,6 +271,15 @@
       confirmLabel:opts.confirmLabel||"معاينة العملية",input:{
         label:"سبب العملية",multiline:true,minLength:opts.minLength||5,maxLength:400
       }}),
+    detailsReview:(details,opts={})=>{
+      if(!details||!Array.isArray(details.rows)||!details.rows.length||
+         !details.rows.every(pair=>Array.isArray(pair)&&pair.length===2))
+        return Promise.resolve(false);
+      return show({title:opts.title||"معاينة العملية",message:opts.message||"",
+        confirmLabel:opts.confirmLabel||"تأكيد",danger:opts.danger===true,
+        delaySeconds:opts.delaySeconds||0,details
+      }).then(result=>result===true);
+    },
     transferReview:(review,opts={})=>{
       if(!review||!Array.isArray(review.persons)||!review.persons.length||
          review.persons.length>100||typeof review.businessDate!=="string"||

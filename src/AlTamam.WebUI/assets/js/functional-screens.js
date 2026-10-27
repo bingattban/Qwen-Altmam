@@ -31,7 +31,7 @@
     const inp = el("input", "form-input");
     inp.type = type;
     inp.required = !!required;
-    inp.autocomplete = type === "password" ? "current-password" : "username";
+    inp.autocomplete = type === "password" ? "current-password" : type === "search" ? "off" : "on";
     append(wrapper, text, inp);
     return { wrapper, input: inp };
   }
@@ -120,6 +120,7 @@
     container.replaceChildren(header("تسجيل الدخول إلى التمام اليومي"));
     const form=el("form","card auth-form");
     const name=field("text","اسم المستخدم",true);
+    name.input.autocomplete="username";
     const pass=field("password","كلمة المرور",true);
     // Existing users may have historical credentials; only NEW founders must
     // satisfy the current strong-password policy during initialization.
@@ -231,8 +232,12 @@
       dashboardClockTimer=window.setInterval(tick,1000);
   }
 
+  // Keep this dialog mounted across dashboard invalidations and redraws.
+  let autoPreparedOverlay=null;
+  function dismissAutoPrepared(){if(autoPreparedOverlay){autoPreparedOverlay.remove?.();autoPreparedOverlay=null;}}
   // Automatic register supports the same audited preview/commit pipeline as daily attendance.
   function openAutoPreparedList(){
+    dismissAutoPrepared();
     const date=STATE.date,site=STATE.siteId;
     const overlay=el("div","auto-attendance-overlay");
     overlay.setAttribute("role","dialog");
@@ -254,36 +259,43 @@
     const footer=el("div","functional-pager");
     append(panel,heading,description,actions,content,footer);
     overlay.appendChild(panel);
-    view().appendChild(overlay);
-    let disposed=false,page=1,term="",generation=0;
-    async function editAutoStatus(person){
-      const statuses=parseData(await bridge().invoke("GetActiveAttendanceStatuses",{}));
-      const choices=Array.isArray(statuses)?statuses:statuses?.items||[];
-      const promptText="اختر الحالة الجديدة للفرد "+person.name+" (ع: "+person.serviceNumberA+
-        "):\n"+choices.map((x,i)=>(i+1)+" - "+x.displayName).join("\n");
-      const picked=await window.AltamamDialog?.prompt(promptText,"",{title:"تعديل حالة المحضّر تلقائياً"});
-      if(!picked)return;
-      const index=Number(picked)-1;
-      if(!Number.isInteger(index)||index<0||index>=choices.length){
-        await window.AltamamDialog?.alert("رقم الحالة غير صحيح.");return;
+    (document.body?.appendChild?document.body:view()).appendChild(overlay);
+    autoPreparedOverlay=overlay;
+    let disposed=false,page=1,term="",generation=0,choices=[];
+    async function editAutoStatus(person,statusId){
+      const chosen=choices.find(item=>item.statusId===statusId);
+      if(!chosen){showError(content,new Error("اختر الحالة الجديدة من القائمة المنسدلة."));return;}
+      if(chosen.statusId===person.statusId){
+        showError(content,new Error("اختر حالة مختلفة عن الحالة المعتمدة حالياً."));return;
       }
       try{
-        const payload={businessDate:date,personIds:[person.personId],statusId:choices[index].statusId,mode:"revise"};
-        const preview=await bridge().invoke("PreviewAttendanceChange",payload);
-        const data=parseData(preview);
-        if(!await window.AltamamDialog?.confirm(
-          "اعتماد تعديل حالة "+person.name+" إلى "+choices[index].displayName+"؟",
-          {title:"تأكيد تعديل التحضير"}))return;
-        await bridge().invoke("ReviseTodayAttendance",{...payload,previewToken:data?.previewToken,
-          operationId:window.crypto?.randomUUID?.()||String(Date.now())+"-auto-correction"});
-        await load();
-        void renderDashboard();
-      }catch(error){showError(content,error);}
+        const payload={businessDate:date,personIds:[person.personId],
+          statusId:chosen.statusId,mode:"revise"};
+        const response=await bridge().invoke("PreviewAttendanceChange",payload);
+        const preview=parseData(response);
+        if(disposed||!preview?.previewToken||!Array.isArray(preview.persons))
+          throw Error("لم تصل معاينة موثّقة لتغيير الحالة.");
+        const review=window.AltamamDialog?.attendanceReview;
+        if(typeof review!=="function")throw Error("نافذة المعاينة غير متاحة؛ لم يُحفظ أي تعديل.");
+        const accepted=await review(preview,{title:"معاينة تغيير حالة المحضّر تلقائياً",
+          message:"راجع الاسم والرقم (ع) والحالة السابقة والجديدة قبل الاعتماد.",
+          confirmLabel:"تأكيد تغيير الحالة"});
+        if(!accepted||disposed)return;
+        const saved=parseData(await bridge().invoke("ReviseTodayAttendance",{
+          previewToken:preview.previewToken,
+          operationId:window.crypto?.randomUUID?.()||
+            "AUTO-REV-"+Date.now()+"-"+Math.random().toString(36).slice(2)
+        }));
+        if(!saved||!Number.isInteger(saved.count)||saved.count<1)
+          throw Error("لم يؤكد الخادم نجاح تعديل الحالة.");
+        if(!disposed)await load(); // Keep the auto-prepared dialog on screen.
+      }catch(error){if(!disposed)showError(content,error);}
     }
     function close(){
       disposed=true;generation++;
       overlay.remove?.();
       if(!overlay.remove&&overlay.parentNode)overlay.parentNode.removeChild(overlay);
+      if(autoPreparedOverlay===overlay)autoPreparedOverlay=null;
     }
     overlay.addEventListener("click",event=>{if(event.target===overlay)close();});
     search.input.addEventListener("keydown",event=>{
@@ -304,14 +316,26 @@
         if(!result||!Array.isArray(result.items))
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
         const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
-          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"},{label:"الإجراء"}]);
+          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"},
+          {label:"الحالة الجديدة"},{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
             person.name,person.siteName,person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
-          const action=el("td");action.appendChild(button("تعديل الحالة",()=>void editAutoStatus(person)));
+          const selectCell=el("td"),statusSelect=el("select","form-select auto-attendance-status-select");
+          statusSelect.setAttribute("aria-label","الحالة الجديدة لـ "+person.name);
+          const placeholder=el("option","","اختر حالة");placeholder.value="";
+          statusSelect.appendChild(placeholder);
+          for(const item of choices){
+            if(item.statusId===person.statusId)continue;
+            const opt=el("option","",item.displayName);opt.value=item.statusId;
+            statusSelect.appendChild(opt);
+          }
+          selectCell.appendChild(statusSelect);row.appendChild(selectCell);
+          const action=el("td");action.appendChild(button("معاينة التعديل",
+            ()=>void editAutoStatus(person,statusSelect.value)));
           row.appendChild(action);
           tb.body.appendChild(row);
         });
@@ -327,7 +351,13 @@
         if(!disposed&&current===generation)showError(content,error);
       }
     }
-    void load();
+    void bridge().invoke("GetActiveAttendanceStatuses",{}).then(reply=>{
+      if(disposed)return;
+      const data=parseData(reply);
+      choices=Array.isArray(data)?data:(data?.items||[]);
+      if(!choices.length)throw Error("لا توجد حالات تحضير فعّالة للاختيار.");
+      void load();
+    }).catch(error=>{if(!disposed)showError(content,error);});
   }
 
   async function renderDashboard() {
@@ -376,25 +406,23 @@
         if(typeof due==="string"&&/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(due))
           configuredDueTime=due;
       }).catch(()=>{});
-      // Keep the completion ratio read-only; the count chips still filter the roster.
-      const percent=Number.isFinite(Number(counts.completionPercentage))?
-        Math.max(0,Math.min(100,Math.round(Number(counts.completionPercentage)))):0;
-      const completion=el("section","counter-card dashboard-completion");
-      completion.setAttribute("aria-label","نسبة اكتمال التحضير "+percent+" بالمئة");
-      append(completion,el("span","counter-label","اكتمال التحضير"),
-        el("span","counter-value",percent+"%"));
-      counters.appendChild(completion);
-      // The counters ARE the roster filters. No duplicate status chips below them.
-      const stats=[{name:"إجمالي القوة النشطة",count:counts.totalForce,statusId:""},
-        {name:"غير المحضرين",count:counts.unprepared,statusId:"__UNPREPARED__"},
-        {name:"المحضّرون تلقائياً",count:counts.automaticallyPrepared||0,statusId:"__AUTO_PREPARED__"},
-         ...(Number(counts.internalTransferDay)>0
-           ? [{name:"نُقلوا اليوم",count:counts.internalTransferDay,
-               statusId:"__TRANSFER_DAY__",color:"#D8B4FE"}]
-           : [])].concat(
-          (counts.statusCounts||[]).map(st=>({
-            name:st.name,count:st.count,statusId:st.statusId,color:st.color
-          })));
+      // Order is operational: total force, present, then every configured status.
+      // Do not show completion/unprepared counters in the primary dashboard.
+      const statusCounts=Array.isArray(counts.statusCounts)?counts.statusCounts:[];
+      const present=statusCounts.find(st=>/^(موجود|الموجود|حاضر|الحاضر)$/.test(
+        String(st.name||"").trim()));
+      const stats=[{name:"إجمالي القوة",count:counts.totalForce,statusId:""}];
+      if(present)stats.push({name:"الموجود",count:present.count,
+        statusId:present.statusId,color:present.color});
+      stats.push(...statusCounts.filter(st=>st.statusId!==present?.statusId)
+        .map(st=>({name:st.name,count:st.count,statusId:st.statusId,color:st.color})));
+      // The automatic-attendance register is a workflow rather than a saved
+      // attendance status and remains accessible after the configured statuses.
+      stats.push({name:"المحضّرون تلقائياً",count:counts.automaticallyPrepared||0,
+        statusId:"__AUTO_PREPARED__"});
+      if(Number(counts.internalTransferDay)>0)
+        stats.push({name:"نُقلوا اليوم",count:counts.internalTransferDay,
+          statusId:"__TRANSFER_DAY__",color:"#D8B4FE"});
       for(const item of stats) {
         const isActive=STATE.statusId===item.statusId;
         const card=button("",()=>{
@@ -752,6 +780,7 @@
   }
 
   function render(section) {
+    if(section!=="dashboard")dismissAutoPrepared();
     if(section!=="dashboard")stopDashboardClock();
     if (!STATE.session) { loginGate();return; }
     if (!sections.has(section)) section="dashboard";
@@ -801,6 +830,7 @@
   }
 
   async function logout(){
+    dismissAutoPrepared();
     try { await bridge().invoke("Logout",{}); }
     catch(e) { /* Do not continue using a possibly expired session. */ }
     finally {
@@ -839,6 +869,6 @@
       // Administration refreshes its own nested screen after a write; keep its context.
      if(sections.has(section)&&section!=="admin"&&STATE.session)render(section);
     }
-    if(name==="SessionEnded"){window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);loginGate();}
+    if(name==="SessionEnded"){dismissAutoPrepared();window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);loginGate();}
   });
 })();

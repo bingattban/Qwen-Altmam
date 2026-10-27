@@ -1390,3 +1390,52 @@ body{min-width:0}
 /* Plain count by the editing screen title (no extra rows or table changes). */
 .admin-force-inline-count{margin-inline-start:8px;font-size:.95em;font-weight:800;
   color:inherit;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* Uniform offline search fields without changing the meaning of screen filters. */
+:is(#appViewport,.auto-attendance-overlay,#appModalBody) input.app-smart-search{
+  width:100%;min-width:0;min-height:42px;max-width:100%;
+  padding:9px 13px;border:1px solid var(--border-color);border-radius:9px;
+  background:var(--bg-surface);color:var(--text-main);font:inherit;
+  font-size:15px;line-height:1.5;outline-offset:2px
+}
+:is(#appViewport,.auto-attendance-overlay,#appModalBody) input.app-smart-search:focus{
+  border-color:var(--accent-teal);outline:2px solid color-mix(in srgb,var(--accent-teal) 18%,transparent)
+}
+:is(.functional-toolbar,.admin-card,.person-report-page) input.app-smart-search{
+  flex:1 1 220px
+}
+.auto-attendance-dialog .auto-attendance-status-select{
+  width:100%;min-width:140px;max-width:100%;min-height:39px;
+  padding:5px 8px;background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--border-color);border-radius:7px;font:inherit
+}
+.auto-attendance-dialog .functional-table{min-width:850px}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(6){width:180px}
+.auto-attendance-dialog .functional-table :is(th,td):last-child{width:150px}
+/* The verified confirmation must appear ABOVE the auto-prepared register. */
+body:has(.auto-attendance-overlay) #appModalBackdrop.open{z-index:1400}
+/* Daily administrative attendance: legible headers without enlarging data rows. */
+.admin-attendance-host .daily-roster-panel .functional-table thead th{
+  position:sticky;top:0;z-index:7;
+  font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;
+  font-size:16px;font-weight:900;line-height:1.55;
+  text-align:center;vertical-align:middle;
+  padding:10px 12px;white-space:normal;overflow:visible;text-overflow:clip;
+  background:var(--primary-navy);color:#fff;
+  border-bottom:3px solid var(--accent-teal);
+  border-inline-start:1px solid rgba(255,255,255,.24)
+}
+.admin-attendance-host .daily-roster-panel .functional-table thead th:nth-child(3){
+  text-align:right;padding-inline:16px
+}
+.admin-attendance-host .daily-roster-panel .functional-table thead th:nth-child(5){
+  min-width:155px
+}
+
+/* Common detail previews: concise facts and bounded, scrollable table content. */
+.app-preview-properties{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;min-width:0}
+.app-preview-property{display:flex;flex-direction:column;gap:4px;min-width:0;padding:8px 11px;
+  border:1px solid var(--border-color);border-radius:8px;background:var(--bg-subtle)}
+.app-preview-property dt{font-size:12px;font-weight:700;color:var(--text-muted)}
+.app-preview-property dd{font-size:14px;font-weight:800;color:var(--text-main);overflow-wrap:anywhere;margin:0}
+@media(max-width:620px){.app-preview-properties{grid-template-columns:minmax(0,1fr)}}

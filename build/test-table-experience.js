@@ -23,6 +23,9 @@ class E{
     item.parentElement=this;this.children.splice(i,0,item);
   }
   setAttribute(key,v){this[key]=v;}
+  getAttribute(key){return this[key]||null;}
+  replaceChildren(...items){this.children=[];this.append(...items);}
+  get isConnected(){return true;}
   addEventListener(key,fn){this.handlers[key]=fn;}
   getBoundingClientRect(){return {top:210,left:0,right:1000,height:500};}
   all(){return [this,...this.children.flatMap(x=>x.all())];}
@@ -51,7 +54,8 @@ const document={
   readyState:"loading",
   createElement:tag=>new E(tag),
   querySelectorAll:selector=>selector==="#appViewport table, #appModalBody table"
-    ?[...main.all(),...modal.all()].filter(x=>x.tag==="table"):[],
+    ?[...main.all(),...modal.all()].filter(x=>x.tag==="table"):
+    selector==="input"?[...main.all(),...modal.all()].filter(x=>x.tag==="input"):[],
   getElementById:id=>id==="appViewport"?main:id==="appModalBody"?modal:null,
   addEventListener:()=>{}
 };
@@ -114,3 +118,36 @@ const html=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/index.html"),"utf8");
 assert.match(html,/assets\/js\/table-experience\.js/);
 console.log("ALL TABLE EXPERIENCE PASS: shared styles, per-table search, Arabic digit normalization, modal tables, no duplicate server search, dynamic height and pager");
+
+async function verifySharedInputCompletion(){
+  let lookups=0;
+  window.AltamamBridge={invoke:async(operation,payload)=>{
+    assert.equal(operation,"QueryPersons");
+    assert.equal(payload.term,"محمد");
+    assert.equal(payload.pageSize,16);
+    lookups++;
+    return{data:{items:[{displayName:"محمد سالم",serviceNumberA:"12345"}]}};
+  }};
+  const person=new E("input");person.type="search";person.placeholder="بحث بالاسم أو الرقم (ع)";
+  main.append(person);
+  const general=new E("input");general.type="text";main.append(general);
+  const secret=new E("input");secret.type="password";main.append(secret);
+  helper.scan();
+  assert.ok(person.className.includes("app-smart-search"));
+  assert.ok(person.list?.startsWith("person-suggestions-"));
+  assert.equal(general.autocomplete,"on","ordinary text fields retain safe native completion");
+  assert.notEqual(secret.autocomplete,"on","passwords never receive completion");
+  person.value="محمد";
+  person.handlers.input();
+  await new Promise(resolve=>setImmediate(resolve));
+  const datalist=main.all().find(x=>x.tag==="datalist"&&x.id===person.list);
+  assert.ok(datalist);
+  assert.ok(datalist.all().some(x=>x.tag==="option"&&x.value==="محمد سالم"));
+  assert.ok(datalist.all().some(x=>x.tag==="option"&&x.value==="12345"));
+  assert.equal(lookups,1,"one bounded backend lookup for the typed phrase");
+  const originalLists=main.all().filter(x=>x.tag==="datalist").length;
+  helper.scan();assert.equal(main.all().filter(x=>x.tag==="datalist").length,originalLists,
+    "rescan cannot duplicate name-suggestion lists");
+  console.log("SHARED AUTOCOMPLETE PASS: person names/numbers, ordinary inputs, password exclusion");
+}
+verifySharedInputCompletion().catch(error=>{console.error(error);process.exitCode=1;});

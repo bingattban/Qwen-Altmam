@@ -88,9 +88,79 @@
     updateAvailableHeight(table);
   }
   function scan(){
+    enhanceInputs();
     for(const table of document.querySelectorAll(tableSelector)){
       enhance(table);
       if(visited.has(table))updateAvailableHeight(table);
+    }
+  }
+
+  // Shared person-name completion for dynamically created search fields.
+  // Suggestions are hints only; existing per-screen server-side search remains authoritative.
+  const enhancedInputs=new WeakSet();
+  let suggestionSerial=0;
+  function personSearchInput(input){
+    if(input.closest?.(".table-local-search"))return false;
+    const description=[input.placeholder||"",input.getAttribute?.("aria-label")||"",
+      input.closest?.("label")?.textContent||""].join(" ");
+    return /بحث/.test(description) &&
+      /(اسم|فرد|الرقم|كشف القوة)/.test(description);
+  }
+  function attachNameSuggestions(input){
+    const parent=input.parentElement;
+    if(!parent||!window.AltamamBridge?.invoke)return;
+    const suggestions=document.createElement("datalist");
+    suggestions.id="person-suggestions-"+(++suggestionSerial);
+    input.setAttribute("list",suggestions.id);
+    input.classList.add("app-smart-search");
+    input.autocomplete="off";
+    parent.appendChild(suggestions);
+    let request=0,delay=null;
+    input.addEventListener("input",()=>{
+      const term=input.value.trim().slice(0,100),seq=++request;
+      if(delay!==null&&window.clearTimeout)window.clearTimeout(delay);
+      suggestions.replaceChildren();
+      if(term.length<2)return;
+      const run=async()=>{
+        try{
+          const context=input.closest?.(".card,.person-report-page")?.textContent||"";
+          const includeArchived=/أرشيف|التقرير/.test(context);
+          const response=await window.AltamamBridge.invoke("QueryPersons",{
+            term,page:1,pageSize:16,includeArchived
+          });
+          if(seq!==request||!input.isConnected||input.value.trim()!==term)return;
+          const seen=new Set();
+          for(const person of response?.data?.items||[]){
+            const name=String(person.displayName||person.name||"").trim();
+            const number=String(person.serviceNumberA||"").trim();
+            for(const value of [name,number]){
+              if(!value||seen.has(value))continue;
+              seen.add(value);
+              const option=document.createElement("option");
+              option.value=value;
+              option.label=name&&number?name+" — ع: "+number:value;
+              suggestions.appendChild(option);
+            }
+          }
+        }catch{
+          // QueryPersons permissions and connectivity never block normal typing.
+          if(seq===request)suggestions.replaceChildren();
+        }
+      };
+      delay=typeof window.setTimeout==="function"?window.setTimeout(run,180):null;
+      if(delay===null)void run();
+    });
+  }
+  function enhanceInputs(){
+    for(const input of document.querySelectorAll("input")){
+      if(enhancedInputs.has(input))continue;
+      enhancedInputs.add(input);
+      if(input.disabled||input.readOnly||input.type==="password"||
+         input.type==="hidden"||input.type==="file")continue;
+      if(personSearchInput(input))attachNameSuggestions(input);
+      else if(["text","search","email"].includes(input.type)&&
+        !input.autocomplete)
+        input.autocomplete="on";
     }
   }
   let scheduled=false;
@@ -103,7 +173,8 @@
     scan();
     if(typeof MutationObserver==="function"){
       const observer=new MutationObserver(schedule);
-      for(const id of ["appViewport","appModalBody"]){
+      if(document.body)observer.observe(document.body,{childList:true,subtree:true});
+      else for(const id of ["appViewport","appModalBody"]){
         const root=document.getElementById(id);
         if(root)observer.observe(root,{childList:true,subtree:true});
       }

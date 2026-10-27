@@ -24,6 +24,9 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
      return{data:{sessionNonce:"A".repeat(32),username:"tester",role:"Supervisor"}};
    if(action==="QuerySites")
      return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
+   if(action==="GetActiveAttendanceStatuses")
+     return{data:[{statusId:"STS-PRESENT",displayName:"موجود"},
+       {statusId:"STS-ABSENT",displayName:"غياب"}]};
    if(action==="GetDashboardSummary")
      return{data:{totalForce:3,unprepared:1,automaticallyPrepared:1,internalTransferDay:transferCount,completionPercentage:67,statusCounts:[
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
@@ -43,6 +46,12 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
      return{data:{items:visible.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
        total:selected.length,hasNext:payload.page*payload.pageSize<selected.length}};
    }
+   if(action==="PreviewAttendanceChange" && payload.mode==="revise")
+     return{data:{businessDate:payload.businessDate,previewToken:"R".repeat(64),
+       mode:"revise",statusName:"موجود",persons:[{personId:"P3",name:"P3",
+         serviceNumberA:"12345",siteName:"غير محدد",previousStatusName:"غياب",
+         proposedStatusName:"موجود"}]}};
+   if(action==="ReviseTodayAttendance")return{data:{count:1}};
    if(action==="PreviewAttendanceChange" && payload.mode==="carry")
      return {data:{mode:"carry",businessDate:payload.businessDate,previewToken:"a".repeat(64),
        persons:[{personId:"P1",name:"P1",serviceNumberA:"12345",siteName:"غير محدد",
@@ -55,7 +64,9 @@ const document={createElement:tag=>new El(tag),
  getElementById:id=>({appViewport:viewport,headerRoleBadge:badge,logoutAction:logout,...nav})[id]||null,
  querySelector:s=>s===".app-sidebar"?sidebar:null,
  addEventListener:(name,fn)=>{events[name]=fn;}};
-const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}}},
+const reviews=[];
+const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
+ AltamamDialog:{attendanceReview:async(data,opts)=>{reviews.push({data,opts});return true;}}},
  document,location:{hash:"#dashboard"},history:{replaceState:()=>{}},Date,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
  "../src/AlTamam.WebUI/assets/js/functional-screens.js"),"utf8"),context);
@@ -66,7 +77,14 @@ async function settle(){await tick();await tick();await tick();}
 async function main(){
  await events.DOMContentLoaded();await settle();
  assert.ok(counter("all"),"total-force counter must be interactive");
- assert.ok(counter("__UNPREPARED__"),"unprepared counter must be interactive");
+ assert.ok(!counter("__UNPREPARED__"),"unprepared counter must not appear");
+ assert.ok(!viewport.all().some(x=>x.textContent==="اكتمال التحضير"),
+   "completion card must be removed");
+ const cards=viewport.all().filter(x=>x.tag==="button"&&
+   x.className.includes("dashboard-filter-counter"));
+ assert.deepEqual(cards.map(x=>x.dataset.statusFilter),
+   ["all","STS-PRESENT","STS-ABSENT","__AUTO_PREPARED__"],
+   "order must be force, present, configured statuses then auto-prepared");
  assert.ok(counter("STS-PRESENT"),"saved attendance counter must be interactive");
  assert.ok(!counter("__TRANSFER_DAY__"),"zero transfers must hide the movement card");
  assert.ok(!viewport.all().some(x=>x.className.includes("functional-status-filters")),
@@ -87,11 +105,11 @@ async function main(){
  clear.handlers.click();await settle();
  assert.equal(lastRoster().payload.term,"");
  assert.equal(counter("all").attrs["aria-pressed"],"true");
- counter("__UNPREPARED__").handlers.click();await settle();
- assert.equal(lastRoster().payload.statusId,"__UNPREPARED__");
- assert.equal(counter("__UNPREPARED__").attrs["aria-pressed"],"true");
+ counter("STS-PRESENT").handlers.click();await settle();
+ assert.equal(lastRoster().payload.statusId,"STS-PRESENT");
+ assert.equal(counter("STS-PRESENT").attrs["aria-pressed"],"true");
  assert.equal(counter("all").attrs["aria-pressed"],"false");
- assert.ok(viewport.all().some(x=>x.textContent==="P1"));
+ assert.ok(viewport.all().some(x=>x.textContent==="P2"));
  assert.equal(lastRoster().payload.page,1);
  counter("STS-ABSENT").handlers.click();await settle();
  assert.equal(lastRoster().payload.statusId,"STS-ABSENT");
@@ -110,9 +128,7 @@ async function main(){
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance"].includes(x.action)).length,0);
  assert.ok(viewport.all().some(x=>x.className==="dashboard-eight-clock"),
    "08:00 clock absent. DOM classes: "+viewport.all().map(x=>x.className).filter(Boolean).join(", "));
- // The counter is now a read-only filter, never a manual carry-forward selector.
- counter("__UNPREPARED__").handlers.click();await settle();
- assert.equal(lastRoster().payload.statusId,"__UNPREPARED__");
+ // No automatic manual carry-forward is triggered by selecting status counters.
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance",
    "PreviewAttendanceChange"].includes(x.action)).length,0);
  assert.ok(counter("__AUTO_PREPARED__"),"automatic-attendance counter is always visible");
@@ -124,9 +140,17 @@ async function main(){
  assert.ok(readOnly.all().some(x=>x.textContent==="P3"));
  assert.ok(readOnly.all().some(x=>x.textContent==="غياب"));
  assert.ok(!readOnly.all().some(x=>x.tag==="input"&&x.type==="checkbox"),
-   "read-only auto register has no selection checkboxes");
- assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance",
-   "PreviewAttendanceChange"].includes(x.action)).length,0);
+   "automatic register allows targeted changes without selecting bulk checkboxes");
+ const dropdown=readOnly.all().find(x=>x.tag==="select");
+ assert.ok(dropdown,"each automatically prepared person needs a status dropdown");
+ dropdown.value="STS-PRESENT";
+ const edit=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="معاينة التعديل");
+ await edit.handlers.click();await settle();
+ assert.equal(reviews.length,1,"changes require a server-verified modal review");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,1,
+   "server-side revision is committed only following modal approval");
+ assert.ok(readOnly.all().some(x=>x.textContent==="P3"),
+   "auto-prepared register remains displayed following a successful revision");
  expandedRoster=true;
  counter("all").handlers.click();await settle();
  const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));
