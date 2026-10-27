@@ -43,6 +43,7 @@ public sealed class AuditOverlayService
     public async Task<BridgeResponse> QueryAuditLogAsync(
         JsonObject payload, CancellationToken ct, BridgePrincipal? principal = null)
     {
+        string term = ReadString(payload, "term");
         string actor = ReadString(payload, "actor");
         string target = ReadString(payload, "target");
         string operation = ReadString(payload, "operation");
@@ -63,6 +64,27 @@ public sealed class AuditOverlayService
 
         var where = new List<string>();
         var args = new List<(string Name, object Value)>();
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            // Search all matching audit entries BEFORE paging. Overlay edits
+            // never rewrite immutable AuditEvents, but are searchable as displayed.
+            where.Add("""
+                (e.ActorUsernameSnapshot LIKE $term ESCAPE '\'
+                 OR e.ActorRosterFullNameSnapshot LIKE $term ESCAPE '\'
+                 OR e.TargetDisplaySnapshot LIKE $term ESCAPE '\'
+                 OR e.TargetEntityId LIKE $term ESCAPE '\'
+                 OR e.OperationCode LIKE $term ESCAPE '\'
+                 OR e.OperationArabicName LIKE $term ESCAPE '\'
+                 OR e.DefaultArabicDescription LIKE $term ESCAPE '\'
+                 OR EXISTS(SELECT 1 FROM AuditLogPresentationEdits o
+                           WHERE o.AuditEventId = e.AuditEventId
+                             AND o.OverlayVersion =
+                                 (SELECT MAX(p.OverlayVersion) FROM AuditLogPresentationEdits p
+                                  WHERE p.AuditEventId = e.AuditEventId)
+                             AND o.CorrectedDescription LIKE $term ESCAPE '\'))
+                """);
+            args.Add(("$term", "%" + EscapeLike(NormalizeTerm(term)) + "%"));
+        }
         if (!string.IsNullOrWhiteSpace(actor))
         {
             where.Add("(e.ActorUsernameSnapshot LIKE $actor ESCAPE '\\' OR e.ActorRosterFullNameSnapshot LIKE $actor ESCAPE '\\')");
