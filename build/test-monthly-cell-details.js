@@ -124,9 +124,14 @@ async function main(){
     assert.ok(output.includes(text),"must display authoritative "+text);
   const details=viewport.all().find(x=>x.className.includes("monthly-cell-details"));
   assert.equal(details.hidden,false);
+  const dialog=viewport.all().find(x=>x.className==="record-details-overlay");
+  assert.ok(dialog,"details should appear in a modal overlay, not inside the grid");
+  assert.equal(dialog.hidden,false);
+  assert.equal(dialog.attrs["aria-modal"],"true");
   const close=viewport.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
   close.handlers.click();
   assert.equal(details.hidden,true,"close hides details without touching attendance");
+  assert.equal(dialog.hidden,true,"closing details dismisses the popup");
   // Browse the previous month without losing the fixed columns, footer, or
   // chronological day order. The archive may have a roster but no preparations.
   const previousMonth=viewport.all().find(x=>x.tag==="button"&&x.textContent==="الشهر السابق");
