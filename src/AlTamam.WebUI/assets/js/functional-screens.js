@@ -267,6 +267,49 @@
       if(event.key==="Escape"){event.preventDefault();close();}
     });
     closeButton.addEventListener("keydown",event=>{if(event.key==="Escape")close();});
+    async function editAutoPerson(person){
+      const editor=el("div","record-details-overlay auto-attendance-editor");
+      const form=el("section","card record-details-dialog");
+      editor.setAttribute("role","dialog");editor.setAttribute("aria-modal","true");
+      const select=el("select","form-select"),feedback=el("div","settings-feedback");
+      select.setAttribute("aria-label","الحالة الجديدة");
+      const label=el("label","form-field");
+      label.append(el("span","","الحالة الجديدة"),select);
+      const reason=field("text","سبب التعديل (اختياري)");
+      const close=()=>{editor.hidden=true;editor.remove?.();};
+      const save=button("معاينة ثم اعتماد التعديل",async()=>{
+        if(!select.value||select.value===person.statusId)
+          return showError(feedback,new Error("اختر حالة أخرى."));
+        save.disabled=true;
+        try{
+          const reply=await bridge().invoke("PreviewAttendanceChange",{
+            businessDate:date,personIds:[person.personId],statusId:select.value,
+            siteId:"",mode:"revise",reason:reason.input.value.trim()});
+          const preview=parseData(reply);
+          if(!preview?.previewToken||preview.persons?.length!==1)
+            throw Error("تعذر إجراء المعاينة الآمنة.");
+          const approved=await window.AltamamDialog?.attendanceReview(preview);
+          if(!approved)return;
+          await bridge().invoke("ReviseTodayAttendance",{previewToken:preview.previewToken});
+          close();await load();void renderDashboard();
+        }catch(e){showError(feedback,e);}
+        finally{save.disabled=false;}
+      },"btn btn-primary");
+      const controls=el("div","functional-toolbar");
+      controls.append(button("إلغاء",close),save);
+      form.append(el("h2","section-title","تعديل حالة "+person.name),
+        el("p","section-description","الحالة الحالية: "+person.statusName),
+        label,reason.wrapper,feedback,controls);
+      editor.appendChild(form);overlay.appendChild(editor);
+      try{
+        const choices=parseData(await bridge().invoke("GetActiveAttendanceStatuses",{}));
+        if(!Array.isArray(choices))throw Error("تعذرت قراءة الحالات.");
+        const none=el("option","","اختر حالة أخرى");none.value="";select.appendChild(none);
+        choices.forEach(item=>{const option=el("option","",item.displayName);
+          option.value=item.statusId;select.appendChild(option);});
+        select.value="";
+      }catch(e){showError(feedback,e);save.disabled=true;}
+    }
     async function load(){
       const current=++generation;
       content.replaceChildren(message("جارٍ قراءة سجل التحضير التلقائي..."));
