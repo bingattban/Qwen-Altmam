@@ -1456,8 +1456,8 @@
           const lockLabel=node("label","admin-input");
           lockLabel.append(node("span","","وقت قفل التحضير اليومي"),lockTime);
           const saveTimes=btn("حفظ أوقات التحضير",async()=>{
-            if(!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(scheduledTime.value)||
-               !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(lockTime.value))
+            if(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(scheduledTime.value)||
+               !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(lockTime.value))
               return errors(feedback,new Error("حدد وقتين صحيحين بصيغة HH:mm."));
             if(!await dialogs.confirm("اعتماد وقت التحضير التلقائي "+scheduledTime.value+
               " ووقت قفل التمام اليومي "+lockTime.value+"؟"))return;
