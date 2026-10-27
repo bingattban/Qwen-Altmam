@@ -4,7 +4,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self';" />
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>التمام اليومي — غير المحضرين (UnpreparedPersonnel)</title>
+  <title>التمام اليومي — المحضّرون تلقائياً (UnpreparedPersonnel)</title>
   <link rel="stylesheet" href="../../../assets/css/altamam.css" />
   <link rel="stylesheet" href="../../../assets/css/presentation.css" />
 </head>
@@ -13,8 +13,8 @@
     <div class="brand-cluster">
       <div class="brand-logo">ت</div>
       <div>
-        <div class="brand-title">التمام اليومي — غير المحضرين</div>
-        <div class="brand-subtitle">المسار التراتبي: الشاشة الرئيسية > غير المحضرين | المعرف القياسي: UnpreparedPersonnel</div>
+        <div class="brand-title">التمام اليومي — المحضّرون تلقائياً</div>
+        <div class="brand-subtitle">المسار التراتبي: الشاشة الرئيسية > المحضّرون تلقائياً | المعرف القياسي: UnpreparedPersonnel</div>
       </div>
     </div>
     <div class="topbar-controls">
@@ -26,14 +26,14 @@
 
   <main class="app-main present7f87d4a9f">
     <nav class="breadcrumb-bar" aria-label="المسار التراتبي">
-      <div class="breadcrumb-path">الشاشة الرئيسية > غير المحضرين</div>
-      <div class="present4c462afda">الصلاحية المعتمدة: All authenticated roles; attendance permission required for write</div>
+      <div class="breadcrumb-path">الشاشة الرئيسية > المحضّرون تلقائياً</div>
+      <div class="present4c462afda">الصلاحية المعتمدة: All authenticated roles; read-only auto attendance listing</div>
     </nav>
 
     <article class="card" id="route-UnpreparedPersonnel" data-bridge-mount="UnpreparedPersonnel">
       <div class="card-header">
         <div>
-          <h1 class="page-title">غير المحضرين (UnpreparedPersonnel)</h1>
+          <h1 class="page-title">المحضّرون تلقائياً (UnpreparedPersonnel)</h1>
           <div class="present4c462afda">
             مرتبط بعقد WebView2 المحلي (<code>https://manger.adwas.example/</code>) ويعمل بدون إنترنت (Zero CDN).
           </div>
@@ -51,7 +51,7 @@
         </div>
         <div class="present0d6e2345d">
           <strong>حالة الصلاحيات والتحقق (RBAC &amp; Validation):</strong>
-          <p class="present65c9a6077">يجب فحص الصلاحية (<code>All authenticated roles; attendance permission required for write</code>) في طبقة C# قبل تنفيذ أي أمر تعديل.</p>
+          <p class="present65c9a6077">يجب فحص الصلاحية (<code>All authenticated roles; read-only auto attendance listing</code>) في طبقة C# قبل تنفيذ أي أمر تعديل.</p>
         </div>
         <div class="present0d6e2345d">
           <strong>حالة الحفظ التاريخي (Historical Immutability):</strong>
@@ -67,5 +67,6 @@
 
   <script src="../../../assets/js/screen-module.js" defer></script>
     <script src="../../../assets/js/bridge-client.js"></script>
+  <script src="../../../assets/js/auto-attendance-route.js" defer></script>
 </body>
 </html>
