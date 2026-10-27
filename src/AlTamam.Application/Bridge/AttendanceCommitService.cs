@@ -22,7 +22,18 @@ public sealed class AttendanceCommitService
     private static string Read(JsonObject? p,string key)
     { try{return p?[key]?.GetValue<string>()?.Trim()??"";}catch{return "";} }
     private string Today()=>_time.GetLocalNow().ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
-    private bool CutoffReached()=>_time.GetLocalNow().TimeOfDay>=TimeSpan.FromHours(20);
+    private bool CutoffReached()
+    {
+        using var c=_db.CreateOpenConnection();
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
+        cmd.Parameters.AddWithValue("$key",AutoAttendancePolicyService.LockTimeKey);
+        var selected=cmd.ExecuteScalar() as string;
+        var cutoff=AutoAttendancePolicyService.IsValidClock(selected)
+            ? TimeOnly.ParseExact(selected!,"HH:mm",CultureInfo.InvariantCulture).ToTimeSpan()
+            : TimeSpan.FromHours(20);
+        return _time.GetLocalNow().TimeOfDay>=cutoff;
+    }
     private static BridgeResponse Fail(string code,string message)=>BridgeHelpers.Error(code,message);
     private static string[] PersonIds(JsonObject? data)
     {
@@ -133,7 +144,7 @@ public sealed class AttendanceCommitService
         if(date!=Today())return Fail(BridgeErrorCodes.HistoricDayLocked,
             "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.");
         if(CutoffReached())return Fail(BridgeErrorCodes.HistoricDayLocked,
-            "انتهى موعد التحضير اليدوي العادي الساعة الثامنة مساءً؛ يبدأ الاعتماد التلقائي عند الثامنة صباحاً.");
+            "انتهى الوقت المحدد للتحضير اليومي في الإعدادات.");
         if(ids.Length==0||statusId.Length==0||mode is not("initial" or "revise"))
             return Fail(BridgeErrorCodes.ValidationError,"اختر الحالة وفرداً أو أكثر (حتى 100) ونوع العملية.");
         // A routine same-day status change requires an explicit, user-bound preview
@@ -196,7 +207,7 @@ public sealed class AttendanceCommitService
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
             if(CutoffReached())return Fail(BridgeErrorCodes.HistoricDayLocked,
-                "انتهت صلاحية معاينة التحضير بعد الساعة الثامنة مساءً؛ لا يُسمح بتعديل اليوم بالطريقة العادية.");
+                "انتهت صلاحية معاينة التحضير بعد وقت القفل المحدد في الإعدادات.");
             using var find=c.CreateCommand();find.Transaction=t;
             find.CommandText="""
                 SELECT PayloadCanonicalJson FROM PreviewTokens
