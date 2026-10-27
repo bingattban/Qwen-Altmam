@@ -41,7 +41,7 @@ public sealed class AutoAttendanceService
         _time = timeProvider ?? TimeProvider.System;
     }
 
-    /// <summary>True when the local clock has passed the canonical due instant (>= 08:00).</summary>
+    /// <summary>True when the local clock has passed the configured due time.</summary>
     public bool IsDueNow() => LocalNow().TimeOfDay >=
         GetDueTimeAsync().GetAwaiter().GetResult();
 
@@ -68,8 +68,8 @@ public sealed class AutoAttendanceService
             throw new BridgeProtocolException(BridgeErrorCodes.ClockRollbackSuspected,
                 "رُصد ارتداد في ساعة النظام؛ أُوقف التحضير التلقائي حتى تصحيح الساعة.");
 
-        // The approved business cutoff is fixed at 08:00 local; old persisted hour
-        // overrides must not silently change this rule.
+        // The configured 24-hour local schedule is read from persisted settings.
+        // The 08:00 default remains only when no administrator value exists.
         int catchUpDays = await GetSettingIntAsync("AutoAttendanceCatchUpDays", DefaultCatchUpDays, ct).ConfigureAwait(false);
         bool dayDue = localNow.TimeOfDay >= await GetDueTimeAsync(ct).ConfigureAwait(false);
 
@@ -280,9 +280,9 @@ public sealed class AutoAttendanceService
             // Actor attribution + tamper-evident audit event inside the SAME transaction (07.03).
             await Bridge.BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 operationCode: "AUTO_ATTENDANCE_08H",
-                operationArabicName: "التحضير التلقائي الساعة الثامنة صباحاً",
+                operationArabicName: "التحضير التلقائي وفق الوقت المحدد",
                 actorUserId: SystemActorUserId,
-                actorUsername: "النظام (جدولة 08:00)",
+                actorUsername: "النظام (جدولة تلقائية)",
                 actorDisplayName: null,
                 targetEntityType: "AutoAttendanceRun",
                 targetEntityId: jobKey,
