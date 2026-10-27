@@ -463,7 +463,7 @@
     detailOverlay.setAttribute("aria-label","تفاصيل التمام الشهري");
     detailOverlay.hidden=true;
     detailOverlay.appendChild(detailsBox);
-    detailsBox.hidden=true;
+    detailsBox.hidden=false;
     const bottom=el("form","card functional-archive monthly-archive-controls");
     append(container,tool,feedback,exportPanel,tableHost,bottom,detailOverlay);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
