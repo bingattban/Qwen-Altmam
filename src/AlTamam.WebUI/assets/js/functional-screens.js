@@ -8,6 +8,7 @@
   const ar = new Intl.DateTimeFormat("ar", { month: "long" });
   const weekday = new Intl.DateTimeFormat("ar", { weekday: "short" });
   const DAILY_PAGE_SIZE=100;
+  const MONTHLY_PAGE_SIZE=100;
   const nav = window.AltamamNavigation;
   const view = () => document.getElementById("appViewport");
   const bridge = () => window.AltamamBridge;
@@ -113,6 +114,7 @@
   async function loginGate() {
     const container=view(); if(!container)return;
     container.classList.toggle("daily-dashboard",false);
+    container.classList.toggle("monthly-dashboard",false);
     document.querySelector(".app-sidebar").hidden=true;
     document.getElementById("headerRoleBadge").textContent="لم يتم تسجيل الدخول";
     document.getElementById("logoutAction").hidden=true;
@@ -376,6 +378,7 @@
 
   async function renderMonthly() {
     const container=view();
+    container.classList.toggle("monthly-dashboard",true);
     const now=new Date();
     const year=STATE.chosenYear||now.getFullYear();
     const month=STATE.chosenMonth||now.getMonth()+1;
@@ -384,7 +387,7 @@
     const feedback=el("div","functional-feedback");
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
-    const tableHost=el("section","card");
+    const tableHost=el("section","card monthly-roster-panel");
     const detailsBox=el("section","card monthly-cell-details");
     detailsBox.hidden=true;
     const bottom=el("form","card functional-archive");
@@ -561,7 +564,7 @@
       }
       const grid=parseData(await bridge().invoke("QueryMonthlyGrid",{
         year,month,siteId:STATE.siteId,term:STATE.monthTerm,
-        page:STATE.monthPage,pageSize:50
+        page:STATE.monthPage,pageSize:MONTHLY_PAGE_SIZE
       }));
       if(STATE.monthEpoch!==epoch)return;
       const dayCount=monthDays(year,month);
@@ -604,7 +607,7 @@
         window.requestAnimationFrame(revealCurrentDay);
       for(const [index,person] of (grid.items||[]).entries()){
         const tr=el("tr");
-        [(STATE.monthPage-1)*50+index+1,person.serviceNumberA,person.name,person.siteName]
+        [(STATE.monthPage-1)*MONTHLY_PAGE_SIZE+index+1,person.serviceNumberA,person.name,person.siteName]
           .forEach((v,j)=>{
             const td=el("td","pinned fixed-"+["one","two","three","four"][j],v);
             td.title=String(v??"");
@@ -637,7 +640,7 @@
       if(!(grid.items||[]).length)tableHost.replaceChildren(message(
         STATE.monthTerm?"لا يوجد فرد مطابق للبحث في هذا الشهر والموقع":
           period!==current?"لا يوجد أرشيف لهذا الشهر":"لا توجد سجلات لهذا الشهر"));
-      else pager(tableHost,STATE.monthPage,grid.total||0,50,p=>{STATE.monthPage=p;renderMonthly();});
+      else pager(tableHost,STATE.monthPage,grid.total||0,MONTHLY_PAGE_SIZE,p=>{STATE.monthPage=p;renderMonthly();});
     } catch(e) { if(STATE.monthEpoch===epoch)showError(feedback,e); }
   }
 
@@ -646,6 +649,7 @@
     if (!STATE.session) { loginGate();return; }
     if (!sections.has(section)) section="dashboard";
     if(section!=="dashboard")view().classList.toggle("daily-dashboard",false);
+    if(section!=="monthly")view().classList.toggle("monthly-dashboard",false);
     applyMainNav(section);
     history.replaceState(null,"","#"+section);
     if(section==="dashboard")renderDashboard();
