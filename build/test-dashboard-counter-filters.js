@@ -29,7 +29,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
    if(action==="QueryDailyRoster"){
-     const all=expandedRoster?Array.from({length:23},(_,i)=>({personId:"R"+(i+1),statusId:null,statusName:"غير محضر"})):[{personId:"P1",statusId:null,statusName:"غير محضر"},
+     const all=expandedRoster?Array.from({length:235},(_,i)=>({personId:"R"+(i+1),statusId:null,statusName:"غير محضر"})):[{personId:"P1",statusId:null,statusName:"غير محضر"},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
        {personId:"P3",statusId:"STS-ABSENT",statusName:"غياب"},
        {personId:"P4",statusId:"__TRANSFER_DAY__",statusName:"تم نقله اليوم"}];
@@ -133,21 +133,27 @@ async function main(){
  const dailyRows=()=>dailyPanel().all().find(x=>x.tag==="tbody").children;
  const navButton=name=>viewport.all().find(x=>x.tag==="button"&&x.textContent===name);
  assert.ok(dailyPanel(),"only daily roster gets dedicated spacing");
- assert.equal(lastRoster().payload.pageSize,10,"server request must limit to ten names");
- assert.equal(dailyRows().length,10,"ten names on first daily page");
+ assert.equal(lastRoster().payload.pageSize,100,"request 100 roster entries per page");
+ assert.equal(dailyRows().length,100,"100 names loaded on the first roster page");
  assert.equal(dailyRows()[0].children[0].textContent,"1");
- assert.equal(dailyRows()[9].children[0].textContent,"10");
+ assert.equal(dailyRows()[99].children[0].textContent,"100");
  assert.equal(navButton("السابق").disabled,true);
  navButton("التالي").handlers.click();await settle();
  assert.equal(lastRoster().payload.page,2);
- assert.equal(dailyRows().length,10);
- assert.equal(dailyRows()[0].children[0].textContent,"11");
+ assert.equal(dailyRows().length,100);
+ assert.equal(dailyRows()[0].children[0].textContent,"101");
  navButton("التالي").handlers.click();await settle();
- assert.equal(dailyRows().length,3,"23 names require 10+10+3 rows");
- assert.equal(dailyRows()[0].children[0].textContent,"21");
+ assert.equal(dailyRows().length,35,"235 names require 100+100+35 rows");
+ assert.equal(dailyRows()[0].children[0].textContent,"201");
  assert.equal(navButton("التالي").disabled,true);
  navButton("السابق").handlers.click();await settle();
- assert.equal(dailyRows().length,10);
- console.log("DASHBOARD COUNTER FILTERS PASS: all filters, ten-name pages and navigation");
+ assert.equal(dailyRows().length,100);
+ assert.ok(viewport.className.includes("daily-dashboard"),"daily view activates flexible full-height layout");
+ const css=fs.readFileSync(path.join(__dirname,"../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+ assert.match(css,/#appViewport\.daily-dashboard>\.daily-roster-panel\s*\{/,
+   "daily roster must fill the available desktop viewport");
+ assert.match(css,/#appViewport\.daily-dashboard>\.daily-roster-panel>\.functional-table-wrap\s*\{/,
+   "daily roster scrolling must be internal to the full-height table");
+ console.log("DASHBOARD COUNTER FILTERS PASS: 100-row pages, counters, full-height layout and pager");
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
