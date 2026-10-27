@@ -49,7 +49,7 @@ public sealed class MonthlyExcelExportService
         var page = await _read.MonthlyGridAsync(new JsonObject
         {
             ["year"] = year, ["month"] = month, ["siteId"] = site,
-            ["term"] = term, ["page"] = 1, ["pageSize"] = 1
+            ["term"] = term, ["archiveMode"] = true, ["page"] = 1, ["pageSize"] = 1
         }, ct).ConfigureAwait(false);
         if (!page.Success) return page;
         long total = ((JsonObject)page.Data!)["total"]!.GetValue<long>();
@@ -154,7 +154,7 @@ public sealed class MonthlyExcelExportService
                     var data = await _read.MonthlyGridAsync(new JsonObject
                     {
                         ["year"] = year, ["month"] = month, ["siteId"] = site,
-                        ["term"] = term, ["page"] = pageNumber, ["pageSize"] = 100
+                        ["term"] = term, ["archiveMode"] = true, ["page"] = pageNumber, ["pageSize"] = 100
                     }, ct).ConfigureAwait(false);
                     if (!data.Success) throw new IOException("تعذر قراءة الصفحة المطلوبة من سجل التمام.");
                     var items = (JsonArray)((JsonObject)data.Data!)["items"]!;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
@@ -12,6 +13,26 @@ namespace AlTamam.Application.Bridge;
 public sealed class AutoAttendancePolicyService
 {
     public const string DefaultStatusKey = "AutoAttendanceDefaultStatusId";
+    public const string DueTimeKey = "AutoAttendanceDueTimeLocal";
+    public const string LockTimeKey = "DailyAttendanceLockTimeLocal";
+    public const string DefaultDueTime = "08:00";
+    public const string DefaultLockTime = "20:00";
+
+    public static bool IsValidClock(string? value) =>
+        value is not null && value.Length == 5 &&
+        TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out _);
+
+    public static async Task<string> ReadClockAsync(AlTamamDbContext db, string key,
+        string fallback, CancellationToken ct = default)
+    {
+        using var c = db.CreateOpenConnection();
+        using var q = c.CreateCommand();
+        q.CommandText = "SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
+        q.Parameters.AddWithValue("$key",key);
+        var raw = await q.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+        return IsValidClock(raw) ? raw! : fallback;
+    }
     private readonly AlTamamDbContext _db;
     private readonly TimeProvider _time;
 
@@ -46,7 +67,8 @@ public sealed class AutoAttendancePolicyService
             ["defaultStatusId"]=id,
             ["defaultStatusName"]=name,
             ["configured"]=id is not null && active,
-            ["dueTimeLocal"]="08:00",
+            ["dueTimeLocal"]=await ReadClockAsync(_db,DueTimeKey,DefaultDueTime,ct),
+            ["dailyLockTimeLocal"]=await ReadClockAsync(_db,LockTimeKey,DefaultLockTime,ct),
             ["note"]="إذا لم توجد حالة لليوم السابق تُستخدم الحالة الافتراضية المعتمدة من الإدارة."
         });
     }
@@ -97,14 +119,80 @@ public sealed class AutoAttendancePolicyService
                     "AppSetting",DefaultStatusKey,"الحالة الافتراضية عند عدم وجود تحضير أمس",
                     new JsonObject{["statusId"]=previous}.ToJsonString(),
                     new JsonObject{["statusId"]=statusId,["name"]=name}.ToJsonString(),
-                    "تغيير الحالة الافتراضية للتحضير التلقائي الساعة الثامنة صباحاً",
+                    "تغيير الحالة الافتراضية للتحضير التلقائي وفق الوقت المحدد",
                     null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
                     .ConfigureAwait(false);
             }
             var data=new JsonObject{["defaultStatusId"]=statusId,["defaultStatusName"]=name,
-                ["configured"]=true,["dueTimeLocal"]="08:00"};
+                ["configured"]=true,
+                ["dueTimeLocal"]=await ReadClockAsync(_db,DueTimeKey,DefaultDueTime,ct)};
             await MutationIdempotency.StoreAsync(c,t,receipt,data,_time,ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(data);
         },ct).ConfigureAwait(false);
     }
+    /// <summary>Persist both independently selected local times with audit and idempotency.</summary>
+    public async Task<BridgeResponse> SetScheduleAsync(JsonObject? payload,
+        BridgePrincipal actor, CancellationToken ct)
+    {
+        if(actor.Role is not (UserRole.GeneralAdministration or UserRole.OrdinaryAdministration))
+            return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
+                "تغيير أوقات التحضير متاح للإدارة فقط.");
+        string due,locked;
+        try
+        {
+            due=payload?["dueTimeLocal"]?.GetValue<string>()?.Trim()??"";
+            locked=payload?["dailyLockTimeLocal"]?.GetValue<string>()?.Trim()??"";
+        }
+        catch { due=""; locked=""; }
+        if(!IsValidClock(due) || !IsValidClock(locked))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "حدد وقتين صحيحين بصيغة 24 ساعة (HH:mm).");
+        return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
+        {
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"SetAttendanceSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
+            async Task<string?> Prior(string key)
+            {
+                using var q=c.CreateCommand();q.Transaction=t;
+                q.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
+                q.Parameters.AddWithValue("$key",key);
+                return await q.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+            }
+            string oldDue=await Prior(DueTimeKey)??DefaultDueTime;
+            string oldLock=await Prior(LockTimeKey)??DefaultLockTime;
+            string timestamp=_time.GetUtcNow().ToString("O");
+            if(oldDue!=due || oldLock!=locked)
+            {
+                foreach(var setting in new[]{(Key:DueTimeKey,Value:due),
+                                              (Key:LockTimeKey,Value:locked)})
+                {
+                    using var save=c.CreateCommand();save.Transaction=t;
+                    save.CommandText="""
+                        INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                        VALUES($key,$value,$now)
+                        ON CONFLICT(SettingKey) DO UPDATE SET
+                          SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                        """;
+                    save.Parameters.AddWithValue("$key",setting.Key);
+                    save.Parameters.AddWithValue("$value",setting.Value);
+                    save.Parameters.AddWithValue("$now",timestamp);
+                    await save.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                }
+                await BridgeAuditWriter.WriteAsync(c,t,_time,
+                    "ATTENDANCE_SCHEDULE_SET","تغيير أوقات التحضير والإغلاق",
+                    actor.UserId,actor.Username,actor.Username,
+                    "AppSetting",DueTimeKey,"أوقات التحضير التلقائي وقفل التمام اليومي",
+                    new JsonObject{["dueTimeLocal"]=oldDue,["dailyLockTimeLocal"]=oldLock}.ToJsonString(),
+                    new JsonObject{["dueTimeLocal"]=due,["dailyLockTimeLocal"]=locked}.ToJsonString(),
+                    "تعديل وقت التحضير التلقائي وقفل التحضير اليومي",
+                    null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
+                    .ConfigureAwait(false);
+            }
+            var response=new JsonObject{["dueTimeLocal"]=due,["dailyLockTimeLocal"]=locked};
+            await MutationIdempotency.StoreAsync(c,t,receipt,response,_time,ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(response);
+        },ct).ConfigureAwait(false);
+    }
+
 }

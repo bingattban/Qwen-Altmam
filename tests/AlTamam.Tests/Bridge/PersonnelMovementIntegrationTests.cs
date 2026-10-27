@@ -105,6 +105,19 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.Equal(1L, source["total"]!.GetValue<long>());
         Assert.Equal(0L, (await Archive("SITE-DEST", "external", today, today))["total"]!.GetValue<long>());
         Assert.Equal(0L, (await Archive("", "", Yesterday(), Yesterday()))["total"]!.GetValue<long>());
+        var local=DateOnly.Parse(today);
+        var monthly=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=local.Year,["month"]=local.Month,
+            ["siteId"]="SITE-UNSPECIFIED",["archiveMode"]=true,
+            ["page"]=1,["pageSize"]=50
+        },CancellationToken.None);
+        Assert.True(monthly.Success,monthly.UserMessage);
+        var people=Assert.IsType<JsonArray>(((JsonObject)monthly.Data!)["items"]);
+        var externalPerson=people.OfType<JsonObject>().Single(p=>
+            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P2");
+        var movedDay=Assert.IsType<JsonObject>(((JsonObject)externalPerson["days"]!)[today]);
+        Assert.Equal("نقل (خ)",movedDay["symbol"]!.GetValue<string>());
+        Assert.StartsWith("نقل (خ)",movedDay["name"]!.GetValue<string>());
     }
 
     [Fact]
@@ -127,7 +140,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         {
             var monthly=await month.MonthlyGridAsync(new JsonObject{
                 ["year"]=now.Year,["month"]=now.Month,["siteId"]=location,
-                ["page"]=1,["pageSize"]=50
+                ["archiveMode"]=true,["page"]=1,["pageSize"]=50
             },CancellationToken.None);
             Assert.True(monthly.Success,monthly.UserMessage);
             var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(monthly.Data)["items"]);
@@ -141,8 +154,19 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
                 transferCells++;
                 Assert.Equal("movement",transferCell["kind"]!.GetValue<string>());
                 Assert.Contains(expected,transferCell["name"]!.GetValue<string>());
+                Assert.Equal("نقل (د)",transferCell["symbol"]!.GetValue<string>());
             }
             Assert.Equal(2,transferCells);
+            var live=await month.MonthlyGridAsync(new JsonObject{
+                ["year"]=now.Year,["month"]=now.Month,["siteId"]=location,
+                ["page"]=1,["pageSize"]=50
+            },CancellationToken.None);
+            Assert.True(live.Success,live.UserMessage);
+            var operational=(JsonObject)live.Data!;
+            Assert.Equal(location=="SITE-UNSPECIFIED"?1L:0L,
+                operational["total"]!.GetValue<long>());
+            // Even internal transfers disappear from the operational month view;
+            // the explicit archive still retains every transferred person.
         }
         var archivePeriods=await month.ArchivePeriodsAsync(CancellationToken.None);
         var archiveMonths=Assert.IsType<JsonArray>(archivePeriods.Data)

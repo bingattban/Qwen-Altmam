@@ -139,7 +139,7 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         var grid=Require(await read.MonthlyGridAsync(new JsonObject
         {
             ["year"]=month.Year,["month"]=month.Month,["siteId"]="SITE-RETURN",
-            ["page"]=1,["pageSize"]=50
+            ["archiveMode"]=true,["page"]=1,["pageSize"]=50
         },default));
         var rows=Assert.IsType<JsonArray>(grid["items"]);
         var row=Assert.IsType<JsonObject>(Assert.Single(rows));
@@ -166,7 +166,7 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         var afterAttendance=Require(await read.MonthlyGridAsync(new JsonObject
         {
             ["year"]=month.Year,["month"]=month.Month,["siteId"]="SITE-RETURN",
-            ["page"]=1,["pageSize"]=50
+            ["archiveMode"]=true,["page"]=1,["pageSize"]=50
         },default));
         var afterRows=Assert.IsType<JsonArray>(afterAttendance["items"]);
         var afterDay=Assert.IsType<JsonObject>(
@@ -174,6 +174,17 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         Assert.Equal("موجود",afterDay["name"]!.GetValue<string>());
         Assert.Equal("return",afterDay["movementKind"]!.GetValue<string>());
         Assert.Contains("عاد إلى القوة",afterDay["movementNote"]!.GetValue<string>());
+        // Reinstatement after an earlier exit restores current-month visibility,
+        // without losing historical transfer and return events.
+        var operational=Require(await read.MonthlyGridAsync(new JsonObject
+        {
+            ["year"]=month.Year,["month"]=month.Month,["siteId"]="SITE-RETURN",
+            ["page"]=1,["pageSize"]=50
+        },default));
+        var activeRows=Assert.IsType<JsonArray>(operational["items"]);
+        var activeReturn=Assert.IsType<JsonObject>(Assert.Single(activeRows));
+        Assert.Equal("TST-RETURN-EXT",activeReturn["personId"]!.GetValue<string>());
+        Assert.Equal("موجود",activeReturn["days"]![Today]!["name"]!.GetValue<string>());
         var retry=Require(await svc.CommitReturnAsync((JsonObject)payload.DeepClone(),Actor,default));
         Assert.True(retry["returned"]!.GetValue<bool>()); // receipt-based retry
         var conflict=await svc.CommitReturnAsync(new JsonObject

@@ -41,8 +41,17 @@ public sealed class AutoAttendanceService
         _time = timeProvider ?? TimeProvider.System;
     }
 
-    /// <summary>True when the local clock has passed the canonical due instant (>= 08:00).</summary>
-    public bool IsDueNow() => LocalNow().TimeOfDay >= new TimeSpan(DefaultDueHour, 0, 0);
+    /// <summary>True when the local clock has passed the configured due time.</summary>
+    public bool IsDueNow() => LocalNow().TimeOfDay >=
+        GetDueTimeAsync().GetAwaiter().GetResult();
+
+    public async Task<TimeSpan> GetDueTimeAsync(CancellationToken ct = default)
+    {
+        string configured=await Bridge.AutoAttendancePolicyService.ReadClockAsync(
+            _db,Bridge.AutoAttendancePolicyService.DueTimeKey,
+            Bridge.AutoAttendancePolicyService.DefaultDueTime,ct).ConfigureAwait(false);
+        return TimeOnly.ParseExact(configured,"HH:mm",CultureInfo.InvariantCulture).ToTimeSpan();
+    }
 
     /// <summary>
     /// Startup/tick entry point: performs bounded catch-up for missed business dates after the last
@@ -59,10 +68,10 @@ public sealed class AutoAttendanceService
             throw new BridgeProtocolException(BridgeErrorCodes.ClockRollbackSuspected,
                 "رُصد ارتداد في ساعة النظام؛ أُوقف التحضير التلقائي حتى تصحيح الساعة.");
 
-        // The approved business cutoff is fixed at 08:00 local; old persisted hour
-        // overrides must not silently change this rule.
+        // The configured 24-hour local schedule is read from persisted settings.
+        // The 08:00 default remains only when no administrator value exists.
         int catchUpDays = await GetSettingIntAsync("AutoAttendanceCatchUpDays", DefaultCatchUpDays, ct).ConfigureAwait(false);
-        bool dayDue = localNow.TimeOfDay >= new TimeSpan(DefaultDueHour, 0, 0);
+        bool dayDue = localNow.TimeOfDay >= await GetDueTimeAsync(ct).ConfigureAwait(false);
 
         List<DateOnly> pending = EnumeratePendingDates(today, dayDue, catchUpDays,
             await GetLastCompletedBusinessDateAsync(ct).ConfigureAwait(false), out int unrecoverable);
@@ -91,7 +100,10 @@ public sealed class AutoAttendanceService
 
         string source = isCatchUp ? "08h-catchup" : "08h-auto";
         DateTimeOffset startedUtc = _time.GetUtcNow();
-        string dueLocal = Iso(businessDate) + "T08:00:00";
+        string configuredDue = await Bridge.AutoAttendancePolicyService.ReadClockAsync(
+            _db,Bridge.AutoAttendancePolicyService.DueTimeKey,
+            Bridge.AutoAttendancePolicyService.DefaultDueTime,ct).ConfigureAwait(false);
+        string dueLocal = Iso(businessDate) + "T" + configuredDue + ":00";
 
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
@@ -268,9 +280,9 @@ public sealed class AutoAttendanceService
             // Actor attribution + tamper-evident audit event inside the SAME transaction (07.03).
             await Bridge.BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 operationCode: "AUTO_ATTENDANCE_08H",
-                operationArabicName: "التحضير التلقائي الساعة الثامنة صباحاً",
+                operationArabicName: "التحضير التلقائي وفق الوقت المحدد",
                 actorUserId: SystemActorUserId,
-                actorUsername: "النظام (جدولة 08:00)",
+                actorUsername: "النظام (جدولة تلقائية)",
                 actorDisplayName: null,
                 targetEntityType: "AutoAttendanceRun",
                 targetEntityId: jobKey,
@@ -324,7 +336,7 @@ public sealed class AutoAttendanceService
         DateTimeOffset nowUtc = _time.GetUtcNow();
         DateTime localNow = LocalNow();
         DateOnly today = DateOnly.FromDateTime(localNow);
-        bool dayDue = localNow.TimeOfDay >= new TimeSpan(DefaultDueHour, 0, 0);
+        bool dayDue = localNow.TimeOfDay >= await GetDueTimeAsync(ct).ConfigureAwait(false);
         DateOnly nextDueDate = dayDue ? today.AddDays(1) : today;
 
         var runs = new List<AutoAttendanceRunResult>();
@@ -359,7 +371,10 @@ public sealed class AutoAttendanceService
             if (end >= start) pending = (end.DayNumber - start.DayNumber) + 1;
         }
 
-        string nextDueWall = nextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T08:00:00";
+        string dueText=await Bridge.AutoAttendancePolicyService.ReadClockAsync(
+            _db,Bridge.AutoAttendancePolicyService.DueTimeKey,
+            Bridge.AutoAttendancePolicyService.DefaultDueTime,ct).ConfigureAwait(false);
+        string nextDueWall = nextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T" + dueText + ":00";
         return new LedgerSnapshot(runs, nowUtc, localNow.ToString("yyyy-MM-ddTHH:mm:ss"),
             nextDueWall, dayDue, lastObservedValid, pending);
     }
