@@ -231,7 +231,7 @@
       dashboardClockTimer=window.setInterval(tick,1000);
   }
 
-  // The automatic-attendance register is READ-ONLY and never commits attendance.
+  // Automatic register supports the same audited preview/commit pipeline as daily attendance.
   function openAutoPreparedList(){
     const date=STATE.date,site=STATE.siteId;
     const overlay=el("div","auto-attendance-overlay");
@@ -244,7 +244,7 @@
     const closeButton=button("إغلاق",close);
     append(heading,title,closeButton);
     const description=el("p","section-description",
-      "كشف للقراءة فقط: الحالات المعتمدة تلقائياً الساعة ٨ صباحاً بحسب حالة أمس، أو الحالة الافتراضية عند عدم وجودها. كل حالة تُحتسب في عدادها الأصلي.");
+      "يمكن تصحيح حالة الفرد المعتمد تلقائياً من خلال معاينة واعتماد مسجلين في سجل العمليات. تخضع التعديلات لصلاحيات المستخدم ووقت قفل اليوم.");
     const search=field("search","بحث بالاسم أو الرقم (ع)");
     search.input.maxLength=100;
     const searchButton=button("بحث",()=>{term=search.input.value.trim();page=1;void load();});
@@ -256,6 +256,30 @@
     overlay.appendChild(panel);
     view().appendChild(overlay);
     let disposed=false,page=1,term="",generation=0;
+    async function editAutoStatus(person){
+      const statuses=parseData(await bridge().invoke("GetActiveAttendanceStatuses",{}));
+      const choices=Array.isArray(statuses)?statuses:statuses?.items||[];
+      const promptText="اختر الحالة الجديدة للفرد "+person.name+" (ع: "+person.serviceNumberA+
+        "):\n"+choices.map((x,i)=>(i+1)+" - "+x.displayName).join("\n");
+      const picked=await window.AltamamDialog?.prompt(promptText,"",{title:"تعديل حالة المحضّر تلقائياً"});
+      if(!picked)return;
+      const index=Number(picked)-1;
+      if(!Number.isInteger(index)||index<0||index>=choices.length){
+        await window.AltamamDialog?.alert("رقم الحالة غير صحيح.");return;
+      }
+      try{
+        const payload={businessDate:date,personIds:[person.personId],statusId:choices[index].statusId,mode:"correction"};
+        const preview=await bridge().invoke("PreviewAttendance",payload);
+        const data=parseData(preview);
+        if(!await window.AltamamDialog?.confirm(
+          "اعتماد تعديل حالة "+person.name+" إلى "+choices[index].displayName+"؟",
+          {title:"تأكيد تعديل التحضير"}))return;
+        await bridge().invoke("CommitAttendance",{...payload,previewToken:data?.previewToken,
+          operationId:window.crypto?.randomUUID?.()||String(Date.now())+"-auto-correction"});
+        await load();
+        void renderDashboard();
+      }catch(error){showError(content,error);}
+    }
     function close(){
       disposed=true;generation++;
       overlay.remove?.();
@@ -280,13 +304,15 @@
         if(!result||!Array.isArray(result.items))
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
         const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
-          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"}]);
+          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"},{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
             person.name,person.siteName,person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
+          const action=el("td");action.appendChild(button("تعديل الحالة",()=>void editAutoStatus(person)));
+          row.appendChild(action);
           tb.body.appendChild(row);
         });
         if(!result.items.length)content.replaceChildren(message(
