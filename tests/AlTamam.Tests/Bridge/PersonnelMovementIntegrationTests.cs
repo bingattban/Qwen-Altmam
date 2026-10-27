@@ -486,12 +486,24 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
 
         var today=DateOnly.Parse(Today());
         var monthly=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
-            ["year"]=today.Year,["month"]=today.Month,["siteId"]="SITE-DEST",
+            ["year"]=today.Year,["month"]=today.Month,["siteId"]="",
             ["page"]=1,["pageSize"]=50
         },default);
         Assert.True(monthly.Success,monthly.UserMessage);
         var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(monthly.Data)["items"]);
-        Assert.Equal(2,items.Count);
+        Assert.Equal(3,items.Count);
+        var destination=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=today.Year,["month"]=today.Month,["siteId"]="SITE-DEST",
+            ["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(destination.Success,destination.UserMessage);
+        var atDestination=Assert.IsType<JsonArray>(
+            Assert.IsType<JsonObject>(destination.Data)["items"]);
+        Assert.Equal(2,atDestination.Count);
+        var newSiteCell=Assert.IsType<JsonObject>(((JsonObject)Assert.Single(
+            atDestination.OfType<JsonObject>().Where(p=>
+                p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1"))["days"]!)[Today()]);
+        Assert.Equal("نقل (د)",newSiteCell["symbol"]!.GetValue<string>());
         var attended=Assert.Single(items.OfType<JsonObject>().Where(p=>
             p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1"));
         var cell=Assert.IsType<JsonObject>(((JsonObject)attended["days"]!)[Today()]);
