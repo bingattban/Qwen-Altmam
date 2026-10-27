@@ -115,6 +115,7 @@ async function main(){
   assert.ok(followingMonth&&followingMonth.disabled,"future months disabled from current month");
   previousMonth.handlers.click();await tick();await tick();
   const earlierCall=calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1);
+  assert.equal(earlierCall.payload.pageSize,100,"monthly history must load 100 names per page");
   assert.equal(earlierCall.payload.year,oldYear);
   assert.equal(earlierCall.payload.month,oldMonth);
   assert.equal(earlierCall.payload.page,1);
