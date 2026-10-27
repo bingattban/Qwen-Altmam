@@ -268,13 +268,13 @@
         await window.AltamamDialog?.alert("رقم الحالة غير صحيح.");return;
       }
       try{
-        const payload={businessDate:date,personIds:[person.personId],statusId:choices[index].statusId,mode:"correction"};
-        const preview=await bridge().invoke("PreviewAttendance",payload);
+        const payload={businessDate:date,personIds:[person.personId],statusId:choices[index].statusId,mode:"revise"};
+        const preview=await bridge().invoke("PreviewAttendanceChange",payload);
         const data=parseData(preview);
         if(!await window.AltamamDialog?.confirm(
           "اعتماد تعديل حالة "+person.name+" إلى "+choices[index].displayName+"؟",
           {title:"تأكيد تعديل التحضير"}))return;
-        await bridge().invoke("CommitAttendance",{...payload,previewToken:data?.previewToken,
+        await bridge().invoke("ReviseTodayAttendance",{...payload,previewToken:data?.previewToken,
           operationId:window.crypto?.randomUUID?.()||String(Date.now())+"-auto-correction"});
         await load();
         void renderDashboard();
