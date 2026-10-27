@@ -100,10 +100,17 @@
   // Suggestions are hints only; existing per-screen server-side search remains authoritative.
   const enhancedInputs=new WeakSet();
   let suggestionSerial=0;
+  function containingLabel(input){
+    const closest=input.closest?.("label");
+    if(closest)return closest;
+    const parent=input.parentElement;
+    return parent?.tagName?.toLowerCase?.()==="label"||
+      parent?.tag==="label"?parent:null;
+  }
   function personSearchInput(input){
     if(input.closest?.(".table-local-search"))return false;
     const description=[input.placeholder||"",input.getAttribute?.("aria-label")||"",
-      input.closest?.("label")?.textContent||""].join(" ");
+      containingLabel(input)?.textContent||""].join(" ");
     return /بحث/.test(description) &&
       /(اسم|فرد|الرقم|كشف القوة)/.test(description);
   }
@@ -156,9 +163,7 @@
   // opening an admin sub-screen or modal. Never modify the search parameters.
   const personSearchPlaceholder="بحث بالاسم أو الرقم (ع)";
   function normalizeSearchField(input,isPerson){
-    const label=input.closest?.("label")||
-      (input.parentElement?.tagName?.toLowerCase?.()==="label"||
-       input.parentElement?.tag==="label"?input.parentElement:null);
+    const label=containingLabel(input);
     const caption=label?.children?.[0];
     const captionText=caption?.textContent?.trim?.()||"";
     const existingHint=(input.placeholder||"").trim();
