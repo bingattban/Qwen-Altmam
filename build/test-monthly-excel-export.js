@@ -63,6 +63,13 @@ async function main(){
       "day cells preserve chronological month order");
   assert.ok(viewport.all().some(x=>x.className.includes("functional-paged-area")),
     "pager lives in fixed table panel rather than below the whole screen");
+  const monthPanel=viewport.all().find(x=>x.className.includes("monthly-grid-panel"));
+  assert.ok(viewport.className.includes("monthly-dashboard")&&monthPanel,
+    "monthly page must use the full-height grid experience");
+  assert.ok(monthPanel.children.some(x=>x.className.includes("functional-pager")),
+    "previous/next remains visible outside the scrolling monthly table");
+  assert.ok(viewport.all().some(x=>x.className.includes("monthly-archive-controls")),
+    "compact month/year archive selector remains available below grid");
   const styles=fs.readFileSync(path.join(__dirname,
     "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
   assert.ok(styles.includes(".monthly-scroll .current-day-column"),
