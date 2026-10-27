@@ -118,6 +118,11 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         var movedDay=Assert.IsType<JsonObject>(((JsonObject)externalPerson["days"]!)[today]);
         Assert.Equal("نقل (خ)",movedDay["symbol"]!.GetValue<string>());
         Assert.StartsWith("نقل (خ)",movedDay["name"]!.GetValue<string>());
+        var summary=await new DailyMonthlyReadService(_db).DashboardSummaryAsync(
+            new JsonObject{["businessDate"]=today,["siteId"]=""},CancellationToken.None);
+        Assert.True(summary.Success,summary.UserMessage);
+        // P1 moved internally and P3 stayed active; external P2 is no longer force.
+        Assert.Equal(2L,((JsonObject)summary.Data!)["totalForce"]!.GetValue<long>());
     }
 
     [Fact]
