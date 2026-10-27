@@ -6,7 +6,7 @@ using AlTamam.Infrastructure.Persistence;
 namespace AlTamam.Application.Bridge;
 
 /// <summary>
-/// Administrator-selected fallback for the 20:00 attendance run. The setting is
+/// Administrator-selected fallback for the 08:00 attendance run. The setting is
 /// a durable StatusId, never a name or a client-supplied status snapshot.
 /// </summary>
 public sealed class AutoAttendancePolicyService
@@ -46,7 +46,7 @@ public sealed class AutoAttendancePolicyService
             ["defaultStatusId"]=id,
             ["defaultStatusName"]=name,
             ["configured"]=id is not null && active,
-            ["dueTimeLocal"]="20:00",
+            ["dueTimeLocal"]="08:00",
             ["note"]="إذا لم توجد حالة لليوم السابق تُستخدم الحالة الافتراضية المعتمدة من الإدارة."
         });
     }
@@ -97,12 +97,12 @@ public sealed class AutoAttendancePolicyService
                     "AppSetting",DefaultStatusKey,"الحالة الافتراضية عند عدم وجود تحضير أمس",
                     new JsonObject{["statusId"]=previous}.ToJsonString(),
                     new JsonObject{["statusId"]=statusId,["name"]=name}.ToJsonString(),
-                    "تغيير الحالة الافتراضية للتحضير التلقائي الساعة الثامنة مساءً",
+                    "تغيير الحالة الافتراضية للتحضير التلقائي الساعة الثامنة صباحاً",
                     null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
                     .ConfigureAwait(false);
             }
             var data=new JsonObject{["defaultStatusId"]=statusId,["defaultStatusName"]=name,
-                ["configured"]=true,["dueTimeLocal"]="20:00"};
+                ["configured"]=true,["dueTimeLocal"]="08:00"};
             await MutationIdempotency.StoreAsync(c,t,receipt,data,_time,ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(data);
         },ct).ConfigureAwait(false);
