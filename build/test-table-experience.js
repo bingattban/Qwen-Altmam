@@ -1,0 +1,116 @@
+"use strict";
+const assert=require("node:assert/strict");
+const fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
+class E{
+  constructor(tag){
+    this.tag=tag;this.parentElement=null;this.children=[];
+    this.className="";this._text="";this.type="";this.placeholder="";
+    this.hidden=false;this.value="";this.colSpan=1;this.handlers={};
+    this.savedStyles={};this.style={setProperty:(name,value)=>this.savedStyles[name]=value};
+  }
+  get textContent(){return this._text+this.children.map(x=>x.textContent).join("");}
+  set textContent(v){this._text=String(v);this.children=[];}
+  get classList(){return{
+    add:name=>{if(!this.className.split(/\s+/).includes(name))this.className+=" "+name;},
+    contains:name=>this.className.split(/\s+/).includes(name)
+  };}
+  get tBodies(){return this.all().filter(e=>e.tag==="tbody");}
+  get rows(){return this.children.filter(e=>e.tag==="tr");}
+  append(...items){for(const item of items){item.parentElement=this;this.children.push(item);}}
+  appendChild(item){this.append(item);return item;}
+  insertBefore(item,before){const i=this.children.indexOf(before);
+    if(i<0)throw Error("invalid insertion point");
+    item.parentElement=this;this.children.splice(i,0,item);
+  }
+  setAttribute(key,v){this[key]=v;}
+  addEventListener(key,fn){this.handlers[key]=fn;}
+  getBoundingClientRect(){return {top:210,left:0,right:1000,height:500};}
+  all(){return [this,...this.children.flatMap(x=>x.all())];}
+  querySelectorAll(selector){
+    if(selector==="input")return this.all().filter(x=>x!==this&&x.tag==="input");
+    if(selector==="label")return this.all().filter(x=>x!==this&&x.tag==="label");
+    if(selector.includes("input[type"))return this.all().filter(x=>x!==this&&x.tag==="input"&&x.type==="search");
+    if(selector===":scope > .functional-pager")
+      return this.children.filter(x=>x.classList.contains("functional-pager"));
+    if(selector.startsWith("."))return this.all().filter(x=>x!==this&&x.classList.contains(selector.slice(1)));
+    return [];
+  }
+  querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
+  closest(selector){
+    const options=selector.split(",").map(x=>x.trim());
+    for(let e=this;e;e=e.parentElement){
+      if(options.some(s=>s.startsWith(".")&&e.classList.contains(s.slice(1)) ||
+        s.startsWith("#")&&e.id===s.slice(1)))return e;
+    }
+    return null;
+  }
+}
+const main=new E("main");main.id="appViewport";
+const modal=new E("section");modal.id="appModalBody";
+const document={
+  readyState:"loading",
+  createElement:tag=>new E(tag),
+  querySelectorAll:selector=>selector==="#appViewport table, #appModalBody table"
+    ?[...main.all(),...modal.all()].filter(x=>x.tag==="table"):[],
+  getElementById:id=>id==="appViewport"?main:id==="appModalBody"?modal:null,
+  addEventListener:()=>{}
+};
+const window={innerHeight:900,addEventListener:()=>{}};
+vm.runInNewContext(fs.readFileSync(path.join(__dirname,
+  "../src/AlTamam.WebUI/assets/js/table-experience.js"),"utf8"),
+  {window,document,Promise,console},{filename:"table-experience.js"});
+const helper=window.AltamamTables;
+function build(owner,{backendSearch=false,paged=false,names=[]}={}){
+  const card=new E("section");card.className="card";owner.append(card);
+  if(backendSearch){
+    const input=new E("input");input.type="search";input.placeholder="بحث بالاسم";
+    card.append(input);
+  }
+  const wrap=new E("div");wrap.className="functional-table-wrap";
+  const table=new E("table"),body=new E("tbody");
+  table.append(body);
+  for(const name of names){const row=new E("tr"),cell=new E("td");
+    cell.textContent=name;row.append(cell);body.append(row);}
+  wrap.append(table);card.append(wrap);
+  if(paged){const pager=new E("div");pager.className="functional-pager";card.append(pager);}
+  return {card,wrap,table,body};
+}
+assert.equal(helper.normalize("  مُحَمَّد  ١٢٣  "),"محمد 123");
+const first=build(main,{paged:true,names:["محمد ١٢٣","سالم 456","خالد 789"]});
+helper.enhance(first.table);
+assert.ok(first.table.classList.contains("unified-app-table"),"every table gets the common grid");
+assert.ok(first.wrap.classList.contains("table-expanded-scroll"),"full available table height");
+assert.ok(first.card.classList.contains("table-expanded-paged"),"pager outside row scroller");
+assert.ok(first.wrap.savedStyles["--usable-table-height"].endsWith("px"),"dynamic height applied");
+assert.ok(first.wrap.classList.contains("has-local-table-search"),"missing search auto-created");
+const local=first.wrap.children[0],input=local.children.find(x=>x.tag==="input");
+assert.equal(input.type,"search");
+input.value="123";input.handlers.input();
+assert.deepEqual(first.body.rows.map(x=>x.hidden),[false,true,true]);
+input.value="سالم";input.handlers.input();
+assert.deepEqual(first.body.rows.map(x=>x.hidden),[true,false,true]);
+input.value="";input.handlers.input();
+assert.deepEqual(first.body.rows.map(x=>x.hidden),[false,false,false]);
+helper.enhance(first.table);
+assert.equal(first.wrap.children.filter(x=>x.className==="table-local-search").length,1,
+  "repeated DOM scans may not duplicate controls");
+const native=build(main,{backendSearch:true,names:["أحمد","حسن"]});
+helper.enhance(native.table);
+assert.equal(native.wrap.children.length,1,
+  "screen-wide backend search must not be duplicated or replaced");
+const second=build(main,{names:["فاطمة","إبراهيم"]});
+helper.enhance(second.table);
+assert.equal(second.wrap.children[0].className,"table-local-search",
+  "search for first table must not suppress search in a different card");
+const review=build(modal,{names:["١٢٣","٤٥٦"]});
+helper.enhance(review.table);
+assert.ok(review.wrap.classList.contains("has-local-table-search"),
+  "modal tables also receive scoped search");
+const css=fs.readFileSync(path.join(__dirname,
+  "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+assert.match(css,/\.table-expanded-paged>\.table-expanded-scroll/);
+assert.match(css,/\.table-local-search/);
+const html=fs.readFileSync(path.join(__dirname,
+  "../src/AlTamam.WebUI/index.html"),"utf8");
+assert.match(html,/assets\/js\/table-experience\.js/);
+console.log("ALL TABLE EXPERIENCE PASS: shared styles, per-table search, Arabic digit normalization, modal tables, no duplicate server search, dynamic height and pager");
