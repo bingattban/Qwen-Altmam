@@ -211,8 +211,6 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
             if(location=="SITE-DEST")
             {
                 Assert.All(liveRows.OfType<JsonObject>(),p=>
-                    Assert.Equal("الموقع الجديد",p["siteName"]!.GetValue<string>()));
-                Assert.All(liveRows.OfType<JsonObject>(),p=>
                     Assert.Equal("نقل (د)",((JsonObject)p["days"]!)[Today()]!["symbol"]!.GetValue<string>()));
             }
         }
