@@ -110,7 +110,7 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
         var monthly=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject
         {
             ["year"]=date.Year,["month"]=date.Month,
-            ["siteId"]="SITE-UNSPECIFIED",["page"]=1,["pageSize"]=20
+            ["siteId"]="SITE-UNSPECIFIED",["archiveMode"]=true,["page"]=1,["pageSize"]=20
         },CancellationToken.None);
         Assert.True(monthly.Success,monthly.UserMessage);
         var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(monthly.Data)["items"]);
