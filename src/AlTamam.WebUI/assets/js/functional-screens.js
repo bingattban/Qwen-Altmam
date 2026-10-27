@@ -456,10 +456,16 @@
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
     const tableHost=el("section","card monthly-grid-panel");
-    const detailsBox=el("section","card monthly-cell-details");
+    const detailsBox=el("section","card monthly-cell-details auto-attendance-dialog");
+    const detailOverlay=el("div","auto-attendance-overlay");
+    detailOverlay.setAttribute("role","dialog");
+    detailOverlay.setAttribute("aria-modal","true");
+    detailOverlay.setAttribute("aria-label","تفاصيل التمام الشهري");
+    detailOverlay.hidden=true;
+    detailOverlay.appendChild(detailsBox);
     detailsBox.hidden=true;
     const bottom=el("form","card functional-archive monthly-archive-controls");
-    append(container,tool,feedback,exportPanel,detailsBox,tableHost,bottom);
+    append(container,tool,feedback,exportPanel,tableHost,bottom,detailOverlay);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
     const item=(label,value)=>{
@@ -469,7 +475,7 @@
     };
     async function showCellDetails(personId,date){
       const request=++detailsRequest;
-      detailsBox.hidden=false;
+      detailOverlay.hidden=false;
       detailsBox.replaceChildren(message("جارٍ قراءة الواقعة المحفوظة..."));
       try{
         const response=await bridge().invoke("GetMonthlyCellDetails",{
@@ -480,7 +486,7 @@
         if(!data||data.personId!==personId||data.businessDate!==date)
           throw new Error("لم تتطابق البيانات التاريخية مع اليوم المختار.");
         const top=el("div","monthly-detail-heading");
-        const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailsBox.hidden=true;
+        const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailOverlay.hidden=true;
           detailsBox.replaceChildren();});
         append(top,el("h3","section-title","تفاصيل التمام — "+date),close);
         const content=el("div","monthly-detail-content");
