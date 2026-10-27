@@ -883,7 +883,7 @@
     },
     {
       "routeKey": "EightPmScheduler",
-      "titleAr": "جدولة الساعة الثامنة صباحاً",
+      "titleAr": "جدولة التحضير التلقائي",
       "breadcrumbAr": "مكوّن نظامي > استكمال تحضير غير المحضرين",
       "relativeFolder": "SharedScreens/EightPmScheduler",
       "kind": "shared system flow",
