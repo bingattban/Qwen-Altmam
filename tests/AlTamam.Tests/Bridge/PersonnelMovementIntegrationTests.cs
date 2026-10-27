@@ -132,6 +132,19 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.Equal(2L,Count("PersonnelMovements"));
         Assert.Equal(2L,Count("AuditEvents"));
         var month=new DailyMonthlyReadService(_db);
+        // Two internally transferred persons remain active at their new site,
+        // but the live month hides their dated transfer records by business rule.
+        async Task<long> ActiveForce(string site)
+        {
+            var response=await month.DashboardSummaryAsync(new JsonObject{
+                ["businessDate"]=Today(),["siteId"]=site
+            },CancellationToken.None);
+            Assert.True(response.Success,response.UserMessage);
+            return ((JsonObject)response.Data!)["totalForce"]!.GetValue<long>();
+        }
+        Assert.Equal(3L,await ActiveForce(""));
+        Assert.Equal(1L,await ActiveForce("SITE-UNSPECIFIED"));
+        Assert.Equal(2L,await ActiveForce("SITE-DEST"));
         DateTime now=DateTime.Now;
         foreach(var (location,expected) in new[] {
             ("SITE-UNSPECIFIED","تم نقله إلى"),
