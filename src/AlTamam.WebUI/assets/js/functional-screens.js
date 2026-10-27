@@ -120,6 +120,7 @@
     container.replaceChildren(header("تسجيل الدخول إلى التمام اليومي"));
     const form=el("form","card auth-form");
     const name=field("text","اسم المستخدم",true);
+    name.input.autocomplete="username";
     const pass=field("password","كلمة المرور",true);
     // Existing users may have historical credentials; only NEW founders must
     // satisfy the current strong-password policy during initialization.
