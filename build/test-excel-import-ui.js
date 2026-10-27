@@ -47,7 +47,11 @@ class FakeFileReader{
     queueMicrotask(()=>this.onload());
   }
 }
-const context={window:{AltamamBridge:bridge},
+let allowImport=false;
+const importReviews=[];
+const context={window:{AltamamBridge:bridge,AltamamDialog:{
+  detailsReview:async(data,opts)=>{importReviews.push({data,opts});return allowImport;}
+}},
   document:{getElementById:x=>x==="appViewport"?viewport:null,
     createElement:tag=>new Element(tag)},
   FileReader:FakeFileReader,console,confirm:()=>true,
@@ -77,8 +81,10 @@ async function run(){
   await button("معاينة خطة الإضافة").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,0,
     "server-side preview must not persist rows");
-  assert.ok(button("تأكيد استيراد الأفراد الجدد"));
-  await button("تأكيد استيراد الأفراد الجدد").handlers.click();
+  assert.equal(importReviews.length,1,"import preview opens directly in a modal");
+  assert.equal(importReviews[0].data.items.length,2,"modal shows both accepted identities");
+  allowImport=true;
+  await button("معاينة خطة الإضافة").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,1);
   assert.equal(calls.find(x=>x.name==="CommitImport").body.previewToken,"B".repeat(64));
   assert.ok(all().some(x=>x.textContent.includes("تم إنشاء 2 فرداً جديداً")));
