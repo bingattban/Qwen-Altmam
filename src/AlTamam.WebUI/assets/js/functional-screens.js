@@ -226,7 +226,7 @@
     try{
       const ids=await dialogs.unpreparedSelection(async page=>{
         const response=parseData(await bridge().invoke("QueryDailyRoster",{
-          businessDate:date,siteId:site,statusId:"__UNPREPARED__",page,pageSize:50
+          businessDate:date,siteId:site,statusId:"__UNPREPARED__",page,pageSize:100
         }));
         if(!response||!Array.isArray(response.items))
           throw Error("لم يُرجع البرنامج قائمة غير المحضرين.");
@@ -561,7 +561,7 @@
       }
       const grid=parseData(await bridge().invoke("QueryMonthlyGrid",{
         year,month,siteId:STATE.siteId,term:STATE.monthTerm,
-        page:STATE.monthPage,pageSize:50
+        page:STATE.monthPage,pageSize:100
       }));
       if(STATE.monthEpoch!==epoch)return;
       const dayCount=monthDays(year,month);
@@ -604,7 +604,7 @@
         window.requestAnimationFrame(revealCurrentDay);
       for(const [index,person] of (grid.items||[]).entries()){
         const tr=el("tr");
-        [(STATE.monthPage-1)*50+index+1,person.serviceNumberA,person.name,person.siteName]
+        [(STATE.monthPage-1)*100+index+1,person.serviceNumberA,person.name,person.siteName]
           .forEach((v,j)=>{
             const td=el("td","pinned fixed-"+["one","two","three","four"][j],v);
             td.title=String(v??"");
@@ -637,7 +637,7 @@
       if(!(grid.items||[]).length)tableHost.replaceChildren(message(
         STATE.monthTerm?"لا يوجد فرد مطابق للبحث في هذا الشهر والموقع":
           period!==current?"لا يوجد أرشيف لهذا الشهر":"لا توجد سجلات لهذا الشهر"));
-      else pager(tableHost,STATE.monthPage,grid.total||0,50,p=>{STATE.monthPage=p;renderMonthly();});
+      else pager(tableHost,STATE.monthPage,grid.total||0,100,p=>{STATE.monthPage=p;renderMonthly();});
     } catch(e) { if(STATE.monthEpoch===epoch)showError(feedback,e); }
   }
 
