@@ -113,6 +113,7 @@
   async function loginGate() {
     const container=view(); if(!container)return;
     container.classList.toggle("daily-dashboard",false);
+    container.classList.toggle("monthly-dashboard",false);
     document.querySelector(".app-sidebar").hidden=true;
     document.getElementById("headerRoleBadge").textContent="لم يتم تسجيل الدخول";
     document.getElementById("logoutAction").hidden=true;
@@ -376,6 +377,10 @@
 
   async function renderMonthly() {
     const container=view();
+    // Month roster owns the available desktop height, like the daily roster.
+    // All calendar days and the fixed identity columns retain their order.
+    container.classList.toggle("daily-dashboard",false);
+    container.classList.toggle("monthly-dashboard",true);
     const now=new Date();
     const year=STATE.chosenYear||now.getFullYear();
     const month=STATE.chosenMonth||now.getMonth()+1;
@@ -384,10 +389,10 @@
     const feedback=el("div","functional-feedback");
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
-    const tableHost=el("section","card");
+    const tableHost=el("section","card monthly-grid-panel");
     const detailsBox=el("section","card monthly-cell-details");
     detailsBox.hidden=true;
-    const bottom=el("form","card functional-archive");
+    const bottom=el("form","card functional-archive monthly-archive-controls");
     append(container,tool,feedback,exportPanel,detailsBox,tableHost,bottom);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
@@ -646,6 +651,7 @@
     if (!STATE.session) { loginGate();return; }
     if (!sections.has(section)) section="dashboard";
     if(section!=="dashboard")view().classList.toggle("daily-dashboard",false);
+    if(section!=="monthly")view().classList.toggle("monthly-dashboard",false);
     applyMainNav(section);
     history.replaceState(null,"","#"+section);
     if(section==="dashboard")renderDashboard();
