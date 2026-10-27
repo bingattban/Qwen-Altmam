@@ -172,7 +172,9 @@
         document.getElementById("headerRoleBadge").textContent=
           result.username+" — "+(result.roleLabelAr||result.role);
         document.getElementById("logoutAction").hidden=false;
+        const openAutomaticRegister=location.hash.slice(1)==="auto-prepared";
         render("dashboard");
+        if(openAutomaticRegister)openAutoPreparedList();
         void checkOutputAfterLogin();
       } catch(e) { showError(status,e); }
       finally { submit.disabled=false; }
@@ -713,9 +715,11 @@
         document.getElementById("headerRoleBadge").textContent=
           state.username+" — "+(state.roleLabelAr||state.role);
         document.getElementById("logoutAction").hidden=false;
+        const openAutomaticRegister=location.hash.slice(1)==="auto-prepared";
         const initialSection=["dashboard","monthly","admin","settings"].includes(location.hash.slice(1))
           ?location.hash.slice(1):"dashboard";
         render(initialSection);
+        if(openAutomaticRegister)openAutoPreparedList();
         // A restored monthly/report page is read-only; check the output-drive
         // on fresh dashboard login and whenever Settings is opened instead.
         if(initialSection==="dashboard")void checkOutputAfterLogin();
