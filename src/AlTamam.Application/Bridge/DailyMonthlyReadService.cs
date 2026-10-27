@@ -50,7 +50,10 @@ public sealed class DailyMonthlyReadService
                    EXISTS(SELECT 1 FROM PersonnelMovements m
                           WHERE m.PersonId=p.PersonId AND m.EffectiveLocalDate=$date
                             AND m.MovementType=1) AS IsInternalTransferDay,
-                   COUNT(*)
+                   COUNT(*),
+                   SUM(CASE WHEN ar.IdempotencyKey LIKE 'AUTO08H-%'
+                                 OR ar.IdempotencyKey LIKE 'AUTO20H-%'
+                            THEN 1 ELSE 0 END)
             FROM Persons p
             LEFT JOIN PersonAssignments a ON a.AssignmentId = (
                 SELECT innerA.AssignmentId FROM PersonAssignments innerA
@@ -69,7 +72,7 @@ public sealed class DailyMonthlyReadService
         cmd.Parameters.AddWithValue("$date", Iso(date));
         cmd.Parameters.AddWithValue("$site", siteId);
         var totals = new Dictionary<string, long>(StringComparer.Ordinal);
-        long force = 0, unprepared = 0, transferDay = 0;
+        long force = 0, unprepared = 0, transferDay = 0, autoPrepared = 0;
         using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
         {
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
@@ -84,6 +87,7 @@ public sealed class DailyMonthlyReadService
                 }
                 else if (reader.IsDBNull(0)) unprepared += amount;
                 else totals[reader.GetString(0)] = totals.GetValueOrDefault(reader.GetString(0)) + amount;
+                if (reader.GetInt64(1) == 0) autoPrepared += reader.GetInt64(3);
             }
         }
 
@@ -115,6 +119,7 @@ public sealed class DailyMonthlyReadService
             ["siteId"] = siteId,
             ["totalForce"] = force,
             ["unprepared"] = unprepared,
+            ["automaticallyPrepared"] = autoPrepared,
             ["internalTransferDay"] = transferDay,
             ["attendanceEligible"] = force - transferDay,
             ["completionPercentage"] = force == transferDay ? 0 :
@@ -155,6 +160,9 @@ public sealed class DailyMonthlyReadService
               AND ($status = '' OR ar.StatusId = $status
                    OR ($status = '__UNPREPARED__' AND ar.StatusId IS NULL
                         AND m.MovementId IS NULL)
+                   OR ($status = '__AUTO_PREPARED__' AND m.MovementId IS NULL
+                        AND (ar.IdempotencyKey LIKE 'AUTO08H-%'
+                             OR ar.IdempotencyKey LIKE 'AUTO20H-%'))
                    OR ($status = '__TRANSFER_DAY__' AND m.MovementId IS NOT NULL)
                    OR ($status = '__ELIGIBLE__' AND m.MovementId IS NULL))
             """;
