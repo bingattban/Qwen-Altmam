@@ -51,7 +51,8 @@ const bridge = {
         backupDirectory:"E:\\AlTamamAlYawmi\\Backups", backupTime:"16:00",
         automaticBackupNote:"الجدولة غير نشطة", defaultDriveAvailable:false },
       GetApplicationVersion: { productNameAr:"التمام اليومي", version:"0.4.0" },
-      GetAutoAttendancePolicy: {configured:false,defaultStatusId:null,dueTimeLocal:"08:00"},
+      GetAutoAttendancePolicy: {configured:false,defaultStatusId:null,dueTimeLocal:"08:00",dailyLockTimeLocal:"20:00"},
+      SetAttendanceSchedule: {dueTimeLocal:"07:15",dailyLockTimeLocal:"19:30"},
       SetAutoAttendanceDefaultStatus: {defaultStatusId:"STS-ABSENT",defaultStatusName:"غياب",configured:true},
       RunDatabaseIntegrityCheck: { integrity:"ok" },
       InspectBackup: {verified:true,fileName:"verified.dbbackup",fileSizeBytes:4096,
@@ -322,13 +323,23 @@ async function run() {
   await controller.renderSettings(admin,()=>{});
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
     .map(x=>x.textContent);
-  assert.deepEqual(titles,["الحساب والبرنامج","التحضير التلقائي — الساعة 8 صباحاً","النسخ الاحتياطي",
+  assert.deepEqual(titles,["الحساب والبرنامج","أوقات التحضير التلقائي وقفل التمام اليومي","النسخ الاحتياطي",
     "سلامة قاعدة البيانات","التحقق من النسخ والاستعادة"]);
   const fallback=visible().find(x=>x.tag==="select"&&
     x.attrs["aria-label"]==="الحالة الافتراضية عند عدم وجود تحضير أمس");
   assert.ok(fallback,"administrators can choose the 08:00 fallback status");
   assert.ok(!calls.some(x=>x.name==="SetAutoAttendanceDefaultStatus"),
     "loading settings must not mutate policy");
+  const due=visible().find(x=>x.tag==="input"&&x.attrs["aria-label"]==="وقت التحضير التلقائي");
+  const locked=visible().find(x=>x.tag==="input"&&x.attrs["aria-label"]==="وقت قفل التحضير اليومي");
+  assert.ok(due&&locked,"independently configured attendance time fields must exist");
+  assert.equal(due.value,"08:00");
+  assert.equal(locked.value,"20:00");
+  due.value="07:15";locked.value="19:30";
+  await buttonNamed("حفظ أوقات التحضير").handlers.click();
+  assert.ok(calls.some(x=>x.name==="SetAttendanceSchedule"&&x.body.dueTimeLocal==="07:15"&&
+    x.body.dailyLockTimeLocal==="19:30"&&x.body.operationId.length>=16),
+    "times must be saved explicitly through the authorized C# action");
   fallback.value="STS-ABSENT";
   await buttonNamed("حفظ الحالة الافتراضية").handlers.click();
   assert.ok(calls.some(x=>x.name==="SetAutoAttendanceDefaultStatus"&&x.body.statusId==="STS-ABSENT"),
