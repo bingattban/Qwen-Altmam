@@ -151,13 +151,39 @@
       if(delay===null)void run();
     });
   }
+  // One visual contract for EVERY search box, including inputs created after
+  // opening an admin sub-screen or modal. Never modify the search parameters.
+  const personSearchPlaceholder="بحث بالاسم أو الرقم (ع)";
+  function normalizeSearchField(input,isPerson){
+    const label=input.closest?.("label")||
+      (input.parentElement?.tagName?.toLowerCase?.()==="label"||
+       input.parentElement?.tag==="label"?input.parentElement:null);
+    const caption=label?.children?.[0];
+    const captionText=caption?.textContent?.trim?.()||"";
+    const existingHint=(input.placeholder||"").trim();
+    const genericSearch=input.type==="search"||
+      /بحث/.test([existingHint,input.getAttribute?.("aria-label")||"",captionText].join(" "));
+    if(!genericSearch||!["text","search"].includes(input.type))return;
+    input.classList.add("app-unified-search");
+    if(isPerson)input.placeholder=personSearchPlaceholder;
+    else if(!existingHint)input.placeholder=captionText||"بحث";
+    if(label && label.classList && !label.classList.contains("table-local-search")){
+      label.classList.add("app-unified-search-wrap");
+      // Keep the accessible label, but put its visible prompt INSIDE the field.
+      if(caption?.tagName?.toLowerCase?.()==="span"||caption?.tag==="span"){
+        if(/بحث/.test(captionText))caption.classList.add("app-unified-search-caption");
+      }
+    }
+  }
   function enhanceInputs(){
     for(const input of document.querySelectorAll("input")){
       if(enhancedInputs.has(input))continue;
       enhancedInputs.add(input);
       if(input.disabled||input.readOnly||input.type==="password"||
          input.type==="hidden"||input.type==="file")continue;
-      if(personSearchInput(input))attachNameSuggestions(input);
+      const isPerson=personSearchInput(input);
+      normalizeSearchField(input,isPerson);
+      if(isPerson)attachNameSuggestions(input);
       else if(["text","search","email"].includes(input.type)&&
         !input.autocomplete)
         input.autocomplete="on";
