@@ -74,6 +74,16 @@ async function main(){
   await events.DOMContentLoaded();await tick();await tick();
   const scroller=viewport.all().find(x=>x.className.includes("monthly-scroll"));
   assert.ok(scroller,"monthly scroll region must exist");
+  assert.ok(viewport.className.includes("monthly-dashboard"),
+    "monthly roster must activate the full-screen layout");
+  const monthPanel=viewport.all().find(x=>x.className.includes("monthly-grid-panel"));
+  assert.ok(monthPanel&&monthPanel.className.includes("functional-paged-area"),
+    "monthly grid uses the remaining viewport and keeps pagination attached");
+  assert.equal(monthPanel.children[0],scroller,"calendar scroll stays inside the monthly grid panel");
+  assert.ok(monthPanel.children.some(x=>x.className.includes("functional-pager")),
+    "month page buttons stay outside the vertically/horizontally scrollable table");
+  assert.ok(viewport.all().some(x=>x.className.includes("monthly-archive-controls")),
+    "month archive controls retain their own accessible compact footer");
   const dayHeaders=viewport.all().filter(x=>x.tag==="th" &&
     x.className.split(/\s+/).includes("day-column"));
   const numberOfDays=new Date(year,month,0).getDate();
@@ -89,6 +99,16 @@ async function main(){
     "today must be adjacent to the last pinned core column at initial render");
   assert.equal(scroller.lastScroll.left,-500,
     "today must align beside fixed columns (right 1180 - fixed 480 - half day 30), not centered");
+  const monthlyCss=fs.readFileSync(path.join(__dirname,
+    "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+  assert.match(monthlyCss,/#appViewport\.monthly-dashboard>\.monthly-grid-panel\s*\{/,
+    "monthly panel must fill the available screen instead of a 41-58vh cap");
+  assert.match(monthlyCss,/#appViewport\.monthly-dashboard>\.monthly-grid-panel>\.monthly-scroll\s*\{/,
+    "month table must own the scrolling area, keeping month-day alignment");
+  assert.match(monthlyCss,/\.monthly-scroll \.functional-table thead th\.day-column\s*\{/,
+    "readable calendar headers preserve weekday/newline layout");
+  assert.match(monthlyCss,/#appViewport\.monthly-dashboard \.monthly-scroll \.functional-table thead th\.pinned\s*\{/,
+    "fixed identity headers keep strong contrast and color");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
   assert.ok(open,"one committed cell has a detail button");
   assert.ok(open.attrs["aria-label"]?.includes(firstDay),"accessible date label");
