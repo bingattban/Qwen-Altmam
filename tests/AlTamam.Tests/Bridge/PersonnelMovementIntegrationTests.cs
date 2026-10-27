@@ -105,6 +105,19 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.Equal(1L, source["total"]!.GetValue<long>());
         Assert.Equal(0L, (await Archive("SITE-DEST", "external", today, today))["total"]!.GetValue<long>());
         Assert.Equal(0L, (await Archive("", "", Yesterday(), Yesterday()))["total"]!.GetValue<long>());
+        var local=DateOnly.Parse(today);
+        var monthly=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=local.Year,["month"]=local.Month,
+            ["siteId"]="SITE-UNSPECIFIED",["archiveMode"]=true,
+            ["page"]=1,["pageSize"]=50
+        },CancellationToken.None);
+        Assert.True(monthly.Success,monthly.UserMessage);
+        var people=Assert.IsType<JsonArray>(((JsonObject)monthly.Data!)["items"]);
+        var externalPerson=people.OfType<JsonObject>().Single(p=>
+            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P2");
+        var movedDay=Assert.IsType<JsonObject>(((JsonObject)externalPerson["days"]!)[today]);
+        Assert.Equal("نقل (خ)",movedDay["symbol"]!.GetValue<string>());
+        Assert.StartsWith("نقل (خ)",movedDay["name"]!.GetValue<string>());
     }
 
     [Fact]
