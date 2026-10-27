@@ -291,7 +291,8 @@
 
     async function showOutcome(batchId){
       const request=++detailsSerial;
-      historyDetails.replaceChildren(warning("جارٍ قراءة تفاصيل الدفعة..."));
+      const dialog=detailsModal("تفاصيل دفعة الاستيراد");
+      dialog.content.replaceChildren(warning("جارٍ قراءة تفاصيل الدفعة..."));
       try{
         const response=await api().invoke("QueryImportOutcome",{importBatchId:batchId});
         if(!valid()||request!==detailsSerial)return;
@@ -319,7 +320,7 @@
               if(!valid()||request!==detailsSerial)return;
               if(result.data?.format!=="xlsx"||!result.data?.filePath)
                 throw Error("لم يؤكد الخادم إنشاء ملف Excel.");
-              historyDetails.appendChild(node("p","settings-success",
+              dialog.content.appendChild(node("p","settings-success",
                 "تم حفظ تقرير الأخطاء: "+result.data.filePath));
             }catch(e){if(valid())errors(historyDetails,e);}
             finally{exportButton.disabled=false;}
@@ -329,8 +330,8 @@
           panel.appendChild(node("p","section-description",
             "لا توجد صفوف مستبعدة لهذه الدفعة."));
         }
-        historyDetails.replaceChildren(panel);
-      }catch(e){if(valid()&&request===detailsSerial)errors(historyDetails,e);}
+        dialog.content.replaceChildren(panel);
+      }catch(e){if(valid()&&request===detailsSerial)errors(dialog.content,e);}
     }
     const valid=()=>state.active==="import"&&page.isConnected!==false;
     function reset(){
