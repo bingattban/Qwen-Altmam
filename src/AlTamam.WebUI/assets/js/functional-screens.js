@@ -498,7 +498,7 @@
     };
     async function showCellDetails(personId,date){
       const request=++detailsRequest;
-      detailsBox.hidden=false;
+      detailsBox.hidden=false;detailsOverlay.hidden=false;
       detailsBox.replaceChildren(message("جارٍ قراءة الواقعة المحفوظة..."));
       try{
         const response=await bridge().invoke("GetMonthlyCellDetails",{
