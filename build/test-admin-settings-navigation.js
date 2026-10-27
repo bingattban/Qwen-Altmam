@@ -269,6 +269,8 @@ async function run() {
   byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="persons").handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(visible().some(x=>x.textContent==="إجمالي الأفراد النشطين: 0"),
+    "name editing must show the all-site active force total");
   const form=visible().find(x=>x.className.includes("admin-create-person"));
   assert.ok(form,"single-person form is available");
   const inputs=form.all().filter(x=>x.tag==="input");
@@ -336,14 +338,16 @@ async function run() {
   assert.equal(due.value,"08:00");
   assert.equal(locked.value,"20:00");
   due.value="07:15";locked.value="19:30";
-  await buttonNamed("حفظ أوقات التحضير").handlers.click();
+  fallback.value="STS-ABSENT";
+  assert.equal(visible().filter(x=>x.tag==="button"&&x.textContent.includes("حفظ")&&
+    x.className.includes("settings-action")&&x.textContent.includes("التحضير")).length,1,
+    "attendance group must use one unified save control");
+  await buttonNamed("حفظ إعدادات التحضير التلقائي").handlers.click();
   assert.ok(calls.some(x=>x.name==="SetAttendanceSchedule"&&x.body.dueTimeLocal==="07:15"&&
     x.body.dailyLockTimeLocal==="19:30"&&x.body.operationId.length>=16),
-    "times must be saved explicitly through the authorized C# action");
-  fallback.value="STS-ABSENT";
-  await buttonNamed("حفظ الحالة الافتراضية").handlers.click();
+    "times must persist on explicit unified save");
   assert.ok(calls.some(x=>x.name==="SetAutoAttendanceDefaultStatus"&&x.body.statusId==="STS-ABSENT"),
-    "explicit administrator confirmation writes the selected active status");
+    "unified save also writes the chosen active fallback");
 
   assert.ok(buttonNamed("إنشاء نسخة احتياطية الآن").disabled,
     "manual backup disabled on a device without E: drive");
@@ -363,8 +367,8 @@ async function run() {
   assert.ok(visible().some(x=>x.textContent==="verified.dbbackup"),
     "verified metadata is displayed only after real native inspection");
   await controller.renderSettings({role:"Supervisor",username:"test-supervisor"},()=>{});
-  assert.ok(!buttonNamed("حفظ الحالة الافتراضية"),
-    "supervisors cannot see or invoke policy changes from settings");
+  assert.ok(!buttonNamed("حفظ إعدادات التحضير التلقائي"),
+    "supervisors cannot see or invoke schedule and default-status policy changes");
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
 run().catch(error => { console.error(error); process.exitCode=1; });
