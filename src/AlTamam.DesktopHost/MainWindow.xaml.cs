@@ -127,9 +127,16 @@ public partial class MainWindow : Window
                 System.Windows.Application.Current.Shutdown(1);
                 return;
             }
-            startupMessage.Text = "تعذر فتح التطبيق. تحقّق من قاعدة البيانات وبيئة WebView2.";
+            // Key recovery and invalid storage paths have different remedies.
+            // Never show a raw DPAPI key, SQLCipher secret or untrusted path as
+            // part of a low-level exception in the user-facing Windows dialog.
+            string? recoveryMessage =
+                AlTamam.Infrastructure.Security.DatabaseStartupFailureClassifier
+                    .UserMessage(ex);
+            startupMessage.Text = recoveryMessage ??
+                "تعذر فتح التطبيق. تحقّق من قاعدة البيانات وبيئة WebView2.";
             MessageBox.Show(
-                "تعذر تشغيل واجهة التطبيق: " + ex.Message,
+                recoveryMessage ?? ("تعذر تشغيل واجهة التطبيق: " + ex.Message),
                 "التمام اليومي", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

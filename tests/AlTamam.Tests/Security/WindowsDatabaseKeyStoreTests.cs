@@ -54,8 +54,9 @@ public sealed class WindowsDatabaseKeyStoreTests : IDisposable
         };
         Directory.CreateDirectory(Path.GetDirectoryName(filename)!);
         File.WriteAllBytes(filename, new byte[] { 0x03, 0x18 });
-        Assert.Throws<CryptographicException>(() =>
+        var error=Assert.Throws<CryptographicException>(() =>
             new WindowsDatabaseKeyStore(KeyPath).LoadOrCreate(DatabasePath));
+        Assert.Equal(DatabaseStartupFailureClassifier.MissingEncryptionKey,error.Message);
         Assert.False(File.Exists(KeyPath));
         Assert.Equal(new byte[] { 0x03, 0x18 }, File.ReadAllBytes(filename));
     }
