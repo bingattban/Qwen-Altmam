@@ -140,7 +140,7 @@ async function verifySharedInputCompletion(){
   person.value="محمد";
   person.handlers.input();
   await new Promise(resolve=>setImmediate(resolve));
-  const datalist=main.all().find(x=>x.tag==="datalist");
+  const datalist=main.all().find(x=>x.tag==="datalist"&&x.id===person.list);
   assert.ok(datalist);
   assert.ok(datalist.all().some(x=>x.tag==="option"&&x.value==="محمد سالم"));
   assert.ok(datalist.all().some(x=>x.tag==="option"&&x.value==="12345"));
