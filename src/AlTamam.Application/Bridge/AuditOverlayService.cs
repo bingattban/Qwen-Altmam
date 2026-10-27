@@ -43,6 +43,7 @@ public sealed class AuditOverlayService
     public async Task<BridgeResponse> QueryAuditLogAsync(
         JsonObject payload, CancellationToken ct, BridgePrincipal? principal = null)
     {
+        string term = ReadString(payload, "term");
         string actor = ReadString(payload, "actor");
         string target = ReadString(payload, "target");
         string operation = ReadString(payload, "operation");
@@ -63,6 +64,27 @@ public sealed class AuditOverlayService
 
         var where = new List<string>();
         var args = new List<(string Name, object Value)>();
+        if (!string.IsNullOrWhiteSpace(term))
+        {
+            // Search all matching audit entries BEFORE paging. Overlay edits
+            // never rewrite immutable AuditEvents, but are searchable as displayed.
+            where.Add("""
+                (altamam_normalize_search(e.ActorUsernameSnapshot) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.ActorRosterFullNameSnapshot) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.TargetDisplaySnapshot) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.TargetEntityId) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.OperationCode) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.OperationArabicName) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.DefaultArabicDescription) LIKE $term ESCAPE '\'
+                 OR EXISTS(SELECT 1 FROM AuditLogPresentationEdits o
+                           WHERE o.AuditEventId = e.AuditEventId
+                             AND o.OverlayVersion =
+                                 (SELECT MAX(p.OverlayVersion) FROM AuditLogPresentationEdits p
+                                  WHERE p.AuditEventId = e.AuditEventId)
+                             AND altamam_normalize_search(o.CorrectedDescription) LIKE $term ESCAPE '\'))
+                """);
+            args.Add(("$term", "%" + EscapeLike(NormalizeTerm(term)) + "%"));
+        }
         if (!string.IsNullOrWhiteSpace(actor))
         {
             where.Add("(e.ActorUsernameSnapshot LIKE $actor ESCAPE '\\' OR e.ActorRosterFullNameSnapshot LIKE $actor ESCAPE '\\')");
@@ -97,6 +119,11 @@ public sealed class AuditOverlayService
         string whereSql = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
 
         using var connection = _db.CreateOpenConnection();
+        // Match normalized Arabic names, diacritics and Arabic-Indic digits
+        // in the stored snapshots WITHOUT ever rewriting immutable audit data.
+        connection.CreateFunction<string, string>("altamam_normalize_search",
+            value => ArabicTextNormalizer.NormalizeForSearch(value),
+            isDeterministic: true);
         using var countCmd = connection.CreateCommand();
         countCmd.CommandText = $"SELECT COUNT(*) FROM AuditEvents e {whereSql};";
         foreach (var (n, v) in args) countCmd.Parameters.Add(n, SqliteType.Text).Value = v;

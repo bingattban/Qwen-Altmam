@@ -56,7 +56,7 @@
       try{
         const response=await api().invoke("QueryPersons",{
           term:input.value.trim(),organizationalStatus:1,includeArchived:false,
-          page,pageSize:30
+          page,pageSize:100
         });
         if(token!==seq||!root.isConnected)return;
         const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","اختيار"]);
@@ -183,7 +183,7 @@
       out.replaceChildren(el("p","جارٍ تحميل أرشيف الفصل..."));
       try{
         const response=await api().invoke("QuerySeparationArchive",{
-          term:query.value.trim(),siteId:sites.value,page,pageSize:50
+          term:query.value.trim(),siteId:sites.value,page,pageSize:100
         });
         if(request!==sequence||!root.isConnected)return;
         const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","تاريخ الفصل","التفاصيل"]);

@@ -87,8 +87,8 @@
             }
             table.append(head,rows);scrolling.appendChild(table);
             loading.textContent=count?"إجمالي غير المحضرين: "+count:"لا يوجد أفراد غير محضرين.";
-            pageText.textContent="صفحة "+page+" من "+Math.max(1,Math.ceil(count/50));
-            prev.disabled=page<=1;next.disabled=page*50>=count;
+            pageText.textContent="صفحة "+page+" من "+Math.max(1,Math.ceil(count/100));
+            prev.disabled=page<=1;next.disabled=page*100>=count;
           }catch(error){
             loading.textContent=error?.message||"تعذرت قراءة القائمة؛ أعد المحاولة.";
           }

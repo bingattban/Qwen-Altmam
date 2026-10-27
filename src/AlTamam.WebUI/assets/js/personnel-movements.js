@@ -43,7 +43,7 @@ async function transfer(host,external){
     list.replaceChildren(el("p","جارٍ قراءة الكشف..."));
     try{
       const data=(await api().invoke("QueryPersons",{siteId:from.value,organizationalStatus:1,
-        term:search.value.trim(),page,pageSize:50})).data||{};
+        term:search.value.trim(),page,pageSize:100})).data||{};
       if(current!==serial||!card.isConnected)return;
       const t=table(["اختيار","الرقم (ع)","الاسم","الموقع"]);
       for(const p of data.items||[]){
@@ -151,7 +151,7 @@ async function archive(host,external){
  card.append(bar,notice,result);host.appendChild(card);
  async function load(){
    try{
-     const data=(await api().invoke("QueryMovementArchive",{page,pageSize:50,
+     const data=(await api().invoke("QueryMovementArchive",{page,pageSize:100,
        type:archiveType,term:search.value.trim(),siteId:site.value,
         dateFrom:dateFrom.value,dateTo:dateTo.value})).data||{};
      if(!card.isConnected)return;

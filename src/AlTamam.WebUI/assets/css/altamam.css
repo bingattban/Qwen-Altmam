@@ -1106,3 +1106,188 @@ body{min-width:0}
     max-height:calc(70dvh - 42px)
   }
 }
+
+/* Consistent high-density, readable table treatment in every application screen.
+   Monthly sticky-day positioning and the dashboard's full-height shell are kept. */
+#appViewport table.unified-app-table,
+#appModalBody table.unified-app-table{
+  border-collapse:separate;border-spacing:0;
+  font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;font-size:14px
+}
+#appViewport table.unified-app-table :is(th,td),
+#appModalBody table.unified-app-table :is(th,td){
+  box-sizing:border-box;vertical-align:middle;line-height:1.4;
+  min-height:35px;padding:5px 8px;border-bottom:1px solid var(--border-color);
+  border-inline-start:1px solid var(--border-color)
+}
+#appViewport table.unified-app-table th,
+#appModalBody table.unified-app-table th{
+  font-weight:800;white-space:normal;text-align:right
+}
+#appViewport table.unified-app-table td,
+#appModalBody table.unified-app-table td{
+  font-weight:650
+}
+#appViewport table.unified-app-table tbody tr:nth-child(even):not([hidden]) td,
+#appModalBody table.unified-app-table tbody tr:nth-child(even):not([hidden]) td{
+  background:var(--bg-subtle)
+}
+#appViewport table.unified-app-table tbody tr[hidden],
+#appModalBody table.unified-app-table tbody tr[hidden]{display:none}
+#appViewport .table-expanded-scroll{
+  max-height:var(--usable-table-height,calc(100dvh - 210px));
+  min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable
+}
+#appModalBody .table-expanded-scroll{
+  max-height:min(58dvh,620px);overflow:auto;min-height:0;overscroll-behavior:contain
+}
+#appViewport .table-expanded-paged{
+  display:flex;flex-direction:column;min-height:0;
+  max-height:min(91dvh,calc(100dvh - 96px))
+}
+#appViewport .table-expanded-paged>.table-expanded-scroll{
+  flex:1 1 auto;min-height:0;
+  max-height:var(--usable-table-height,calc(100dvh - 180px))
+}
+#appViewport .table-expanded-paged>.functional-pager{
+  position:relative;flex:0 0 auto;margin:0;min-height:42px;
+  background:var(--bg-surface);padding:6px 10px;z-index:12;
+  border-top:1px solid var(--border-color)
+}
+/* Use the existing daily-dashboard full-height flex contract unchanged. */
+#appViewport.daily-dashboard>.daily-roster-panel>.table-expanded-scroll{
+  max-height:none;flex:1 1 auto
+}
+.table-local-search{
+  position:sticky;top:0;z-index:10;
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  background:var(--bg-surface);border-bottom:1px solid var(--border-color);
+  padding:5px 9px;font-size:13px;font-weight:700
+}
+.table-local-search input{
+  flex:1 1 220px;min-width:130px;max-width:450px;
+  background:var(--bg-surface);color:var(--text-main);border:1px solid var(--border-color);
+  border-radius:7px;padding:6px 10px;min-height:34px;font:inherit
+}
+.table-local-count{margin-inline-start:auto;color:var(--text-muted);font-weight:600}
+.table-expanded-scroll.has-local-table-search table.unified-app-table thead th{
+  top:43px
+}
+@media(max-width:700px){
+  .table-local-search{gap:5px;padding:5px}
+  .table-local-search input{flex-basis:150px}
+  #appViewport .table-expanded-scroll{max-height:min(72dvh,610px)}
+}
+/* Retain all monthly-column pinning, centered dates and current-day highlight. */
+#appViewport .monthly-scroll table.unified-app-table thead th{
+  text-align:center;white-space:pre-line
+}
+#appViewport .monthly-scroll table.unified-app-table thead th.pinned{
+  z-index:15
+}
+
+/* Monthly attendance: fit as many readable people as the window permits.
+   Keep the chronological calendar, four sticky columns and visible pager. */
+#appViewport.monthly-dashboard{
+  height:100%;min-height:0;overflow:hidden;gap:6px
+}
+#appViewport.monthly-dashboard>.functional-header{
+  flex:0 0 auto;padding:6px 12px
+}
+#appViewport.monthly-dashboard>.functional-header .page-title{
+  margin:0;font-size:18px;line-height:1.3
+}
+#appViewport.monthly-dashboard>.functional-toolbar{
+  flex:0 0 auto;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+  gap:6px;min-height:0;padding:5px 8px;scrollbar-width:thin
+}
+#appViewport.monthly-dashboard>.functional-toolbar>*{flex-shrink:0}
+#appViewport.monthly-dashboard>.functional-toolbar .form-field:has(input[type="search"]){
+  flex:1 0 220px;min-width:210px;max-width:340px
+}
+#appViewport.monthly-dashboard>.functional-toolbar input[type="search"]{
+  box-sizing:border-box;width:100%;max-width:none;
+  min-height:34px;padding:5px 9px;font-size:14px
+}
+#appViewport.monthly-dashboard>.functional-toolbar :is(select,.btn),
+#appViewport.monthly-dashboard>.monthly-archive-controls :is(select,.btn){
+  min-height:34px;padding:5px 9px;font-size:13px
+}
+#appViewport.monthly-dashboard>.functional-feedback:not(:empty){flex:0 0 auto}
+#appViewport.monthly-dashboard> :is(.functional-export-preview,.monthly-cell-details)[hidden]{
+  display:none!important
+}
+#appViewport.monthly-dashboard> :is(.functional-export-preview,.monthly-cell-details):not([hidden]){
+  flex:0 0 auto;max-height:min(24dvh,190px);overflow:auto
+}
+#appViewport.monthly-dashboard>.monthly-grid-panel{
+  display:flex;flex-direction:column;flex:1 1 0;
+  min-width:0;min-height:0;height:auto;max-height:none;
+  overflow:hidden;padding:0
+}
+#appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-scroll{
+  flex:1 1 0;min-height:0;max-height:none;
+  overflow:auto;scrollbar-gutter:stable
+}
+#appViewport.monthly-dashboard>.monthly-grid-panel>.functional-pager{
+  position:relative;flex:0 0 auto;min-height:38px;
+  margin:0;padding:4px 9px;gap:8px;z-index:12;
+  background:var(--bg-surface);border-top:1px solid var(--border-color)
+}
+#appViewport.monthly-dashboard>.monthly-grid-panel>.functional-pager .btn{
+  min-height:29px;padding:4px 10px
+}
+#appViewport.monthly-dashboard>.monthly-archive-controls{
+  flex:0 0 auto;min-height:0;gap:8px;padding:5px 9px;
+  margin:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin
+}
+#appViewport.monthly-dashboard>.monthly-archive-controls>*{flex-shrink:0}
+/* A compact cell keeps a clear font. Longer names may wrap to the next
+   line rather than disappearing behind an ellipsis. */
+#appViewport.monthly-dashboard .monthly-scroll .functional-table :is(th,td){
+  box-sizing:border-box;vertical-align:middle;
+  font-size:14px;line-height:1.35;padding:4px 7px;
+  border-bottom:1px solid var(--border-color)
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table tbody tr{
+  height:35px
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table td.fixed-three{
+  white-space:normal;overflow-wrap:anywhere;overflow:visible;
+  text-overflow:clip;font-weight:750
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table td.fixed-four{
+  white-space:normal;overflow-wrap:anywhere
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table thead th.day-column{
+  white-space:pre-line;text-align:center;line-height:1.3;padding:5px 6px;
+  font-weight:800
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table thead th.pinned{
+  background:var(--primary-navy);color:#fff;font-size:15px;
+  font-weight:900;white-space:normal;text-align:center;
+  border-bottom:3px solid var(--accent-teal)
+}
+#appViewport.monthly-dashboard .monthly-scroll .functional-table .day-cell{
+  min-width:44px;text-align:center
+}
+#appViewport.monthly-dashboard .monthly-scroll .monthly-day-detail{
+  min-height:28px;padding:3px 5px;font-size:14px;
+  font-weight:800;line-height:1.25
+}
+#appViewport.monthly-dashboard .monthly-scroll td.current-day-column .monthly-day-detail{
+  font-size:16px;font-weight:900
+}
+#appViewport.monthly-dashboard .monthly-scroll th.current-day-column{
+  background:var(--accent-teal);color:#fff
+}
+/* Very small screens retain scrolling instead of crushing the calendar. */
+@media(max-height:580px),(max-width:670px){
+  #appViewport.monthly-dashboard{height:auto;overflow-y:auto}
+  #appViewport.monthly-dashboard>.monthly-grid-panel{
+    flex:0 0 auto;min-height:220px;max-height:72dvh
+  }
+  #appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-scroll{
+    max-height:calc(72dvh - 42px)
+  }
+}

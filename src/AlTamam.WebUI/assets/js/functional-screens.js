@@ -113,6 +113,7 @@
   async function loginGate() {
     const container=view(); if(!container)return;
     container.classList.toggle("daily-dashboard",false);
+    container.classList.toggle("monthly-dashboard",false);
     document.querySelector(".app-sidebar").hidden=true;
     document.getElementById("headerRoleBadge").textContent="لم يتم تسجيل الدخول";
     document.getElementById("logoutAction").hidden=true;
@@ -226,7 +227,7 @@
     try{
       const ids=await dialogs.unpreparedSelection(async page=>{
         const response=parseData(await bridge().invoke("QueryDailyRoster",{
-          businessDate:date,siteId:site,statusId:"__UNPREPARED__",page,pageSize:50
+          businessDate:date,siteId:site,statusId:"__UNPREPARED__",page,pageSize:100
         }));
         if(!response||!Array.isArray(response.items))
           throw Error("لم يُرجع البرنامج قائمة غير المحضرين.");
@@ -376,6 +377,10 @@
 
   async function renderMonthly() {
     const container=view();
+    // Month roster owns the available desktop height, like the daily roster.
+    // All calendar days and the fixed identity columns retain their order.
+    container.classList.toggle("daily-dashboard",false);
+    container.classList.toggle("monthly-dashboard",true);
     const now=new Date();
     const year=STATE.chosenYear||now.getFullYear();
     const month=STATE.chosenMonth||now.getMonth()+1;
@@ -384,10 +389,10 @@
     const feedback=el("div","functional-feedback");
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
-    const tableHost=el("section","card");
+    const tableHost=el("section","card monthly-grid-panel");
     const detailsBox=el("section","card monthly-cell-details");
     detailsBox.hidden=true;
-    const bottom=el("form","card functional-archive");
+    const bottom=el("form","card functional-archive monthly-archive-controls");
     append(container,tool,feedback,exportPanel,detailsBox,tableHost,bottom);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
@@ -561,7 +566,7 @@
       }
       const grid=parseData(await bridge().invoke("QueryMonthlyGrid",{
         year,month,siteId:STATE.siteId,term:STATE.monthTerm,
-        page:STATE.monthPage,pageSize:50
+        page:STATE.monthPage,pageSize:100
       }));
       if(STATE.monthEpoch!==epoch)return;
       const dayCount=monthDays(year,month);
@@ -604,7 +609,7 @@
         window.requestAnimationFrame(revealCurrentDay);
       for(const [index,person] of (grid.items||[]).entries()){
         const tr=el("tr");
-        [(STATE.monthPage-1)*50+index+1,person.serviceNumberA,person.name,person.siteName]
+        [(STATE.monthPage-1)*100+index+1,person.serviceNumberA,person.name,person.siteName]
           .forEach((v,j)=>{
             const td=el("td","pinned fixed-"+["one","two","three","four"][j],v);
             td.title=String(v??"");
@@ -637,7 +642,7 @@
       if(!(grid.items||[]).length)tableHost.replaceChildren(message(
         STATE.monthTerm?"لا يوجد فرد مطابق للبحث في هذا الشهر والموقع":
           period!==current?"لا يوجد أرشيف لهذا الشهر":"لا توجد سجلات لهذا الشهر"));
-      else pager(tableHost,STATE.monthPage,grid.total||0,50,p=>{STATE.monthPage=p;renderMonthly();});
+      else pager(tableHost,STATE.monthPage,grid.total||0,100,p=>{STATE.monthPage=p;renderMonthly();});
     } catch(e) { if(STATE.monthEpoch===epoch)showError(feedback,e); }
   }
 
@@ -646,6 +651,7 @@
     if (!STATE.session) { loginGate();return; }
     if (!sections.has(section)) section="dashboard";
     if(section!=="dashboard")view().classList.toggle("daily-dashboard",false);
+    if(section!=="monthly")view().classList.toggle("monthly-dashboard",false);
     applyMainNav(section);
     history.replaceState(null,"","#"+section);
     if(section==="dashboard")renderDashboard();

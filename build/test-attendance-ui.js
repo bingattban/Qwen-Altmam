@@ -94,8 +94,9 @@ async function main(){
  choices[1].value="STS-ABSENT";
  choices[2].value="revise";choices[2].handlers.change();
  assert.ok(one("معاينة تغيير الحالة"));
- assert.equal(root.all().filter(x=>x.tag==="input"&&x.type!=="checkbox").length,0,
-   "routine status revision must not require a reason");
+ assert.equal(root.all().filter(x=>x.tag==="input"&&
+   !["checkbox","search"].includes(x.type)).length,0,
+   "routine status revision must not require a reason; the search box stays usable");
  await choose();
  await one("معاينة تغيير الحالة").handlers.click();await flush();
  assert.equal(reviews.at(-1).opts.confirmLabel,"تأكيد تغيير الحالة");
@@ -112,6 +113,14 @@ async function main(){
  assert.equal(writes.length,committed,"failed individual preview never commits");
  assert.ok(root.all().some(x=>x.textContent.includes("شخص تجريبي")&&
    x.textContent.includes("12345")),"rejection identifies the person and الرقم (ع)");
+ // Search must reach the authorized QueryDailyRoster service before pagination.
+  const termBox=()=>root.all().find(x=>x.tag==="input"&&x.type==="search");
+  assert.ok(termBox(),"attendance selector has a direct search input");
+  termBox().value="67890";
+  one("بحث").handlers.click();await flush();
+  assert.equal(calls.filter(x=>x.name==="QueryDailyRoster").at(-1).payload.term,"67890");
+  one("مسح البحث").handlers.click();await flush();
+  assert.equal(calls.filter(x=>x.name==="QueryDailyRoster").at(-1).payload.term,"");
  expandedRoster=true;errorName="";
   await context.window.AltamamAttendance.render(root);
   const dailyPanel=()=>root.all().find(x=>x.className.includes("daily-roster-panel"));

@@ -218,7 +218,7 @@
      results.replaceChildren(el("p","جارٍ البحث عن الأفراد..."));
      try{
        const reply=await api().invoke("QueryPersons",{
-         term:value,page:1,pageSize:50,includeArchived:true
+         term:value,page:1,pageSize:100,includeArchived:true
        });
        if(ticket!==serial||!root.isConnected)return;
        const items=reply.data?.items||[];
