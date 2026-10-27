@@ -16,9 +16,9 @@
   const sections = [
     {key:"force",title:"إدارة القوة",children:[
       ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
-      ["separation","الفصل"],["personReport","التقرير"]]},
-    {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"],
+      ["separation","الفصل"],["personReport","التقرير"],
       ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]]},
+    {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
       ["export","تصدير Excel"],["layout","تعديل هيكل الكشف"]]},
     {key:"users",title:"المستخدمون",children:[]},
@@ -424,11 +424,11 @@
   // Emergency historical changes are always gated in C#, never merely by hiding UI.
   async function closedCorrection(){
     if(!["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role)){
-      start("الإدارة / التصحيح الاستثنائي");
+      start("الإدارة / إدارة القوة / التصحيح الاستثنائي لليوم المغلق");
       target().appendChild(warning("هذه العملية مخصصة للإدارة العامة والإدارة العادية فقط."));
       return;
     }
-    const page=start("الإدارة / التقارير والفصل / التصحيح الاستثنائي");
+    const page=start("الإدارة / إدارة القوة / التصحيح الاستثنائي لليوم المغلق");
     const box=card("تصحيح تحضير يوم مغلق — الإدارة العامة والإدارة العادية");
     const notice=node("div","admin-note");
     box.appendChild(warning("عملية استثنائية وخاضعة للتدقيق. يجب تفعيل السياسة صراحة، ومعاينة حالة قديمة محفوظة، ولا يمكن تصحيح يوم نقل أو فصل. لا يُفتح اليوم ولا يُغيَّر وقت التحضير الأصلي."));

@@ -89,6 +89,8 @@ assert.ok(first.wrap.savedStyles["--usable-table-height"].endsWith("px"),"dynami
 assert.ok(first.wrap.classList.contains("has-local-table-search"),"missing search auto-created");
 const local=first.wrap.children[0],input=local.children.find(x=>x.tag==="input");
 assert.equal(input.type,"search");
+assert.ok(input.classList.contains("app-unified-search"),
+  "locally generated table searches receive the compact dimensions immediately");
 input.value="123";input.handlers.input();
 assert.deepEqual(first.body.rows.map(x=>x.hidden),[false,true,true]);
 input.value="سالم";input.handlers.input();
@@ -114,6 +116,8 @@ const css=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
 assert.match(css,/\.table-expanded-paged>\.table-expanded-scroll/);
 assert.match(css,/\.table-local-search/);
+assert.match(css,/height:28px!important;min-height:28px!important;max-height:28px!important/);
+assert.match(css,/width:min\(147px,100%\)!important/);
 const html=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/index.html"),"utf8");
 assert.match(html,/assets\/js\/table-experience\.js/);
@@ -130,10 +134,29 @@ async function verifySharedInputCompletion(){
   }};
   const person=new E("input");person.type="search";person.placeholder="بحث بالاسم أو الرقم (ع)";
   main.append(person);
+  const labeled=new E("label"),caption=new E("span");
+  caption.textContent="بحث عن فرد بالاسم أو الرقم (ع)";
+  const named=new E("input");named.type="text";
+  labeled.append(caption,named);main.append(labeled);
+  const audit=new E("input");audit.type="search";
+  audit.placeholder="بحث في سجل العمليات";main.append(audit);
   const general=new E("input");general.type="text";main.append(general);
   const secret=new E("input");secret.type="password";main.append(secret);
   helper.scan();
   assert.ok(person.className.includes("app-smart-search"));
+  assert.ok(person.classList.contains("app-unified-search"));
+  assert.equal(person.placeholder,"بحث بالاسم أو الرقم (ع)");
+  assert.ok(named.classList.contains("app-unified-search"),
+    "admin text search receives the same compact dimensions");
+  assert.equal(named.placeholder,"بحث بالاسم أو الرقم (ع)",
+    "person-search hint moves inside the input");
+  assert.ok(labeled.classList.contains("app-unified-search-wrap"));
+  assert.ok(caption.classList.contains("app-unified-search-caption"),
+    "visible search caption is visually hidden but remains accessible");
+  assert.ok(audit.classList.contains("app-unified-search"),
+    "general non-person search inputs have the same dimensions");
+  assert.equal(audit.placeholder,"بحث في سجل العمليات",
+    "audit-specific search semantics must remain visible");
   assert.ok(person.list?.startsWith("person-suggestions-"));
   assert.equal(general.autocomplete,"on","ordinary text fields retain safe native completion");
   assert.notEqual(secret.autocomplete,"on","passwords never receive completion");
