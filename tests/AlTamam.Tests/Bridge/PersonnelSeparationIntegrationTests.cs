@@ -126,6 +126,10 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
         },CancellationToken.None);
         Assert.True(current.Success,current.UserMessage);
         Assert.Equal(0L,((JsonObject)current.Data!)["total"]!.GetValue<long>());
+        var dashboard=await new DailyMonthlyReadService(_db).DashboardSummaryAsync(
+            new JsonObject{["businessDate"]=Today(),["siteId"]=""},CancellationToken.None);
+        Assert.True(dashboard.Success,dashboard.UserMessage);
+        Assert.Equal(0L,((JsonObject)dashboard.Data!)["totalForce"]!.GetValue<long>());
         // The individual is absent from the operational grid, but the
         // explicit archive above still retains the separation-day snapshot.
     }
