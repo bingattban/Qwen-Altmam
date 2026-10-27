@@ -30,7 +30,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
    if(action==="QueryDailyRoster"&&payload.statusId==="__AUTO_PREPARED__")
      return{data:{items:[{personId:"P3",name:"P3",serviceNumberA:"12345",
-       siteName:"غير محدد",statusName:"غياب"}],total:1,hasNext:false}};
+       siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب"}],total:1,hasNext:false}};
    if(action==="QueryDailyRoster"){
      const all=expandedRoster?Array.from({length:235},(_,i)=>({personId:"R"+(i+1),statusId:null,statusName:"غير محضر"})):[{personId:"P1",statusId:null,statusName:"غير محضر"},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
@@ -43,6 +43,15 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
      return{data:{items:visible.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
        total:selected.length,hasNext:payload.page*payload.pageSize<selected.length}};
    }
+   if(action==="GetActiveAttendanceStatuses")
+     return {data:[{statusId:"STS-ABSENT",displayName:"غياب"},
+                   {statusId:"STS-PRESENT",displayName:"موجود"}]};
+   if(action==="PreviewAttendanceChange"&&payload.mode==="revise")
+     return {data:{mode:"revise",businessDate:payload.businessDate,
+       statusName:"موجود",statusId:"STS-PRESENT",previewToken:"b".repeat(64),
+       persons:[{personId:"P3",name:"P3",serviceNumberA:"12345",
+         previousStatusName:"غياب",siteName:"غير محدد"}]}};
+   if(action==="ReviseTodayAttendance")return{data:{count:1}};
    if(action==="PreviewAttendanceChange" && payload.mode==="carry")
      return {data:{mode:"carry",businessDate:payload.businessDate,previewToken:"a".repeat(64),
        persons:[{personId:"P1",name:"P1",serviceNumberA:"12345",siteName:"غير محدد",
@@ -55,7 +64,8 @@ const document={createElement:tag=>new El(tag),
  getElementById:id=>({appViewport:viewport,headerRoleBadge:badge,logoutAction:logout,...nav})[id]||null,
  querySelector:s=>s===".app-sidebar"?sidebar:null,
  addEventListener:(name,fn)=>{events[name]=fn;}};
-const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}}},
+const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
+ AltamamDialog:{attendanceReview:async()=>true}},
  document,location:{hash:"#dashboard"},history:{replaceState:()=>{}},Date,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
  "../src/AlTamam.WebUI/assets/js/functional-screens.js"),"utf8"),context);
@@ -127,6 +137,19 @@ async function main(){
    "read-only auto register has no selection checkboxes");
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance",
    "PreviewAttendanceChange"].includes(x.action)).length,0);
+ const reviseButton=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="تعديل الحالة");
+ assert.ok(reviseButton,"active auto-prepared row must offer a controlled revision");
+ await reviseButton.handlers.click();await settle();
+ const revision=readOnly.all().find(x=>x.className.includes("auto-attendance-editor"));
+ assert.ok(revision,"revision must open an in-app dialog");
+ const newStatus=revision.all().find(x=>x.tag==="select");
+ assert.ok(newStatus);
+ newStatus.value="STS-PRESENT";
+ const save=revision.all().find(x=>x.tag==="button"&&x.textContent==="معاينة ثم اعتماد التعديل");
+ await save.handlers.click();await settle();
+ assert.ok(calls.some(x=>x.action==="PreviewAttendanceChange"&&x.payload.mode==="revise"&&
+   x.payload.personIds[0]==="P3"&&x.payload.statusId==="STS-PRESENT"));
+ assert.ok(calls.some(x=>x.action==="ReviseTodayAttendance"&&x.payload.previewToken==="b".repeat(64)));
  expandedRoster=true;
  counter("all").handlers.click();await settle();
  const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));
