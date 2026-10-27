@@ -138,17 +138,20 @@ async function main(){
   for(const text of ["التحضير المعتمد", "غياب", "تاريخ تعديل التحضير", "سبب اختبار"])
     assert.ok(output.includes(text),"must display authoritative "+text);
   const details=viewport.all().find(x=>x.className.includes("monthly-cell-details"));
+  const overlay=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
+  assert.ok(overlay&&overlay.attrs["aria-modal"]==="true");
   assert.equal(details.hidden,false);
+  assert.equal(overlay.hidden,false);
   const close=viewport.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
   close.handlers.click();
-  assert.equal(details.hidden,true,"close hides details without touching attendance");
+  assert.equal(overlay.hidden,true,"close hides modal without touching attendance");
   const clear=viewport.all().find(x=>x.tag==="button"&&x.textContent==="مسح بحث الشهر");
   assert.ok(clear);
   clear.handlers.click();await tick();await tick();
   assert.equal(calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1).payload.term,"");
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
     "QueryMonthlyGrid","GetMonthlyCellDetails","PreviewMonthlyExport","ExportMonthlyWorkbookSet",
-    "GetSettingsOverview"].includes(x.action)).length,0,
+    "GetSettingsOverview","GetDashboardSummary"].includes(x.action)).length,0,
     "read-only click must never commit attendance or modify history");
   console.log("MONTHLY EXCEL + MONTHLY CELL UI PASS: guarded preview, native export response, date-bound read-only details");
 }
