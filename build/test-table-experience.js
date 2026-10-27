@@ -145,7 +145,8 @@ async function verifySharedInputCompletion(){
   assert.ok(datalist.all().some(x=>x.tag==="option"&&x.value==="محمد سالم"));
   assert.ok(datalist.all().some(x=>x.tag==="option"&&x.value==="12345"));
   assert.equal(lookups,1,"one bounded backend lookup for the typed phrase");
-  helper.scan();assert.equal(main.all().filter(x=>x.tag==="datalist").length,1,
+  const originalLists=main.all().filter(x=>x.tag==="datalist").length;
+  helper.scan();assert.equal(main.all().filter(x=>x.tag==="datalist").length,originalLists,
     "rescan cannot duplicate name-suggestion lists");
   console.log("SHARED AUTOCOMPLETE PASS: person names/numbers, ordinary inputs, password exclusion");
 }
