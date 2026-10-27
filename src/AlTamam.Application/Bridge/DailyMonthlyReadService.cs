@@ -66,6 +66,17 @@ public sealed class DailyMonthlyReadService
                                           AND ar.AttendanceLocalDate = $date
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM PersonnelMovements departure
+                WHERE departure.PersonId=p.PersonId
+                  AND departure.MovementType IN (2,3)
+                  AND departure.EffectiveLocalDate <= $date
+                  AND NOT EXISTS (
+                    SELECT 1 FROM PersonnelMovements comeback
+                    WHERE comeback.PersonId=p.PersonId
+                      AND comeback.MovementType=4
+                      AND comeback.EffectiveLocalDate >= departure.EffectiveLocalDate
+                      AND comeback.EffectiveLocalDate <= $date))
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
             GROUP BY ar.StatusId, IsInternalTransferDay;
             """;
@@ -154,6 +165,17 @@ public sealed class DailyMonthlyReadService
                 AND m.EffectiveLocalDate=$date AND m.MovementType=1
             WHERE p.FirstRecordedLocalDate <= $date AND p.ActiveFlag = 1
               AND p.OrganizationalStatus = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM PersonnelMovements departure
+                WHERE departure.PersonId=p.PersonId
+                  AND departure.MovementType IN (2,3)
+                  AND departure.EffectiveLocalDate <= $date
+                  AND NOT EXISTS (
+                    SELECT 1 FROM PersonnelMovements comeback
+                    WHERE comeback.PersonId=p.PersonId
+                      AND comeback.MovementType=4
+                      AND comeback.EffectiveLocalDate >= departure.EffectiveLocalDate
+                      AND comeback.EffectiveLocalDate <= $date))
               AND ($site = '' OR COALESCE(a.SiteId, '') = $site)
               AND ($term = '' OR p.NormalizedName LIKE $term ESCAPE '\'
                    OR p.NormalizedServiceNumberA LIKE $term ESCAPE '\')
