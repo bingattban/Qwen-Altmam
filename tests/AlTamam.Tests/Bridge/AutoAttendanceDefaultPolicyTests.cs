@@ -79,6 +79,53 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
     }
 
     [Fact]
+    public async Task ScheduledDueAndDailyLock_AreIndependentAuthorizedPersistentAndIdempotent()
+    {
+        var policy=new AutoAttendancePolicyService(_db);
+        var initial=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
+        Assert.Equal("08:00",initial["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("20:00",initial["dailyLockTimeLocal"]!.GetValue<string>());
+        var choice=new JsonObject{
+            ["dueTimeLocal"]="07:15",["dailyLockTimeLocal"]="19:30",
+            ["operationId"]="AUTO-CLOCKS-CHANGE-0001"
+        };
+        var forbidden=await policy.SetScheduleAsync((JsonObject)choice.DeepClone(),Supervisor,default);
+        Assert.False(forbidden.Success);
+        Assert.Equal(BridgeErrorCodes.Unauthorized,forbidden.ErrorCode);
+        var invalid=await policy.SetScheduleAsync(new JsonObject{
+            ["dueTimeLocal"]="25:42",["dailyLockTimeLocal"]="19:30",
+            ["operationId"]="AUTO-CLOCKS-INVALID-0001"
+        },Admin,default);
+        Assert.False(invalid.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,invalid.ErrorCode);
+
+        var accepted=await policy.SetScheduleAsync(choice,Admin,default);
+        Assert.True(accepted.Success,accepted.UserMessage);
+        Assert.True((await policy.SetScheduleAsync(
+            (JsonObject)choice.DeepClone(),Admin,default)).Success);
+        var restartedPolicy=new AutoAttendancePolicyService(_db);
+        var read=Assert.IsType<JsonObject>((await restartedPolicy.GetAsync(default)).Data);
+        Assert.Equal("07:15",read["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("19:30",read["dailyLockTimeLocal"]!.GetValue<string>());
+        Assert.Equal(TimeSpan.FromHours(7)+TimeSpan.FromMinutes(15),
+            await new AutoAttendanceService(_db).GetDueTimeAsync());
+        Assert.Equal(1L,Count("MutationReceipts"));
+        Assert.Equal(1L,Count("AuditEvents"));
+
+        var lockAllDay=await policy.SetScheduleAsync(new JsonObject{
+            ["dueTimeLocal"]="07:15",["dailyLockTimeLocal"]="00:00",
+            ["operationId"]="AUTO-CLOCKS-CHANGE-0002"
+        },Admin,default);
+        Assert.True(lockAllDay.Success,lockAllDay.UserMessage);
+        var preview=await new AttendanceCommitService(_db).PreviewAsync(new JsonObject{
+            ["businessDate"]=DateOnly.FromDateTime(DateTime.Now).ToString("yyyy-MM-dd"),
+            ["mode"]="initial"
+        },Admin,default);
+        Assert.False(preview.Success);
+        Assert.Equal(BridgeErrorCodes.HistoricDayLocked,preview.ErrorCode);
+    }
+
+    [Fact]
     public async Task MissingYesterday_RequiresAdministratorSettingThenRunsOnceWithoutOverwritingManual()
     {
         using(var c=_db.CreateOpenConnection())
