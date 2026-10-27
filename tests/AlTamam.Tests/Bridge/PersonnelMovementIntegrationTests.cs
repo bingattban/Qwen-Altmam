@@ -141,8 +141,19 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
                 transferCells++;
                 Assert.Equal("movement",transferCell["kind"]!.GetValue<string>());
                 Assert.Contains(expected,transferCell["name"]!.GetValue<string>());
+                Assert.Equal("نقل (د)",transferCell["symbol"]!.GetValue<string>());
             }
             Assert.Equal(2,transferCells);
+            var live=await month.MonthlyGridAsync(new JsonObject{
+                ["year"]=now.Year,["month"]=now.Month,["siteId"]=location,
+                ["page"]=1,["pageSize"]=50
+            },CancellationToken.None);
+            Assert.True(live.Success,live.UserMessage);
+            var operational=(JsonObject)live.Data!;
+            Assert.Equal(location=="SITE-UNSPECIFIED"?1L:0L,
+                operational["total"]!.GetValue<long>());
+            // Even internal transfers disappear from the operational month view;
+            // the explicit archive still retains every transferred person.
         }
         var archivePeriods=await month.ArchivePeriodsAsync(CancellationToken.None);
         var archiveMonths=Assert.IsType<JsonArray>(archivePeriods.Data)
