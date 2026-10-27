@@ -481,10 +481,14 @@
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
     const tableHost=el("section","card monthly-grid-panel");
-    const detailsBox=el("section","card monthly-cell-details");
-    detailsBox.hidden=true;
+    const detailsOverlay=el("div","record-details-overlay");
+    detailsOverlay.hidden=true;
+    detailsOverlay.setAttribute("role","dialog");
+    detailsOverlay.setAttribute("aria-modal","true");
+    const detailsBox=el("section","card monthly-cell-details record-details-dialog");
+    detailsBox.hidden=true;detailsOverlay.appendChild(detailsBox);
     const bottom=el("form","card functional-archive monthly-archive-controls");
-    append(container,tool,feedback,exportPanel,detailsBox,tableHost,bottom);
+    append(container,tool,feedback,exportPanel,detailsOverlay,tableHost,bottom);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
     const item=(label,value)=>{
