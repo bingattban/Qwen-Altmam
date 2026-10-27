@@ -43,6 +43,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
     if(action==="GetCurrentSession")return{data:{sessionNonce:"A".repeat(32),username:"test",role:"Supervisor"}};
     if(action==="QuerySites")return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
     if(action==="GetAvailableArchivePeriods")return{data:[firstDay.slice(0,7),oldPeriod]};
+    if(action==="GetDashboardSummary")return{data:{totalForce:7}};
     if(action==="QueryMonthlyGrid"){
       const chosen=payload.year+"-"+String(payload.month).padStart(2,"0")+"-01";
       return{data:{total:1,page:payload.page,items:[
@@ -109,6 +110,10 @@ async function main(){
     "readable calendar headers preserve weekday/newline layout");
   assert.match(monthlyCss,/#appViewport\.monthly-dashboard \.monthly-scroll \.functional-table thead th\.pinned\s*\{/,
     "fixed identity headers keep strong contrast and color");
+  const activeCount=viewport.all().find(x=>x.textContent==="إجمالي القوة النشطة: 7");
+  const monthCount=viewport.all().find(x=>x.textContent==="أفراد كشف الشهر الظاهرون: 1");
+  assert.ok(activeCount&&monthCount,
+    "monthly current period must disclose active force and visible roster separately");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
   assert.ok(open,"one committed cell has a detail button");
   assert.ok(open.attrs["aria-label"]?.includes(firstDay),"accessible date label");
@@ -123,10 +128,13 @@ async function main(){
   for(const text of ["التحضير المعتمد", "غياب", "تاريخ تعديل التحضير", "سبب اختبار"])
     assert.ok(output.includes(text),"must display authoritative "+text);
   const details=viewport.all().find(x=>x.className.includes("monthly-cell-details"));
+  const overlay=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
+  assert.ok(overlay&&overlay.attrs["aria-modal"]==="true","details open in an accessible modal");
+  assert.equal(overlay.hidden,false);
   assert.equal(details.hidden,false);
   const close=viewport.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
   close.handlers.click();
-  assert.equal(details.hidden,true,"close hides details without touching attendance");
+  assert.equal(overlay.hidden,true,"close hides detail modal without touching attendance");
   // Browse the previous month without losing the fixed columns, footer, or
   // chronological day order. The archive may have a roster but no preparations.
   const previousMonth=viewport.all().find(x=>x.tag==="button"&&x.textContent==="الشهر السابق");
@@ -157,7 +165,7 @@ async function main(){
   assert.equal(viewport.all().filter(x=>x.tag==="th"&&
     x.className.includes("current-day-column")).length,1);
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
-    "QueryMonthlyGrid","GetMonthlyCellDetails"].includes(x.action)).length,0,
+    "QueryMonthlyGrid","GetMonthlyCellDetails","GetDashboardSummary"].includes(x.action)).length,0,
     "read-only navigation must never commit attendance or modify history");
   console.log("MONTHLY CELL DETAILS UI PASS: date-bound click, saved snapshot and revision, close, read-only");
 }
