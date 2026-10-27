@@ -491,6 +491,16 @@
     append(container,tool,feedback,exportPanel,detailsOverlay,tableHost,bottom);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
+    detailsOverlay.addEventListener("click",e=>{
+      if(e.target===detailsOverlay){
+        detailsRequest++;detailsOverlay.hidden=true;detailsBox.hidden=true;
+      }
+    });
+    detailsOverlay.addEventListener("keydown",e=>{
+      if(e.key==="Escape"){
+        detailsRequest++;detailsOverlay.hidden=true;detailsBox.hidden=true;
+      }
+    });
     const item=(label,value)=>{
       const row=el("div","monthly-detail-row");
       append(row,el("strong","",label+"："),el("span","",value==null||value===""?"—":value));
