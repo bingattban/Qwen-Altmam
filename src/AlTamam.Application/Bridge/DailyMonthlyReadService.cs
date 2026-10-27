@@ -294,6 +294,13 @@ public sealed class DailyMonthlyReadService
         var start = new DateOnly(year, month, 1);
         var next = start.AddMonths(1);
         string startIso = Iso(start), nextIso = Iso(next), endIso = Iso(next.AddDays(-1));
+        // The operational current-month grid contains active, unmoved personnel.
+        // Archive mode explicitly replays everyone who served during that month,
+        // including departures and movement cells, without touching historical data.
+        bool explicitArchive = string.Equals(payload?["archiveMode"]?.ToJsonString(),
+            "true", StringComparison.Ordinal);
+        DateTime localNow = DateTime.Now;
+        bool liveCurrentMonth = year == localNow.Year && month == localNow.Month && !explicitArchive;
         const string fromSql = """
             FROM Persons p
             WHERE p.FirstRecordedLocalDate < $next
@@ -308,6 +315,15 @@ public sealed class DailyMonthlyReadService
                            AND m.EffectiveLocalDate < $next
                            AND ($site='' OR m.SourceSiteId=$site OR m.DestinationSiteId=$site))
               )
+              AND ($live=0 OR (
+                    p.ActiveFlag=1 AND p.OrganizationalStatus=1
+                    AND NOT EXISTS (
+                      SELECT 1 FROM PersonnelMovements moved
+                      WHERE moved.PersonId=p.PersonId
+                        AND moved.EffectiveLocalDate >= $start
+                        AND moved.EffectiveLocalDate < $next
+                        AND moved.MovementType IN (1,2,3))
+                  ))
               -- Match the identity actually displayed for the selected month,
               -- NEVER today's mutable name/number. Two people who later reuse
               -- الرقم (ع) remain separate because the key is immutable PersonId.
@@ -329,6 +345,7 @@ public sealed class DailyMonthlyReadService
         using var count = connection.CreateCommand();
         count.CommandText = "SELECT COUNT(*) " + fromSql;
         BindPeriod(count, startIso, nextIso, siteId, term, endIso);
+        count.Parameters.AddWithValue("$live",liveCurrentMonth?1:0);
         long total = Convert.ToInt64(await count.ExecuteScalarAsync(ct).ConfigureAwait(false));
 
         // A row per person for this page. Historical cells are sourced from the
@@ -363,6 +380,7 @@ public sealed class DailyMonthlyReadService
             ORDER BY 3 COLLATE NOCASE, p.PersonId LIMIT $limit OFFSET $offset;
             """;
         BindPeriod(cmd, startIso, nextIso, siteId, term, endIso);
+        cmd.Parameters.AddWithValue("$live",liveCurrentMonth?1:0);
         cmd.Parameters.AddWithValue("$limit", pageSize);
         cmd.Parameters.AddWithValue("$offset", (long)(page - 1) * pageSize);
         var people = new List<(string Id, JsonObject Row)>();
@@ -455,17 +473,18 @@ public sealed class DailyMonthlyReadService
                 int movementType=movementReader.GetInt32(2);
                 // Separation must remain visible historically even though the
                 // person is no longer in today's active roster.
+                string moveMark=movementType==1?"نقل (د)":movementType==2?"نقل (خ)":"";
                 string label=movementType==3?"مفصول":
                     movementType==4?"عاد إلى القوة في "+after:
-                    siteId.Length==0
+                    moveMark+" — "+(siteId.Length==0
                         ?"تم نقله من "+before+" إلى "+after
-                        :siteId==sourceId?"تم نقله إلى "+after:"تم نقله من "+before;
+                        :siteId==sourceId?"تم نقله إلى "+after:"تم نقله من "+before);
                 JsonObject days=(JsonObject)ids[movementReader.GetString(0)]["days"]!;
                 string movementDate=movementReader.GetString(1);
                 if(days[movementDate] is null)
                     days[movementDate]=new JsonObject{
                         ["name"]=label,
-                        ["symbol"]=movementType==3?"ف":movementType==4?"عودة":"نقل",
+                        ["symbol"]=movementType==3?"ف":movementType==4?"عودة":moveMark,
                         ["color"]=movementType==3?"#64748B":movementType==4?"#16A34A":"#D8B4FE",
                         ["kind"]=movementType==3?"separation":movementType==4?"return":"movement",
                         ["personName"]=movementReader.GetString(7),
