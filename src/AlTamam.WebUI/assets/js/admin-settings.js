@@ -1486,25 +1486,6 @@
           timesRow.append(scheduledLabel,lockLabel);
           automatic.append(timesRow,saveTimes);
         }catch(e){if(token===currentRequest)errors(feedback,e);}
-            finally{saveTimes.disabled=false;}
-          },"btn btn-primary settings-action");
-          automatic.append(scheduledLabel,lockLabel,saveTimes);
-          const saveDefault=btn("حفظ الحالة الافتراضية",async()=>{
-            if(!picker.value)return errors(feedback,new Error("اختر حالة نشطة أولاً."));
-            if(!await dialogs.confirm("تأكيد اعتماد الحالة المختارة عند غياب تحضير أمس؟"))return;
-            saveDefault.disabled=true;
-            try{
-              const result=await api().invoke("SetAutoAttendanceDefaultStatus",{
-                statusId:picker.value,operationId:makeOperationId()
-              });
-              if(token!==currentRequest)return;
-              feedback.replaceChildren(node("p","settings-success",
-                "تم اعتماد الحالة الافتراضية: "+result.data.defaultStatusName));
-            }catch(e){if(token===currentRequest)errors(feedback,e);}
-            finally{saveDefault.disabled=false;}
-          },"btn btn-primary settings-action");
-          automatic.appendChild(saveDefault);
-        }catch(e){if(token===currentRequest)errors(feedback,e);}
       }
 
       // The daily schedule is executed by the native Windows host, never by JS timers.
