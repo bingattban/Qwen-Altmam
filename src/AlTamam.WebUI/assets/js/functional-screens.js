@@ -509,7 +509,7 @@
         if(!data||data.personId!==personId||data.businessDate!==date)
           throw new Error("لم تتطابق البيانات التاريخية مع اليوم المختار.");
         const top=el("div","monthly-detail-heading");
-        const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailsBox.hidden=true;
+        const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailsBox.hidden=true;detailsOverlay.hidden=true;
           detailsBox.replaceChildren();});
         append(top,el("h3","section-title","تفاصيل التمام — "+date),close);
         const content=el("div","monthly-detail-content");
