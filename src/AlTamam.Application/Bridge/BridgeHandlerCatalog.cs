@@ -480,6 +480,12 @@ public static class BridgeHandlerCatalog
             var result = await svc.SetAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
+        "SetAttendanceSchedule" => async (req, principal, ct) =>
+        {
+            var svc = new AutoAttendancePolicyService(services.Db,services.Time);
+            var result = await svc.SetScheduleAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "GetSettingsOverview" => async (req, principal, ct) =>
         {
             var svc = new SettingsReadBackupService(services.Db);
