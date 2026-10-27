@@ -119,7 +119,7 @@ public sealed class AutoAttendancePolicyService
                     "AppSetting",DefaultStatusKey,"الحالة الافتراضية عند عدم وجود تحضير أمس",
                     new JsonObject{["statusId"]=previous}.ToJsonString(),
                     new JsonObject{["statusId"]=statusId,["name"]=name}.ToJsonString(),
-                    "تغيير الحالة الافتراضية للتحضير التلقائي الساعة الثامنة صباحاً",
+                    "تغيير الحالة الافتراضية للتحضير التلقائي وفق الوقت المحدد",
                     null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
                     .ConfigureAwait(false);
             }
