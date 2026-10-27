@@ -95,6 +95,7 @@ public static class ActionManifest
         new("QueryAuditPresentationChanges", "UserAuditService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, false),
         new("GetAutoAttendancePolicy", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("SetAutoAttendanceDefaultStatus", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
+        new("SetAttendanceSchedule", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
         new("GetSettingsOverview", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("SetOutputDirectory", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("CreateVerifiedBackup", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
