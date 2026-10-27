@@ -1271,12 +1271,17 @@
       }catch(e){if(token===currentRequest)errors(results,e);}
     }
     async function showAuditDetails(auditEventId) {
-      openDetail?.remove();
+      openDetail?.parentElement?.remove();
       const detail=card("تفاصيل القيد وسلامة السجل");
       openDetail=detail;
-      results.after(detail);
+      detail.classList.add("auto-attendance-dialog");
+      const overlay=node("div","auto-attendance-overlay");
+      overlay.setAttribute("role","dialog");overlay.setAttribute("aria-modal","true");
+      overlay.setAttribute("aria-label","تفاصيل القيد");
+      overlay.appendChild(detail);
+      results.after(overlay);
       const content=node("div","admin-note");
-      detail.append(content,btn("إغلاق التفاصيل",()=>detail.remove()));
+      detail.append(content,btn("إغلاق التفاصيل",()=>overlay.remove()));
       content.replaceChildren(warning("جارٍ التحقق من تفاصيل القيد..."));
       try {
         const reply=await api().invoke("GetAuditEntryDetails",{auditEventId});
