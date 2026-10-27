@@ -1455,24 +1455,32 @@
           scheduledLabel.append(node("span","","وقت التحضير التلقائي"),scheduledTime);
           const lockLabel=node("label","admin-input");
           lockLabel.append(node("span","","وقت قفل التحضير اليومي"),lockTime);
-          const saveTimes=btn("حفظ أوقات التحضير",async()=>{
+          const saveTimes=btn("حفظ إعدادات التحضير التلقائي",async()=>{
+            if(!picker.value)return errors(feedback,new Error("اختر حالة افتراضية نشطة أولاً."));
             if(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(scheduledTime.value)||
                !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(lockTime.value))
               return errors(feedback,new Error("حدد وقتين صحيحين بصيغة HH:mm."));
-            if(!await dialogs.confirm("اعتماد وقت التحضير التلقائي "+scheduledTime.value+
-              " ووقت قفل التمام اليومي "+lockTime.value+"؟"))return;
+            if(!await dialogs.confirm("اعتماد الحالة الافتراضية وأوقات التحضير والقفل معاً؟"))return;
             saveTimes.disabled=true;
             try{
+              await api().invoke("SetAutoAttendanceDefaultStatus",{
+                statusId:picker.value,operationId:makeOperationId()
+              });
               const result=await api().invoke("SetAttendanceSchedule",{
                 dueTimeLocal:scheduledTime.value,
-                dailyLockTimeLocal:lockTime.value,
-                operationId:makeOperationId()
+                dailyLockTimeLocal:lockTime.value,operationId:makeOperationId()
               });
               if(token!==currentRequest)return;
               feedback.replaceChildren(node("p","settings-success",
-                "حُفظت الأوقات: التحضير التلقائي "+result.data.dueTimeLocal+
-                " — القفل "+result.data.dailyLockTimeLocal));
+                "تم حفظ الحالة الافتراضية وأوقات التحضير والقفل: "+
+                result.data.dueTimeLocal+" / "+result.data.dailyLockTimeLocal));
             }catch(e){if(token===currentRequest)errors(feedback,e);}
+            finally{saveTimes.disabled=false;}
+          },"btn btn-primary settings-action");
+          const timesRow=node("div","settings-attendance-fields");
+          timesRow.append(scheduledLabel,lockLabel);
+          automatic.append(timesRow,saveTimes);
+        }catch(e){if(token===currentRequest)errors(feedback,e);}
             finally{saveTimes.disabled=false;}
           },"btn btn-primary settings-action");
           automatic.append(scheduledLabel,lockLabel,saveTimes);
