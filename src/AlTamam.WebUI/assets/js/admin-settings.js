@@ -1003,6 +1003,10 @@
 
   async function persons() {
     const page=start("الإدارة / إدارة القوة / تعديل الأسماء"), box=card("الأفراد المسجلون");
+    // A simple number beside the screen title; keep the old table/pager layout.
+    const activeTotalNumber=node("span","admin-force-inline-count","…");
+    activeTotalNumber.setAttribute("aria-label","إجمالي القوة النشطة");
+    page.querySelector(".section-title")?.appendChild(activeTotalNumber);
     const creation=node("details","admin-create-person card");
     const toggle=node("summary","btn btn-primary","إضافة فرد واحد للكشف");
     const creationFields=node("div","admin-site-form");
@@ -1163,10 +1167,6 @@
     filter.appendChild(node("option","","جميع المواقع"));filter.firstChild.value="";
     const go=btn("بحث",()=>{state.term=search.input.value.trim();state.page=1;load();},"btn btn-primary");
     controls.append(search.wrap,filter,go);box.appendChild(controls);
-    const totalSummary=node("div","admin-roster-totals");
-    totalSummary.setAttribute("role","status");
-    totalSummary.setAttribute("aria-live","polite");
-    box.appendChild(totalSummary);
     const content=node("div","admin-note");box.appendChild(content);
     try {
       const response=await api().invoke("QuerySites",{});
@@ -1198,10 +1198,7 @@
         if(token!==currentRequest)return;
         const data=response.data||{};
         const activeTotal=all?.data?.total??data.total??0;
-        totalSummary.replaceChildren(
-          node("strong","","إجمالي الأفراد النشطين: "+activeTotal),
-          node("span","","المطابقون للبحث والموقع: "+(data.total||0))
-        );
+        activeTotalNumber.textContent="("+activeTotal+")";
         const t=table(["الرقم (ع)","الاسم","الموقع","إجراء"]);
         for(const person of data.items||[]){
           addRow(t.body,[person.serviceNumberA,person.displayName,person.siteName],
