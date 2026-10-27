@@ -101,51 +101,46 @@
         if(expected!==previewCounter||!root.isConnected||person?.personId!==entry.personId)return;
         const data=response.data||{};
         if(!data.previewToken)throw Error("لم تصدر الخدمة معاينة صالحة.");
-        const sheet=el("section",undefined,"card");
-        sheet.append(el("h3","تأكيد نهائي للفصل","section-title"),
-          el("p","الفرد: "+data.name+" — الرقم (ع): "+data.serviceNumberA),
-          el("p","الموقع: "+data.siteName+" — التاريخ: "+fullDate(data.businessDate)),
-          el("p","سبب الفصل: "+data.reason),
-          el("p","سيختفي من كشف القوة النشطة وتظل بياناته التاريخية محفوظة.","admin-warning"));
-        const info=el("p","مهلة التأكيد: 5 ثوانٍ");
-        // Once the five-second delay expires, this exact preview has one
-        // stable retry identity even if the successful response is lost.
+        // The full separation preview (including the five-second safety delay)
+        // is a modal, not an embedded card requiring a second navigation.
+        const detailsReview=window.AltamamDialog?.detailsReview;
+        if(typeof detailsReview!=="function")
+          throw Error("نافذة معاينة الفصل غير متاحة؛ أُلغي الاعتماد.");
         const operationId=window.crypto?.randomUUID?.()||
           ("SEP-"+Date.now()+"-"+Math.random().toString(36).slice(2)+
            Math.random().toString(36).slice(2));
-        const save=button("تأكيد الفصل",async()=>{
-          if(!await dialogs.confirm("تأكيد فصل «"+data.name+"»؟ السبب: "+data.reason+" — ستبقى السجلات التاريخية محفوظة."))return;
-          save.disabled=true;
+        const summary={rows:[
+          ["اسم الفرد",data.name],["الرقم (ع)",data.serviceNumberA],
+          ["الموقع",data.siteName],["التاريخ",fullDate(data.businessDate)],
+          ["سبب الفصل",data.reason],
+          ["الأثر","يخرج الفرد من كشف القوة النشطة وتظل بياناته التاريخية محفوظة."]
+        ]};
+        async function commitSamePlan(){
           try{
-            await api().invoke("CommitSeparation",{
-              previewToken:data.previewToken,operationId
-            });
+            await api().invoke("CommitSeparation",{previewToken:data.previewToken,operationId});
             if(!root.isConnected)return;
             clear();selected.replaceChildren();person=null;page=1;
             feedback.replaceChildren(el("p","تم تنفيذ الفصل وتسجيله في الأرشيف وسجل العمليات.","settings-success"));
             await search();
-          }catch(e){
-            // A network error may happen after C# has committed successfully.
-            // Keep this preview and operationId for a safe exact retry.
-            error(feedback,e);
-            save.disabled=false;
+          }catch(error){
+            errorToUser(error);
+            // Recover from a lost response without changing the preview identity.
+            preview.replaceChildren(button("إعادة مراجعة وتأكيد الفصل",async()=>{
+              if(await detailsReview(summary,{title:"معاينة فصل الفرد",
+                message:"المعاينة نفسها محفوظة للمحاولة الآمنة.",
+                confirmLabel:"تأكيد الفصل",danger:true}))
+                await commitSamePlan();
+            }));
           }
-        },"btn btn-danger");
-        save.disabled=true;
-        const cancel=button("إلغاء الطلب",()=>{
-          if(confirm("إلغاء طلب الفصل دون حفظ أي تغيير؟"))clear();
-        });
-        sheet.append(info,save,cancel);
-        preview.replaceChildren(sheet);
-        let remaining=Math.max(5,Number(data.minimumConfirmationSeconds)||5);
-        const timer=setInterval(()=>{
-          if(!root.isConnected||expected!==previewCounter){
-            clearInterval(timer);return;
-          }
-          remaining--;
-          info.textContent=remaining>0?"مهلة التأكيد: "+remaining+" ثوانٍ":"يمكنك تأكيد الفصل الآن.";
-          if(remaining<=0){save.disabled=false;clearInterval(timer);}
-        },1000);
+        }
+        function errorToUser(err){error(feedback,err);}
+        if(await detailsReview(summary,{title:"معاينة فصل الفرد",
+          message:"راجع جميع التفاصيل. لن يُنفذ الفصل قبل انتهاء مهلة التأكيد.",
+          confirmLabel:"تأكيد الفصل",danger:true,
+          delaySeconds:Math.max(5,Number(data.minimumConfirmationSeconds)||5)})){
+          if(expected!==previewCounter||!root.isConnected||person?.personId!==entry.personId)return;
+          await commitSamePlan();
+        }
       }catch(e){error(feedback,e);}
     }
     await search();
