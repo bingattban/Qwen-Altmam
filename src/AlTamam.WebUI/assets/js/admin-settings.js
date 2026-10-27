@@ -1424,7 +1424,7 @@
         picker.appendChild(empty);
         label.append(node("span","","الحالة الافتراضية عند عدم وجود تحضير أمس"),picker);
         const feedback=node("div","settings-feedback");
-        automatic.append(label,feedback);
+        automatic.append(feedback);
         grid.appendChild(automatic);
         try{
           const [policyResult,statusResult]=await Promise.all([
@@ -1455,42 +1455,40 @@
           scheduledLabel.append(node("span","","وقت التحضير التلقائي"),scheduledTime);
           const lockLabel=node("label","admin-input");
           lockLabel.append(node("span","","وقت قفل التحضير اليومي"),lockTime);
-          const saveTimes=btn("حفظ أوقات التحضير",async()=>{
+          const saveAttendance=btn("حفظ إعدادات التحضير",async()=>{
             if(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(scheduledTime.value)||
                !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(lockTime.value))
               return errors(feedback,new Error("حدد وقتين صحيحين بصيغة HH:mm."));
-            if(!await dialogs.confirm("اعتماد وقت التحضير التلقائي "+scheduledTime.value+
-              " ووقت قفل التمام اليومي "+lockTime.value+"؟"))return;
-            saveTimes.disabled=true;
+            const selected=picker.value;
+            if(!await dialogs.confirm("تأكيد حفظ إعدادات التحضير: الوقت التلقائي "+
+              scheduledTime.value+"، قفل اليوم "+lockTime.value+
+              (selected?"، والحالة الافتراضية "+picker.options?.[picker.selectedIndex]?.textContent:"")+
+              "؟"))return;
+            saveAttendance.disabled=true;
             try{
               const result=await api().invoke("SetAttendanceSchedule",{
                 dueTimeLocal:scheduledTime.value,
                 dailyLockTimeLocal:lockTime.value,
+                ...(selected?{defaultStatusId:selected}:{}),
                 operationId:makeOperationId()
               });
               if(token!==currentRequest)return;
               feedback.replaceChildren(node("p","settings-success",
-                "حُفظت الأوقات: التحضير التلقائي "+result.data.dueTimeLocal+
-                " — القفل "+result.data.dailyLockTimeLocal));
+                "حُفظت إعدادات التحضير معاً: التلقائي "+result.data.dueTimeLocal+
+                "، القفل "+result.data.dailyLockTimeLocal+
+                (selected?"، والحالة الافتراضية المعتمدة.":".")));
             }catch(e){if(token===currentRequest)errors(feedback,e);}
-            finally{saveTimes.disabled=false;}
+            finally{saveAttendance.disabled=false;}
           },"btn btn-primary settings-action");
-          automatic.append(scheduledLabel,lockLabel,saveTimes);
-          const saveDefault=btn("حفظ الحالة الافتراضية",async()=>{
-            if(!picker.value)return errors(feedback,new Error("اختر حالة نشطة أولاً."));
-            if(!await dialogs.confirm("تأكيد اعتماد الحالة المختارة عند غياب تحضير أمس؟"))return;
-            saveDefault.disabled=true;
-            try{
-              const result=await api().invoke("SetAutoAttendanceDefaultStatus",{
-                statusId:picker.value,operationId:makeOperationId()
-              });
-              if(token!==currentRequest)return;
-              feedback.replaceChildren(node("p","settings-success",
-                "تم اعتماد الحالة الافتراضية: "+result.data.defaultStatusName));
-            }catch(e){if(token===currentRequest)errors(feedback,e);}
-            finally{saveDefault.disabled=false;}
-          },"btn btn-primary settings-action");
-          automatic.appendChild(saveDefault);
+          const attendanceFields=node("div","settings-attendance-fields");
+          attendanceFields.append(label,scheduledLabel,lockLabel);
+          const actions=node("div","settings-action-bar");
+          actions.appendChild(saveAttendance);
+          automatic.replaceChildren(automatic.querySelector(".section-title"),
+            node("p","settings-copy",
+              "حدد الحالة الافتراضية عند غياب تحضير أمس وموعد الاعتماد التلقائي وقفل اليوم، ثم احفظها جميعاً بزر واحد."),
+            attendanceFields,feedback,actions);
+
         }catch(e){if(token===currentRequest)errors(feedback,e);}
       }
 
