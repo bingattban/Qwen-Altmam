@@ -385,7 +385,7 @@
         el("span","counter-value",percent+"%"));
       counters.appendChild(completion);
       // The counters ARE the roster filters. No duplicate status chips below them.
-      const stats=[{name:"إجمالي القوة",count:counts.totalForce,statusId:""},
+      const stats=[{name:"إجمالي القوة النشطة",count:counts.totalForce,statusId:""},
         {name:"غير المحضرين",count:counts.unprepared,statusId:"__UNPREPARED__"},
         {name:"المحضّرون تلقائياً",count:counts.automaticallyPrepared||0,statusId:"__AUTO_PREPARED__"},
          ...(Number(counts.internalTransferDay)>0
@@ -453,6 +453,9 @@
     container.replaceChildren(header("التمام الشهري لشهر "+monthLabel(year,month)+" "+year));
     const tool=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
+    const monthlyTotals=el("div","monthly-force-totals");
+    monthlyTotals.setAttribute("role","status");
+    monthlyTotals.setAttribute("aria-live","polite");
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
     const tableHost=el("section","card monthly-grid-panel");
@@ -465,7 +468,7 @@
     detailOverlay.appendChild(detailsBox);
     detailsBox.hidden=false;
     const bottom=el("form","card functional-archive monthly-archive-controls");
-    append(container,tool,feedback,exportPanel,tableHost,bottom,detailOverlay);
+    append(container,tool,monthlyTotals,feedback,exportPanel,tableHost,bottom,detailOverlay);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
     const item=(label,value)=>{
@@ -636,12 +639,37 @@
         tableHost.replaceChildren(message("لا يوجد أرشيف لهذا الشهر"));
         return;
       }
-      const grid=parseData(await bridge().invoke("QueryMonthlyGrid",{
-        year,month,siteId:STATE.siteId,term:STATE.monthTerm,
-        page:STATE.monthPage,pageSize:100,
-        archiveMode:STATE.chosenYear!==null||STATE.chosenMonth!==null
-      }));
+      const isArchive=STATE.chosenYear!==null||STATE.chosenMonth!==null;
+      const liveCurrent=period===current&&!isArchive;
+      const [gridReply,forceReply]=await Promise.all([
+        bridge().invoke("QueryMonthlyGrid",{
+          year,month,siteId:STATE.siteId,term:STATE.monthTerm,
+          page:STATE.monthPage,pageSize:100,archiveMode:isArchive
+        }),
+        liveCurrent
+          ? bridge().invoke("GetDashboardSummary",{
+              businessDate:startOfToday(),siteId:STATE.siteId
+            }).catch(()=>null)
+          : Promise.resolve(null)
+      ]);
       if(STATE.monthEpoch!==epoch)return;
+      const grid=parseData(gridReply);
+      const force=parseData(forceReply);
+      if(!grid)throw Error("تعذر قراءة كشف التمام الشهري.");
+      if(liveCurrent){
+        monthlyTotals.replaceChildren(
+          el("strong","","إجمالي القوة النشطة: "+
+            (typeof force?.totalForce==="number"?force.totalForce:"غير متاح")),
+          el("span","","أفراد كشف الشهر الظاهرون: "+(grid.total||0)),
+          el("small","","تُستبعد من كشف الشهر الجاري حركات النقل والفصل؛ "+
+            "لذلك قد يختلف عدد صفوف الكشف عن إجمالي القوة النشطة.")
+        );
+      }else{
+        monthlyTotals.replaceChildren(
+          el("strong","","إجمالي الأفراد في أرشيف الشهر: "+(grid.total||0)),
+          el("span","","هذا سجل تاريخي للشهر المحدد، وليس عداد القوة النشطة اليوم.")
+        );
+      }
       const dayCount=monthDays(year,month);
       const cols=[{label:"الرقم",cls:"pinned fixed-one"},
         {label:"الرقم (ع)",cls:"pinned fixed-two"},
