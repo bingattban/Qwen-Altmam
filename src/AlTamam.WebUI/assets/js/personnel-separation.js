@@ -219,8 +219,12 @@
           el("p","التاريخ: "+fullDate(data.date)),
           el("p","سبب الفصل: "+data.reason),
           el("p","منفذ العملية (معرّف): "+data.actorUserId),
-          button("إغلاق التفاصيل",()=>box.remove()));
-        out.appendChild(box);
+          button("إغلاق التفاصيل",()=>{overlay.hidden=true;overlay.remove?.();}));
+        overlay.appendChild(box);
+        root.appendChild(overlay);
+        overlay.addEventListener("click",e=>{
+          if(e.target===overlay){overlay.hidden=true;overlay.remove?.();}
+        });
       }catch(e){error(out,e);}
     }
     await load();
