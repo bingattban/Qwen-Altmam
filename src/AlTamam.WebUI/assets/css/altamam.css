@@ -1178,3 +1178,10 @@ body{min-width:0}
   .table-local-search input{flex-basis:150px}
   #appViewport .table-expanded-scroll{max-height:min(72dvh,610px)}
 }
+/* Retain all monthly-column pinning, centered dates and current-day highlight. */
+#appViewport .monthly-scroll table.unified-app-table thead th{
+  text-align:center;white-space:pre-line
+}
+#appViewport .monthly-scroll table.unified-app-table thead th.pinned{
+  z-index:15
+}
