@@ -335,15 +335,16 @@ async function run() {
   assert.ok(due&&locked,"independently configured attendance time fields must exist");
   assert.equal(due.value,"08:00");
   assert.equal(locked.value,"20:00");
-  due.value="07:15";locked.value="19:30";
-  await buttonNamed("حفظ أوقات التحضير").handlers.click();
-  assert.ok(calls.some(x=>x.name==="SetAttendanceSchedule"&&x.body.dueTimeLocal==="07:15"&&
-    x.body.dailyLockTimeLocal==="19:30"&&x.body.operationId.length>=16),
-    "times must be saved explicitly through the authorized C# action");
-  fallback.value="STS-ABSENT";
-  await buttonNamed("حفظ الحالة الافتراضية").handlers.click();
-  assert.ok(calls.some(x=>x.name==="SetAutoAttendanceDefaultStatus"&&x.body.statusId==="STS-ABSENT"),
-    "explicit administrator confirmation writes the selected active status");
+  due.value="07:15";locked.value="19:30";fallback.value="STS-ABSENT";
+  assert.ok(!buttonNamed("حفظ أوقات التحضير"));
+  assert.ok(!buttonNamed("حفظ الحالة الافتراضية"));
+  await buttonNamed("حفظ إعدادات التحضير").handlers.click();
+  assert.ok(calls.some(x=>x.name==="SetAttendanceSchedule"&&
+    x.body.dueTimeLocal==="07:15"&&x.body.dailyLockTimeLocal==="19:30"&&
+    x.body.defaultStatusId==="STS-ABSENT"&&x.body.operationId.length>=16),
+    "one explicit save must commit default status and both clocks atomically");
+  assert.equal(calls.filter(x=>x.name==="SetAutoAttendanceDefaultStatus").length,0,
+    "settings must not write a second independent attendance mutation");
 
   assert.ok(buttonNamed("إنشاء نسخة احتياطية الآن").disabled,
     "manual backup disabled on a device without E: drive");
@@ -363,7 +364,7 @@ async function run() {
   assert.ok(visible().some(x=>x.textContent==="verified.dbbackup"),
     "verified metadata is displayed only after real native inspection");
   await controller.renderSettings({role:"Supervisor",username:"test-supervisor"},()=>{});
-  assert.ok(!buttonNamed("حفظ الحالة الافتراضية"),
+  assert.ok(!buttonNamed("حفظ إعدادات التحضير"),
     "supervisors cannot see or invoke policy changes from settings");
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
