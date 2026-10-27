@@ -24,6 +24,47 @@ public sealed class AdminSettingsIntegrationTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task AuditSearch_FiltersAcrossEntireHistoryBeforePageBoundaries()
+    {
+        var config=new AdminConfigurationService(_db);
+        foreach(var site in new[]{"المحطة الجديدة 100","موقع مختلف تماماً","قاعدة المحطة الجديدة 200"})
+        {
+            var result=await config.CreateSiteAsync(
+                new JsonObject{["name"]=site},Actor,CancellationToken.None);
+            Assert.True(result.Success,result.UserMessage);
+        }
+        var audit=new AuditOverlayService(_db);
+        var first=await audit.QueryAuditLogAsync(
+            new JsonObject{["term"]="المحطة الجديدة",["page"]=1,["pageSize"]=1},
+            CancellationToken.None,Actor);
+        Assert.True(first.Success,first.UserMessage);
+        var firstData=Assert.IsType<JsonObject>(first.Data);
+        Assert.Equal(2L,firstData["total"]!.GetValue<long>());
+        Assert.True(firstData["hasNext"]!.GetValue<bool>());
+        Assert.Single(Assert.IsType<JsonArray>(firstData["items"]));
+        var next=await audit.QueryAuditLogAsync(
+            new JsonObject{["term"]="المحطة الجديدة",["page"]=2,["pageSize"]=1},
+            CancellationToken.None,Actor);
+        Assert.True(next.Success,next.UserMessage);
+        var second=Assert.IsType<JsonObject>(next.Data);
+        Assert.Equal(2L,second["total"]!.GetValue<long>());
+        Assert.Single(Assert.IsType<JsonArray>(second["items"]));
+        Assert.False(second["hasNext"]!.GetValue<bool>());
+        var noMatch=await audit.QueryAuditLogAsync(
+            new JsonObject{["term"]="ليس_في_السجل",["page"]=1,["pageSize"]=100},
+            CancellationToken.None,Actor);
+        Assert.True(noMatch.Success,noMatch.UserMessage);
+        Assert.Equal(0L,Assert.IsType<JsonObject>(noMatch.Data)["total"]!.GetValue<long>());
+        // Escape LIKE metacharacters: a wildcard must not accidentally
+        // reveal every record in the audit table.
+        var wildcard=await audit.QueryAuditLogAsync(
+            new JsonObject{["term"]="%_%%",["page"]=1,["pageSize"]=100},
+            CancellationToken.None,Actor);
+        Assert.True(wildcard.Success,wildcard.UserMessage);
+        Assert.Equal(0L,Assert.IsType<JsonObject>(wildcard.Data)["total"]!.GetValue<long>());
+    }
+
+    [Fact]
     public async Task SiteCreated_WithImmutableIdHistoryAndAudit()
     {
         var svc = new AdminConfigurationService(_db);
