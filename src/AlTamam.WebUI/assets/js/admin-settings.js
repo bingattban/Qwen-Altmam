@@ -369,31 +369,45 @@
             if(!plan.previewToken||!plan.requiresExplicitConfirmation)
               throw Error("معاينة الاستيراد لم تُعتمد على الخادم.");
             previewToken=plan.previewToken;
-            const out=card("خطة الإضافة النهائية");
-            out.append(node("p","section-description",
-              "سيتم إنشاء "+plan.newCount+" فرد جديد. " +
-              "لن تتغير أي هوية أو حالة تحضير أو تاريخ قديم."),
-              node("p","section-description","صفوف مستبعدة: "+plan.issueCount));
-            const names=table(["الاسم الجديد","الرقم (ع)"]);
-            for(const person of plan.acceptedPreview||[])
-              addRow(names.body,[person.name,person.serviceNumberA]);
-            out.append(names.wrap);
-            const commit=btn("تأكيد استيراد الأفراد الجدد",async()=>{
-              if(!previewToken)return;
-              if(!await dialogs.confirm("تأكيد إضافة "+plan.newCount+" فرداً جديداً بعد مراجعة التعارضات؟"))return;
-              const token=previewToken;previewToken="";
-              commit.disabled=true;
+            const detailsReview=window.AltamamDialog?.detailsReview;
+            if(typeof detailsReview!=="function")
+              throw Error("نافذة معاينة الاستيراد غير متاحة؛ لم يُحفظ أي تغيير.");
+            const details={rows:[
+              ["أفراد جدد",plan.newCount],["صفوف مستبعدة",plan.issueCount],
+              ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
+            ],columns:["الاسم الجديد","الرقم (ع)"],
+              items:(plan.acceptedPreview||[]).map(p=>[p.name,p.serviceNumberA])};
+            const accepted=await detailsReview(details,{
+              title:"معاينة خطة إضافة الأفراد",
+              message:"راجع الأسماء والأرقام (ع) والتعارضات قبل الاعتماد.",
+              confirmLabel:"تأكيد استيراد الأفراد الجدد"
+            });
+            if(!accepted){previewToken="";return;}
+            const token=previewToken;
+            const commit=async()=>{
               try{
                 const done=await api().invoke("CommitImport",{previewToken:token});
                 if(!valid())return;
                 if(!Number.isInteger(done.data?.createdCount))
                   throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
+                previewToken="";
                 confirmBox.replaceChildren(node("p","settings-success",
-                  "تم إنشاء "+done.data.createdCount+" فرداً جديداً، وحُفظت العملية في سجل التدقيق."+
+                  "تم إنشاء "+done.data.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق."+
                   " معرف الدفعة: "+(done.data.importBatchId||"—")));
                 workbookToken="";
                 await loadHistory();
-              }catch(e){errors(confirmBox,e);}
+              }catch(e){
+                errors(confirmBox,e);
+                // Retry the exact same preview if the response was lost.
+                confirmBox.appendChild(btn("إعادة معاينة واعتماد الخطة نفسها",async()=>{
+                  if(await detailsReview(details,{
+                    title:"إعادة مراجعة خطة الاستيراد",confirmLabel:"إعادة تأكيد الاستيراد"
+                  }))await commit();
+                }));
+              }
+            };
+            await commit();
+          }catch(e){errors(confirmBox,e);}
             },"btn btn-primary");
             out.append(commit,btn("إلغاء المعاينة",()=>{
               previewToken="";confirmBox.replaceChildren();
@@ -482,35 +496,41 @@
         if(!result.previewToken||result.requiresExplicitConfirmation!==true)
           throw Error("لم تُرجع الخدمة معاينة موثّقة.");
         previewToken=result.previewToken;
-        const summary=node("div","settings-properties");
-        for(const [label,value] of [
+        const detailsReview=window.AltamamDialog?.detailsReview;
+        if(typeof detailsReview!=="function")
+          throw Error("نافذة معاينة التصحيح غير متاحة؛ لم يُحفظ أي تغيير.");
+        const details={rows:[
           ["الفرد",result.personName],["الرقم (ع)",result.serviceNumberA],
           ["الموقع",result.siteName],["التاريخ",result.businessDate],
-          ["من الحالة",result.beforeStatusName],["إلى الحالة",result.afterStatusName],
-          ["السبب",result.reason]
-        ])summary.appendChild(settingsValue(label,value));
+          ["الحالة السابقة",result.beforeStatusName],["الحالة الجديدة",result.afterStatusName],
+          ["سبب التصحيح",result.reason]
+        ]};
         const operationId=makeOperationId();
-        const submit=btn("اعتماد التصحيح الاستثنائي",async()=>{
-          if(!previewToken)return;
-          if(!await dialogs.confirm("اعتماد التصحيح النهائي لليوم المغلق؟ ستُحفظ الحالة السابقة والتعديل والسبب في سجل العمليات."))return;
-          submit.disabled=true;
+        const accept=await detailsReview(details,{
+          title:"معاينة تصحيح اليوم المغلق",
+          message:"تصحيح استثنائي موثق في سجل العمليات؛ لا يُعاد فتح اليوم.",
+          confirmLabel:"اعتماد التصحيح الاستثنائي"
+        });
+        if(!accept){clearPreview();return;}
+        const commit=async()=>{
           try{
             const committed=await api().invoke("CommitClosedDayCorrection",{
               previewToken,operationId
             });
             if(!committed.data?.revisionNumber)throw Error("لم يؤكد الخادم اعتماد التصحيح.");
             previewToken=null;
-            previewPanel.replaceChildren(node("p","",
+            previewPanel.replaceChildren(node("p","settings-success",
               "اعتمد التصحيح بنجاح، ورقم المراجعة "+committed.data.revisionNumber+
               ". لم يُغيَّر تاريخ التحضير الأصلي."));
-          }catch(e){
-            // The database may have committed before the reply was lost:
-            // preserve this exact preview and operationId for safe retry.
-            errors(notice,e);
-            submit.disabled=false;
+          }catch(error){
+            errors(notice,error);
+            previewPanel.replaceChildren(btn("إعادة مراجعة واعتماد التصحيح نفسه",async()=>{
+              if(await detailsReview(details,{title:"معاينة التصحيح الاستثنائي",
+                confirmLabel:"إعادة اعتماد التصحيح"}))await commit();
+            }));
           }
-        },"btn btn-primary");
-        previewPanel.replaceChildren(summary,submit,btn("إلغاء",clearPreview));
+        };
+        await commit();
       }catch(e){errors(previewPanel,e);}
       finally{preview.disabled=false;}
     },"btn btn-primary");
