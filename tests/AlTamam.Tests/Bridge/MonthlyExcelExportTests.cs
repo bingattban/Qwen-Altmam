@@ -177,6 +177,8 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
             ["year"]=2026,["month"]=10,["siteId"]="SITE-UNSPECIFIED",
             ["term"]="EX٠٠١"
         };
+        // Exports use the historical archive, including exited identities.
+        selected["archiveMode"]=true;
         var month=new DailyMonthlyReadService(_db);
         var response=await month.MonthlyGridAsync((JsonObject)selected.DeepClone(),
             CancellationToken.None);
