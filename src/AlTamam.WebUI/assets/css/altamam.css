@@ -1294,7 +1294,7 @@ body{min-width:0}
 
 /* Read-only, keyboard-accessible register of automatic attendance at 08:00. */
 .auto-attendance-overlay{
-  position:fixed;inset:0;z-index:1200;display:flex;
+  position:fixed;inset:0;z-index:900;display:flex;
   align-items:center;justify-content:center;padding:clamp(7px,2vw,20px);
   background:rgba(0,0,0,.68)
 }
