@@ -631,7 +631,7 @@
       rows.replaceChildren(warning("جارٍ تحميل حسابات المستخدمين..."));
       try {
         const reply=await api().invoke("ListUserAccounts",{
-          page:state.page,pageSize:30,term:state.term
+          page:state.page,pageSize:100,term:state.term
         });
         if(serial!==currentRequest)return;
         const data=reply.data||{},listing=table(["م","الرقم (ع)","المستخدم","الاسم الكامل",
@@ -1183,7 +1183,7 @@
       try {
         const response=await api().invoke("QueryPersons",{
           term:state.term,siteId:state.siteId,organizationalStatus:1,
-          page:state.page,pageSize:50});
+          page:state.page,pageSize:100});
         if(token!==currentRequest)return;
         const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","إجراء"]);
         for(const person of data.items||[]){
@@ -1223,6 +1223,8 @@
   async function audit() {
     const page=start("الإدارة / سجل العمليات"),box=card("سجل العمليات المحفوظ");
     page.appendChild(box);
+    const general=field("بحث شامل في سجل العمليات","","search");
+    general.input.placeholder="بحث بالاسم أو الرقم (ع) أو العملية أو الوصف";
     const actor=field("من قام بالتنفيذ"),targetField=field("المنفذ عليه"),
       op=field("نوع العملية (رمز)"),startDate=field("من تاريخ","","date"),
       endDate=field("إلى تاريخ","","date"),controls=node("div","functional-toolbar"),
@@ -1230,7 +1232,10 @@
     const canEditAudit=["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role);
     let openDetail=null;
     const search=btn("بحث",()=>{state.page=1;load();},"btn btn-primary");
-    controls.append(actor.wrap,targetField.wrap,op.wrap,startDate.wrap,endDate.wrap,search);
+    general.input.addEventListener("keydown",event=>{
+      if(event.key==="Enter"){event.preventDefault();state.page=1;void load();}
+    });
+    controls.append(general.wrap,actor.wrap,targetField.wrap,op.wrap,startDate.wrap,endDate.wrap,search);
     const showHidden=node("input");
     if(canEditAudit){
       showHidden.type="checkbox";
@@ -1244,10 +1249,10 @@
       const token=++currentRequest;
       try {
         const response=await api().invoke("QueryAuditLog",{
-          actor:actor.input.value,target:targetField.input.value,
+          term:general.input.value.trim(),actor:actor.input.value,target:targetField.input.value,
           operation:op.input.value,fromDate:startDate.input.value,toDate:endDate.input.value,
           includeTombstoned:canEditAudit&&showHidden.checked,
-          page:state.page,pageSize:50});
+          page:state.page,pageSize:100});
         if(token!==currentRequest)return;
         const data=response.data||{},t=table(["العملية","الهدف","المنفذ","الوصف الظاهر","وقت التنفيذ"]);
         (data.items||[]).forEach(item=>addRow(t.body,[
