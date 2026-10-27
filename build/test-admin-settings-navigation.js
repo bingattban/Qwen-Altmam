@@ -269,8 +269,10 @@ async function run() {
   byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="persons").handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
-  assert.ok(visible().some(x=>x.textContent==="إجمالي الأفراد النشطين: 0"),
-    "name editing must show the all-site active force total");
+  assert.ok(visible().some(x=>x.className.includes("admin-force-inline-count")&&
+    x.textContent==="(0)"),"the active-force number belongs beside the screen title");
+  assert.ok(!visible().some(x=>x.className.includes("admin-roster-totals")),
+    "keep the original names table without a separate totals panel");
   const form=visible().find(x=>x.className.includes("admin-create-person"));
   assert.ok(form,"single-person form is available");
   const inputs=form.all().filter(x=>x.tag==="input");
