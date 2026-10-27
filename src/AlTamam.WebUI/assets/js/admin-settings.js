@@ -38,6 +38,20 @@
     const c=node("section","card admin-card");
     c.appendChild(node("h2","section-title",title));return c;
   }
+  function detailsModal(title){
+    const overlay=node("div","record-details-overlay");
+    const modal=node("section","card record-details-dialog");
+    const content=node("div","record-details-content");
+    overlay.setAttribute("role","dialog");
+    overlay.setAttribute("aria-modal","true");
+    const close=()=>{overlay.hidden=true;overlay.remove?.();};
+    const heading=node("div","record-details-heading");
+    heading.append(node("h2","section-title",title),btn("إغلاق التفاصيل",close));
+    modal.append(heading,content);overlay.appendChild(modal);
+    target().appendChild(overlay);
+    overlay.addEventListener("click",e=>{if(e.target===overlay)close();});
+    return {overlay,content,close};
+  }
   function field(label,value,type) {
     const wrap=node("label","admin-input");
     const name=node("span","",label);
