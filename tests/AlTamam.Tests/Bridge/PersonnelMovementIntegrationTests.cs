@@ -127,7 +127,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         {
             var monthly=await month.MonthlyGridAsync(new JsonObject{
                 ["year"]=now.Year,["month"]=now.Month,["siteId"]=location,
-                ["page"]=1,["pageSize"]=50
+                ["archiveMode"]=true,["page"]=1,["pageSize"]=50
             },CancellationToken.None);
             Assert.True(monthly.Success,monthly.UserMessage);
             var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(monthly.Data)["items"]);
