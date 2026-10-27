@@ -147,6 +147,14 @@ public sealed class AutoAttendancePolicyService
         if(!IsValidClock(due) || !IsValidClock(locked))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "حدد وقتين صحيحين بصيغة 24 ساعة (HH:mm).");
+        // Optional for backward compatibility: one settings save can atomically
+        // commit both clock values and the active default attendance status.
+        string? newStatus=null;
+        try {newStatus=payload?["defaultStatusId"]?.GetValue<string>()?.Trim();}
+        catch {return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"الحالة الافتراضية غير صالحة.");}
+        if(newStatus is {Length:>128})
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"معرّف الحالة الافتراضية غير صالح.");
+        if(string.IsNullOrEmpty(newStatus))newStatus=null;
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
@@ -161,11 +169,25 @@ public sealed class AutoAttendancePolicyService
             }
             string oldDue=await Prior(DueTimeKey)??DefaultDueTime;
             string oldLock=await Prior(LockTimeKey)??DefaultLockTime;
-            string timestamp=_time.GetUtcNow().ToString("O");
-            if(oldDue!=due || oldLock!=locked)
+            string? oldStatus=await Prior(DefaultStatusKey);
+            string? selectedStatusName=null;
+            if(newStatus is not null)
             {
-                foreach(var setting in new[]{(Key:DueTimeKey,Value:due),
-                                              (Key:LockTimeKey,Value:locked)})
+                using var status=c.CreateCommand();status.Transaction=t;
+                status.CommandText="SELECT VisibleName FROM AttendanceStatusDefinitions WHERE StatusId=$id AND ActiveFlag=1;";
+                status.Parameters.AddWithValue("$id",newStatus);
+                selectedStatusName=await status.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+                if(selectedStatusName is null)
+                    return BridgeHelpers.Error(BridgeErrorCodes.CustomStatusInactive,
+                        "الحالة الافتراضية المختارة غير نشطة أو غير موجودة؛ لم تُحفظ أي تغييرات.");
+            }
+            string timestamp=_time.GetUtcNow().ToString("O");
+            if(oldDue!=due || oldLock!=locked || (newStatus is not null && newStatus!=oldStatus))
+            {
+                var changes=new List<(string Key,string Value)>{
+                    (DueTimeKey,due),(LockTimeKey,locked)};
+                if(newStatus is not null)changes.Add((DefaultStatusKey,newStatus));
+                foreach(var setting in changes)
                 {
                     using var save=c.CreateCommand();save.Transaction=t;
                     save.CommandText="""
@@ -183,13 +205,16 @@ public sealed class AutoAttendancePolicyService
                     "ATTENDANCE_SCHEDULE_SET","تغيير أوقات التحضير والإغلاق",
                     actor.UserId,actor.Username,actor.Username,
                     "AppSetting",DueTimeKey,"أوقات التحضير التلقائي وقفل التمام اليومي",
-                    new JsonObject{["dueTimeLocal"]=oldDue,["dailyLockTimeLocal"]=oldLock}.ToJsonString(),
-                    new JsonObject{["dueTimeLocal"]=due,["dailyLockTimeLocal"]=locked}.ToJsonString(),
+                    new JsonObject{["dueTimeLocal"]=oldDue,["dailyLockTimeLocal"]=oldLock,
+                        ["defaultStatusId"]=oldStatus}.ToJsonString(),
+                    new JsonObject{["dueTimeLocal"]=due,["dailyLockTimeLocal"]=locked,
+                        ["defaultStatusId"]=newStatus??oldStatus}.ToJsonString(),
                     "تعديل وقت التحضير التلقائي وقفل التحضير اليومي",
                     null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
                     .ConfigureAwait(false);
             }
-            var response=new JsonObject{["dueTimeLocal"]=due,["dailyLockTimeLocal"]=locked};
+            var response=new JsonObject{["dueTimeLocal"]=due,["dailyLockTimeLocal"]=locked,
+                ["defaultStatusId"]=newStatus??oldStatus,["defaultStatusName"]=selectedStatusName};
             await MutationIdempotency.StoreAsync(c,t,receipt,response,_time,ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(response);
         },ct).ConfigureAwait(false);
