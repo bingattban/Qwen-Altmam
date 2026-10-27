@@ -14,12 +14,12 @@
     (Number(row.children[0].colSpan)||1)>1;
   function existingSearch(table){
     const screen=table.closest(".card,.attendance-review,.person-report-dialog,.person-report-page");
-    const search=screen?.querySelector(searchSelector);
-    if(search)return true;
     if(screen){
-      for(const label of screen.querySelectorAll("label")){
-        if(label.textContent.includes("بحث")&&label.querySelector("input"))
-          return true;
+      // A local search in another table is not a screen-level search.
+      for(const input of screen.querySelectorAll("input")){
+        if(input.closest(".table-local-search"))continue;
+        if(input.type==="search" || (input.placeholder||"").includes("بحث") ||
+           (input.closest("label")?.textContent||"").includes("بحث"))return true;
       }
     }
     // Dashboard and monthly searches live in a toolbar alongside their table cards.
