@@ -37,6 +37,7 @@ const firstDay=year+"-"+String(month).padStart(2,"0")+"-01";
 const older=new Date(year,month-2,1),oldYear=older.getFullYear(),
   oldMonth=older.getMonth()+1;
 const oldPeriod=oldYear+"-"+String(oldMonth).padStart(2,"0");
+let expandedGrid=false;
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
   invoke:async(action,payload)=>{
     calls.push({action,payload});
@@ -44,6 +45,14 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
     if(action==="QuerySites")return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
     if(action==="GetAvailableArchivePeriods")return{data:[firstDay.slice(0,7),oldPeriod]};
     if(action==="QueryMonthlyGrid"){
+      if(expandedGrid){
+        const people=Array.from({length:115},(_,i)=>({
+          personId:"P"+(i+1),serviceNumberA:String(1000+i),
+          name:"فرد شهري "+(i+1),siteName:"غير محدد",days:{}
+        }));
+        return{data:{total:people.length,page:payload.page,
+          items:people.slice((payload.page-1)*payload.pageSize,payload.page*payload.pageSize)}};
+      }
       const chosen=payload.year+"-"+String(payload.month).padStart(2,"0")+"-01";
       return{data:{total:1,page:payload.page,items:[
         {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
@@ -138,6 +147,32 @@ async function main(){
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
     "QueryMonthlyGrid","GetMonthlyCellDetails"].includes(x.action)).length,0,
     "read-only navigation must never commit attendance or modify history");
-  console.log("MONTHLY CELL DETAILS UI PASS: date-bound click, saved snapshot and revision, close, read-only");
+  // 100-person monthly pages remain read-only and the pager is outside the scroller.
+  expandedGrid=true;
+  const refresh=viewport.all().find(x=>x.tag==="button"&&x.textContent==="تحديث");
+  assert.ok(refresh);refresh.handlers.click();await tick();await tick();
+  const panel=()=>viewport.all().find(x=>x.className.includes("monthly-roster-panel"));
+  const rows=()=>panel().all().find(x=>x.tag==="tbody").children;
+  assert.equal(rows().length,100,"the first monthly page contains 100 persons");
+  assert.equal(calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1).payload.pageSize,100,
+    "monthly query requests 100 persons, matching the daily roster");
+  const pager=panel().children.find(x=>x.className.includes("functional-pager"));
+  assert.ok(pager,"monthly pagination remains outside the horizontal scrolling grid");
+  const next=panel().all().find(x=>x.tag==="button"&&x.textContent==="التالي");
+  assert.ok(next&&!next.disabled);next.handlers.click();await tick();await tick();
+  assert.equal(rows().length,15,"the last monthly page shows the 15 remaining names");
+  assert.equal(calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1).payload.page,2);
+  assert.equal(rows()[0].children[0].textContent,"101","numbering continues across pages");
+  const back=panel().all().find(x=>x.tag==="button"&&x.textContent==="السابق");
+  back.handlers.click();await tick();await tick();
+  assert.equal(rows().length,100,"previous navigation restores the full first page");
+  const styles=require("node:fs").readFileSync(path.join(__dirname,
+    "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+  assert.ok(styles.includes("#appViewport.monthly-dashboard>.monthly-roster-panel>.monthly-scroll"),
+    "the monthly scroll region consumes the available viewport height");
+  assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
+    "QueryMonthlyGrid","GetMonthlyCellDetails"].includes(x.action)).length,0,
+    "monthly pagination cannot change or export historical records");
+  console.log("MONTHLY CELL DETAILS UI PASS: read-only details, 100-row paging, fixed footer");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
