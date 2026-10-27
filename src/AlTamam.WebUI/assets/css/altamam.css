@@ -1106,3 +1106,75 @@ body{min-width:0}
     max-height:calc(70dvh - 42px)
   }
 }
+
+/* Consistent high-density, readable table treatment in every application screen.
+   Monthly sticky-day positioning and the dashboard's full-height shell are kept. */
+#appViewport table.unified-app-table,
+#appModalBody table.unified-app-table{
+  border-collapse:separate;border-spacing:0;
+  font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;font-size:14px
+}
+#appViewport table.unified-app-table :is(th,td),
+#appModalBody table.unified-app-table :is(th,td){
+  box-sizing:border-box;vertical-align:middle;line-height:1.4;
+  min-height:35px;padding:5px 8px;border-bottom:1px solid var(--border-color);
+  border-inline-start:1px solid var(--border-color)
+}
+#appViewport table.unified-app-table th,
+#appModalBody table.unified-app-table th{
+  font-weight:800;white-space:normal;text-align:right
+}
+#appViewport table.unified-app-table td,
+#appModalBody table.unified-app-table td{
+  font-weight:650
+}
+#appViewport table.unified-app-table tbody tr:nth-child(even):not([hidden]) td,
+#appModalBody table.unified-app-table tbody tr:nth-child(even):not([hidden]) td{
+  background:var(--bg-subtle)
+}
+#appViewport table.unified-app-table tbody tr[hidden],
+#appModalBody table.unified-app-table tbody tr[hidden]{display:none}
+#appViewport .table-expanded-scroll{
+  max-height:var(--usable-table-height,calc(100dvh - 210px));
+  min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable
+}
+#appModalBody .table-expanded-scroll{
+  max-height:min(58dvh,620px);overflow:auto;min-height:0;overscroll-behavior:contain
+}
+#appViewport .table-expanded-paged{
+  display:flex;flex-direction:column;min-height:0;
+  max-height:min(91dvh,calc(100dvh - 96px))
+}
+#appViewport .table-expanded-paged>.table-expanded-scroll{
+  flex:1 1 auto;min-height:0;
+  max-height:var(--usable-table-height,calc(100dvh - 180px))
+}
+#appViewport .table-expanded-paged>.functional-pager{
+  position:relative;flex:0 0 auto;margin:0;min-height:42px;
+  background:var(--bg-surface);padding:6px 10px;z-index:12;
+  border-top:1px solid var(--border-color)
+}
+/* Use the existing daily-dashboard full-height flex contract unchanged. */
+#appViewport.daily-dashboard>.daily-roster-panel>.table-expanded-scroll{
+  max-height:none;flex:1 1 auto
+}
+.table-local-search{
+  position:sticky;top:0;z-index:10;
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  background:var(--bg-surface);border-bottom:1px solid var(--border-color);
+  padding:5px 9px;font-size:13px;font-weight:700
+}
+.table-local-search input{
+  flex:1 1 220px;min-width:130px;max-width:450px;
+  background:var(--bg-surface);color:var(--text-main);border:1px solid var(--border-color);
+  border-radius:7px;padding:6px 10px;min-height:34px;font:inherit
+}
+.table-local-count{margin-inline-start:auto;color:var(--text-muted);font-weight:600}
+.table-expanded-scroll.has-local-table-search table.unified-app-table thead th{
+  top:43px
+}
+@media(max-width:700px){
+  .table-local-search{gap:5px;padding:5px}
+  .table-local-search input{flex-basis:150px}
+  #appViewport .table-expanded-scroll{max-height:min(72dvh,610px)}
+}
