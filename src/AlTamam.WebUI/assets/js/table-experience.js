@@ -123,8 +123,10 @@
       if(term.length<2)return;
       const run=async()=>{
         try{
+          const context=input.closest?.(".card,.person-report-page")?.textContent||"";
+          const includeArchived=/أرشيف|التقرير/.test(context);
           const response=await window.AltamamBridge.invoke("QueryPersons",{
-            term,page:1,pageSize:16
+            term,page:1,pageSize:16,includeArchived
           });
           if(seq!==request||!input.isConnected||input.value.trim()!==term)return;
           const seen=new Set();
