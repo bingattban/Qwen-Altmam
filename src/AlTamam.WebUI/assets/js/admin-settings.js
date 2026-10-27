@@ -1193,7 +1193,7 @@
           api().invoke("QueryPersons",filterQuery),
           (!state.term&&!state.siteId)
             ? Promise.resolve(null)
-            : api().invoke("QueryPersons",allQuery).catch(()=>null)
+            : api().invoke("QueryPersons",allQuery)
         ]);
         if(token!==currentRequest)return;
         const data=response.data||{};
