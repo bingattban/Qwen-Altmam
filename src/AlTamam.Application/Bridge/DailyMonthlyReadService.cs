@@ -322,7 +322,13 @@ public sealed class DailyMonthlyReadService
                       WHERE moved.PersonId=p.PersonId
                         AND moved.EffectiveLocalDate >= $start
                         AND moved.EffectiveLocalDate < $next
-                        AND moved.MovementType IN (1,2,3))
+                        AND moved.MovementType IN (1,2,3)
+                        AND NOT EXISTS (
+                          SELECT 1 FROM PersonnelMovements returned
+                          WHERE returned.PersonId=moved.PersonId
+                            AND returned.MovementType=4
+                            AND returned.EffectiveLocalDate >= moved.EffectiveLocalDate
+                            AND returned.EffectiveLocalDate < $next))
                   ))
               -- Match the identity actually displayed for the selected month,
               -- NEVER today's mutable name/number. Two people who later reuse
