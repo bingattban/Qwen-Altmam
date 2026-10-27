@@ -149,6 +149,17 @@ public partial class MainWindow : Window
         string databasePath = AppDataLayout.ResolveDatabasePath();
         string key = new Infrastructure.Security.WindowsDatabaseKeyStore(
             Path.Combine(AppDataLayout.DataRoot, "db.key.protected")).LoadOrCreate(databasePath);
+        // The desktop application already owns the single-instance mutex here.
+        // Reconcile an interrupted encrypted restore BEFORE opening any DB
+        // connection, applying migrations, starting scheduled jobs or attaching
+        // WebView2. Unknown states fail CLOSED without touching user records.
+        if (File.Exists(databasePath) ||
+            File.Exists(Path.Combine(AppDataLayout.DataRoot,
+                ".altamam-restore-activation.pending.json")))
+        {
+            await new OfflineRestoreSwitch()
+                .ReconcileAtStartupAsync(databasePath, key).ConfigureAwait(false);
+        }
         var database = new AlTamamDbContext(databasePath, key);
         try
         {
