@@ -188,6 +188,7 @@
 
   let dashboardClockTimer=null;
   let lastMorningRefreshAt=0;
+  let configuredDueTime="08:00";
   function stopDashboardClock(){
     if(dashboardClockTimer!==null&&typeof window.clearInterval==="function")
       window.clearInterval(dashboardClockTimer);
@@ -197,7 +198,7 @@
     stopDashboardClock();
     const line=el("div","dashboard-eight-clock");
     line.setAttribute("role","timer");
-    line.setAttribute("aria-label","الوقت المتبقي للاعتماد التلقائي الساعة الثامنة صباحاً");
+    line.setAttribute("aria-label","الوقت المتبقي للاعتماد التلقائي حسب الإعدادات");
     host.appendChild(line);
     const tick=()=>{
       const now=new Date();
@@ -206,11 +207,12 @@
         if(STATE.session&&view().contains?.(line))void renderDashboard();
         return;
       }
-      const cutoff=new Date(now.getFullYear(),now.getMonth(),now.getDate(),8,0,0,0);
+      const [dueHour,dueMinute]=configuredDueTime.split(":").map(Number);
+      const cutoff=new Date(now.getFullYear(),now.getMonth(),now.getDate(),dueHour,dueMinute,0,0);
       const remaining=Math.max(0,Math.ceil((cutoff.getTime()-now.getTime())/1000));
       // The native scheduler performs the write; refresh the read-only counters
       // as it completes, without initiating or repeating the write in JavaScript.
-      if(remaining===0&&now.getHours()===8&&now.getMinutes()<10&&
+      if(remaining===0&&now.getTime()-cutoff.getTime()<600000&&
          now.getTime()-lastMorningRefreshAt>=30000){
         lastMorningRefreshAt=now.getTime();
         if(STATE.session&&view().contains?.(line))void renderDashboard();
@@ -219,8 +221,8 @@
       const m=String(Math.floor(remaining%3600/60)).padStart(2,"0");
       const sec=String(remaining%60).padStart(2,"0");
       line.textContent=remaining>0
-        ?"الوقت المتبقي لاعتماد حالات أمس تلقائياً الساعة ٨ صباحاً: "+h+":"+m+":"+sec
-        :"حلّت الساعة ٨ صباحاً؛ يتولى النظام اعتماد الحالات السابقة تلقائياً. يظهر العدد في كشف المحضّرين تلقائياً.";
+        ?"الوقت المتبقي للاعتماد التلقائي عند "+configuredDueTime+" : "+h+":"+m+":"+sec
+        :"حان موعد الاعتماد التلقائي عند "+configuredDueTime+"؛ سيعرض الكشف الأفراد المعتمدين بعد التنفيذ.";
     };
     tick();
     // The native scheduler is authoritative; this is DISPLAY ONLY and never
@@ -342,6 +344,12 @@
       feedback.replaceChildren(el("p","section-description","التحضير ليوم "+STATE.date+
         " — البيانات من قاعدة التطبيق المحلية."));
       beginEightAmCountdown(feedback,STATE.date);
+      // Read the saved clock from the C# policy; this timer never writes.
+      void bridge().invoke("GetAutoAttendancePolicy",{}).then(reply=>{
+        const due=parseData(reply)?.dueTimeLocal;
+        if(typeof due==="string"&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(due))
+          configuredDueTime=due;
+      }).catch(()=>{});
       // Keep the completion ratio read-only; the count chips still filter the roster.
       const percent=Number.isFinite(Number(counts.completionPercentage))?
         Math.max(0,Math.min(100,Math.round(Number(counts.completionPercentage)))):0;
@@ -598,7 +606,8 @@
       }
       const grid=parseData(await bridge().invoke("QueryMonthlyGrid",{
         year,month,siteId:STATE.siteId,term:STATE.monthTerm,
-        page:STATE.monthPage,pageSize:100
+        page:STATE.monthPage,pageSize:100,
+        archiveMode:STATE.chosenYear!==null||STATE.chosenMonth!==null
       }));
       if(STATE.monthEpoch!==epoch)return;
       const dayCount=monthDays(year,month);
