@@ -119,6 +119,15 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
         var cell=Assert.IsType<JsonObject>(days[Today()]);
         Assert.Equal("separation",cell["kind"]!.GetValue<string>());
         Assert.Equal("مفصول",cell["name"]!.GetValue<string>());
+        var current=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject
+        {
+            ["year"]=date.Year,["month"]=date.Month,
+            ["siteId"]="SITE-UNSPECIFIED",["page"]=1,["pageSize"]=20
+        },CancellationToken.None);
+        Assert.True(current.Success,current.UserMessage);
+        Assert.Equal(0L,((JsonObject)current.Data!)["total"]!.GetValue<long>());
+        // The individual is absent from the operational grid, but the
+        // explicit archive above still retains the separation-day snapshot.
     }
     [Fact]
     public async Task Separation_RevokesLinkedAccountAndSessionsInOneTransaction()
