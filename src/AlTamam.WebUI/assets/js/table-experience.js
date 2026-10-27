@@ -38,6 +38,7 @@
     const input=document.createElement("input");
     const count=document.createElement("span");
     input.type="search";input.maxLength=120;input.autocomplete="off";
+    input.classList.add("app-unified-search");
     input.placeholder="بحث في الصفوف المعروضة";
     input.setAttribute("aria-label","بحث في صفوف الجدول المعروضة");
     prompt.textContent="بحث في الجدول";
