@@ -185,6 +185,7 @@
   }
 
   let dashboardClockTimer=null;
+  let lastMorningRefreshAt=0;
   function stopDashboardClock(){
     if(dashboardClockTimer!==null&&typeof window.clearInterval==="function")
       window.clearInterval(dashboardClockTimer);
@@ -205,6 +206,13 @@
       }
       const cutoff=new Date(now.getFullYear(),now.getMonth(),now.getDate(),8,0,0,0);
       const remaining=Math.max(0,Math.ceil((cutoff.getTime()-now.getTime())/1000));
+      // The native scheduler performs the write; refresh the read-only counters
+      // as it completes, without initiating or repeating the write in JavaScript.
+      if(remaining===0&&now.getHours()===8&&now.getMinutes()<10&&
+         now.getTime()-lastMorningRefreshAt>=30000){
+        lastMorningRefreshAt=now.getTime();
+        if(STATE.session&&view().contains?.(line))void renderDashboard();
+      }
       const h=String(Math.floor(remaining/3600)).padStart(2,"0");
       const m=String(Math.floor(remaining%3600/60)).padStart(2,"0");
       const sec=String(remaining%60).padStart(2,"0");
