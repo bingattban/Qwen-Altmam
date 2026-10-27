@@ -45,7 +45,7 @@
    draftPanel.append(make("h3","مسودات التمام المحفوظة","section-title"),draftResults);
    const selected=new Set();
    let activeDraftId=null;
-   const DAILY_PAGE_SIZE=10;
+   const DAILY_PAGE_SIZE=100;
    let pageNo=1,loading=false,nonce=0,previewVersion=0;
    const summary=()=>choice.textContent="الأفراد المحددون: "+selected.size+" من 100";
    const clearReview=()=>{previewVersion++;};
@@ -104,7 +104,7 @@
        const prev=button("السابق",()=>{pageNo--;load();});
        const next=button("التالي",()=>{pageNo++;load();});
        prev.disabled=pageNo<=1;next.disabled=!d.hasNext;
-       pages.append(make("span","الإجمالي: "+(d.total||0)+" — صفحة "+pageNo+" (10 أسماء)"),prev,next);
+       pages.append(make("span","الإجمالي: "+(d.total||0)+" — صفحة "+pageNo+" (حتى "+DAILY_PAGE_SIZE+" اسم)"),prev,next);
        list.replaceChildren(t.outer,pages);
      }catch(e){if(current===nonce)showError(list,e);}
      finally{loading=false;}

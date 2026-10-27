@@ -7,7 +7,7 @@
     monthPage: 1, monthTerm: "", chosenYear: null, chosenMonth: null, archivePeriods: [] };
   const ar = new Intl.DateTimeFormat("ar", { month: "long" });
   const weekday = new Intl.DateTimeFormat("ar", { weekday: "short" });
-  const DAILY_PAGE_SIZE=10;
+  const DAILY_PAGE_SIZE=100;
   const nav = window.AltamamNavigation;
   const view = () => document.getElementById("appViewport");
   const bridge = () => window.AltamamBridge;
@@ -112,6 +112,7 @@
 
   async function loginGate() {
     const container=view(); if(!container)return;
+    container.classList.remove("daily-dashboard");
     document.querySelector(".app-sidebar").hidden=true;
     document.getElementById("headerRoleBadge").textContent="لم يتم تسجيل الدخول";
     document.getElementById("logoutAction").hidden=true;
@@ -265,6 +266,7 @@
     stopDashboardClock();
     STATE.date=startOfToday();
     const container=view();
+    container.classList.add("daily-dashboard");
     container.replaceChildren(header("التمام اليومي"));
     const controls=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
@@ -643,6 +645,7 @@
     if(section!=="dashboard")stopDashboardClock();
     if (!STATE.session) { loginGate();return; }
     if (!sections.has(section)) section="dashboard";
+    if(section!=="dashboard")view().classList.remove("daily-dashboard");
     applyMainNav(section);
     history.replaceState(null,"","#"+section);
     if(section==="dashboard")renderDashboard();
