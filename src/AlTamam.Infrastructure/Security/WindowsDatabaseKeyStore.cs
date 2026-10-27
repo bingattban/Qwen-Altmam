@@ -13,7 +13,7 @@ namespace AlTamam.Infrastructure.Security;
 public sealed class WindowsDatabaseKeyStore
 {
     private const string RecoveryRequired =
-        "تعذر استعادة مفتاح تشفير قاعدة البيانات. استعد المفتاح الأصلي والنسخة الاحتياطية؛ لم يتم تغيير البيانات.";
+        DatabaseStartupFailureClassifier.MissingEncryptionKey;
     private readonly string _keyPath;
 
     public WindowsDatabaseKeyStore(string keyPath)
