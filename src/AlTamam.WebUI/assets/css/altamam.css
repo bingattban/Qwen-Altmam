@@ -1363,3 +1363,5 @@ body{min-width:0}
 .record-details-overlay{position:fixed;inset:0;z-index:950;display:flex;align-items:center;justify-content:center;padding:12px;background:rgba(0,0,0,.67)}
 .record-details-overlay[hidden]{display:none!important}
 .record-details-dialog{display:flex;flex-direction:column;gap:12px;width:min(96vw,900px);max-height:94dvh;min-height:0;overflow:auto;background:var(--bg-surface);color:var(--text-main);border:1px solid var(--accent-teal);padding:18px}
+
+.auto-attendance-editor{z-index:960}
