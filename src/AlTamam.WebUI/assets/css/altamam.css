@@ -1106,3 +1106,97 @@ body{min-width:0}
     max-height:calc(70dvh - 42px)
   }
 }
+
+/* Monthly roster shares the daily full-height paging model: scroll rows,
+   not the footer. Compact aligned cells preserve legibility at 100 rows. */
+#appViewport.monthly-dashboard{height:100%;min-height:0;overflow:hidden;gap:6px}
+#appViewport.monthly-dashboard>.functional-header{flex:0 0 auto;padding:6px 12px}
+#appViewport.monthly-dashboard>.functional-header .page-title{margin:0;font-size:18px;line-height:1.3}
+#appViewport.monthly-dashboard>.functional-toolbar{flex:0 0 auto;gap:6px;padding:5px 8px}
+#appViewport.monthly-dashboard>.functional-toolbar .form-field:has(input[type="search"]){
+  flex:1 1 225px;min-width:175px;max-width:none
+}
+#appViewport.monthly-dashboard>.functional-toolbar .form-field>span{font-size:12px;line-height:1.2}
+#appViewport.monthly-dashboard>.functional-toolbar input[type="search"]{
+  width:100%;max-width:none;min-height:34px;padding:5px 9px;font-size:14px
+}
+#appViewport.monthly-dashboard>.functional-toolbar select{
+  min-width:145px;max-width:210px;min-height:34px;padding:5px 8px;font-size:13px
+}
+#appViewport.monthly-dashboard>.functional-toolbar .btn{
+  min-height:34px;padding:5px 9px;font-size:13px
+}
+#appViewport.monthly-dashboard>.functional-feedback{flex:0 0 auto}
+#appViewport.monthly-dashboard>.functional-archive{
+  flex:0 0 auto;gap:6px;padding:6px 8px;min-height:0
+}
+#appViewport.monthly-dashboard>.functional-archive select{
+  min-width:130px;min-height:34px;padding:5px 8px
+}
+#appViewport.monthly-dashboard>.functional-archive .btn{
+  min-height:34px;padding:5px 10px
+}
+#appViewport.monthly-dashboard>.monthly-cell-details:not([hidden]),
+#appViewport.monthly-dashboard>.functional-export-preview:not([hidden]){
+  flex:0 1 auto;max-height:25dvh;overflow:auto
+}
+#appViewport.monthly-dashboard>.monthly-roster-panel{
+  display:flex;flex-direction:column;flex:1 1 0;
+  min-height:0;max-height:none;overflow:hidden;padding:0
+}
+#appViewport.monthly-dashboard>.monthly-roster-panel>.monthly-scroll{
+  flex:1 1 auto;min-height:0;max-height:none;overflow:auto;
+  scrollbar-gutter:stable;overscroll-behavior:contain
+}
+#appViewport.monthly-dashboard>.monthly-roster-panel>.functional-pager{
+  flex:0 0 auto;margin:0;min-height:38px;
+  padding:4px 9px;gap:8px
+}
+#appViewport.monthly-dashboard>.monthly-roster-panel>.functional-pager .btn{
+  min-height:29px;padding:4px 10px
+}
+.monthly-roster-panel .monthly-scroll .functional-table{
+  width:max-content;min-width:100%;table-layout:fixed;
+  font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;font-size:14px
+}
+.monthly-roster-panel .monthly-scroll .functional-table th,
+.monthly-roster-panel .monthly-scroll .functional-table td{
+  height:36px;box-sizing:border-box;padding:4px 7px;
+  font-size:14px;font-weight:700;line-height:1.3;
+  vertical-align:middle;white-space:nowrap;
+  border-bottom:1px solid var(--border-color);
+  border-inline-start:1px solid var(--border-color)
+}
+.monthly-roster-panel .monthly-scroll .functional-table th{
+  height:auto;font-weight:800;line-height:1.3;
+  white-space:pre-line;text-align:center;padding:6px 6px
+}
+.monthly-roster-panel .monthly-scroll .fixed-one{right:0;width:62px;min-width:62px;text-align:center}
+.monthly-roster-panel .monthly-scroll .fixed-two{right:62px;width:112px;min-width:112px}
+.monthly-roster-panel .monthly-scroll .fixed-three{
+  right:174px;width:245px;min-width:245px;max-width:245px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.monthly-roster-panel .monthly-scroll .fixed-four{
+  right:419px;width:130px;min-width:130px;max-width:130px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.monthly-roster-panel .monthly-scroll .day-cell{
+  min-width:50px;text-align:center;padding:2px 4px
+}
+.monthly-roster-panel .monthly-scroll .monthly-day-detail{
+  min-height:28px;padding:3px 4px;font-size:15px;line-height:1.25
+}
+.monthly-roster-panel .monthly-scroll td.current-day-column .monthly-day-detail{font-size:16px}
+.monthly-roster-panel .functional-table tbody tr:nth-child(even) td:not([style]):not(.current-day-column){
+  background:var(--bg-subtle)
+}
+@media(max-height:580px),(max-width:670px){
+  #appViewport.monthly-dashboard{height:auto;overflow-y:auto}
+  #appViewport.monthly-dashboard>.monthly-roster-panel{
+    flex:0 0 auto;min-height:240px;max-height:70dvh
+  }
+  #appViewport.monthly-dashboard>.monthly-roster-panel>.monthly-scroll{
+    max-height:calc(70dvh - 42px)
+  }
+}
