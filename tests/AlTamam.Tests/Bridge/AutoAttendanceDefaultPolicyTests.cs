@@ -126,6 +126,35 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
     }
 
     [Fact]
+    public async Task OneSave_UpdatesBothTimesAndDefaultStatusAtomically()
+    {
+        var policy=new AutoAttendancePolicyService(_db);
+        var bad=await policy.SetScheduleAsync(new JsonObject{
+            ["dueTimeLocal"]="09:45",["dailyLockTimeLocal"]="18:00",
+            ["defaultStatusId"]="STS-DOES-NOT-EXIST",
+            ["operationId"]="TST-UNIFIED-INVALID-01"
+        },Admin,default);
+        Assert.False(bad.Success);
+        var unchanged=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
+        Assert.Equal("08:00",unchanged["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("20:00",unchanged["dailyLockTimeLocal"]!.GetValue<string>());
+        Assert.False(unchanged["configured"]!.GetValue<bool>());
+        var changed=await policy.SetScheduleAsync(new JsonObject{
+            ["dueTimeLocal"]="09:45",["dailyLockTimeLocal"]="18:00",
+            ["defaultStatusId"]="STS-PERMISSION",
+            ["operationId"]="TST-UNIFIED-VALID-0001"
+        },Admin,default);
+        Assert.True(changed.Success,changed.UserMessage);
+        var persisted=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
+        Assert.Equal("09:45",persisted["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("18:00",persisted["dailyLockTimeLocal"]!.GetValue<string>());
+        Assert.Equal("STS-PERMISSION",persisted["defaultStatusId"]!.GetValue<string>());
+        Assert.True(persisted["configured"]!.GetValue<bool>());
+        Assert.Equal(1L,Count("MutationReceipts"));
+        Assert.Equal(1L,Count("AuditEvents"));
+    }
+
+    [Fact]
     public async Task MissingYesterday_RequiresAdministratorSettingThenRunsOnceWithoutOverwritingManual()
     {
         using(var c=_db.CreateOpenConnection())
