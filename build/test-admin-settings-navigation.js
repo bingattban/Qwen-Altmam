@@ -105,7 +105,8 @@ const bridge = {
 const modalReviews=[];
 let approveDetailPreview=false;
 const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
-  detailsReview:async(details,opts)=>{modalReviews.push({details,opts});return approveDetailPreview;}
+  detailsReview:async(details,opts)=>{modalReviews.push({details,opts});return approveDetailPreview;},
+  confirm:async()=>true, prompt:async(message,value="")=>value, alert:async()=>true
  } }, document, console,
   alert: () => { throw Error("Unexpected alert"); },
   prompt: () => { throw Error("Unexpected prompt"); },
@@ -317,7 +318,7 @@ async function run() {
     "active non-system site is removable only by explicit operation");
   assert.equal(visible().filter(x=>x.textContent==="موقع محمي").length,1,
     "the Unspecified site can never display a remove action");
-  context.window.AltamamDialog={confirm:async()=>true,alert:async()=>true};
+  context.window.AltamamDialog={...context.window.AltamamDialog,confirm:async()=>true,alert:async()=>true};
   const selectedRow=visible().find(x=>x.tag==="tr"&&
     x.children[0]?.textContent==="موقع تجريبي قابل للإزالة");
   assert.ok(selectedRow,"expected removable site row must exist");
