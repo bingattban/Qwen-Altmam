@@ -1285,16 +1285,14 @@
       }catch(e){if(token===currentRequest)errors(results,e);}
     }
     async function showAuditDetails(auditEventId) {
-      openDetail?.remove();
-      const detail=card("تفاصيل القيد وسلامة السجل");
-      openDetail=detail;
-      results.after(detail);
-      const content=node("div","admin-note");
-      detail.append(content,btn("إغلاق التفاصيل",()=>detail.remove()));
+      openDetail?.remove?.();
+      const dialog=detailsModal("تفاصيل القيد وسلامة السجل");
+      openDetail=dialog.overlay;
+      const content=dialog.content;
       content.replaceChildren(warning("جارٍ التحقق من تفاصيل القيد..."));
       try {
         const reply=await api().invoke("GetAuditEntryDetails",{auditEventId});
-        if(state.active!=="log"){detail.remove();return;}
+        if(state.active!=="log"){dialog.close();return;}
         const item=reply.data||{};
         const facts=node("div","settings-properties");
         for(const [label,value] of [
@@ -1357,7 +1355,7 @@
               if(!reply.data?.rawEvidenceUntouched)
                 throw Error("لم يؤكد الخادم الاحتفاظ بالقيد الأصلي.");
               retry=null;
-              detail.remove();openDetail=null;
+              dialog.close();openDetail=null;
               await load();
             }catch(e){errors(editBox,e);}
             finally{edit.disabled=false;hide.disabled=false;}
