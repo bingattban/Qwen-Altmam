@@ -3,7 +3,7 @@ using AlTamam.Application.Scheduling;
 namespace AlTamam.DesktopHost.Scheduling;
 
 /// <summary>
-/// Durable in-process scheduler for the local-business-time 08:00 automatic attendance run (07.02).
+/// Durable in-process scheduler for the local-business-time configured automatic attendance run (07.02).
 /// Lives entirely in the C# WPF host — it does NOT rely on an open HTML page or any JavaScript timer.
 /// A single long-running background task sleeps until the next due instant, fires the database-backed
 /// <see cref="AutoAttendanceService"/>, and on every startup performs the approved bounded catch-up
@@ -32,7 +32,7 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
     public string? LastFailureMessage { get; private set; }
     public string? LastRetentionFailureMessage { get; private set; }
 
-    /// <summary>Runs startup catch-up immediately, then keeps the 08:00 schedule alive.</summary>
+    /// <summary>Runs startup catch-up immediately, then keeps the configured daily schedule alive.</summary>
     public void Start()
     {
         if (_loop is not null) return;
@@ -80,7 +80,7 @@ public sealed class EightPmSchedulerService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Sleeps coarsely before the due hour and finely around it so a the configured daily cutoff boundary fires
+    /// Sleeps coarsely before the due hour and finely around it so a the configured attendance time boundary fires
     /// promptly and clock adjustments are re-evaluated at most one granularity window late.
     /// </summary>
     private async Task<TimeSpan> SleepUntilNextCheckAsync(CancellationToken ct)
