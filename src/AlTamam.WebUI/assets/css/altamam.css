@@ -1443,7 +1443,7 @@ body:has(.auto-attendance-overlay) #appModalBackdrop.open{z-index:1400}
 /* Consistent search footprint for every dynamically mounted screen.
    All person-name search prompts are inside the input; the original label
    stays accessible to assistive technology. Other form fields are untouched. */
-:is(#appViewport,#appModalBody,.auto-attendance-overlay) input.app-unified-search{
+input.app-unified-search{
   box-sizing:border-box;
   width:min(147px,100%)!important;min-width:0!important;max-width:147px!important;
   height:28px!important;min-height:28px!important;max-height:28px!important;
@@ -1452,10 +1452,10 @@ body:has(.auto-attendance-overlay) #appModalBackdrop.open{z-index:1400}
   background:var(--bg-surface);color:var(--text-main);
   font-size:12px!important;font-weight:600;line-height:20px!important;
 }
-:is(#appViewport,#appModalBody,.auto-attendance-overlay) input.app-unified-search::placeholder{
+input.app-unified-search::placeholder{
   color:var(--text-muted);opacity:1;font-size:11px;
 }
-:is(#appViewport,#appModalBody,.auto-attendance-overlay) label.app-unified-search-wrap{
+label.app-unified-search-wrap{
   width:147px!important;min-width:0!important;max-width:147px!important;
   flex:0 0 147px!important;gap:0;
 }
