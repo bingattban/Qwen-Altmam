@@ -69,19 +69,19 @@ public sealed class AuditOverlayService
             // Search all matching audit entries BEFORE paging. Overlay edits
             // never rewrite immutable AuditEvents, but are searchable as displayed.
             where.Add("""
-                (e.ActorUsernameSnapshot LIKE $term ESCAPE '\'
-                 OR e.ActorRosterFullNameSnapshot LIKE $term ESCAPE '\'
-                 OR e.TargetDisplaySnapshot LIKE $term ESCAPE '\'
-                 OR e.TargetEntityId LIKE $term ESCAPE '\'
-                 OR e.OperationCode LIKE $term ESCAPE '\'
-                 OR e.OperationArabicName LIKE $term ESCAPE '\'
-                 OR e.DefaultArabicDescription LIKE $term ESCAPE '\'
+                (altamam_normalize_search(e.ActorUsernameSnapshot) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.ActorRosterFullNameSnapshot) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.TargetDisplaySnapshot) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.TargetEntityId) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.OperationCode) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.OperationArabicName) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.DefaultArabicDescription) LIKE $term ESCAPE '\'
                  OR EXISTS(SELECT 1 FROM AuditLogPresentationEdits o
                            WHERE o.AuditEventId = e.AuditEventId
                              AND o.OverlayVersion =
                                  (SELECT MAX(p.OverlayVersion) FROM AuditLogPresentationEdits p
                                   WHERE p.AuditEventId = e.AuditEventId)
-                             AND o.CorrectedDescription LIKE $term ESCAPE '\'))
+                             AND altamam_normalize_search(o.CorrectedDescription) LIKE $term ESCAPE '\'))
                 """);
             args.Add(("$term", "%" + EscapeLike(NormalizeTerm(term)) + "%"));
         }
@@ -119,6 +119,11 @@ public sealed class AuditOverlayService
         string whereSql = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
 
         using var connection = _db.CreateOpenConnection();
+        // Match normalized Arabic names, diacritics and Arabic-Indic digits
+        // in the stored snapshots WITHOUT ever rewriting immutable audit data.
+        connection.CreateFunction<string, string>("altamam_normalize_search",
+            value => ArabicTextNormalizer.NormalizeForSearch(value),
+            isDeterministic: true);
         using var countCmd = connection.CreateCommand();
         countCmd.CommandText = $"SELECT COUNT(*) FROM AuditEvents e {whereSql};";
         foreach (var (n, v) in args) countCmd.Parameters.Add(n, SqliteType.Text).Value = v;
