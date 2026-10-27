@@ -32,6 +32,9 @@
        make("p","تحضير فردي أو جماعي لليوم الحالي. لا يحفظ أي تعديل قبل المراجعة.","section-description"));
    const filters=make("div",undefined,"functional-toolbar");
    const site=make("select"),status=make("select"),mode=make("select");
+   const search=make("input");search.type="search";
+   search.placeholder="بحث بالاسم أو الرقم (ع) في جميع الأفراد";
+   search.setAttribute("aria-label","البحث عن فرد للتحضير");
    site.setAttribute("aria-label","الموقع");
    status.setAttribute("aria-label","الحالة الجديدة");
    mode.setAttribute("aria-label","نوع العملية");
@@ -56,7 +59,14 @@
    });
    status.addEventListener("change",clearReview);
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
-   filters.append(site,status,mode);
+   search.addEventListener("keydown",event=>{
+     if(event.key==="Enter"){event.preventDefault();pageNo=1;void load();}
+   });
+   const searchButton=button("بحث",()=>{pageNo=1;void load();});
+   const clearSearch=button("مسح البحث",()=>{
+     search.value="";pageNo=1;void load();
+   });
+   filters.append(site,status,mode,search,searchButton,clearSearch);
    header.append(filters,choice,info,list);
    host.appendChild(draftPanel);
    host.insertBefore(header,draftPanel);
@@ -77,7 +87,7 @@
      try{
        const response=await bridge.invoke("QueryDailyRoster",{
          businessDate:day,siteId:site.value,statusId:"__ELIGIBLE__",
-         page:pageNo,pageSize:DAILY_PAGE_SIZE
+         term:search.value.trim(),page:pageNo,pageSize:DAILY_PAGE_SIZE
        });
        if(current!==nonce||!host.isConnected)return;
        const d=response.data||{},t=table(fields);
