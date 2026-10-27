@@ -501,11 +501,11 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
             Assert.IsType<JsonObject>(destination.Data)["items"]);
         Assert.Equal(2,atDestination.Count);
         var newSiteCell=Assert.IsType<JsonObject>(((JsonObject)Assert.Single(
-            atDestination.OfType<JsonObject>().Where(p=>
-                p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1"))["days"]!)[Today()]);
+            atDestination.OfType<JsonObject>(),p=>
+                p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1")["days"]!)[Today()]);
         Assert.Equal("نقل (د)",newSiteCell["symbol"]!.GetValue<string>());
-        var attended=Assert.Single(items.OfType<JsonObject>().Where(p=>
-            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1"));
+        var attended=Assert.Single(items.OfType<JsonObject>(),p=>
+            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1");
         var cell=Assert.IsType<JsonObject>(((JsonObject)attended["days"]!)[Today()]);
         Assert.Equal("م",cell["symbol"]!.GetValue<string>());
         Assert.Equal("internal-transfer",cell["movementKind"]!.GetValue<string>());
@@ -588,8 +588,8 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         },default);
         Assert.True(archive.Success,archive.UserMessage);
         var stored=Assert.Single(Assert.IsType<JsonArray>(
-            Assert.IsType<JsonObject>(archive.Data)["items"]).OfType<JsonObject>().Where(p=>
-            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1"));
+            Assert.IsType<JsonObject>(archive.Data)["items"]).OfType<JsonObject>(),p=>
+            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1");
         var archiveDay=Assert.IsType<JsonObject>(((JsonObject)stored["days"]!)[Today()]);
         Assert.Equal("غ",archiveDay["symbol"]!.GetValue<string>());
         Assert.Equal(external?"external-transfer":"internal-transfer",
