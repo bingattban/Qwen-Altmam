@@ -1348,3 +1348,13 @@ body{min-width:0}
   .functional-table thead th:nth-child(3){text-align:right;padding-inline:15px}
 #appViewport.daily-dashboard>.daily-roster-panel
   .functional-table thead th:last-child{min-width:145px}
+
+
+.settings-panel:has(.settings-attendance-fields){grid-column:1/-1}
+.settings-attendance-fields{display:grid;grid-template-columns:minmax(230px,2fr) repeat(2,minmax(155px,1fr));gap:12px}
+.settings-attendance-fields>.admin-input{min-width:0}
+.settings-attendance-fields :is(input,select){width:100%;box-sizing:border-box;min-height:40px}
+.settings-action-bar{display:flex;border-top:1px solid var(--border-color);padding-top:12px}
+.settings-action-bar .btn{min-width:225px}
+@media(max-width:850px){.settings-attendance-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:580px){.settings-attendance-fields{grid-template-columns:1fr}}
