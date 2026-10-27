@@ -16,7 +16,7 @@ class El{
 const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
  badge=new El("span"),events={},calls=[],nav={};
 for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]=new El("button");
-let transferCount=0;
+let transferCount=0,expandedRoster=false;
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
  invoke:async(action,payload)=>{
    calls.push({action,payload});
@@ -29,15 +29,16 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
    if(action==="QueryDailyRoster"){
-     const all=[{personId:"P1",statusId:null,statusName:"غير محضر"},
+     const all=expandedRoster?Array.from({length:23},(_,i)=>({personId:"R"+(i+1),statusId:null,statusName:"غير محضر"})):[{personId:"P1",statusId:null,statusName:"غير محضر"},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
        {personId:"P3",statusId:"STS-ABSENT",statusName:"غياب"},
        {personId:"P4",statusId:"__TRANSFER_DAY__",statusName:"تم نقله اليوم"}];
      const selected=all.filter(p=>(!payload.statusId ||
        (payload.statusId==="__UNPREPARED__"?p.statusId===null:p.statusId===payload.statusId))
        &&(!payload.term || p.personId.toLowerCase().includes(payload.term.toLowerCase())));
-     return{data:{items:selected.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
-       total:selected.length,hasNext:false}};
+     const visible=selected.slice((payload.page-1)*payload.pageSize,payload.page*payload.pageSize);
+     return{data:{items:visible.map(p=>({...p,name:p.personId,serviceNumberA:"12345",siteName:"غير محدد"})),
+       total:selected.length,hasNext:payload.page*payload.pageSize<selected.length}};
    }
    if(action==="PreviewAttendanceChange" && payload.mode==="carry")
      return {data:{mode:"carry",businessDate:payload.businessDate,previewToken:"a".repeat(64),
@@ -126,6 +127,27 @@ async function main(){
  assert.equal(reviewCalled,1,"a separate confirmable preview is mandatory");
  assert.equal(calls.filter(x=>x.action==="SubmitAttendance"&&x.payload.mode==="carry").length,1,
    "write must happen only after both the picker and confirmation");
- console.log("DASHBOARD COUNTER FILTERS PASS: total/unprepared/status buttons, active states, no redundant chips");
+ expandedRoster=true;
+ counter("all").handlers.click();await settle();
+ const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));
+ const dailyRows=()=>dailyPanel().all().find(x=>x.tag==="tbody").children;
+ const navButton=name=>viewport.all().find(x=>x.tag==="button"&&x.textContent===name);
+ assert.ok(dailyPanel(),"only daily roster gets dedicated spacing");
+ assert.equal(lastRoster().payload.pageSize,10,"server request must limit to ten names");
+ assert.equal(dailyRows().length,10,"ten names on first daily page");
+ assert.equal(dailyRows()[0].children[0].textContent,"1");
+ assert.equal(dailyRows()[9].children[0].textContent,"10");
+ assert.equal(navButton("السابق").disabled,true);
+ navButton("التالي").handlers.click();await settle();
+ assert.equal(lastRoster().payload.page,2);
+ assert.equal(dailyRows().length,10);
+ assert.equal(dailyRows()[0].children[0].textContent,"11");
+ navButton("التالي").handlers.click();await settle();
+ assert.equal(dailyRows().length,3,"23 names require 10+10+3 rows");
+ assert.equal(dailyRows()[0].children[0].textContent,"21");
+ assert.equal(navButton("التالي").disabled,true);
+ navButton("السابق").handlers.click();await settle();
+ assert.equal(dailyRows().length,10);
+ console.log("DASHBOARD COUNTER FILTERS PASS: all filters, ten-name pages and navigation");
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
