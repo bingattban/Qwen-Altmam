@@ -219,9 +219,10 @@ public sealed class AutoAttendanceService
                 {
                     if (configuredDefault is null)
                     {
-                        // Fail the entire transaction; no partial 08:00 attendance.
-                        throw new InvalidOperationException(
-                            "تعذر التحضير التلقائي: يجب أن تحدد الإدارة حالة افتراضية نشطة في الإعدادات لعدم وجود تحضير أمس.");
+                        // Do not block other people who have a valid previous-day status.
+                        // A person without yesterday or a configured fallback stays unprepared.
+                        skipNoYesterday++;
+                        continue;
                     }
                     statusId = configuredDefault.Value.Id;
                     statusName = configuredDefault.Value.Name;
