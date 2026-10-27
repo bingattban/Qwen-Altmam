@@ -70,7 +70,7 @@ public sealed class MonthlyHistoryReuseTests : IAsyncLifetime, IDisposable
         var result = await service.MonthlyGridAsync(new JsonObject
         {
             ["year"] = 2026, ["month"] = 10, ["siteId"] = "SITE-UNSPECIFIED",
-            ["page"] = 1, ["pageSize"] = 50
+            ["archiveMode"]=true, ["page"] = 1, ["pageSize"] = 50
         }, CancellationToken.None);
         Assert.True(result.Success, result.UserMessage);
         var json = Assert.IsType<JsonObject>(result.Data);
@@ -172,7 +172,7 @@ public sealed class MonthlyHistoryReuseTests : IAsyncLifetime, IDisposable
         {
             var response=await service.MonthlyGridAsync(new JsonObject{
                 ["year"]=2026,["month"]=10,["siteId"]=site,
-                ["term"]=term,["page"]=page,["pageSize"]=pageSize
+                ["term"]=term,["archiveMode"]=true,["page"]=page,["pageSize"]=pageSize
             },CancellationToken.None);
             Assert.True(response.Success,response.UserMessage);
             return Assert.IsType<JsonObject>(response.Data);
