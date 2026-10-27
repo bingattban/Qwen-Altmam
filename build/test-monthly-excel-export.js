@@ -74,6 +74,7 @@ async function main(){
   assert.ok(searchButton);
   searchButton.handlers.click();await tick();await tick();
   const lastFilteredGrid=calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1);
+  assert.equal(lastFilteredGrid.payload.pageSize,100,"monthly grid must use full 100-person pages");
   assert.equal(lastFilteredGrid.payload.term,"EX٠٠١");
   assert.equal(lastFilteredGrid.payload.page,1);
   assert.equal(lastFilteredGrid.payload.year,year);
