@@ -22,8 +22,8 @@ async function transfer(host,external){
   function destinations(){if(external)return;to.replaceChildren(opt("","اختر الموقع المنقول إليه"));sites.filter(s=>s.siteId!==from.value).forEach(s=>to.appendChild(opt(s.siteId,s.name)));}
   card.appendChild(el("h2",external?"النقل الخارجي":"النقل الداخلي","section-title"));
   card.appendChild(el("p",external
-     ?"النقل الخارجي يستبعد الفرد من القوة مع الاحتفاظ بتاريخ خدمته."
-     :"تظهر حركة النقل في يوم التنفيذ بالموقعين، ويبدأ التحضير بالموقع الجديد في اليوم التالي.",
+     ?"يخرج الفرد من كشوف القوة النشطة بعد النقل الخارجي، مع الاحتفاظ بتاريخه في الأرشيف. يسمح بالنقل حتى بعد تحضير اليوم أو قفله."
+     :"يبقى المنقول داخلياً في القوة النشطة والتمام الشهري بموقعه الجديد. يسمح بالنقل بعد التحضير والقفل مع الاحتفاظ بالحالة السابقة؛ والتحضير الجديد يبدأ غداً.",
      "section-description"));
   bar.append(from,external?outside:to,search,btn("بحث",()=>{page=1;reset();load();}));
   card.append(bar,counter,note,list,confirmation);host.appendChild(card);
