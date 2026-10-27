@@ -322,14 +322,22 @@
         if(disposed||current!==generation)return;
         if(!result||!Array.isArray(result.items))
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
+        const allowed=date===startOfToday()&&
+          ["GeneralAdministration","OrdinaryAdministration","Supervisor"].includes(STATE.session?.role);
         const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
-          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"}]);
+          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"},
+          {label:"إجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
             person.name,person.siteName,person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
+          const actionCell=el("td");
+          if(allowed&&person.personId&&person.statusId)
+            actionCell.appendChild(button("تعديل الحالة",()=>void editAutoPerson(person)));
+          else actionCell.textContent="للعرض فقط";
+          row.appendChild(actionCell);
           tb.body.appendChild(row);
         });
         if(!result.items.length)content.replaceChildren(message(
