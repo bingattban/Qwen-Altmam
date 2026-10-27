@@ -5,6 +5,7 @@
    if(text!==undefined)n.textContent=String(text);
    if(cls)n.className=cls;return n;};
  const btn=(text,action)=>{const b=el("button",text,"btn btn-outline");
+   if(/^العودة إلى|^رجوع/.test(String(text)))b.className+=" app-back-action";
    b.type="button";b.addEventListener("click",action);return b;};
  const alert=(box,error)=>box.replaceChildren(el("p",
    error.message||"تعذرت قراءة التقرير.","admin-warning"));

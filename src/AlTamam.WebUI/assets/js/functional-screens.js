@@ -231,7 +231,7 @@
       dashboardClockTimer=window.setInterval(tick,1000);
   }
 
-  // The automatic-attendance register is READ-ONLY and never commits attendance.
+  // Automatic register supports the same audited preview/commit pipeline as daily attendance.
   function openAutoPreparedList(){
     const date=STATE.date,site=STATE.siteId;
     const overlay=el("div","auto-attendance-overlay");
@@ -244,7 +244,7 @@
     const closeButton=button("إغلاق",close);
     append(heading,title,closeButton);
     const description=el("p","section-description",
-      "كشف للقراءة فقط: الحالات المعتمدة تلقائياً الساعة ٨ صباحاً بحسب حالة أمس، أو الحالة الافتراضية عند عدم وجودها. كل حالة تُحتسب في عدادها الأصلي.");
+      "يمكن تصحيح حالة الفرد المعتمد تلقائياً من خلال معاينة واعتماد مسجلين في سجل العمليات. تخضع التعديلات لصلاحيات المستخدم ووقت قفل اليوم.");
     const search=field("search","بحث بالاسم أو الرقم (ع)");
     search.input.maxLength=100;
     const searchButton=button("بحث",()=>{term=search.input.value.trim();page=1;void load();});
@@ -256,6 +256,30 @@
     overlay.appendChild(panel);
     view().appendChild(overlay);
     let disposed=false,page=1,term="",generation=0;
+    async function editAutoStatus(person){
+      const statuses=parseData(await bridge().invoke("GetActiveAttendanceStatuses",{}));
+      const choices=Array.isArray(statuses)?statuses:statuses?.items||[];
+      const promptText="اختر الحالة الجديدة للفرد "+person.name+" (ع: "+person.serviceNumberA+
+        "):\n"+choices.map((x,i)=>(i+1)+" - "+x.displayName).join("\n");
+      const picked=await window.AltamamDialog?.prompt(promptText,"",{title:"تعديل حالة المحضّر تلقائياً"});
+      if(!picked)return;
+      const index=Number(picked)-1;
+      if(!Number.isInteger(index)||index<0||index>=choices.length){
+        await window.AltamamDialog?.alert("رقم الحالة غير صحيح.");return;
+      }
+      try{
+        const payload={businessDate:date,personIds:[person.personId],statusId:choices[index].statusId,mode:"revise"};
+        const preview=await bridge().invoke("PreviewAttendanceChange",payload);
+        const data=parseData(preview);
+        if(!await window.AltamamDialog?.confirm(
+          "اعتماد تعديل حالة "+person.name+" إلى "+choices[index].displayName+"؟",
+          {title:"تأكيد تعديل التحضير"}))return;
+        await bridge().invoke("ReviseTodayAttendance",{...payload,previewToken:data?.previewToken,
+          operationId:window.crypto?.randomUUID?.()||String(Date.now())+"-auto-correction"});
+        await load();
+        void renderDashboard();
+      }catch(error){showError(content,error);}
+    }
     function close(){
       disposed=true;generation++;
       overlay.remove?.();
@@ -280,13 +304,15 @@
         if(!result||!Array.isArray(result.items))
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
         const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
-          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"}]);
+          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"},{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
             person.name,person.siteName,person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
+          const action=el("td");action.appendChild(button("تعديل الحالة",()=>void editAutoStatus(person)));
+          row.appendChild(action);
           tb.body.appendChild(row);
         });
         if(!result.items.length)content.replaceChildren(message(
@@ -359,7 +385,7 @@
         el("span","counter-value",percent+"%"));
       counters.appendChild(completion);
       // The counters ARE the roster filters. No duplicate status chips below them.
-      const stats=[{name:"إجمالي القوة",count:counts.totalForce,statusId:""},
+      const stats=[{name:"إجمالي القوة النشطة",count:counts.totalForce,statusId:""},
         {name:"غير المحضرين",count:counts.unprepared,statusId:"__UNPREPARED__"},
         {name:"المحضّرون تلقائياً",count:counts.automaticallyPrepared||0,statusId:"__AUTO_PREPARED__"},
          ...(Number(counts.internalTransferDay)>0
@@ -427,13 +453,22 @@
     container.replaceChildren(header("التمام الشهري لشهر "+monthLabel(year,month)+" "+year));
     const tool=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
+    const monthlyTotals=el("div","monthly-force-totals");
+    monthlyTotals.setAttribute("role","status");
+    monthlyTotals.setAttribute("aria-live","polite");
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
     const tableHost=el("section","card monthly-grid-panel");
-    const detailsBox=el("section","card monthly-cell-details");
-    detailsBox.hidden=true;
+    const detailsBox=el("section","card monthly-cell-details auto-attendance-dialog");
+    const detailOverlay=el("div","auto-attendance-overlay");
+    detailOverlay.setAttribute("role","dialog");
+    detailOverlay.setAttribute("aria-modal","true");
+    detailOverlay.setAttribute("aria-label","تفاصيل التمام الشهري");
+    detailOverlay.hidden=true;
+    detailOverlay.appendChild(detailsBox);
+    detailsBox.hidden=false;
     const bottom=el("form","card functional-archive monthly-archive-controls");
-    append(container,tool,feedback,exportPanel,detailsBox,tableHost,bottom);
+    append(container,tool,monthlyTotals,feedback,exportPanel,tableHost,bottom,detailOverlay);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
     const item=(label,value)=>{
@@ -443,7 +478,7 @@
     };
     async function showCellDetails(personId,date){
       const request=++detailsRequest;
-      detailsBox.hidden=false;
+      detailOverlay.hidden=false;
       detailsBox.replaceChildren(message("جارٍ قراءة الواقعة المحفوظة..."));
       try{
         const response=await bridge().invoke("GetMonthlyCellDetails",{
@@ -454,7 +489,7 @@
         if(!data||data.personId!==personId||data.businessDate!==date)
           throw new Error("لم تتطابق البيانات التاريخية مع اليوم المختار.");
         const top=el("div","monthly-detail-heading");
-        const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailsBox.hidden=true;
+        const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailOverlay.hidden=true;
           detailsBox.replaceChildren();});
         append(top,el("h3","section-title","تفاصيل التمام — "+date),close);
         const content=el("div","monthly-detail-content");
@@ -604,12 +639,37 @@
         tableHost.replaceChildren(message("لا يوجد أرشيف لهذا الشهر"));
         return;
       }
-      const grid=parseData(await bridge().invoke("QueryMonthlyGrid",{
-        year,month,siteId:STATE.siteId,term:STATE.monthTerm,
-        page:STATE.monthPage,pageSize:100,
-        archiveMode:STATE.chosenYear!==null||STATE.chosenMonth!==null
-      }));
+      const isArchive=STATE.chosenYear!==null||STATE.chosenMonth!==null;
+      const liveCurrent=period===current&&!isArchive;
+      const [gridReply,forceReply]=await Promise.all([
+        bridge().invoke("QueryMonthlyGrid",{
+          year,month,siteId:STATE.siteId,term:STATE.monthTerm,
+          page:STATE.monthPage,pageSize:100,archiveMode:isArchive
+        }),
+        liveCurrent
+          ? bridge().invoke("GetDashboardSummary",{
+              businessDate:startOfToday(),siteId:STATE.siteId
+            }).catch(()=>null)
+          : Promise.resolve(null)
+      ]);
       if(STATE.monthEpoch!==epoch)return;
+      const grid=parseData(gridReply);
+      const force=parseData(forceReply);
+      if(!grid)throw Error("تعذر قراءة كشف التمام الشهري.");
+      if(liveCurrent){
+        monthlyTotals.replaceChildren(
+          el("strong","","إجمالي القوة النشطة: "+
+            (typeof force?.totalForce==="number"?force.totalForce:"غير متاح")),
+          el("span","","أفراد كشف الشهر الظاهرون: "+(grid.total||0)),
+          el("small","","تُستبعد من كشف الشهر الجاري حركات النقل والفصل؛ "+
+            "لذلك قد يختلف عدد صفوف الكشف عن إجمالي القوة النشطة.")
+        );
+      }else{
+        monthlyTotals.replaceChildren(
+          el("strong","","إجمالي الأفراد في أرشيف الشهر: "+(grid.total||0)),
+          el("span","","هذا سجل تاريخي للشهر المحدد، وليس عداد القوة النشطة اليوم.")
+        );
+      }
       const dayCount=monthDays(year,month);
       const cols=[{label:"الرقم",cls:"pinned fixed-one"},
         {label:"الرقم (ع)",cls:"pinned fixed-two"},

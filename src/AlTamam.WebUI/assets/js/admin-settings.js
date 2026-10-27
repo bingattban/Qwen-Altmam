@@ -32,6 +32,7 @@
   }
   function btn(label,callback,klass) {
     const b=node("button",klass||"btn btn-outline",label);b.type="button";
+    if(/^العودة إلى|^رجوع/.test(String(label)))b.className+=" app-back-action";
     b.addEventListener("click",callback);return b;
   }
   function card(title) {
@@ -1162,6 +1163,10 @@
     filter.appendChild(node("option","","جميع المواقع"));filter.firstChild.value="";
     const go=btn("بحث",()=>{state.term=search.input.value.trim();state.page=1;load();},"btn btn-primary");
     controls.append(search.wrap,filter,go);box.appendChild(controls);
+    const totalSummary=node("div","admin-roster-totals");
+    totalSummary.setAttribute("role","status");
+    totalSummary.setAttribute("aria-live","polite");
+    box.appendChild(totalSummary);
     const content=node("div","admin-note");box.appendChild(content);
     try {
       const response=await api().invoke("QuerySites",{});
@@ -1181,11 +1186,23 @@
       const token=++currentRequest;
       content.replaceChildren(warning("جارٍ تحميل الأفراد..."));
       try {
-        const response=await api().invoke("QueryPersons",{
-          term:state.term,siteId:state.siteId,organizationalStatus:1,
-          page:state.page,pageSize:100});
+        const filterQuery={term:state.term,siteId:state.siteId,organizationalStatus:1,
+          page:state.page,pageSize:100};
+        const allQuery={term:"",siteId:"",organizationalStatus:1,page:1,pageSize:1};
+        const [response,all]=await Promise.all([
+          api().invoke("QueryPersons",filterQuery),
+          (!state.term&&!state.siteId)
+            ? Promise.resolve(null)
+            : api().invoke("QueryPersons",allQuery).catch(()=>null)
+        ]);
         if(token!==currentRequest)return;
-        const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","إجراء"]);
+        const data=response.data||{};
+        const activeTotal=all?.data?.total??data.total??0;
+        totalSummary.replaceChildren(
+          node("strong","","إجمالي الأفراد النشطين: "+activeTotal),
+          node("span","","المطابقون للبحث والموقع: "+(data.total||0))
+        );
+        const t=table(["الرقم (ع)","الاسم","الموقع","إجراء"]);
         for(const person of data.items||[]){
           addRow(t.body,[person.serviceNumberA,person.displayName,person.siteName],
             "تعديل الاسم والرقم",()=>editPerson(person));
@@ -1271,12 +1288,17 @@
       }catch(e){if(token===currentRequest)errors(results,e);}
     }
     async function showAuditDetails(auditEventId) {
-      openDetail?.remove();
+      openDetail?.parentElement?.remove();
       const detail=card("تفاصيل القيد وسلامة السجل");
       openDetail=detail;
-      results.after(detail);
+      detail.classList.add("auto-attendance-dialog");
+      const overlay=node("div","auto-attendance-overlay");
+      overlay.setAttribute("role","dialog");overlay.setAttribute("aria-modal","true");
+      overlay.setAttribute("aria-label","تفاصيل القيد");
+      overlay.appendChild(detail);
+      results.after(overlay);
       const content=node("div","admin-note");
-      detail.append(content,btn("إغلاق التفاصيل",()=>detail.remove()));
+      detail.append(content,btn("إغلاق التفاصيل",()=>overlay.remove()));
       content.replaceChildren(warning("جارٍ التحقق من تفاصيل القيد..."));
       try {
         const reply=await api().invoke("GetAuditEntryDetails",{auditEventId});
@@ -1403,6 +1425,7 @@
       grid.replaceChildren();
       // Identity and runtime version are read from the authenticated bridge.
       const account=settingsCard("الحساب والبرنامج","◉");
+      account.classList.add("settings-account-panel");
       const accountData=node("div","settings-properties");
       accountData.append(
         settingsValue("اسم البرنامج",version.productNameAr||"التمام اليومي"),
@@ -1416,6 +1439,7 @@
 
       if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
         const automatic=settingsCard("أوقات التحضير التلقائي وقفل التمام اليومي","◷");
+        automatic.classList.add("settings-attendance-panel");
         automatic.appendChild(node("p","settings-copy",
           "يحدد وقت التحضير التلقائي موعد نسخ حالات أمس لغير المحضرين، ويحدد وقت القفل آخر وقت لإجراء التحضير والتعديل المعتاد خلال اليوم. لا يشمل الاعتماد التلقائي يوم النقل."));
         const label=node("label","admin-input"),picker=node("select","form-control");
@@ -1455,47 +1479,37 @@
           scheduledLabel.append(node("span","","وقت التحضير التلقائي"),scheduledTime);
           const lockLabel=node("label","admin-input");
           lockLabel.append(node("span","","وقت قفل التحضير اليومي"),lockTime);
-          const saveTimes=btn("حفظ أوقات التحضير",async()=>{
+          const saveTimes=btn("حفظ إعدادات التحضير التلقائي",async()=>{
+            if(!picker.value)return errors(feedback,new Error("اختر حالة افتراضية نشطة أولاً."));
             if(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(scheduledTime.value)||
                !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(lockTime.value))
               return errors(feedback,new Error("حدد وقتين صحيحين بصيغة HH:mm."));
-            if(!await dialogs.confirm("اعتماد وقت التحضير التلقائي "+scheduledTime.value+
-              " ووقت قفل التمام اليومي "+lockTime.value+"؟"))return;
+            if(!await dialogs.confirm("اعتماد الحالة الافتراضية وأوقات التحضير والقفل معاً؟"))return;
             saveTimes.disabled=true;
             try{
+              await api().invoke("SetAutoAttendanceDefaultStatus",{
+                statusId:picker.value,operationId:makeOperationId()
+              });
               const result=await api().invoke("SetAttendanceSchedule",{
                 dueTimeLocal:scheduledTime.value,
-                dailyLockTimeLocal:lockTime.value,
-                operationId:makeOperationId()
+                dailyLockTimeLocal:lockTime.value,operationId:makeOperationId()
               });
               if(token!==currentRequest)return;
               feedback.replaceChildren(node("p","settings-success",
-                "حُفظت الأوقات: التحضير التلقائي "+result.data.dueTimeLocal+
-                " — القفل "+result.data.dailyLockTimeLocal));
+                "تم حفظ الحالة الافتراضية وأوقات التحضير والقفل: "+
+                result.data.dueTimeLocal+" / "+result.data.dailyLockTimeLocal));
             }catch(e){if(token===currentRequest)errors(feedback,e);}
             finally{saveTimes.disabled=false;}
           },"btn btn-primary settings-action");
-          automatic.append(scheduledLabel,lockLabel,saveTimes);
-          const saveDefault=btn("حفظ الحالة الافتراضية",async()=>{
-            if(!picker.value)return errors(feedback,new Error("اختر حالة نشطة أولاً."));
-            if(!await dialogs.confirm("تأكيد اعتماد الحالة المختارة عند غياب تحضير أمس؟"))return;
-            saveDefault.disabled=true;
-            try{
-              const result=await api().invoke("SetAutoAttendanceDefaultStatus",{
-                statusId:picker.value,operationId:makeOperationId()
-              });
-              if(token!==currentRequest)return;
-              feedback.replaceChildren(node("p","settings-success",
-                "تم اعتماد الحالة الافتراضية: "+result.data.defaultStatusName));
-            }catch(e){if(token===currentRequest)errors(feedback,e);}
-            finally{saveDefault.disabled=false;}
-          },"btn btn-primary settings-action");
-          automatic.appendChild(saveDefault);
+          const timesRow=node("div","settings-attendance-fields");
+          timesRow.append(scheduledLabel,lockLabel);
+          automatic.append(timesRow,saveTimes);
         }catch(e){if(token===currentRequest)errors(feedback,e);}
       }
 
       // The daily schedule is executed by the native Windows host, never by JS timers.
       const backup=settingsCard("النسخ الاحتياطي","▣");
+      backup.classList.add("settings-backup-panel");
       backup.append(
         node("p","settings-copy","اختر مجلداً مشتركاً للنسخ الاحتياطي المشفر وجميع ملفات Excel، مع التحقق من سلامة كل نسخة.")
       );
@@ -1619,6 +1633,7 @@
       grid.appendChild(backup);
 
       const integrity=settingsCard("سلامة قاعدة البيانات","◇");
+      integrity.classList.add("settings-integrity-panel");
       integrity.appendChild(node("p","settings-copy",
         "تحقق من سلامة البيانات المشفرة داخل البرنامج دون تعديل أي سجل."));
       const result=node("div","settings-feedback");
@@ -1643,6 +1658,7 @@
       grid.appendChild(integrity);
 
       const planned=settingsCard("التحقق من النسخ والاستعادة","⚙");
+      planned.classList.add("settings-restore-panel");
       planned.appendChild(node("p","settings-copy",
         "هذه الإجراءات تحتاج إلى اختبارات حماية البيانات قبل السماح بتشغيلها."));
       const forthcoming=node("div","settings-properties");
