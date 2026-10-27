@@ -244,7 +244,7 @@
     const closeButton=button("إغلاق",close);
     append(heading,title,closeButton);
     const description=el("p","section-description",
-      "كشف للقراءة فقط: الحالات المعتمدة تلقائياً الساعة ٨ صباحاً بحسب حالة أمس، أو الحالة الافتراضية عند عدم وجودها. كل حالة تُحتسب في عدادها الأصلي.");
+      "كشف المحضّرين تلقائياً مع إمكانية تعديل الحالة بعد المعاينة والتأكيد.");
     const search=field("search","بحث بالاسم أو الرقم (ع)");
     search.input.maxLength=100;
     const searchButton=button("بحث",()=>{term=search.input.value.trim();page=1;void load();});
