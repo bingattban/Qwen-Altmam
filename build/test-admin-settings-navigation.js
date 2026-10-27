@@ -102,7 +102,11 @@ const bridge = {
     return { data: responses[name] };
   }
 };
-const context = { window:{ AltamamBridge:bridge }, document, console,
+const modalReviews=[];
+let approveDetailPreview=false;
+const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
+  detailsReview:async(details,opts)=>{modalReviews.push({details,opts});return approveDetailPreview;}
+ } }, document, console,
   alert: () => { throw Error("Unexpected alert"); },
   prompt: () => { throw Error("Unexpected prompt"); },
   confirm: () => true };
@@ -203,8 +207,11 @@ async function run() {
   await buttonNamed("معاينة التصحيح").handlers.click();
   assert.equal(calls.filter(x=>x.name==="PreviewClosedDayCorrection").length,1);
   assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,0,
-    "preview must not commit the closed-day correction");
-  await buttonNamed("اعتماد التصحيح الاستثنائي").handlers.click();
+    "closing the modal without approval must not correct a closed day");
+  assert.equal(modalReviews.length,1,"closed-day preview renders as a modal");
+  assert.ok(modalReviews[0].details.rows.some(x=>x[0]==="الحالة السابقة"));
+  approveDetailPreview=true;
+  await buttonNamed("معاينة التصحيح").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,1);
   assert.ok(visible().some(x=>x.textContent.includes("اعتمد التصحيح بنجاح")));
   controller.renderAdmin(admin);
