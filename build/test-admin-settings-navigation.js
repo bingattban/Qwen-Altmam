@@ -129,12 +129,12 @@ async function run() {
   byDataset("adminSection")[0].handlers.click();
   assert.equal(byDataset("adminSection").length,0,"top-level cards hidden in subgroup");
   assert.deepEqual(byDataset("adminScreen").map(x=>x.dataset.adminScreen),
-    ["attendance","persons","transfers","separation","personReport"]);
+    ["attendance","persons","transfers","separation","personReport","closedCorrection"]);
   byDataset("adminScreen")[0].handlers.click();
   assert.equal(byDataset("adminScreen").length,0,"only selected detail page is visible");
   assert.ok(buttonNamed("العودة إلى إدارة القوة"),"back from detail to parent");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  assert.equal(byDataset("adminScreen").length,5,"re-open five separate roster sections");
+  assert.equal(byDataset("adminScreen").length,6,"re-open all force management screens");
   buttonNamed("العودة إلى الإدارة").handlers.click();
   assert.equal(byDataset("adminSection").length,5,"return to clean admin landing");
 
@@ -186,8 +186,12 @@ async function run() {
     x.body.columnId==="FLD-TST-ONE"&&x.body.confirmed===true));
   controller.renderAdmin(admin);
   byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"),
+    "closed-day correction must leave statuses and sites");
+  buttonNamed("العودة إلى الإدارة").handlers.click();
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   const correction=byDataset("adminScreen").find(x=>x.dataset.adminScreen==="closedCorrection");
-  assert.ok(correction,"GA sees restricted historical correction screen");
+  assert.ok(correction,"GA sees restricted historical correction under force management");
   correction.handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
   assert.ok(buttonNamed("معاينة التصحيح"));
@@ -216,19 +220,23 @@ async function run() {
   assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,1);
   assert.ok(visible().some(x=>x.textContent.includes("اعتمد التصحيح بنجاح")));
   controller.renderAdmin(admin);
-  byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"));
 
   controller.renderAdmin({role:"OrdinaryAdministration",username:"test-admin"});
-  byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"),
     "ordinary admin can see closed-day correction");
     controller.renderAdmin({ role:"Supervisor" });
   assert.equal(byDataset("adminSection").length,4,"supervisor cannot see users card");
   assert.ok(!byDataset("adminSection").some(x=>x.dataset.adminSection==="users"));
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"),
+    "supervisor cannot see closed-day correction even inside force management");
+  buttonNamed("العودة إلى الإدارة").handlers.click();
   byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
   assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"),
-    "supervisor cannot see closed-day correction");
+    "sites and statuses never contain the correction screen");
 
   controller.renderAdmin(admin);
   byDataset("adminSection").find(x=>x.dataset.adminSection==="audit").handlers.click();
