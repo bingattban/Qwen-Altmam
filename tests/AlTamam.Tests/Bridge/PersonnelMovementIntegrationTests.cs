@@ -95,6 +95,21 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
             return Assert.IsType<JsonObject>(response.Data);
         }
 
+        var live=new DailyMonthlyReadService(_db);
+        var dashboard=await live.DashboardSummaryAsync(new JsonObject{
+            ["businessDate"]=Today(),["siteId"]=""
+        },CancellationToken.None);
+        Assert.True(dashboard.Success,dashboard.UserMessage);
+        Assert.Equal(2L,((JsonObject)dashboard.Data!)["totalForce"]!.GetValue<long>());
+        var active=await live.DailyRosterAsync(new JsonObject{
+            ["businessDate"]=Today(),["siteId"]="",
+            ["page"]=1,["pageSize"]=100
+        },CancellationToken.None);
+        Assert.True(active.Success,active.UserMessage);
+        var activeData=(JsonObject)active.Data!;
+        Assert.Equal(2L,activeData["total"]!.GetValue<long>());
+        Assert.DoesNotContain("TST-MOVEMENT-P2",activeData.ToJsonString());
+
         string today = Today();
         var destination = await Archive("SITE-DEST", "internal", today, today);
         Assert.Equal(1L, destination["total"]!.GetValue<long>());
