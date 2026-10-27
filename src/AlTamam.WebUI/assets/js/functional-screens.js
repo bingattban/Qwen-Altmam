@@ -347,7 +347,7 @@
       // Read the saved clock from the C# policy; this timer never writes.
       void bridge().invoke("GetAutoAttendancePolicy",{}).then(reply=>{
         const due=parseData(reply)?.dueTimeLocal;
-        if(typeof due==="string"&&/^([01]\\d|2[0-3]):[0-5]\\d$/.test(due))
+        if(typeof due==="string"&&/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(due))
           configuredDueTime=due;
       }).catch(()=>{});
       // Keep the completion ratio read-only; the count chips still filter the roster.
