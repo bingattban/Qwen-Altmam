@@ -166,7 +166,7 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         var afterAttendance=Require(await read.MonthlyGridAsync(new JsonObject
         {
             ["year"]=month.Year,["month"]=month.Month,["siteId"]="SITE-RETURN",
-            ["page"]=1,["pageSize"]=50
+            ["archiveMode"]=true,["page"]=1,["pageSize"]=50
         },default));
         var afterRows=Assert.IsType<JsonArray>(afterAttendance["items"]);
         var afterDay=Assert.IsType<JsonObject>(
