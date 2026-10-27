@@ -1415,9 +1415,9 @@
       grid.appendChild(account);
 
       if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
-        const automatic=settingsCard("التحضير التلقائي — الساعة 8 مساءً","◷");
+        const automatic=settingsCard("التحضير التلقائي — الساعة 8 صباحاً","◷");
         automatic.appendChild(node("p","settings-copy",
-          "من بقي غير محضر حتى 20:00 تُعتمد له حالة أمس. وإذا لم تكن له حالة أمس، تُستخدم الحالة الافتراضية التي تحددها الإدارة هنا. لا يشمل ذلك يوم النقل."));
+          "من بقي غير محضر حتى 08:00 تُعتمد له حالة أمس. وإذا لم تكن له حالة أمس، تُستخدم الحالة الافتراضية التي تحددها الإدارة هنا. لا يشمل ذلك يوم النقل."));
         const label=node("label","admin-input"),picker=node("select","form-control");
         picker.setAttribute("aria-label","الحالة الافتراضية عند عدم وجود تحضير أمس");
         const empty=node("option","","اختر الحالة الافتراضية");empty.value="";
