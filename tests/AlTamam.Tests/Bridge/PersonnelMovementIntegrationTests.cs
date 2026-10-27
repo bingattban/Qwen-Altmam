@@ -123,6 +123,28 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.True(summary.Success,summary.UserMessage);
         // P1 moved internally and P3 stayed active; external P2 is no longer force.
         Assert.Equal(2L,((JsonObject)summary.Data!)["totalForce"]!.GetValue<long>());
+        var personReader=new PersonRosterService(_db);
+        var operational=await personReader.QueryPersonsAsync(new JsonObject{
+            ["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(operational.Success,operational.UserMessage);
+        var activeData=Assert.IsType<JsonObject>(operational.Data);
+        Assert.Equal(2L,activeData["total"]!.GetValue<long>());
+        Assert.DoesNotContain(Assert.IsType<JsonArray>(activeData["items"]).OfType<JsonObject>(),
+            p=>p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P2");
+        var history=await personReader.QueryPersonsAsync(new JsonObject{
+            ["includeArchived"]=true,["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(history.Success,history.UserMessage);
+        Assert.Equal(3L,Assert.IsType<JsonObject>(history.Data)["total"]!.GetValue<long>());
+        var liveMonth=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=local.Year,["month"]=local.Month,["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(liveMonth.Success,liveMonth.UserMessage);
+        var liveData=Assert.IsType<JsonObject>(liveMonth.Data);
+        Assert.Equal(2L,liveData["total"]!.GetValue<long>());
+        Assert.DoesNotContain(Assert.IsType<JsonArray>(liveData["items"]).OfType<JsonObject>(),
+            p=>p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P2");
     }
 
     [Fact]
