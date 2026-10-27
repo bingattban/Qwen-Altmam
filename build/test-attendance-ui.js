@@ -18,7 +18,7 @@ let approved=false, errorName="",expandedRoster=false;
 const bridge={invoke:async(name,payload)=>{
  calls.push({name,payload});
  if(name==="QueryDailyRoster"&&expandedRoster){
-    const all=Array.from({length:12},(_,i)=>({personId:"P"+(i+1),name:"فرد "+(i+1),
+    const all=Array.from({length:112},(_,i)=>({personId:"P"+(i+1),name:"فرد "+(i+1),
       serviceNumberA:String(100+i),siteName:"غير محدد",statusName:"غير محضر"}));
     return {data:{items:all.slice((payload.page-1)*payload.pageSize,payload.page*payload.pageSize),
       total:all.length,hasNext:payload.page*payload.pageSize<all.length}};
@@ -72,7 +72,7 @@ async function choose(){
 async function main(){
  await context.window.AltamamAttendance.render(root);
  assert.ok(one("معاينة التحضير"),"actual attendance page");
- assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&x.payload.statusId==="__ELIGIBLE__"&&x.payload.pageSize===10),
+ assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&x.payload.statusId==="__ELIGIBLE__"&&x.payload.pageSize===100),
    "attendance selection must exclude the movement-day roster on the C# query");
  assert.equal(root.all().filter(x=>x.tag==="input"&&x.type==="checkbox").length,2);
  assert.equal(writes.length,0,"no write on load");
@@ -116,13 +116,13 @@ async function main(){
   await context.window.AltamamAttendance.render(root);
   const dailyPanel=()=>root.all().find(x=>x.className.includes("daily-roster-panel"));
   const dailyRows=()=>dailyPanel().all().find(x=>x.tag==="tbody").children;
-  assert.equal(dailyRows().length,10,"ten names visible in daily attendance table");
+  assert.equal(dailyRows().length,100,"load 100 names into scrollable attendance table");
   one("التالي").handlers.click();await flush();
-  assert.equal(dailyRows().length,2,"last attendance page contains two remaining names");
+  assert.equal(dailyRows().length,12,"last attendance page contains twelve remaining names");
   assert.equal(calls.filter(x=>x.name==="QueryDailyRoster").at(-1).payload.page,2);
   one("السابق").handlers.click();await flush();
-  assert.equal(dailyRows().length,10);
+  assert.equal(dailyRows().length,100);
   assert.equal(writes.length,committed,"paging must never save attendance");
-  console.log("ATTENDANCE UI PASS: 10 daily names, paging, review and confirmation");
+  console.log("ATTENDANCE UI PASS: 100-person scrollable roster, paging, review and confirmation");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
