@@ -1330,3 +1330,21 @@ body{min-width:0}
   .auto-attendance-heading .page-title{font-size:16px}
   .auto-attendance-dialog .section-description{font-size:12px}
 }
+
+/* Distinct legible dashboard column titles, while compact data rows remain untouched. */
+#appViewport.daily-dashboard>.daily-roster-panel>.functional-table-wrap
+  .functional-table thead th{
+  position:sticky;top:0;z-index:8;
+  padding:10px 9px;min-height:46px;height:auto;
+  font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;
+  font-size:16px;font-weight:900;line-height:1.5;
+  white-space:normal;overflow:visible;text-overflow:clip;
+  text-align:center;vertical-align:middle;
+  background:var(--primary-navy);color:#fff;
+  border-bottom:3px solid var(--accent-teal);
+  border-inline-start:1px solid rgba(255,255,255,.28)
+}
+#appViewport.daily-dashboard>.daily-roster-panel
+  .functional-table thead th:nth-child(3){text-align:right;padding-inline:15px}
+#appViewport.daily-dashboard>.daily-roster-panel
+  .functional-table thead th:last-child{min-width:145px}
