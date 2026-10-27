@@ -112,7 +112,7 @@
 
   async function loginGate() {
     const container=view(); if(!container)return;
-    container.classList.remove("daily-dashboard");
+    container.classList.toggle("daily-dashboard",false);
     document.querySelector(".app-sidebar").hidden=true;
     document.getElementById("headerRoleBadge").textContent="لم يتم تسجيل الدخول";
     document.getElementById("logoutAction").hidden=true;
@@ -266,7 +266,7 @@
     stopDashboardClock();
     STATE.date=startOfToday();
     const container=view();
-    container.classList.add("daily-dashboard");
+    container.classList.toggle("daily-dashboard",true);
     container.replaceChildren(header("التمام اليومي"));
     const controls=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
@@ -645,7 +645,7 @@
     if(section!=="dashboard")stopDashboardClock();
     if (!STATE.session) { loginGate();return; }
     if (!sections.has(section)) section="dashboard";
-    if(section!=="dashboard")view().classList.remove("daily-dashboard");
+    if(section!=="dashboard")view().classList.toggle("daily-dashboard",false);
     applyMainNav(section);
     history.replaceState(null,"","#"+section);
     if(section==="dashboard")renderDashboard();
