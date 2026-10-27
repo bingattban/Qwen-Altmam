@@ -1355,3 +1355,35 @@ body{min-width:0}
 @media(max-width:640px){.settings-attendance-fields{grid-template-columns:minmax(0,1fr)}}
 .auto-attendance-overlay[hidden]{display:none!important}
 .auto-attendance-overlay .monthly-cell-details{max-height:85vh;overflow:auto;width:min(760px,94vw)}
+
+/* One consistent direction for navigational back controls in RTL screens. */
+.app-back-action{display:inline-flex;align-items:center;justify-content:center;gap:8px;direction:rtl}
+.app-back-action::before{content:"→";display:inline-block;flex:0 0 auto;font-size:1.2em;font-weight:900;direction:ltr;unicode-bidi:isolate}
+.app-back-action:focus-visible{outline:2px solid var(--accent-teal);outline-offset:2px}
+
+/* Explain active-force membership separately from the historical month roster. */
+.monthly-force-totals,.admin-roster-totals{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;
+  border:1px solid var(--border-color);border-radius:10px;padding:9px 14px;
+  background:var(--bg-surface);color:var(--text-main);min-width:0}
+.monthly-force-totals strong,.admin-roster-totals strong{color:var(--accent-teal);font-size:15px;font-weight:900}
+.monthly-force-totals span,.admin-roster-totals span{font-size:14px;font-weight:700}
+.monthly-force-totals small{display:block;flex-basis:100%;font-size:12px;line-height:1.5;color:var(--text-muted)}
+#appViewport.monthly-dashboard>.monthly-force-totals{flex:0 0 auto}
+
+/* Settings grouped in orderly action-oriented widths without uneven narrow cards. */
+.settings-grid{grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:stretch}
+.settings-grid>.settings-panel{min-width:0;height:100%}
+.settings-account-panel{grid-column:span 4}
+.settings-attendance-panel{grid-column:span 8}
+.settings-backup-panel{grid-column:span 8}
+.settings-integrity-panel{grid-column:span 4}
+.settings-restore-panel{grid-column:1 / -1}
+.settings-panel .settings-action{min-height:42px}
+.settings-attendance-panel .settings-action{align-self:flex-end;min-width:min(100%,290px)}
+.settings-attendance-panel .settings-attendance-fields{width:100%}
+.settings-attendance-panel .admin-input{display:flex;flex-direction:column;gap:5px}
+.settings-attendance-panel .form-control{width:100%;min-width:0}
+@media(max-width:1150px){
+ .settings-grid{grid-template-columns:minmax(0,1fr)}
+ .settings-grid>.settings-panel{grid-column:1 / -1}
+}
