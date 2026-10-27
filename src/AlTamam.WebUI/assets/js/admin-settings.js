@@ -1415,9 +1415,9 @@
       grid.appendChild(account);
 
       if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
-        const automatic=settingsCard("التحضير التلقائي — الساعة 8 صباحاً","◷");
+        const automatic=settingsCard("أوقات التحضير التلقائي وقفل التمام اليومي","◷");
         automatic.appendChild(node("p","settings-copy",
-          "من بقي غير محضر حتى 08:00 تُعتمد له حالة أمس. وإذا لم تكن له حالة أمس، تُستخدم الحالة الافتراضية التي تحددها الإدارة هنا. لا يشمل ذلك يوم النقل."));
+          "يحدد وقت التحضير التلقائي موعد نسخ حالات أمس لغير المحضرين، ويحدد وقت القفل آخر وقت لإجراء التحضير والتعديل المعتاد خلال اليوم. لا يشمل الاعتماد التلقائي يوم النقل."));
         const label=node("label","admin-input"),picker=node("select","form-control");
         picker.setAttribute("aria-label","الحالة الافتراضية عند عدم وجود تحضير أمس");
         const empty=node("option","","اختر الحالة الافتراضية");empty.value="";
@@ -1443,6 +1443,39 @@
           automatic.appendChild(node("p","section-description",
             policy.configured?"الحالة المعتمدة حالياً: "+policy.defaultStatusName:
               "لم تُحدد حالة افتراضية بعد؛ لن تُنشأ حالة دون مرجع حتى تختارها الإدارة."));
+          const scheduledTime=node("input","form-control");
+          scheduledTime.type="time";scheduledTime.required=true;
+          scheduledTime.value=policy.dueTimeLocal||"08:00";
+          scheduledTime.setAttribute("aria-label","وقت التحضير التلقائي");
+          const lockTime=node("input","form-control");
+          lockTime.type="time";lockTime.required=true;
+          lockTime.value=policy.dailyLockTimeLocal||"20:00";
+          lockTime.setAttribute("aria-label","وقت قفل التحضير اليومي");
+          const scheduledLabel=node("label","admin-input");
+          scheduledLabel.append(node("span","","وقت التحضير التلقائي"),scheduledTime);
+          const lockLabel=node("label","admin-input");
+          lockLabel.append(node("span","","وقت قفل التحضير اليومي"),lockTime);
+          const saveTimes=btn("حفظ أوقات التحضير",async()=>{
+            if(!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(scheduledTime.value)||
+               !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(lockTime.value))
+              return errors(feedback,new Error("حدد وقتين صحيحين بصيغة HH:mm."));
+            if(!await dialogs.confirm("اعتماد وقت التحضير التلقائي "+scheduledTime.value+
+              " ووقت قفل التمام اليومي "+lockTime.value+"؟"))return;
+            saveTimes.disabled=true;
+            try{
+              const result=await api().invoke("SetAttendanceSchedule",{
+                dueTimeLocal:scheduledTime.value,
+                dailyLockTimeLocal:lockTime.value,
+                operationId:makeOperationId()
+              });
+              if(token!==currentRequest)return;
+              feedback.replaceChildren(node("p","settings-success",
+                "حُفظت الأوقات: التحضير التلقائي "+result.data.dueTimeLocal+
+                " — القفل "+result.data.dailyLockTimeLocal));
+            }catch(e){if(token===currentRequest)errors(feedback,e);}
+            finally{saveTimes.disabled=false;}
+          },"btn btn-primary settings-action");
+          automatic.append(scheduledLabel,lockLabel,saveTimes);
           const saveDefault=btn("حفظ الحالة الافتراضية",async()=>{
             if(!picker.value)return errors(feedback,new Error("اختر حالة نشطة أولاً."));
             if(!await dialogs.confirm("تأكيد اعتماد الحالة المختارة عند غياب تحضير أمس؟"))return;
