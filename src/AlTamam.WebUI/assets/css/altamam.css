@@ -987,19 +987,122 @@ body{min-width:0}
 .admin-input .form-control{min-height:46px;font-size:16px;padding:10px 13px;line-height:1.5}
 .functional-toolbar input[placeholder*="بحث"],
 .functional-toolbar input[aria-label*="بحث"]{min-height:46px;font-size:16px;flex:1 1 285px;max-width:580px}
-/* Daily attendance: ten aligned, legible Arabic names per page. */
-.daily-roster-panel>.functional-table-wrap{max-height:min(66dvh,560px)}
-.daily-roster-panel .functional-table{table-layout:fixed;min-width:680px}
-.daily-roster-panel .functional-table th,.daily-roster-panel .functional-table td{
-  font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;
-  font-size:15px;font-weight:700;line-height:1.3;vertical-align:middle;
-  height:39px;padding:5px 9px;box-sizing:border-box;white-space:normal;
-  overflow-wrap:anywhere;border-bottom:1px solid var(--border-color);
+
+/* Daily roster: use the remaining desktop height, not a 41vh table cap.
+   The viewport owns the page; the table scrolls and the pager stays visible. */
+#appViewport.daily-dashboard{
+  height:100%;overflow:hidden;gap:6px
+}
+#appViewport.daily-dashboard>.functional-header{
+  flex:0 0 auto;padding:6px 12px
+}
+#appViewport.daily-dashboard>.functional-header .page-title{
+  margin:0;font-size:18px;line-height:1.3
+}
+#appViewport.daily-dashboard>.functional-toolbar{
+  flex:0 0 auto;flex-wrap:nowrap;overflow-x:auto;
+  gap:6px;padding:5px 8px;min-height:0
+}
+#appViewport.daily-dashboard>.functional-toolbar>*{flex-shrink:0}
+#appViewport.daily-dashboard>.functional-toolbar .form-field:has(input[type="search"]){
+  flex:1 1 220px;min-width:190px;max-width:none
+}
+#appViewport.daily-dashboard>.functional-toolbar input[type="search"]{
+  width:100%;min-width:190px;min-height:34px;
+  padding:5px 9px;font-size:14px
+}
+#appViewport.daily-dashboard>.functional-toolbar select,
+#appViewport.daily-dashboard>.functional-toolbar .btn{
+  min-height:34px;padding:5px 9px;font-size:13px
+}
+#appViewport.daily-dashboard>.functional-feedback{
+  flex:0 0 auto;display:flex;flex-wrap:wrap;
+  align-items:center;gap:5px 12px;font-size:12px
+}
+#appViewport.daily-dashboard>.functional-feedback .section-description{
+  margin:0;line-height:1.4
+}
+#appViewport.daily-dashboard>.functional-counters{
+  display:flex;grid-template-columns:none;flex:0 0 auto;
+  gap:6px;overflow-x:auto;overflow-y:hidden;min-height:0;
+  scrollbar-width:thin
+}
+#appViewport.daily-dashboard>.functional-counters .counter-card{
+  flex:1 0 116px;min-width:116px;max-width:180px;
+  min-height:52px;gap:1px;padding:5px 9px;border-radius:7px
+}
+#appViewport.daily-dashboard>.functional-counters .counter-label{
+  font-size:11px;line-height:1.25
+}
+#appViewport.daily-dashboard>.functional-counters .counter-value{
+  font-size:20px;line-height:1.15
+}
+#appViewport.daily-dashboard>.daily-roster-panel{
+  display:flex;flex-direction:column;flex:1 1 0;
+  height:auto;min-height:0;max-height:none;
+  overflow:hidden;padding:0
+}
+#appViewport.daily-dashboard>.daily-roster-panel>.functional-table-wrap{
+  flex:1 1 auto;min-height:0;max-height:none;
+  overflow:auto;scrollbar-gutter:stable
+}
+#appViewport.daily-dashboard>.daily-roster-panel>.functional-pager{
+  flex:0 0 auto;margin:0;min-height:38px;
+  padding:4px 9px;gap:8px
+}
+#appViewport.daily-dashboard>.daily-roster-panel>.functional-pager .btn{
+  min-height:29px;padding:4px 10px
+}
+/* One-line, uniform-height cells keep names legible and show more at once;
+   allow horizontal scrolling on narrow windows rather than tiny text. */
+.daily-roster-panel .functional-table{width:100%;min-width:780px;table-layout:fixed}
+.daily-roster-panel .functional-table th,
+.daily-roster-panel .functional-table td{
+  font-family:"AlTamam Tajawal","AlTamam Cairo",sans-serif;
+  font-size:14px;font-weight:700;line-height:1.3;
+  height:34px;padding:4px 8px;box-sizing:border-box;
+  vertical-align:middle;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+  border-bottom:1px solid var(--border-color);
   border-inline-start:1px solid var(--border-color)
 }
-.daily-roster-panel .functional-table th{font-weight:800;background:var(--bg-subtle);text-align:right}
-.daily-roster-panel .functional-table tbody tr:nth-child(even) td{background:var(--bg-subtle)}
-.daily-roster-panel .functional-table th:first-child,.daily-roster-panel .functional-table td:first-child{width:72px;text-align:center}
-.daily-roster-panel .functional-table th:nth-child(2),.daily-roster-panel .functional-table td:nth-child(2){width:125px}
-.daily-roster-panel .functional-table th:last-child,.daily-roster-panel .functional-table td:last-child{width:140px}
-.daily-roster-panel .functional-table input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent-teal)}
+.daily-roster-panel .functional-table th{
+  font-weight:800;text-align:right;background:var(--bg-subtle)
+}
+.daily-roster-panel .functional-table tbody tr:nth-child(even) td{
+  background:var(--bg-subtle)
+}
+.daily-roster-panel .functional-table th:first-child,
+.daily-roster-panel .functional-table td:first-child{
+  width:62px;text-align:center
+}
+.daily-roster-panel .functional-table th:nth-child(2),
+.daily-roster-panel .functional-table td:nth-child(2){width:115px}
+.daily-roster-panel .functional-table th:nth-child(3),
+.daily-roster-panel .functional-table td:nth-child(3){width:34%}
+.daily-roster-panel .functional-table th:last-child,
+.daily-roster-panel .functional-table td:last-child{width:135px}
+.daily-roster-panel .functional-table input[type="checkbox"]{
+  width:18px;height:18px;accent-color:var(--accent-teal)
+}
+/* The attendance-selection list uses the same dense table and a visible pager. */
+.admin-attendance-host .daily-roster-panel{
+  display:flex;flex-direction:column;min-height:0
+}
+.admin-attendance-host .daily-roster-panel>.functional-table-wrap{
+  max-height:min(66dvh,740px);overflow:auto
+}
+.admin-attendance-host .daily-roster-panel>.functional-pager{
+  flex:0 0 auto;margin:0;min-height:38px;padding:5px 8px
+}
+/* Very short/small screens can scroll the whole dashboard if needed;
+   never collapse the roster to a tiny zero-height strip. */
+@media(max-height:580px),(max-width:670px){
+  #appViewport.daily-dashboard{height:auto;overflow-y:auto}
+  #appViewport.daily-dashboard>.daily-roster-panel{
+    flex:0 0 auto;min-height:220px;max-height:70dvh
+  }
+  #appViewport.daily-dashboard>.daily-roster-panel>.functional-table-wrap{
+    max-height:calc(70dvh - 42px)
+  }
+}
