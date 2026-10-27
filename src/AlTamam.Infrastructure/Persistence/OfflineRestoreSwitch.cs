@@ -40,6 +40,37 @@ public sealed class OfflineRestoreSwitch
         if(File.Exists(live+"-wal")||File.Exists(live+"-shm")||File.Exists(live+"-journal"))
             throw new IOException("Cannot switch while SQLite WAL/SHM/journal sidecars remain.");
     }
+    private static void CheckpointAndQuiesceWal(string live,string key)
+    {
+        // Native caller holds the single-instance mutex. Fail if a reader or
+        // writer still owns the database; do NOT delete WAL bytes manually.
+        SqliteConnection.ClearAllPools();
+        using(var connection=new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource=live,Mode=SqliteOpenMode.ReadWrite,Password=key,
+            Pooling=false,ForeignKeys=true,DefaultTimeout=15
+        }.ConnectionString))
+        {
+            connection.Open();
+            using(var checkpoint=connection.CreateCommand())
+            {
+                checkpoint.CommandText="PRAGMA wal_checkpoint(TRUNCATE);";
+                using var row=checkpoint.ExecuteReader();
+                if(!row.Read() || row.GetInt64(0)!=0)
+                    throw new IOException("SQLite has an active reader/writer; WAL cannot be checkpointed.");
+            }
+            using(var journal=connection.CreateCommand())
+            {
+                journal.CommandText="PRAGMA journal_mode=DELETE;";
+                if(!string.Equals(journal.ExecuteScalar()?.ToString(),"delete",
+                    StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("SQLite refused to leave WAL journal mode.");
+            }
+        }
+        SqliteConnection.ClearAllPools();
+        RequireOffline(live);
+    }
+
     private static async Task<bool> ValidExactAsync(string path,string digest,
         string live,string key,CancellationToken ct)
     {
@@ -121,8 +152,7 @@ public sealed class OfflineRestoreSwitch
         if(emergency.SchemaVersion!=AlTamamDbContext.CurrentSchemaVersion)
             throw new InvalidDataException("Fresh rescue failed verification.");
 
-        SqliteConnection.ClearAllPools();
-        RequireOffline(live);
+        CheckpointAndQuiesceWal(live,key);
         var old=await EncryptedBackupInspector.VerifyAsync(
             live,prepared.StageFilePath,key,ct).ConfigureAwait(false);
         if(old.SchemaVersion!=AlTamamDbContext.CurrentSchemaVersion)
