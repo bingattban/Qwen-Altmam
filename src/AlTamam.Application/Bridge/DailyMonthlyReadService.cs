@@ -294,9 +294,10 @@ public sealed class DailyMonthlyReadService
         var start = new DateOnly(year, month, 1);
         var next = start.AddMonths(1);
         string startIso = Iso(start), nextIso = Iso(next), endIso = Iso(next.AddDays(-1));
-        // The operational current-month grid contains active, unmoved personnel.
-        // Archive mode explicitly replays everyone who served during that month,
-        // including departures and movement cells, without touching historical data.
+        // Current-month operational view follows today's active roster. Internal
+        // transfers remain visible under their CURRENT site, including their
+        // date-bound movement, while external exits/separations are excluded.
+        // Explicit/archive periods keep every historical identity and movement.
         bool explicitArchive = string.Equals(payload?["archiveMode"]?.ToJsonString(),
             "true", StringComparison.Ordinal);
         DateTime localNow = DateTime.Now;
@@ -317,18 +318,11 @@ public sealed class DailyMonthlyReadService
               )
               AND ($live=0 OR (
                     p.ActiveFlag=1 AND p.OrganizationalStatus=1
-                    AND NOT EXISTS (
-                      SELECT 1 FROM PersonnelMovements moved
-                      WHERE moved.PersonId=p.PersonId
-                        AND moved.EffectiveLocalDate >= $start
-                        AND moved.EffectiveLocalDate < $next
-                        AND moved.MovementType IN (1,2,3)
-                        AND NOT EXISTS (
-                          SELECT 1 FROM PersonnelMovements returned
-                          WHERE returned.PersonId=moved.PersonId
-                            AND returned.MovementType=4
-                            AND returned.EffectiveLocalDate >= moved.EffectiveLocalDate
-                            AND returned.EffectiveLocalDate < $next))
+                    AND ($site='' OR EXISTS (
+                        SELECT 1 FROM PersonAssignments currentA
+                        WHERE currentA.PersonId=p.PersonId
+                          AND currentA.SiteId=$site
+                          AND currentA.ValidToLocalDate IS NULL))
                   ))
               -- Match the identity actually displayed for the selected month,
               -- NEVER today's mutable name/number. Two people who later reuse
@@ -497,13 +491,18 @@ public sealed class DailyMonthlyReadService
                         ["serviceNumberA"]=movementReader.GetString(8),
                         ["siteName"]=siteId.Length>0 && siteId==targetId ? after : before
                     };
-                else if(movementType==4)
+                else
                 {
-                    // Return and ordinary attendance may both occur on admission
-                    // date; preserve both facts in the SAME historical cell.
+                    // An individual may now be moved AFTER their daily attendance
+                    // has been committed. Keep the saved attendance symbol/cell
+                    // and annotate the movement so neither fact is lost.
                     var existing=(JsonObject)days[movementDate]!;
                     existing["movementNote"]=label;
-                    existing["movementKind"]="return";
+                    existing["movementKind"]=movementType switch
+                    {
+                        1=>"internal-transfer",2=>"external-transfer",
+                        3=>"separation",4=>"return",_=>"movement"
+                    };
                 }
             }
         }

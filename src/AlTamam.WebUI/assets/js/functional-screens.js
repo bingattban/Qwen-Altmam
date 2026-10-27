@@ -661,8 +661,8 @@
           el("strong","","إجمالي القوة النشطة: "+
             (typeof force?.totalForce==="number"?force.totalForce:"غير متاح")),
           el("span","","أفراد كشف الشهر الظاهرون: "+(grid.total||0)),
-          el("small","","تُستبعد من كشف الشهر الجاري حركات النقل والفصل؛ "+
-            "لذلك قد يختلف عدد صفوف الكشف عن إجمالي القوة النشطة.")
+          el("small","","يبقى المنقول داخلياً ضمن القوة النشطة وكشف الشهر في موقعه الجديد، "+
+            "ولا تظهر حالات النقل الخارجي والفصل إلا عند استعراض الأرشيف.")
         );
       }else{
         monthlyTotals.replaceChildren(
@@ -723,8 +723,12 @@
             "day-cell current-day-column":"day-cell");
           cell.title=info?(info.name+(info.movementNote?" — "+info.movementNote:"")):"لا يوجد تحضير مسجل";
           if(info){
-            const open=button((info.symbol||"تفاصيل")+(info.movementKind==="return"?" ↩":""),()=>showCellDetails(person.personId,date),
-              "monthly-day-detail");
+            const movementMark=info.movementKind==="return"?" ↩":
+              info.movementKind==="internal-transfer"?" ↔":
+              info.movementKind==="external-transfer"?" ↗":
+              info.movementKind==="separation"?" ⊗":"";
+            const open=button((info.symbol||"تفاصيل")+movementMark,
+              ()=>showCellDetails(person.personId,date),"monthly-day-detail");
             open.setAttribute("aria-label","عرض تفاصيل "+person.name+" في "+date);
             cell.appendChild(open);
           }

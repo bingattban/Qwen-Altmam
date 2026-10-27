@@ -123,6 +123,28 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.True(summary.Success,summary.UserMessage);
         // P1 moved internally and P3 stayed active; external P2 is no longer force.
         Assert.Equal(2L,((JsonObject)summary.Data!)["totalForce"]!.GetValue<long>());
+        var personReader=new PersonRosterService(_db);
+        var operational=await personReader.QueryPersonsAsync(new JsonObject{
+            ["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(operational.Success,operational.UserMessage);
+        var activeData=Assert.IsType<JsonObject>(operational.Data);
+        Assert.Equal(2L,activeData["total"]!.GetValue<long>());
+        Assert.DoesNotContain(Assert.IsType<JsonArray>(activeData["items"]).OfType<JsonObject>(),
+            p=>p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P2");
+        var history=await personReader.QueryPersonsAsync(new JsonObject{
+            ["includeArchived"]=true,["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(history.Success,history.UserMessage);
+        Assert.Equal(3L,Assert.IsType<JsonObject>(history.Data)["total"]!.GetValue<long>());
+        var liveMonth=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=local.Year,["month"]=local.Month,["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(liveMonth.Success,liveMonth.UserMessage);
+        var liveData=Assert.IsType<JsonObject>(liveMonth.Data);
+        Assert.Equal(2L,liveData["total"]!.GetValue<long>());
+        Assert.DoesNotContain(Assert.IsType<JsonArray>(liveData["items"]).OfType<JsonObject>(),
+            p=>p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P2");
     }
 
     [Fact]
@@ -137,8 +159,8 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         Assert.Equal(2L,Count("PersonnelMovements"));
         Assert.Equal(2L,Count("AuditEvents"));
         var month=new DailyMonthlyReadService(_db);
-        // Two internally transferred persons remain active at their new site,
-        // but the live month hides their dated transfer records by business rule.
+        // Internal transfers remain in current active strength and the monthly
+        // grid at their new location; archived source-site history is unchanged.
         async Task<long> ActiveForce(string site)
         {
             var response=await month.DashboardSummaryAsync(new JsonObject{
@@ -181,10 +203,16 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
             },CancellationToken.None);
             Assert.True(live.Success,live.UserMessage);
             var operational=(JsonObject)live.Data!;
-            Assert.Equal(location=="SITE-UNSPECIFIED"?1L:0L,
+            Assert.Equal(location=="SITE-UNSPECIFIED"?1L:2L,
                 operational["total"]!.GetValue<long>());
-            // Even internal transfers disappear from the operational month view;
-            // the explicit archive still retains every transferred person.
+            // At the source site only the person who did NOT move stays in the
+            // operational roster. The target site contains both active movers.
+            var liveRows=Assert.IsType<JsonArray>(operational["items"]);
+            if(location=="SITE-DEST")
+            {
+                Assert.All(liveRows.OfType<JsonObject>(),p=>
+                    Assert.Equal("نقل (د)",((JsonObject)p["days"]!)[Today()]!["symbol"]!.GetValue<string>()));
+            }
         }
         var archivePeriods=await month.ArchivePeriodsAsync(CancellationToken.None);
         var archiveMonths=Assert.IsType<JsonArray>(archivePeriods.Data)
@@ -422,17 +450,17 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
     }
 
     [Fact]
-    public async Task InvalidBulkOrAlreadyPreparedCannotTransferAnyPerson()
+    public async Task PreparedPeopleCanTransfer_WithoutLosingAttendanceOrMonthlyHistory()
     {
         var svc=new PersonnelMovementService(_db);
         var unknown=await svc.PreviewAsync(Plan(["TST-MOVEMENT-P1","UNKNOWN"]),
             Actor,false,CancellationToken.None);
         Assert.False(unknown.Success);
         Assert.Equal(0L,Count("PersonnelMovements"));
-        // A valid attendance record on the transfer day forbids moving that person.
+
         using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
         {
-            using var cmd=c.CreateCommand();
             cmd.CommandText="""
                 INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,StatusNameSnapshot,
                     StatusSymbolSnapshot,StatusColorSnapshot,AssignmentIdAtEffectiveDate,
@@ -445,12 +473,126 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
             cmd.Parameters.AddWithValue("$day",Today());
             await cmd.ExecuteNonQueryAsync();
         }
-        var blocked=await svc.PreviewAsync(Plan(["TST-MOVEMENT-P1","TST-MOVEMENT-P2"]),
+
+        var preview=await svc.PreviewAsync(Plan(["TST-MOVEMENT-P1","TST-MOVEMENT-P2"]),
             Actor,false,CancellationToken.None);
+        var committed=await svc.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,false,CancellationToken.None);
+        Assert.True(committed.Success,committed.UserMessage);
+        Assert.Equal(2L,Count("PersonnelMovements"));
+        Assert.Equal(1L,Count("AttendanceRecords"));
+
+        var today=DateOnly.Parse(Today());
+        var monthly=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=today.Year,["month"]=today.Month,["siteId"]="",
+            ["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(monthly.Success,monthly.UserMessage);
+        var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(monthly.Data)["items"]);
+        Assert.Equal(3,items.Count);
+        var destination=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=today.Year,["month"]=today.Month,["siteId"]="SITE-DEST",
+            ["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(destination.Success,destination.UserMessage);
+        var atDestination=Assert.IsType<JsonArray>(
+            Assert.IsType<JsonObject>(destination.Data)["items"]);
+        Assert.Equal(2,atDestination.Count);
+        var newSiteCell=Assert.IsType<JsonObject>(((JsonObject)Assert.Single(
+            atDestination.OfType<JsonObject>(),p=>
+                p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1")["days"]!)[Today()]);
+        Assert.Equal("نقل (د)",newSiteCell["symbol"]!.GetValue<string>());
+        var attended=Assert.Single(items.OfType<JsonObject>(),p=>
+            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1");
+        var cell=Assert.IsType<JsonObject>(((JsonObject)attended["days"]!)[Today()]);
+        Assert.Equal("م",cell["symbol"]!.GetValue<string>());
+        Assert.Equal("internal-transfer",cell["movementKind"]!.GetValue<string>());
+        Assert.Contains("نقل (د)",cell["movementNote"]!.GetValue<string>());
+        var details=await new DailyMonthlyReadService(_db).MonthlyCellDetailsAsync(new JsonObject{
+            ["personId"]="TST-MOVEMENT-P1",["businessDate"]=Today()
+        },default);
+        Assert.True(details.Success,details.UserMessage);
+        Assert.NotNull(Assert.IsType<JsonObject>(details.Data)["attendance"]);
+        Assert.NotNull(Assert.IsType<JsonObject>(details.Data)["movement"]);
+
+        // One person cannot have a second same-day movement despite the
+        // absence of a restriction on their attendance or status.
+        var duplicate=Plan(["TST-MOVEMENT-P1"]);
+        duplicate["sourceSiteId"]="SITE-DEST";
+        duplicate["destinationSiteId"]="SITE-UNSPECIFIED";
+        var blocked=await svc.PreviewAsync(duplicate,Actor,false,default);
         Assert.False(blocked.Success);
-        Assert.Equal(0L,Count("PersonnelMovements"));
+        Assert.Equal(2L,Count("PersonnelMovements"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TransfersRemainPossibleAfterAttendanceCutoff_AndClosedDay(bool external)
+    {
+        // A closed attendance period is not a ban on personnel movements.
+        // The existing attendance snapshot remains untouched in either case.
+        using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,StatusNameSnapshot,
+                    StatusSymbolSnapshot,StatusColorSnapshot,AssignmentIdAtEffectiveDate,
+                    SiteIdAtEffectiveDate,SiteNameSnapshot,Source,CreatedByUserId,
+                    CommittedAtUtc,RevisionNumber,IdempotencyKey)
+                VALUES('TST-MOVEMENT-P1',$date,'STS-ABSENT','غياب','غ','#DC2626',
+                    'TST-MOVEMENT-A1','SITE-UNSPECIFIED','غير محدد','manual',
+                    'TST-TRANSFER-ADMIN','2026-10-23T00:00:00Z',1,'TEST-CLOSED-MOVE');
+                INSERT INTO PeriodClosures(PeriodKey,PeriodType,IsClosed,ClosedAtUtc,
+                    ClosedByActor,PolicyVersion)
+                VALUES($date,'DAY',1,'2026-10-27T20:00:00Z','TST-TRANSFER-ADMIN','v1');
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('DailyAttendanceLockTimeLocal','00:00','2026-10-27T00:00:00Z')
+                ON CONFLICT(SettingKey) DO UPDATE SET SettingValue=excluded.SettingValue,
+                    UpdatedAtUtc=excluded.UpdatedAtUtc;
+                """;
+            cmd.Parameters.AddWithValue("$date",Today());
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var svc=new PersonnelMovementService(_db);
+        var request=Plan(["TST-MOVEMENT-P1"],external);
+        var preview=await svc.PreviewAsync(request,Actor,external,default);
+        Assert.True(preview.Success,preview.UserMessage);
+        var committed=await svc.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,external,default);
+        Assert.True(committed.Success,committed.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRecords"));
+        Assert.Equal(1L,Count("PersonnelMovements"));
+        var summary=await new DailyMonthlyReadService(_db).DashboardSummaryAsync(new JsonObject{
+            ["businessDate"]=Today(),["siteId"]=""
+        },default);
+        Assert.True(summary.Success);
+        Assert.Equal(external?2L:3L,
+            Assert.IsType<JsonObject>(summary.Data)["totalForce"]!.GetValue<long>());
+        var year=DateOnly.Parse(Today());
+        var month=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=year.Year,["month"]=year.Month,["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(month.Success,month.UserMessage);
+        var rows=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(month.Data)["items"]);
+        Assert.Equal(external?2:3,rows.Count);
+        Assert.Equal(!external,rows.OfType<JsonObject>().Any(p=>
+            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1"));
+        // The exited individual's original attendance and transfer are still
+        // obtainable only through the historical archive.
+        var archive=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=year.Year,["month"]=year.Month,["archiveMode"]=true,
+            ["page"]=1,["pageSize"]=50
+        },default);
+        Assert.True(archive.Success,archive.UserMessage);
+        var stored=Assert.Single(Assert.IsType<JsonArray>(
+            Assert.IsType<JsonObject>(archive.Data)["items"]).OfType<JsonObject>(),p=>
+            p["personId"]!.GetValue<string>()=="TST-MOVEMENT-P1");
+        var archiveDay=Assert.IsType<JsonObject>(((JsonObject)stored["days"]!)[Today()]);
+        Assert.Equal("غ",archiveDay["symbol"]!.GetValue<string>());
+        Assert.Equal(external?"external-transfer":"internal-transfer",
+            archiveDay["movementKind"]!.GetValue<string>());
+    }
 
     [Fact]
     public async Task ApprovedTransferRule_MovementOnDayAndAttendanceEligibleNextDay()

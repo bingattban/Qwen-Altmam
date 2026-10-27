@@ -1362,11 +1362,11 @@ body{min-width:0}
 .app-back-action:focus-visible{outline:2px solid var(--accent-teal);outline-offset:2px}
 
 /* Explain active-force membership separately from the historical month roster. */
-.monthly-force-totals,.admin-roster-totals{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;
+.monthly-force-totals{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;
   border:1px solid var(--border-color);border-radius:10px;padding:9px 14px;
   background:var(--bg-surface);color:var(--text-main);min-width:0}
-.monthly-force-totals strong,.admin-roster-totals strong{color:var(--accent-teal);font-size:15px;font-weight:900}
-.monthly-force-totals span,.admin-roster-totals span{font-size:14px;font-weight:700}
+.monthly-force-totals strong{color:var(--accent-teal);font-size:15px;font-weight:900}
+.monthly-force-totals span{font-size:14px;font-weight:700}
 .monthly-force-totals small{display:block;flex-basis:100%;font-size:12px;line-height:1.5;color:var(--text-muted)}
 #appViewport.monthly-dashboard>.monthly-force-totals{flex:0 0 auto}
 
@@ -1387,3 +1387,6 @@ body{min-width:0}
  .settings-grid{grid-template-columns:minmax(0,1fr)}
  .settings-grid>.settings-panel{grid-column:1 / -1}
 }
+/* Plain count by the editing screen title (no extra rows or table changes). */
+.admin-force-inline-count{margin-inline-start:8px;font-size:.95em;font-weight:800;
+  color:inherit;white-space:nowrap;font-variant-numeric:tabular-nums}

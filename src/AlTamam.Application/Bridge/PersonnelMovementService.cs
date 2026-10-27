@@ -10,7 +10,9 @@ namespace AlTamam.Application.Bridge;
 /// <summary>
 /// Today's internal/external transfer. One-use preview; assignment history,
 /// immutable movement and audit are committed together in SQLCipher.
-/// Transfer day has no attendance at either site.
+/// A transfer may follow attendance or daily closure; the existing attendance snapshot
+/// remains immutable, while the new movement and assignment are audited independently.
+/// A second movement on the same day is forbidden to avoid ambiguous assignments.
 /// </summary>
 public sealed class PersonnelMovementService
 {
@@ -75,29 +77,16 @@ public sealed class PersonnelMovementService
         q.Parameters.AddWithValue("$id",id);
         return (await q.ExecuteScalarAsync(ct).ConfigureAwait(false)) as string;
     }
-    private static async Task<bool> Locked(SqliteConnection c,SqliteTransaction? tx,
-        string date,CancellationToken ct)
-    {
-        using var q=c.CreateCommand();q.Transaction=tx;
-        q.CommandText="""
-            SELECT EXISTS(SELECT 1 FROM PeriodClosures WHERE IsClosed=1
-            AND ((PeriodType='DAY' AND PeriodKey=$d) OR (PeriodType='MONTH' AND PeriodKey=$m)));
-            """;
-        q.Parameters.AddWithValue("$d",date);q.Parameters.AddWithValue("$m",date[..7]);
-        return Convert.ToInt32(await q.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0;
-    }
-    private static async Task<bool> DayConflict(SqliteConnection c,SqliteTransaction? tx,
+    private static async Task<bool> AlreadyMovedToday(SqliteConnection c,SqliteTransaction? tx,
         string id,string date,CancellationToken ct)
     {
         using var q=c.CreateCommand();q.Transaction=tx;
         q.CommandText="""
-            SELECT (SELECT COUNT(*) FROM AttendanceRecords
-                WHERE PersonId=$id AND AttendanceLocalDate=$d) +
-                (SELECT COUNT(*) FROM PersonnelMovements
-                WHERE PersonId=$id AND EffectiveLocalDate=$d);
+            SELECT EXISTS(SELECT 1 FROM PersonnelMovements
+                          WHERE PersonId=$id AND EffectiveLocalDate=$d);
             """;
         q.Parameters.AddWithValue("$id",id);q.Parameters.AddWithValue("$d",date);
-        return Convert.ToInt64(await q.ExecuteScalarAsync(ct).ConfigureAwait(false))>0;
+        return Convert.ToInt64(await q.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0;
     }
     private static string Operation(bool external)=>external?"TRANSFER_EXTERNAL":"TRANSFER_INTERNAL";
 
@@ -115,8 +104,6 @@ public sealed class PersonnelMovementService
             (destination.Length==0||destination==source))
             return Reject(BridgeErrorCodes.InvalidTransferSites,"حدد جهة نقل مختلفة وصحيحة.");
         using var c=_db.CreateOpenConnection();
-        if(await Locked(c,null,date,ct).ConfigureAwait(false))
-            return Reject(BridgeErrorCodes.HistoricDayLocked,"اليوم أو الشهر مغلق.");
         var destName=external?externalName:await ActiveSite(c,null,destination,ct).ConfigureAwait(false);
         if(destName is null)return Reject(BridgeErrorCodes.InvalidTransferSites,"الموقع المنقول إليه غير موجود أو معطل.");
         var selected=new JsonArray();
@@ -125,9 +112,9 @@ public sealed class PersonnelMovementService
             var p=await ActivePerson(c,null,id,date,ct).ConfigureAwait(false);
             if(p is null||p.SiteId!=source)
                 return Reject(BridgeErrorCodes.ConflictStale,"تغير موقع الفرد أو انتهى نشاطه. حدّث الكشف.");
-            if(await DayConflict(c,null,id,date,ct).ConfigureAwait(false))
+            if(await AlreadyMovedToday(c,null,id,date,ct).ConfigureAwait(false))
                 return Reject(BridgeErrorCodes.TransferDayAttendanceForbidden,
-                    "لا يمكن نقل فرد محضر اليوم أو سبق نقله اليوم. لم يتغير أي فرد.");
+                    "سبق تنفيذ حركة لهذا الفرد اليوم؛ لا يمكن تكرار النقل في نفس اليوم.");
             selected.Add(PersonJson(p));
         }
         var envelope=new JsonObject
@@ -176,8 +163,6 @@ public sealed class PersonnelMovementService
                 return Reject(BridgeErrorCodes.HistoricDayLocked,"المعاينة لا تنتمي ليوم العمل الحالي.");
             string date=Today(),destId=Get(plan,"destinationSiteId"),
                 destName=Get(plan,"destinationName"),source=Get(plan,"sourceSiteId");
-            if(await Locked(c,t,date,ct).ConfigureAwait(false))
-                return Reject(BridgeErrorCodes.HistoricDayLocked,"أُغلق اليوم قبل النقل.");
             if(!external && await ActiveSite(c,t,destId,ct).ConfigureAwait(false)!=destName)
                 return Reject(BridgeErrorCodes.ConflictStale,"تغير اسم الموقع الهدف منذ المعاينة.");
             var entries=new List<Person>();
@@ -189,9 +174,9 @@ public sealed class PersonnelMovementService
                    person.AssignmentId!=Get(previous,"sourceAssignmentId") ||
                    person.SiteName!=Get(previous,"sourceSiteName") ||
                    person.Revision!=previous["rowVersion"]?.GetValue<long>() ||
-                   await DayConflict(c,t,Get(previous,"personId"),date,ct).ConfigureAwait(false))
+                   await AlreadyMovedToday(c,t,Get(previous,"personId"),date,ct).ConfigureAwait(false))
                     return Reject(BridgeErrorCodes.ConflictStale,
-                        "أحد الأفراد تغير موقعه أو تحضيره أو سبق نقله اليوم؛ أُلغي النقل الجماعي.");
+                        "أحد الأفراد تغير موقعه أو سبق نقله اليوم؛ أُلغي النقل الجماعي.");
                 entries.Add(person);
             }
             long? used=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,t,token,
