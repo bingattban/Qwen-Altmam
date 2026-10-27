@@ -408,12 +408,6 @@
             };
             await commit();
           }catch(e){errors(confirmBox,e);}
-            },"btn btn-primary");
-            out.append(commit,btn("إلغاء المعاينة",()=>{
-              previewToken="";confirmBox.replaceChildren();
-            }));
-            confirmBox.appendChild(out);
-          }catch(e){errors(confirmBox,e);}
           finally{preview.disabled=false;}
         },"btn btn-primary");
         analysis.replaceChildren(summary);
