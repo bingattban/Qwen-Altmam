@@ -66,10 +66,15 @@ public sealed class PersonRosterService
         {
             where.Add("p.OrganizationalStatus = $org");
             parameters.Add(("$org", organizationalStatus));
+            // The active roster must also respect ActiveFlag; explicit archived
+            // queries for exited persons remain possible by status or flag.
+            if (organizationalStatus == 1) where.Add("p.ActiveFlag = 1");
         }
         else if (!includeArchived)
         {
-            where.Add("p.OrganizationalStatus <> 4");
+            // Default person pickers and strength rosters must never surface
+            // externally transferred, separated or archived personnel.
+            where.Add("p.OrganizationalStatus = 1 AND p.ActiveFlag = 1");
         }
 
         string whereSql = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
