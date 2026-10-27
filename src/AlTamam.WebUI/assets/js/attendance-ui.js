@@ -8,6 +8,7 @@
  };
  const button=(text,click)=>{
    const b=make("button",text,"btn btn-outline");
+   if(/^العودة إلى|^رجوع/.test(String(text)))b.className+=" app-back-action";
    b.type="button";b.addEventListener("click",click);return b;
  };
  const option=(value,title)=>{
