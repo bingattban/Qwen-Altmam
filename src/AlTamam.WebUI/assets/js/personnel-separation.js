@@ -209,7 +209,10 @@
       try{
         const response=await api().invoke("GetSeparationDetails",{movementId:id});
         const data=response.data||{};
-        const box=el("section",undefined,"card");
+        const overlay=el("div",undefined,"record-details-overlay");
+        const box=el("section",undefined,"card record-details-dialog");
+        overlay.setAttribute("role","dialog");
+        overlay.setAttribute("aria-modal","true");
         box.append(el("h3","تفاصيل الفصل","section-title"),
           el("p",data.name+" — ع: "+data.serviceNumberA),
           el("p","الموقع قبل الفصل: "+data.siteName),
