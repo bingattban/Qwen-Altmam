@@ -38,13 +38,14 @@
    site.appendChild(option("","جميع المواقع"));
    status.appendChild(option("","اختر الحالة"));
    mode.append(option("initial","تحضير جديد"),option("revise","تغيير حالة التحضير"));
-   const list=make("div"),info=make("div");
+   const list=make("div",undefined,"daily-roster-panel"),info=make("div");
    const choice=make("span","لم يتم تحديد أسماء");
    const draftPanel=make("section",undefined,"card attendance-drafts");
    const draftResults=make("div");
    draftPanel.append(make("h3","مسودات التمام المحفوظة","section-title"),draftResults);
    const selected=new Set();
    let activeDraftId=null;
+   const DAILY_PAGE_SIZE=10;
    let pageNo=1,loading=false,nonce=0,previewVersion=0;
    const summary=()=>choice.textContent="الأفراد المحددون: "+selected.size+" من 100";
    const clearReview=()=>{previewVersion++;};
@@ -76,7 +77,7 @@
      try{
        const response=await bridge.invoke("QueryDailyRoster",{
          businessDate:day,siteId:site.value,statusId:"__ELIGIBLE__",
-         page:pageNo,pageSize:50
+         page:pageNo,pageSize:DAILY_PAGE_SIZE
        });
        if(current!==nonce||!host.isConnected)return;
        const d=response.data||{},t=table(fields);
@@ -103,7 +104,7 @@
        const prev=button("السابق",()=>{pageNo--;load();});
        const next=button("التالي",()=>{pageNo++;load();});
        prev.disabled=pageNo<=1;next.disabled=!d.hasNext;
-       pages.append(make("span","الإجمالي: "+(d.total||0)),prev,next);
+       pages.append(make("span","الإجمالي: "+(d.total||0)+" — صفحة "+pageNo+" (10 أسماء)"),prev,next);
        list.replaceChildren(t.outer,pages);
      }catch(e){if(current===nonce)showError(list,e);}
      finally{loading=false;}

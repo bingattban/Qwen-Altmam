@@ -14,10 +14,16 @@ class El{
  all(){return [this,...this.children.flatMap(x=>x instanceof El?x.all():[])];}
 }
 const root=new El("main"),calls=[],writes=[],reviews=[];
-let approved=false, errorName="";
+let approved=false, errorName="",expandedRoster=false;
 const bridge={invoke:async(name,payload)=>{
  calls.push({name,payload});
- if(name==="PreviewAttendanceChange"&&errorName)
+ if(name==="QueryDailyRoster"&&expandedRoster){
+    const all=Array.from({length:12},(_,i)=>({personId:"P"+(i+1),name:"فرد "+(i+1),
+      serviceNumberA:String(100+i),siteName:"غير محدد",statusName:"غير محضر"}));
+    return {data:{items:all.slice((payload.page-1)*payload.pageSize,payload.page*payload.pageSize),
+      total:all.length,hasNext:payload.page*payload.pageSize<all.length}};
+  }
+  if(name==="PreviewAttendanceChange"&&errorName)
    throw Error("تعذر تحضير «"+errorName+"» (الرقم (ع): 12345): الحالة مسجلة اليوم.");
  const data={
    QuerySites:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}],
@@ -66,7 +72,7 @@ async function choose(){
 async function main(){
  await context.window.AltamamAttendance.render(root);
  assert.ok(one("معاينة التحضير"),"actual attendance page");
- assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&x.payload.statusId==="__ELIGIBLE__"),
+ assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&x.payload.statusId==="__ELIGIBLE__"&&x.payload.pageSize===10),
    "attendance selection must exclude the movement-day roster on the C# query");
  assert.equal(root.all().filter(x=>x.tag==="input"&&x.type==="checkbox").length,2);
  assert.equal(writes.length,0,"no write on load");
@@ -106,6 +112,17 @@ async function main(){
  assert.equal(writes.length,committed,"failed individual preview never commits");
  assert.ok(root.all().some(x=>x.textContent.includes("شخص تجريبي")&&
    x.textContent.includes("12345")),"rejection identifies the person and الرقم (ع)");
- console.log("ATTENDANCE UI PASS: centered modal preview, cancellation, one-step approval, revision and named rejection");
+ expandedRoster=true;errorName="";
+  await context.window.AltamamAttendance.render(root);
+  const dailyPanel=()=>root.all().find(x=>x.className.includes("daily-roster-panel"));
+  const dailyRows=()=>dailyPanel().all().find(x=>x.tag==="tbody").children;
+  assert.equal(dailyRows().length,10,"ten names visible in daily attendance table");
+  one("التالي").handlers.click();await flush();
+  assert.equal(dailyRows().length,2,"last attendance page contains two remaining names");
+  assert.equal(calls.filter(x=>x.name==="QueryDailyRoster").at(-1).payload.page,2);
+  one("السابق").handlers.click();await flush();
+  assert.equal(dailyRows().length,10);
+  assert.equal(writes.length,committed,"paging must never save attendance");
+  console.log("ATTENDANCE UI PASS: 10 daily names, paging, review and confirmation");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
