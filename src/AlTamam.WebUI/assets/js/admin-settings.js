@@ -1722,9 +1722,18 @@
             if(token!==currentRequest)return;
             const data=response.data||{};
             if(!data.previewToken || !data.requiredConfirmation)throw Error("معاينة التصفير غير موثقة.");
-            const summary=node("p","settings-copy",
-              "أفراد: "+data.people+"، تحضير: "+data.attendance+
-              "، نسخ مسجلة: "+data.backupEntries+". "+data.warning);
+            const detailsReview=window.AltamamDialog?.detailsReview;
+            if(typeof detailsReview!=="function")
+              throw Error("نافذة معاينة التصفير غير متاحة؛ أُلغي الإجراء.");
+            const approved=await detailsReview({rows:[
+              ["الأفراد المعرّضون للحذف",data.people],
+              ["سجلات التحضير",data.attendance],
+              ["النسخ المسجلة",data.backupEntries],
+              ["تحذير",data.warning||"لا يمكن التراجع عن تصفير البرنامج."]
+            ]},{title:"معاينة التصفير النهائي",
+              message:"ستُمحى جميع البيانات. راجع الأعداد بعناية قبل الانتقال للتحقق النهائي.",
+              confirmLabel:"الانتقال للتحقق بكلمة المرور",danger:true});
+            if(!approved){resetStatus.replaceChildren();previewButton.disabled=false;return;}
             const passwordWrap=field("كلمة المرور الحالية للإدارة العامة","","password");
             passwordWrap.input.autocomplete="current-password";
             const phraseWrap=field("اكتب عبارة التأكيد حرفياً","","text");
@@ -1751,7 +1760,9 @@
               }catch(e){passwordWrap.input.value="";errors(resetStatus,e);approve.disabled=false;}
             },"btn btn-primary settings-action");
             const cancel=btn("إلغاء",()=>{passwordWrap.input.value="";resetStatus.replaceChildren();previewButton.disabled=false;});
-            resetStatus.replaceChildren(summary,passwordWrap.wrap,phraseWrap.wrap,approve,cancel);
+            resetStatus.replaceChildren(node("p","settings-copy",
+              "تمت مراجعة المعاينة. أدخل كلمة المرور وعبارة التأكيد لتنفيذ الإجراء النهائي."),
+              passwordWrap.wrap,phraseWrap.wrap,approve,cancel);
           }catch(e){errors(resetStatus,e);previewButton.disabled=false;}
         },"btn btn-outline settings-action");
         resetBox.append(notice,previewButton,resetStatus);
