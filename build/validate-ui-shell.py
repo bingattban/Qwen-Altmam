@@ -75,7 +75,7 @@ def main() -> None:
     dangerous = re.compile(r"(?i)\.(?:db|sqlite|sqlite3|db-wal|db-shm|key|protected|bak|xlsx|xlsm|pdf)$")
     leaked = [f for f in tracked if dangerous.search(f) and not f.startswith("tests/fixtures/")]
     check(not leaked, "possible tracked personnel data / key / report: " + str(leaked[:5]))
-    check(len(actions) == 100, "action manifest drift")
+    check(len(actions) == 101, "action manifest drift")
     for section, title in sections.items():
         tag = re.search(
             r'<button\b[^>]*id="navBtn-' + re.escape(section)
