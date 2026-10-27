@@ -76,6 +76,10 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
             Actor,CancellationToken.None);
         Assert.True(saved.Success,saved.UserMessage);
         Assert.Equal(1L,Count("PersonnelMovements"));
+        var live=await new DailyMonthlyReadService(_db).DashboardSummaryAsync(
+            new JsonObject{["businessDate"]=Today(),["siteId"]=""},CancellationToken.None);
+        Assert.True(live.Success,live.UserMessage);
+        Assert.Equal(0L,((JsonObject)live.Data!)["totalForce"]!.GetValue<long>());
         Assert.Equal(1L,Count("AuditEvents"));
         using(var c=_db.CreateOpenConnection())
         {
