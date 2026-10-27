@@ -1291,3 +1291,42 @@ body{min-width:0}
     max-height:calc(72dvh - 42px)
   }
 }
+
+/* Read-only, keyboard-accessible register of automatic attendance at 08:00. */
+.auto-attendance-overlay{
+  position:fixed;inset:0;z-index:1200;display:flex;
+  align-items:center;justify-content:center;padding:clamp(7px,2vw,20px);
+  background:rgba(0,0,0,.68)
+}
+.auto-attendance-dialog{
+  display:flex;flex-direction:column;gap:10px;
+  width:min(97vw,1250px);max-height:94dvh;min-height:0;overflow:hidden;
+  background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--accent-teal);box-shadow:0 18px 54px rgba(0,0,0,.3)
+}
+.auto-attendance-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.auto-attendance-heading .page-title{margin:0;font-size:19px}
+.auto-attendance-dialog>.section-description{margin:0;line-height:1.65}
+.auto-attendance-dialog>.functional-toolbar{gap:8px;padding:0;flex:0 0 auto}
+.auto-attendance-dialog>.functional-toolbar .form-field{flex:1 1 200px}
+.auto-attendance-dialog .auto-attendance-results{
+  flex:1 1 auto;min-height:130px;overflow:hidden
+}
+.auto-attendance-dialog .auto-attendance-results>.functional-table-wrap{
+  height:100%;max-height:none;overflow:auto;scrollbar-gutter:stable
+}
+.auto-attendance-dialog .functional-table{width:100%;min-width:690px;table-layout:fixed}
+.auto-attendance-dialog .functional-table :is(th,td){
+  padding:6px 9px;min-height:36px;font-size:14px;line-height:1.4;
+  overflow:hidden;text-overflow:ellipsis
+}
+.auto-attendance-dialog .functional-table :is(th,td):first-child{width:62px;text-align:center}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(2){width:125px}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(3){width:35%}
+.auto-attendance-dialog .functional-table :is(th,td):last-child{width:160px}
+.auto-attendance-dialog>.functional-pager{flex:0 0 auto;margin:0;padding:8px 0 0;border-top:1px solid var(--border-color)}
+@media(max-width:670px){
+  .auto-attendance-dialog{max-height:96dvh;padding:10px}
+  .auto-attendance-heading .page-title{font-size:16px}
+  .auto-attendance-dialog .section-description{font-size:12px}
+}

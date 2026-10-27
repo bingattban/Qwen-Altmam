@@ -25,9 +25,12 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
    if(action==="QuerySites")
      return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
    if(action==="GetDashboardSummary")
-     return{data:{totalForce:3,unprepared:1,internalTransferDay:transferCount,completionPercentage:67,statusCounts:[
+     return{data:{totalForce:3,unprepared:1,automaticallyPrepared:1,internalTransferDay:transferCount,completionPercentage:67,statusCounts:[
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
+   if(action==="QueryDailyRoster"&&payload.statusId==="__AUTO_PREPARED__")
+     return{data:{items:[{personId:"P3",name:"P3",serviceNumberA:"12345",
+       siteName:"غير محدد",statusName:"غياب"}],total:1,hasNext:false}};
    if(action==="QueryDailyRoster"){
      const all=expandedRoster?Array.from({length:235},(_,i)=>({personId:"R"+(i+1),statusId:null,statusName:"غير محضر"})):[{personId:"P1",statusId:null,statusName:"غير محضر"},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
@@ -106,27 +109,24 @@ async function main(){
  assert.ok(viewport.all().some(x=>x.textContent==="P4"));
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance"].includes(x.action)).length,0);
  assert.ok(viewport.all().some(x=>x.className==="dashboard-eight-clock"),
-   "20:00 clock absent. DOM classes: "+viewport.all().map(x=>x.className).filter(Boolean).join(", "));
- let selectionCalled=0,reviewCalled=0;
- context.window.AltamamDialog={
-   unpreparedSelection:async loader=>{
-     selectionCalled++;
-     const data=await loader(1);
-     assert.equal(data.items.length,1);
-     return ["P1"];
-   },
-   attendanceReview:async plan=>{
-     reviewCalled++;
-     assert.equal(plan.persons[0].proposedStatusName,"غياب");
-     return true;
-   },
-   alert:async error=>{throw Error("Unexpected modal error "+error);}
- };
+   "08:00 clock absent. DOM classes: "+viewport.all().map(x=>x.className).filter(Boolean).join(", "));
+ // The counter is now a read-only filter, never a manual carry-forward selector.
  counter("__UNPREPARED__").handlers.click();await settle();
- assert.equal(selectionCalled,1,"counter click must open the independent selector");
- assert.equal(reviewCalled,1,"a separate confirmable preview is mandatory");
- assert.equal(calls.filter(x=>x.action==="SubmitAttendance"&&x.payload.mode==="carry").length,1,
-   "write must happen only after both the picker and confirmation");
+ assert.equal(lastRoster().payload.statusId,"__UNPREPARED__");
+ assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance",
+   "PreviewAttendanceChange"].includes(x.action)).length,0);
+ assert.ok(counter("__AUTO_PREPARED__"),"automatic-attendance counter is always visible");
+ counter("__AUTO_PREPARED__").handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="QueryDailyRoster").at(-1).payload.statusId,
+   "__AUTO_PREPARED__");
+ const readOnly=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
+ assert.ok(readOnly,"automatic attendance opens an independent read-only register");
+ assert.ok(readOnly.all().some(x=>x.textContent==="P3"));
+ assert.ok(readOnly.all().some(x=>x.textContent==="غياب"));
+ assert.ok(!readOnly.all().some(x=>x.tag==="input"&&x.type==="checkbox"),
+   "read-only auto register has no selection checkboxes");
+ assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance",
+   "PreviewAttendanceChange"].includes(x.action)).length,0);
  expandedRoster=true;
  counter("all").handlers.click();await settle();
  const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));

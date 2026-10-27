@@ -45,7 +45,7 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         var policy=new AutoAttendancePolicyService(_db);
         var unset=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
         Assert.False(unset["configured"]!.GetValue<bool>());
-        Assert.Equal("20:00",unset["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("08:00",unset["dueTimeLocal"]!.GetValue<string>());
 
         var denied=await policy.SetAsync(Selection("STS-PERMISSION",
             "AUTO-SV-DENIED-000001"),Supervisor,default);
@@ -119,48 +119,52 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         }
 
         var service=new AutoAttendanceService(_db);
-        // Without an administrator-selected active fallback, the entire transaction
-        // must roll back: never pretend the day is complete.
-        var error=await Assert.ThrowsAsync<InvalidOperationException>(async()=>
-            await service.RunForDateAsync(Date,false));
-        Assert.Contains("حالة افتراضية",error.Message);
-        Assert.Equal(2L,Count("AttendanceRecords"));
-        Assert.Equal(0L,Count("AutoAttendanceRuns"));
-        Assert.Equal(0L,Count("AuditEvents"));
-
-        var selected=await new AutoAttendancePolicyService(_db).SetAsync(
-            Selection("STS-PERMISSION","AUTO-SET-DEFAULT-00002"),Admin,default);
-        Assert.True(selected.Success,selected.UserMessage);
+        // Missing yesterday and no default must NOT stop the other eligible person.
         var result=await service.RunForDateAsync(Date,false);
-        Assert.Equal(2,result.CopiedCount);
+        Assert.Equal(1,result.CopiedCount);
+        Assert.Equal(1,result.SkippedNoYesterdayCount);
         Assert.Equal(1,result.SkippedManualCount);
-        Assert.Contains("منها 1 بالحالة الافتراضية",result.SummaryArabic);
-        Assert.Equal(4L,Count("AttendanceRecords"));
+        Assert.Equal(3L,Count("AttendanceRecords"));
         Assert.Equal(1L,Count("AutoAttendanceRuns"));
-        Assert.Equal(2L,Count("AuditEvents")); // Policy change + scheduled run.
+        Assert.Equal(1L,Count("AuditEvents"));
 
         using(var c=_db.CreateOpenConnection())
         {
             using var q=c.CreateCommand();
             q.CommandText="""
-                SELECT PersonId,StatusId,Source FROM AttendanceRecords
+                SELECT PersonId,StatusId,Source,IdempotencyKey FROM AttendanceRecords
                 WHERE AttendanceLocalDate='2026-10-15' ORDER BY PersonId;
                 """;
             using var rd=await q.ExecuteReaderAsync();
-            var rows=new List<(string,string,string)>();
-            while(await rd.ReadAsync())rows.Add((rd.GetString(0),rd.GetString(1),rd.GetString(2)));
+            var rows=new List<(string,string,string,string)>();
+            while(await rd.ReadAsync())rows.Add((rd.GetString(0),rd.GetString(1),
+                rd.GetString(2),rd.GetString(3)));
             Assert.Equal(new[]
             {
-                ("TST-AUTO-P1","STS-ABSENT","20h-auto"),
-                ("TST-AUTO-P2","STS-PERMISSION","20h-auto"),
-                ("TST-AUTO-P3","STS-PRESENT","manual")
+                ("TST-AUTO-P1","STS-ABSENT","08h-auto","AUTO08H-2026-10-15-TST-AUTO-P1"),
+                ("TST-AUTO-P3","STS-PRESENT","manual","AUTO-TEST-MANUAL")
             },rows);
         }
+
         var replay=await service.RunForDateAsync(Date,false);
         Assert.True(replay.WasAlreadyCompleted);
-        Assert.Equal(4L,Count("AttendanceRecords"));
+        Assert.Equal(3L,Count("AttendanceRecords"));
         Assert.Equal(1L,Count("AutoAttendanceRuns"));
-        Assert.Equal(2L,Count("AuditEvents"));
+
+        var selected=await new AutoAttendancePolicyService(_db).SetAsync(
+            Selection("STS-PERMISSION","AUTO-SET-DEFAULT-00002"),Admin,default);
+        Assert.True(selected.Success,selected.UserMessage);
+        // A subsequent day copies P1 and P3 from yesterday, and uses the
+        // configured fallback for P2, without rewriting yesterday's ledger.
+        var next=await service.RunForDateAsync(Date.AddDays(1),false);
+        Assert.Equal(3,next.CopiedCount);
+        Assert.Contains("منها 1 بالحالة الافتراضية",next.SummaryArabic);
+        Assert.Equal(6L,Count("AttendanceRecords"));
+        Assert.Equal(2L,Count("AutoAttendanceRuns"));
+        Assert.Equal(3L,Count("AuditEvents"));
+        var secondReplay=await service.RunForDateAsync(Date.AddDays(1),false);
+        Assert.True(secondReplay.WasAlreadyCompleted);
+        Assert.Equal(6L,Count("AttendanceRecords"));
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;

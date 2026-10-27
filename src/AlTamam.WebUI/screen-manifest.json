@@ -25,11 +25,11 @@
     },
     {
       "routeKey": "UnpreparedPersonnel",
-      "titleAr": "غير المحضرين",
-      "breadcrumbAr": "الرئيسية > غير المحضرين",
+      "titleAr": "المحضّرون تلقائياً",
+      "breadcrumbAr": "الرئيسية > المحضّرون تلقائياً",
       "relativeFolder": "Dashboard/UnpreparedPersonnel",
       "kind": "screen",
-      "access": "All authenticated roles; attendance permission required for write",
+      "access": "All authenticated roles; read-only auto attendance listing",
       "sources": "Original dashboard + explicit user changes + improved master §07",
       "implementationPhase": "06",
       "uiAvailability": "INTEGRATED_HTML_CSS_JS",
@@ -883,7 +883,7 @@
     },
     {
       "routeKey": "EightPmScheduler",
-      "titleAr": "جدولة الساعة الثامنة مساء",
+      "titleAr": "جدولة الساعة الثامنة صباحاً",
       "breadcrumbAr": "مكوّن نظامي > استكمال تحضير غير المحضرين",
       "relativeFolder": "SharedScreens/EightPmScheduler",
       "kind": "shared system flow",

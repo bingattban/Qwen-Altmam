@@ -75,6 +75,58 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task AutomaticAttendance_IsCountedInStatusTotalsAndReadOnlyRegisterEvenAfterManualRevision()
+    {
+        // The original durable idempotency key survives an attendance revision
+        // even though Source is changed to 'manual' for the latest action.
+        using(var connection=_db.CreateOpenConnection())
+        using(var cmd=connection.CreateCommand())
+        {
+            cmd.CommandText="""
+                UPDATE AttendanceRecords
+                SET IdempotencyKey='AUTO08H-2026-10-19-TST-P-1',
+                    Source='manual',RevisionNumber=2
+                WHERE PersonId='TST-P-1' AND AttendanceLocalDate='2026-10-19';
+                """;
+            Assert.Equal(1,await cmd.ExecuteNonQueryAsync());
+        }
+
+        var svc=new DailyMonthlyReadService(_db);
+        var input=new JsonObject{["businessDate"]="2026-10-19",["siteId"]="SITE-UNSPECIFIED"};
+        var summary=await svc.DashboardSummaryAsync(input,default);
+        Assert.True(summary.Success,summary.UserMessage);
+        var counts=Assert.IsType<JsonObject>(summary.Data);
+        Assert.Equal(1L,counts["automaticallyPrepared"]!.GetValue<long>());
+        Assert.Equal(0L,counts["unprepared"]!.GetValue<long>());
+        var statusCounts=Assert.IsType<JsonArray>(counts["statusCounts"]);
+        Assert.Equal(1L,statusCounts.OfType<JsonObject>()
+            .Single(x=>x["statusId"]!.GetValue<string>()=="STS-ABSENT")
+            ["count"]!.GetValue<long>());
+
+        var automatic=await svc.DailyRosterAsync(new JsonObject{
+            ["businessDate"]="2026-10-19",["siteId"]="SITE-UNSPECIFIED",
+            ["statusId"]="__AUTO_PREPARED__",["term"]="X001",
+            ["page"]=1,["pageSize"]=100
+        },default);
+        Assert.True(automatic.Success,automatic.UserMessage);
+        var data=Assert.IsType<JsonObject>(automatic.Data);
+        Assert.Equal(1L,data["total"]!.GetValue<long>());
+        var person=Assert.Single(Assert.IsType<JsonArray>(data["items"]));
+        Assert.Equal("TST-P-1",person!["personId"]!.GetValue<string>());
+        Assert.Equal("غياب",person["statusName"]!.GetValue<string>());
+        var noMatch=await svc.DailyRosterAsync(new JsonObject{
+            ["businessDate"]="2026-10-19",["siteId"]="SITE-OTHER",
+            ["statusId"]="__AUTO_PREPARED__"
+        },default);
+        Assert.Equal(0L,Assert.IsType<JsonObject>(noMatch.Data)["total"]!.GetValue<long>());
+
+        using var verify=_db.CreateOpenConnection();
+        using var check=verify.CreateCommand();
+        check.CommandText="SELECT COUNT(*) FROM AttendanceRecords;";
+        Assert.Equal(1L,Convert.ToInt64(await check.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task UnpreparedCounter_ReturnsOnlyPeopleWithoutSavedAttendance()
     {
         using (var connection=_db.CreateOpenConnection())

@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 
 namespace AlTamam.Application.Scheduling;
 
-/// <summary>Immutable result of one 20:00 automatic-attendance attempt (scheduled or catch-up).</summary>
+/// <summary>Immutable result of one 08:00 automatic-attendance attempt (scheduled or catch-up).</summary>
 public sealed record AutoAttendanceRunResult(
     string JobKey,
     DateOnly BusinessDate,
@@ -19,14 +19,14 @@ public sealed record AutoAttendanceRunResult(
     string SummaryArabic);
 
 /// <summary>
-/// Durable, database-authoritative implementation of the canonical 20:00 carry-forward rule
-/// documented in docs/implementation/PHASE07_20H_RULE.md. Never trusts UI state: exclusions
+/// Durable, database-authoritative implementation of the canonical 08:00 carry-forward rule
+/// for individuals with no current-day attendance. Legacy 20:00 ledgers remain valid. Never trusts UI state: exclusions
 /// (transfer-effective dates, archived persons, closed periods), manual precedence and ledger
 /// idempotency are all enforced against SQLCipher inside a single write transaction per date.
 /// </summary>
 public sealed class AutoAttendanceService
 {
-    public const int DefaultDueHour = 20;
+    public const int DefaultDueHour = 8;
     public const int DefaultCatchUpDays = 7;
     public const string SystemActorUserId = "USR-SYSTEM";
     private static readonly TimeSpan ClockRollbackTolerance = TimeSpan.FromMinutes(1);
@@ -41,7 +41,7 @@ public sealed class AutoAttendanceService
         _time = timeProvider ?? TimeProvider.System;
     }
 
-    /// <summary>True when the local clock has passed the canonical due instant (>= 20:00).</summary>
+    /// <summary>True when the local clock has passed the canonical due instant (>= 08:00).</summary>
     public bool IsDueNow() => LocalNow().TimeOfDay >= new TimeSpan(DefaultDueHour, 0, 0);
 
     /// <summary>
@@ -59,7 +59,7 @@ public sealed class AutoAttendanceService
             throw new BridgeProtocolException(BridgeErrorCodes.ClockRollbackSuspected,
                 "رُصد ارتداد في ساعة النظام؛ أُوقف التحضير التلقائي حتى تصحيح الساعة.");
 
-        // The approved business cutoff is fixed at 20:00 local; old persisted hour
+        // The approved business cutoff is fixed at 08:00 local; old persisted hour
         // overrides must not silently change this rule.
         int catchUpDays = await GetSettingIntAsync("AutoAttendanceCatchUpDays", DefaultCatchUpDays, ct).ConfigureAwait(false);
         bool dayDue = localNow.TimeOfDay >= new TimeSpan(DefaultDueHour, 0, 0);
@@ -89,9 +89,9 @@ public sealed class AutoAttendanceService
         if (existing is not null)
             return existing with { WasAlreadyCompleted = true };
 
-        string source = isCatchUp ? "20h-catchup" : "20h-auto";
+        string source = isCatchUp ? "08h-catchup" : "08h-auto";
         DateTimeOffset startedUtc = _time.GetUtcNow();
-        string dueLocal = Iso(businessDate) + "T20:00:00";
+        string dueLocal = Iso(businessDate) + "T08:00:00";
 
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
@@ -219,9 +219,10 @@ public sealed class AutoAttendanceService
                 {
                     if (configuredDefault is null)
                     {
-                        // Fail the entire transaction; no partial 20:00 attendance.
-                        throw new InvalidOperationException(
-                            "تعذر التحضير التلقائي: يجب أن تحدد الإدارة حالة افتراضية نشطة في الإعدادات لعدم وجود تحضير أمس.");
+                        // Do not block other people who have a valid previous-day status.
+                        // A person without yesterday or a configured fallback stays unprepared.
+                        skipNoYesterday++;
+                        continue;
                     }
                     statusId = configuredDefault.Value.Id;
                     statusName = configuredDefault.Value.Name;
@@ -256,7 +257,7 @@ public sealed class AutoAttendanceService
                 insert.Parameters.AddWithValue("$source", source);
                 insert.Parameters.AddWithValue("$actor", SystemActorUserId);
                 insert.Parameters.AddWithValue("$now", startedUtc.ToString("O"));
-                insert.Parameters.AddWithValue("$idem", $"AUTO20H-{Iso(businessDate)}-{person.PersonId}");
+                insert.Parameters.AddWithValue("$idem", $"AUTO08H-{Iso(businessDate)}-{person.PersonId}");
                 await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 copied++;
             }
@@ -266,10 +267,10 @@ public sealed class AutoAttendanceService
 
             // Actor attribution + tamper-evident audit event inside the SAME transaction (07.03).
             await Bridge.BridgeAuditWriter.WriteAsync(connection, tx, _time,
-                operationCode: "AUTO_ATTENDANCE_20H",
-                operationArabicName: "التحضير التلقائي الساعة الثامنة مساءً",
+                operationCode: "AUTO_ATTENDANCE_08H",
+                operationArabicName: "التحضير التلقائي الساعة الثامنة صباحاً",
                 actorUserId: SystemActorUserId,
-                actorUsername: "النظام (جدولة 20:00)",
+                actorUsername: "النظام (جدولة 08:00)",
                 actorDisplayName: null,
                 targetEntityType: "AutoAttendanceRun",
                 targetEntityId: jobKey,
@@ -317,7 +318,7 @@ public sealed class AutoAttendanceService
         }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Reads the EightPmScheduler screen facts: last ledger rows plus next scheduled due time.</summary>
+    /// <summary>Reads the scheduling diagnostics: last ledger rows plus next scheduled due time.</summary>
     public async Task<LedgerSnapshot> ReadStatusAsync(int take, CancellationToken ct = default)
     {
         DateTimeOffset nowUtc = _time.GetUtcNow();
@@ -358,7 +359,7 @@ public sealed class AutoAttendanceService
             if (end >= start) pending = (end.DayNumber - start.DayNumber) + 1;
         }
 
-        string nextDueWall = nextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T20:00:00";
+        string nextDueWall = nextDueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T08:00:00";
         return new LedgerSnapshot(runs, nowUtc, localNow.ToString("yyyy-MM-ddTHH:mm:ss"),
             nextDueWall, dayDue, lastObservedValid, pending);
     }
@@ -374,7 +375,7 @@ public sealed class AutoAttendanceService
 
     // ------------------------------------------------------------------ internals
 
-    internal static string JobKey(DateOnly businessDate) => "AUTO20H-" + Iso(businessDate);
+    internal static string JobKey(DateOnly businessDate) => "AUTO08H-" + Iso(businessDate);
     internal static string Iso(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private DateTime LocalNow() => _time.GetLocalNow().DateTime;
@@ -406,15 +407,17 @@ public sealed class AutoAttendanceService
     {
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = @"SELECT BusinessDate, IsCatchUpRun, CopiedCount, SkippedNoYesterdayCount,
+        cmd.CommandText = @"SELECT JobKey, BusinessDate, IsCatchUpRun, CopiedCount, SkippedNoYesterdayCount,
                                    SkippedTransferExemptCount, SummaryArabic
-                            FROM AutoAttendanceRuns WHERE JobKey = $job;";
+                            FROM AutoAttendanceRuns WHERE BusinessDate = $date
+                            ORDER BY CASE WHEN JobKey=$job THEN 0 ELSE 1 END LIMIT 1;";
         cmd.Parameters.AddWithValue("$job", jobKey);
+        cmd.Parameters.AddWithValue("$date", jobKey["AUTO08H-".Length..]);
         using SqliteDataReader reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         if (!await reader.ReadAsync(ct).ConfigureAwait(false)) return null;
-        var date = DateOnly.Parse(reader.GetString(0), CultureInfo.InvariantCulture);
-        return new AutoAttendanceRunResult(jobKey, date, true, false,
-            reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4), 0, 0, reader.GetString(5));
+        var date = DateOnly.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
+        return new AutoAttendanceRunResult(reader.GetString(0), date, true, false,
+            reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0, reader.GetString(6));
     }
 
     private async Task<DateOnly?> GetLastCompletedBusinessDateAsync(CancellationToken ct)

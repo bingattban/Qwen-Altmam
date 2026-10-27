@@ -133,7 +133,7 @@ public sealed class AttendanceCommitService
         if(date!=Today())return Fail(BridgeErrorCodes.HistoricDayLocked,
             "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.");
         if(CutoffReached())return Fail(BridgeErrorCodes.HistoricDayLocked,
-            "انتهى التحضير العادي الساعة الثامنة مساءً؛ اليوم بانتظار الاعتماد التلقائي أو أُعتمد بالفعل.");
+            "انتهى موعد التحضير اليدوي العادي الساعة الثامنة مساءً؛ يبدأ الاعتماد التلقائي عند الثامنة صباحاً.");
         if(ids.Length==0||statusId.Length==0||mode is not("initial" or "revise"))
             return Fail(BridgeErrorCodes.ValidationError,"اختر الحالة وفرداً أو أكثر (حتى 100) ونوع العملية.");
         // A routine same-day status change requires an explicit, user-bound preview

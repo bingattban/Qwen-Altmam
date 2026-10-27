@@ -172,7 +172,9 @@
         document.getElementById("headerRoleBadge").textContent=
           result.username+" — "+(result.roleLabelAr||result.role);
         document.getElementById("logoutAction").hidden=false;
+        const openAutomaticRegister=location.hash.slice(1)==="auto-prepared";
         render("dashboard");
+        if(openAutomaticRegister)openAutoPreparedList();
         void checkOutputAfterLogin();
       } catch(e) { showError(status,e); }
       finally { submit.disabled=false; }
@@ -185,16 +187,17 @@
   }
 
   let dashboardClockTimer=null;
+  let lastMorningRefreshAt=0;
   function stopDashboardClock(){
     if(dashboardClockTimer!==null&&typeof window.clearInterval==="function")
       window.clearInterval(dashboardClockTimer);
     dashboardClockTimer=null;
   }
-  function beginEightPmCountdown(host,businessDate){
+  function beginEightAmCountdown(host,businessDate){
     stopDashboardClock();
     const line=el("div","dashboard-eight-clock");
     line.setAttribute("role","timer");
-    line.setAttribute("aria-label","الوقت المتبقي للاعتماد التلقائي الساعة الثامنة مساءً");
+    line.setAttribute("aria-label","الوقت المتبقي للاعتماد التلقائي الساعة الثامنة صباحاً");
     host.appendChild(line);
     const tick=()=>{
       const now=new Date();
@@ -203,14 +206,21 @@
         if(STATE.session&&view().contains?.(line))void renderDashboard();
         return;
       }
-      const cutoff=new Date(now.getFullYear(),now.getMonth(),now.getDate(),20,0,0,0);
+      const cutoff=new Date(now.getFullYear(),now.getMonth(),now.getDate(),8,0,0,0);
       const remaining=Math.max(0,Math.ceil((cutoff.getTime()-now.getTime())/1000));
+      // The native scheduler performs the write; refresh the read-only counters
+      // as it completes, without initiating or repeating the write in JavaScript.
+      if(remaining===0&&now.getHours()===8&&now.getMinutes()<10&&
+         now.getTime()-lastMorningRefreshAt>=30000){
+        lastMorningRefreshAt=now.getTime();
+        if(STATE.session&&view().contains?.(line))void renderDashboard();
+      }
       const h=String(Math.floor(remaining/3600)).padStart(2,"0");
       const m=String(Math.floor(remaining%3600/60)).padStart(2,"0");
       const sec=String(remaining%60).padStart(2,"0");
       line.textContent=remaining>0
-        ?"الوقت المتبقي لاعتماد حالات أمس تلقائياً الساعة ٨ مساءً: "+h+":"+m+":"+sec
-        :"حلّت الساعة ٨ مساءً؛ يتولى نظام Windows الاعتماد التلقائي. حدّث البيانات لعرض النتائج.";
+        ?"الوقت المتبقي لاعتماد حالات أمس تلقائياً الساعة ٨ صباحاً: "+h+":"+m+":"+sec
+        :"حلّت الساعة ٨ صباحاً؛ يتولى النظام اعتماد الحالات السابقة تلقائياً. يظهر العدد في كشف المحضّرين تلقائياً.";
     };
     tick();
     // The native scheduler is authoritative; this is DISPLAY ONLY and never
@@ -219,48 +229,77 @@
       dashboardClockTimer=window.setInterval(tick,1000);
   }
 
-  async function openUnpreparedCarryForward(){
-    const dialogs=window.AltamamDialog;
-    if(typeof dialogs?.unpreparedSelection!=="function")
-      return;
+  // The automatic-attendance register is READ-ONLY and never commits attendance.
+  function openAutoPreparedList(){
     const date=STATE.date,site=STATE.siteId;
-    try{
-      const ids=await dialogs.unpreparedSelection(async page=>{
-        const response=parseData(await bridge().invoke("QueryDailyRoster",{
-          businessDate:date,siteId:site,statusId:"__UNPREPARED__",page,pageSize:100
-        }));
-        if(!response||!Array.isArray(response.items))
-          throw Error("لم يُرجع البرنامج قائمة غير المحضرين.");
-        return response;
-      });
-      if(!Array.isArray(ids)||ids.length===0)return;
-      if(STATE.date!==date||STATE.siteId!==site)
-        throw Error("تغير التاريخ أو الموقع أثناء الاختيار؛ أعد فتح غير المحضرين.");
-      const preview=parseData(await bridge().invoke("PreviewAttendanceChange",{
-        mode:"carry",businessDate:date,siteId:site,personIds:ids
-      }));
-      if(!preview||!preview.previewToken||!Array.isArray(preview.persons))
-        throw Error("تعذر عرض معاينة معتمدة من البرنامج.");
-      if(typeof dialogs.attendanceReview!=="function")
-        throw Error("نافذة المراجعة غير متاحة؛ لم تُحفظ أي حالة.");
-      const accepted=await dialogs.attendanceReview(preview,{
-        title:"معاينة اعتماد حالة أمس",
-        message:"تأكد من الحالة المقترحة لكل فرد (حالة أمس أو الحالة الافتراضية المعتمدة).",
-        confirmLabel:"تأكيد واعتماد حالات الأفراد"
-      });
-      if(!accepted)return;
-      const result=parseData(await bridge().invoke("SubmitAttendance",{
-        mode:"carry",previewToken:preview.previewToken
-      }));
-      if(!Number.isInteger(result?.count)||result.count!==ids.length)
-        throw Error("لم يؤكد الخادم اعتماد جميع الأفراد المحددين.");
-      STATE.dayPage=1;
-      await renderDashboard();
-    }catch(error){
-      await dialogs?.alert?.(error?.message||"فشل اعتماد حالات أمس؛ لم يُؤكد الحفظ.",{
-        title:"تعذر اعتماد حالة أمس"
-      });
+    const overlay=el("div","auto-attendance-overlay");
+    overlay.setAttribute("role","dialog");
+    overlay.setAttribute("aria-modal","true");
+    overlay.setAttribute("aria-label","المحضّرون تلقائياً");
+    const panel=el("section","auto-attendance-dialog card");
+    const heading=el("div","auto-attendance-heading");
+    const title=el("h2","page-title","المحضّرون تلقائياً — "+date);
+    const closeButton=button("إغلاق",close);
+    append(heading,title,closeButton);
+    const description=el("p","section-description",
+      "كشف للقراءة فقط: الحالات المعتمدة تلقائياً الساعة ٨ صباحاً بحسب حالة أمس، أو الحالة الافتراضية عند عدم وجودها. كل حالة تُحتسب في عدادها الأصلي.");
+    const search=field("search","بحث بالاسم أو الرقم (ع)");
+    search.input.maxLength=100;
+    const searchButton=button("بحث",()=>{term=search.input.value.trim();page=1;void load();});
+    const actions=el("div","functional-toolbar");
+    append(actions,search.wrapper,searchButton);
+    const content=el("div","auto-attendance-results");
+    const footer=el("div","functional-pager");
+    append(panel,heading,description,actions,content,footer);
+    overlay.appendChild(panel);
+    view().appendChild(overlay);
+    let disposed=false,page=1,term="",generation=0;
+    function close(){
+      disposed=true;generation++;
+      overlay.remove?.();
+      if(!overlay.remove&&overlay.parentNode)overlay.parentNode.removeChild(overlay);
     }
+    overlay.addEventListener("click",event=>{if(event.target===overlay)close();});
+    search.input.addEventListener("keydown",event=>{
+      if(event.key==="Enter"){event.preventDefault();term=search.input.value.trim();page=1;void load();}
+      if(event.key==="Escape"){event.preventDefault();close();}
+    });
+    closeButton.addEventListener("keydown",event=>{if(event.key==="Escape")close();});
+    async function load(){
+      const current=++generation;
+      content.replaceChildren(message("جارٍ قراءة سجل التحضير التلقائي..."));
+      footer.replaceChildren();
+      try{
+        const result=parseData(await bridge().invoke("QueryDailyRoster",{
+          businessDate:date,siteId:site,statusId:"__AUTO_PREPARED__",
+          term,page,pageSize:DAILY_PAGE_SIZE
+        }));
+        if(disposed||current!==generation)return;
+        if(!result||!Array.isArray(result.items))
+          throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
+        const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
+          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"}]);
+        content.replaceChildren(tb.wrap);
+        result.items.forEach((person,i)=>{
+          const row=el("tr");
+          [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
+            person.name,person.siteName,person.statusName].forEach(value=>
+            row.appendChild(el("td","",value==null?"—":value)));
+          tb.body.appendChild(row);
+        });
+        if(!result.items.length)content.replaceChildren(message(
+          "لا يوجد أفراد اعتُمدت حالاتهم تلقائياً لهذا اليوم وفق البحث والموقع."));
+        const total=Number(result.total)||0;
+        footer.appendChild(el("span","", "المحضّرون تلقائياً: "+total+" — صفحة "+page));
+        const previous=button("السابق",()=>{page--;void load();});
+        const next=button("التالي",()=>{page++;void load();});
+        previous.disabled=page<=1;next.disabled=page*DAILY_PAGE_SIZE>=total;
+        append(footer,previous,next);
+      }catch(error){
+        if(!disposed&&current===generation)showError(content,error);
+      }
+    }
+    void load();
   }
 
   async function renderDashboard() {
@@ -302,7 +341,7 @@
       const counts=parseData(countsResponse), rows=parseData(rosterResponse);
       feedback.replaceChildren(el("p","section-description","التحضير ليوم "+STATE.date+
         " — البيانات من قاعدة التطبيق المحلية."));
-      beginEightPmCountdown(feedback,STATE.date);
+      beginEightAmCountdown(feedback,STATE.date);
       // Keep the completion ratio read-only; the count chips still filter the roster.
       const percent=Number.isFinite(Number(counts.completionPercentage))?
         Math.max(0,Math.min(100,Math.round(Number(counts.completionPercentage)))):0;
@@ -314,6 +353,7 @@
       // The counters ARE the roster filters. No duplicate status chips below them.
       const stats=[{name:"إجمالي القوة",count:counts.totalForce,statusId:""},
         {name:"غير المحضرين",count:counts.unprepared,statusId:"__UNPREPARED__"},
+        {name:"المحضّرون تلقائياً",count:counts.automaticallyPrepared||0,statusId:"__AUTO_PREPARED__"},
          ...(Number(counts.internalTransferDay)>0
            ? [{name:"نُقلوا اليوم",count:counts.internalTransferDay,
                statusId:"__TRANSFER_DAY__",color:"#D8B4FE"}]
@@ -324,15 +364,7 @@
       for(const item of stats) {
         const isActive=STATE.statusId===item.statusId;
         const card=button("",()=>{
-          if(item.statusId==="__UNPREPARED__"){
-            if(STATE.statusId!==item.statusId){
-              STATE.statusId=item.statusId;
-              STATE.dayPage=1;
-              void renderDashboard();
-            }
-            if(Number(item.count)>0)void openUnpreparedCarryForward();
-            return;
-          }
+          if(item.statusId==="__AUTO_PREPARED__"){openAutoPreparedList();return;}
           if(STATE.statusId!==item.statusId){
             STATE.statusId=item.statusId;
             STATE.dayPage=1;
@@ -683,9 +715,11 @@
         document.getElementById("headerRoleBadge").textContent=
           state.username+" — "+(state.roleLabelAr||state.role);
         document.getElementById("logoutAction").hidden=false;
+        const openAutomaticRegister=location.hash.slice(1)==="auto-prepared";
         const initialSection=["dashboard","monthly","admin","settings"].includes(location.hash.slice(1))
           ?location.hash.slice(1):"dashboard";
         render(initialSection);
+        if(openAutomaticRegister)openAutoPreparedList();
         // A restored monthly/report page is read-only; check the output-drive
         // on fresh dashboard login and whenever Settings is opened instead.
         if(initialSection==="dashboard")void checkOutputAfterLogin();
