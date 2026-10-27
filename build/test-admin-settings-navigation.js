@@ -227,6 +227,13 @@ async function run() {
     "audit must open the actual operations screen without a redundant submenu");
   assert.ok(buttonNamed("بحث"),"audit filters visible directly");
   assert.ok(buttonNamed("العودة إلى الإدارة"),"direct audit back action");
+  const auditSearch=visible().find(x=>x.tag==="input"&&
+    x.type==="search"&&x.placeholder?.includes("بحث بالاسم"));
+  assert.ok(auditSearch,"audit history must have a comprehensive search box");
+  auditSearch.value="اسم تجريبي";
+  await buttonNamed("بحث").handlers.click();
+  assert.ok(calls.some(x=>x.name==="QueryAuditLog"&&x.body.term==="اسم تجريبي"),
+    "audit search must query matching records across all pages");
   buttonNamed("العودة إلى الإدارة").handlers.click();
   byDataset("adminSection").find(x=>x.dataset.adminSection==="users").handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
@@ -255,13 +262,6 @@ async function run() {
     "opening users must request server-side account list");
   assert.ok(calls.some(x=>x.name==="QueryAuditLog"),
     "opening audit must request actual operation records");
-  const auditSearch=visible().find(x=>x.tag==="input"&&
-    x.type==="search"&&x.placeholder?.includes("بحث بالاسم"));
-  assert.ok(auditSearch,"audit history must have a comprehensive search box");
-  auditSearch.value="اسم تجريبي";
-  await buttonNamed("بحث").handlers.click();
-  assert.ok(calls.some(x=>x.name==="QueryAuditLog"&&x.body.term==="اسم تجريبي"),
-    "audit search must query matching records across all pages");
   buttonNamed("العودة إلى الإدارة").handlers.click();
 
   controller.renderAdmin(admin);
