@@ -42,7 +42,8 @@ public sealed class SchemaInvariantTests : IDisposable, IAsyncLifetime
             """;
         cmd.Parameters.Add("$id", SqliteType.Text).Value = personId;
         cmd.Parameters.Add("$name", SqliteType.Text).Value = SyntheticFixtures.VisibleName;
-        cmd.Parameters.Add("$num", SqliteType.Text).Value = SyntheticFixtures.ServiceNumberA + "-" + personId[^4..];
+        // SQLCipher storage is canonical; this synthetic fixture is not user input.
+        cmd.Parameters.Add("$num", SqliteType.Text).Value = "90" + personId[^4..];
         cmd.ExecuteNonQuery();
     }
 
