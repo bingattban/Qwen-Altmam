@@ -298,11 +298,17 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
             int offset = w;
             tasks.Add(Task.Run(async () =>
             {
-                using SqliteConnection connection = _db.CreateOpenConnection(); // busy_timeout=15000 set inside
-                for (int i = 1; i <= 50; i++)
+                // Production mutations serialize their write transactions through
+                // AlTamamDbContext._writeGate. Keep two concurrent writer CALLERS,
+                // but exercise that real transaction boundary rather than racing
+                // raw SQLite connections for the single SQLCipher writer lock.
+                await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
                 {
+                    for (int i = 1; i <= 50; i++)
+                    {
                     int personIdx = offset * 50 + i;
                     using var cmd = connection.CreateCommand();
+                    cmd.Transaction = tx;
                     cmd.CommandText = @"INSERT INTO AttendanceRecords (PersonId, AttendanceLocalDate, StatusId,
                         StatusNameSnapshot, StatusSymbolSnapshot, StatusColorSnapshot, AssignmentIdAtEffectiveDate,
                         SiteIdAtEffectiveDate, SiteNameSnapshot, Source, CreatedByUserId, CommittedAtUtc,
@@ -318,7 +324,9 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
                     cmd.Parameters.AddWithValue("$utc", DateTime.UtcNow.ToString("O"));
                     cmd.Parameters.AddWithValue("$key", $"CONC-{personIdx}");
                     await cmd.ExecuteNonQueryAsync();
-                }
+                    }
+                    return true;
+                });
             }));
         }
 
