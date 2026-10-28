@@ -29,7 +29,7 @@ public sealed class ExportJobCoordinatorTests
         Assert.NotNull(job);
         using(job!)
         {
-            job.Report(42, 100);
+            job!.Report(42, 100);
             var current = Assert.IsType<JsonObject>(manager.Get(Session(0)).Data);
             Assert.Equal("running",current["status"]!.GetValue<string>());
             Assert.Equal(42,current["processed"]!.GetValue<int>());
@@ -38,15 +38,15 @@ public sealed class ExportJobCoordinatorTests
             Assert.Equal("EXPORT-A",current["jobId"]!.GetValue<string>());
             Assert.Equal(BridgeErrorCodes.MissingData,manager.Get(Session(1)).ErrorCode);
             Assert.Equal(BridgeErrorCodes.MissingData,manager.Cancel(Session(1)).ErrorCode);
-            Assert.False(job.Token.IsCancellationRequested);
+            Assert.False(job!.Token.IsCancellationRequested);
             var canceled=manager.Cancel(Session(0));
             Assert.True(canceled.Success,canceled.UserMessage);
-            Assert.True(job.Token.IsCancellationRequested);
+            Assert.True(job!.Token.IsCancellationRequested);
             var after=Assert.IsType<JsonObject>(manager.Get(Session(0)).Data);
             Assert.True(after["cancelRequested"]!.GetValue<bool>());
             Assert.Equal("canceling",after["status"]!.GetValue<string>());
             Assert.False(after["completed"]!.GetValue<bool>());
-            job.Finish(false);
+            job!.Finish(false);
         }
         var final=Assert.IsType<JsonObject>(manager.Get(Session(0)).Data);
         Assert.Equal("canceled",final["status"]!.GetValue<string>());
@@ -61,9 +61,9 @@ public sealed class ExportJobCoordinatorTests
         Assert.True(manager.TryBegin(Session(0),"EXPORT-B","personnel",CancellationToken.None,out var job));
         using(job!)
         {
-            job.Report(100,100);
+            job!.Report(100,100);
             Assert.Equal(99,((JsonObject)manager.Get(Session(0)).Data!)["percentage"]!.GetValue<int>());
-            job.Finish(true,@"C:\safe\result.xlsx");
+            job!.Finish(true,@"C:\safe\result.xlsx");
         }
         var saved=Assert.IsType<JsonObject>(manager.Get(Session(0)).Data);
         Assert.True(saved["completed"]!.GetValue<bool>());
@@ -81,9 +81,9 @@ public sealed class ExportJobCoordinatorTests
         Assert.True(manager.TryBegin(Session(0),"EXPORT-C","monthly",source.Token,out var job));
         using(job!)
         {
-            job.Report(5,10);
+            job!.Report(5,10);
             source.Cancel();
-            job.Finish(false);
+            job!.Finish(false);
         }
         var outcome=Assert.IsType<JsonObject>(manager.Get(Session(0)).Data);
         Assert.Equal("canceled",outcome["status"]!.GetValue<string>());
@@ -99,15 +99,15 @@ public sealed class ExportJobCoordinatorTests
         using(first!)
         {
             Assert.False(manager.TryBegin(Session(0),"EXPORT-TWO","monthly",default,out _));
-            first.Finish(false);
+            first!.Finish(false);
         }
         Assert.True(manager.TryBegin(Session(0),"EXPORT-TWO","monthly",default,out var second));
         using(second!)
         {
-            second.Report(4,4);
+            second!.Report(4,4);
             first!.Finish(true,"forged.xlsx"); // stale object must not change visible run
             Assert.Equal("EXPORT-TWO",((JsonObject)manager.Get(Session(0)).Data!)["jobId"]!.GetValue<string>());
-            second.Finish(true,"real.xlsx");
+            second!.Finish(true,"real.xlsx");
         }
         Assert.Equal("real.xlsx",((JsonObject)manager.Get(Session(0)).Data!)["filePath"]!.GetValue<string>());
     }
@@ -121,11 +121,11 @@ public sealed class ExportJobCoordinatorTests
         {
             var initial=Assert.IsType<JsonObject>(manager.Get(Session(0)).Data);
             Assert.Null(initial["percentage"]);
-            job.Report(200,100);
+            job!.Report(200,100);
             var bounded=Assert.IsType<JsonObject>(manager.Get(Session(0)).Data);
             Assert.Equal(100,bounded["processed"]!.GetValue<int>());
             Assert.Equal(99,bounded["percentage"]!.GetValue<int>());
-            job.Finish(false);
+            job!.Finish(false);
         }
     }
 }
