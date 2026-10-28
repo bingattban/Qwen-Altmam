@@ -13,21 +13,22 @@
   const isEmptyRow=row=>row.children.length===1 &&
     (Number(row.children[0].colSpan)||1)>1;
   function existingSearch(table){
+    // A search belongs to this table only when it is attached to the same
+    // table card or the page-level toolbar of a single-table screen.
+    // Never let a search in a sibling card hide another table's search.
     const screen=table.closest(".card,.attendance-review,.person-report-dialog,.person-report-page");
     if(screen){
-      // A local search in another table is not a screen-level search.
       for(const input of screen.querySelectorAll("input")){
         if(input.closest(".table-local-search"))continue;
         if(input.type==="search" || (input.placeholder||"").includes("بحث") ||
            (input.closest("label")?.textContent||"").includes("بحث"))return true;
       }
     }
-    // Dashboard and monthly searches live in a toolbar alongside their table cards.
     const viewport=table.closest("#appViewport");
     if(viewport && (
       viewport.classList.contains("daily-dashboard") ||
-      table.closest(".monthly-scroll") ||
-      table.closest(".person-report-page")
+      viewport.classList.contains("monthly-dashboard") ||
+      table.closest(".monthly-scroll")
     ) && viewport.querySelector(searchSelector))return true;
     return false;
   }
