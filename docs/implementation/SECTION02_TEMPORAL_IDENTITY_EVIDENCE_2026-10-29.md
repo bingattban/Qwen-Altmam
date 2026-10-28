@@ -22,6 +22,13 @@
 | 02.16 | 08:00 scheduler and durable local-day run ledger, source provenance, idempotent write receipts; 20:00 auto-attendance defaults superseded. **Existing; real clock rollback/power outage acceptance remains.** |
 | 02.17 | Number reuse after eligible dismissal retains two distinct PersonIds, immutable old reports and new person with empty operational history; integration tests group by PersonId. **Existing, tested.** |
 
+## Test-first CI failure and synthetic-fixture repair
+
+- Initial PR Windows Core run [40779761870](https://github.com/bingattban2/Qwen-Altmam/actions/runs/40779761870) **FAILED: 97 failed / 735 passed / 832 total**. Most historical tests seeded nonnumeric personnel numbers like `EX001`, `C-1`, `TST-NUM-0`, or `تج-000001` directly through SQL. The new V010 insert guard correctly blocked those invalid synthetic writes, exposing stale fixtures rather than a production-data defect. A founding-account migration test separately assumed the hard-coded schema version `9`.
+- Corrected synthetic-only seed values **and their exact expected report/Excel results** across 14 test classes, with no production changes to number validation, SQLCipher triggers, real identities, case logic or history. Updated the founding migration assertion to derive its version from `CurrentSchemaVersion`.
+- These repairs were split into two sequential groups of test-file edits. The original red run is retained as evidence, never represented as PASS. **The full suite must be re-executed on the final PR head**, then both x86/x64 packages generated after a fully passing Release suite before merge.
+- Historical nonconforming production rows, if any, were neither read nor modified by the fixture corrections.
+
 ## Exact change scope and test-first validation
 
 1. **Tests first:** extended `tests/AlTamam.Tests/Persistence/Section02HistoricalIntegrityTests.cs` with six invalid direct-write samples, 70-digit zero-prefixed acceptance, mismatched column and history-snapshot rejection, and an encrypted V009→V010 forward-upgrade preserving existing legacy evidence.
