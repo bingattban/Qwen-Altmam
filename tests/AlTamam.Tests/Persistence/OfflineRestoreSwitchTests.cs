@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Tests.Fixtures;
 using Microsoft.Data.Sqlite;
@@ -105,6 +106,76 @@ public sealed class OfflineRestoreSwitchTests : IDisposable
         Assert.Equal("after-backup",ReadSentinel());
         Assert.False(File.Exists(Path.Combine(_dir,
             ".altamam-restore-activation.pending.json")));
+    }
+
+
+    [Theory]
+    [InlineData("rollback-extension")]
+    [InlineData("rescue-outside-owned-directory")]
+    [InlineData("rescue-different-id")]
+    [InlineData("stage-outside-live-directory")]
+    public async Task TamperedPendingIntent_RejectsUntrustedPathsWithoutChangingLiveHistory(string mutation)
+    {
+        var prepared=await PreparedAsync();
+        SqliteConnection.ClearAllPools();
+        var service=new OfflineRestoreSwitch();
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            service.ActivateOfflineAsync(Live,Key,prepared,point=>
+            {
+                if(point==OfflineRestoreSwitch.Checkpoint.BeforeReplace)
+                    throw new InvalidOperationException("synthetic crash before replacement");
+            }));
+        string journal=Path.Combine(_dir,".altamam-restore-activation.pending.json");
+        Assert.True(File.Exists(journal));
+        JsonObject state=JsonNode.Parse(await File.ReadAllTextAsync(journal))!.AsObject();
+        switch(mutation)
+        {
+            case "rollback-extension":
+                state["Rollback"]=Path.ChangeExtension(state["Rollback"]!.GetValue<string>(),".txt");
+                break;
+            case "rescue-outside-owned-directory":
+                state["Rescue"]=Path.Combine(_dir,Path.GetFileName(state["Rescue"]!.GetValue<string>()));
+                break;
+            case "rescue-different-id":
+                state["Rescue"]=Path.Combine(_dir,"backups",
+                    "rescue-at-activation-"+Guid.NewGuid().ToString("N")+".dbbackup");
+                break;
+            case "stage-outside-live-directory":
+                state["Stage"]=Path.Combine(Path.GetTempPath(),
+                    Path.GetFileName(prepared.StageFilePath));
+                break;
+            default:throw new InvalidOperationException("unknown test mutation");
+        }
+        await File.WriteAllTextAsync(journal,state.ToJsonString());
+        SqliteConnection.ClearAllPools();
+        await Assert.ThrowsAsync<InvalidDataException>(()=>
+            service.ReconcileAtStartupAsync(Live,Key));
+        Assert.True(File.Exists(journal)); // no destructive recovery or false success
+        Assert.True(File.Exists(prepared.StageFilePath));
+        Assert.Equal("after-backup",ReadSentinel());
+    }
+
+    [Fact]
+    public async Task InvalidOldDigest_CannotClearARealPostReplaceRecoveryIntent()
+    {
+        var prepared=await PreparedAsync();
+        SqliteConnection.ClearAllPools();
+        var service=new OfflineRestoreSwitch();
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            service.ActivateOfflineAsync(Live,Key,prepared,point=>
+            {
+                if(point==OfflineRestoreSwitch.Checkpoint.AfterReplace)
+                    throw new InvalidOperationException("synthetic crash after replacement");
+            }));
+        string journal=Path.Combine(_dir,".altamam-restore-activation.pending.json");
+        JsonObject state=JsonNode.Parse(await File.ReadAllTextAsync(journal))!.AsObject();
+        state["OldDigest"]=new string('Z',64);
+        await File.WriteAllTextAsync(journal,state.ToJsonString());
+        SqliteConnection.ClearAllPools();
+        await Assert.ThrowsAsync<InvalidDataException>(()=>
+            service.ReconcileAtStartupAsync(Live,Key));
+        Assert.True(File.Exists(journal));
+        Assert.Null(ReadSentinel()); // replacement remains unaltered, but NOT approved
     }
 
     public void Dispose()
