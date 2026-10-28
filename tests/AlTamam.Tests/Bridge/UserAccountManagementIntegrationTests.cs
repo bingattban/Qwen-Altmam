@@ -29,12 +29,12 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
             INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
               NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
               OrganizationalStatus,ActiveFlag,RowVersion)
-            VALUES('TST-ACTIVE-1','مستخدم اختباري','مستخدم اختباري','TEST-001','TEST-001',
+            VALUES('TST-ACTIVE-1','مستخدم اختباري','مستخدم اختباري','970001','970001',
               '2026-10-01','2026-10-01T10:00:00Z',1,1,1);
             INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
               NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
               OrganizationalStatus,ActiveFlag,RowVersion)
-            VALUES('TST-ACTIVE-2','مشرف اختباري','مشرف اختباري','TEST-002','TEST-002',
+            VALUES('TST-ACTIVE-2','مشرف اختباري','مشرف اختباري','970002','970002',
               '2026-10-01','2026-10-01T10:00:00Z',1,1,1);
             """;
         await cmd.ExecuteNonQueryAsync();
@@ -256,7 +256,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         Assert.Single(items);
         Assert.Equal(1L,items[0]!["index"]!.GetValue<long>());
         Assert.Equal("roster-admin - مستخدم اختباري",items[0]!["createdBy"]!.GetValue<string>());
-        Assert.Equal("TEST-002",items[0]!["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("970002",items[0]!["serviceNumberA"]!.GetValue<string>());
         using(var creatorCheck=_db.CreateOpenConnection())
         using(var queryCreator=creatorCheck.CreateCommand())
         {
