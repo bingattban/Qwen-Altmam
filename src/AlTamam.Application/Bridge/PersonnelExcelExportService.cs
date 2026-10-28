@@ -312,7 +312,7 @@ public sealed class PersonnelExcelExportService
     }
 
     public async Task<BridgeResponse> ExportAsync(JsonObject? payload,
-        BridgePrincipal actor,CancellationToken ct)
+        BridgePrincipal actor,CancellationToken ct,Action<int,int>? progress=null)
     {
         string mode=Read(payload,"mode");
         string label;
@@ -348,10 +348,13 @@ public sealed class PersonnelExcelExportService
                 : mode=="separationArchive"
                 ? await ArchiveSheetsAsync(payload,true,ct).ConfigureAwait(false)
                 : await ReportSheetsAsync(payload!,ids,ct).ConfigureAwait(false);
+            int totalRows=sheets.Sum(x=>x.Rows.Count);
+            progress?.Invoke(0,totalRows);
             Directory.CreateDirectory(directory);
             using(var stream=new FileStream(partial,FileMode.CreateNew,FileAccess.Write,FileShare.None))
             using(var zip=new ZipArchive(stream,ZipArchiveMode.Create,leaveOpen:false,Encoding.UTF8))
-                NativeWorkbook(zip,sheets);
+                NativeWorkbook(zip,sheets,ct,progress);
+            ct.ThrowIfCancellationRequested();
             File.Move(partial,destination,false);
             try
             {
@@ -399,8 +402,10 @@ public sealed class PersonnelExcelExportService
         }
     }
 
-    private static void NativeWorkbook(ZipArchive zip,List<Sheet> sheets)
+    private static void NativeWorkbook(ZipArchive zip,List<Sheet> sheets,
+        CancellationToken ct,Action<int,int>? progress)
     {
+        int completedRows=0,totalRows=sheets.Sum(x=>x.Rows.Count);
         const string baseNs="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
         const string relationships="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
         static void Part(ZipArchive zip,string name,Action<XmlWriter> render)
@@ -502,6 +507,7 @@ public sealed class PersonnelExcelExportService
                 w.WriteStartElement("sheetData",baseNs);
                 for(int row=0;row<sheet.Rows.Count;row++)
                 {
+                    ct.ThrowIfCancellationRequested();
                     w.WriteStartElement("row",baseNs);
                     w.WriteAttributeString("r",(row+1).ToString(CultureInfo.InvariantCulture));
                     int col=0;
@@ -518,6 +524,9 @@ public sealed class PersonnelExcelExportService
                         w.WriteEndElement();w.WriteEndElement();w.WriteEndElement();
                     }
                     w.WriteEndElement();
+                    completedRows++;
+                    if(completedRows%50==0 || completedRows==totalRows)
+                        progress?.Invoke(completedRows,totalRows);
                 }
                 w.WriteEndElement();w.WriteEndElement();
             });

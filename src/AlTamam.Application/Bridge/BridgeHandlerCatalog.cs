@@ -247,10 +247,33 @@ public static class BridgeHandlerCatalog
         },
         "ExportMonthlyWorkbookSet" => async (req, principal, ct) =>
         {
-            var excel = new MonthlyExcelExportService(services.Db);
-            var result = await excel.ExportAsync(req.Payload, ct).ConfigureAwait(false);
-            return result with { RequestId = req.RequestId };
+            if(!services.ExportJobs.TryBegin(req.SessionNonce,req.RequestId,
+                "monthly",ct,out var job))
+                return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.ConflictStale,
+                    "عملية تصدير جارية لهذه الجلسة؛ أكملها أو ألغها أولاً."));
+            using(job!)
+            {
+                try
+                {
+                    var result = await new MonthlyExcelExportService(services.Db)
+                        .ExportAsync(req.Payload,job!.Token,job.Report).ConfigureAwait(false);
+                    job.Finish(result.Success,(result.Data as JsonObject)?["filePath"]?.GetValue<string>());
+                    return result with { RequestId = req.RequestId };
+                }
+                catch(OperationCanceledException) when (job!.Token.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    job!.Finish(false);
+                    return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.StorageBusy,
+                        "أُلغيت عملية تصدير Excel قبل اكتمال حفظ الملف."));
+                }
+            }
         },
+        "GetExportProgress" => (req, principal, ct) =>
+            Task.FromResult(services.ExportJobs.Get(req.SessionNonce) with
+                {RequestId=req.RequestId}),
+        "CancelExport" => (req, principal, ct) =>
+            Task.FromResult(services.ExportJobs.Cancel(req.SessionNonce) with
+                {RequestId=req.RequestId}),
         "GetMonthlyCellDetails" => async (req, principal, ct) =>
         {
             var read = new DailyMonthlyReadService(services.Db);
@@ -372,9 +395,26 @@ public static class BridgeHandlerCatalog
         },
         "ExportPersonLifetimeExcel" => async (req, principal, ct) =>
         {
-            var service=new PersonnelExcelExportService(services.Db);
-            BridgeResponse result=await service.ExportAsync(req.Payload,principal!,ct).ConfigureAwait(false);
-            return result with {RequestId=req.RequestId};
+            if(!services.ExportJobs.TryBegin(req.SessionNonce,req.RequestId,
+                "personnel",ct,out var job))
+                return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.ConflictStale,
+                    "عملية تصدير جارية لهذه الجلسة؛ أكملها أو ألغها أولاً."));
+            using(job!)
+            {
+                try
+                {
+                    BridgeResponse result=await new PersonnelExcelExportService(services.Db)
+                        .ExportAsync(req.Payload,principal!,job!.Token,job.Report).ConfigureAwait(false);
+                    job.Finish(result.Success,(result.Data as JsonObject)?["filePath"]?.GetValue<string>());
+                    return result with {RequestId=req.RequestId};
+                }
+                catch(OperationCanceledException) when (job!.Token.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    job!.Finish(false);
+                    return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.StorageBusy,
+                        "أُلغيت عملية تصدير Excel قبل اكتمال حفظ الملف."));
+                }
+            }
         },
         "QueryPersons" => async (req, principal, ct) =>
         {
