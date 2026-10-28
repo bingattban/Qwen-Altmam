@@ -96,7 +96,7 @@ def main() -> int:
         ui_dir = Path("src/AlTamam.WebUI/assets/js")
         catalog = Path("src/AlTamam.Application/Bridge/BridgeHandlerCatalog.cs").read_text(encoding="utf-8")
         arms = re.findall(
-            r'((?:"[A-Za-z][A-Za-z0-9]*"\\s*(?:or\\s*)?)+)\\s*=>',
+            r'((?:"[A-Za-z][A-Za-z0-9]*"\s*(?:or\s*)?)+)\s*=>',
             catalog)
         wired = set()
         for arm in arms:
@@ -105,7 +105,7 @@ def main() -> int:
         for source in ui_dir.glob("*.js"):
             js = source.read_text(encoding="utf-8")
             for action in re.findall(
-                r'\\b(?:invoke|invokeWithRetry|request)\\(\\s*["\\\']([A-Z][A-Za-z0-9]*)["\\\']',
+                r'\b(?:invoke|invokeWithRetry|request)\(\s*["\x27]([A-Z][A-Za-z0-9]*)["\x27]',
                 js):
                 ui_calls.setdefault(action, set()).add(str(source))
         for action, sources in sorted(ui_calls.items()):
