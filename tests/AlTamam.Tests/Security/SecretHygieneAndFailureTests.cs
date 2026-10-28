@@ -187,7 +187,7 @@ public sealed class SecretHygieneAndFailureTests : IDisposable
             seed.CommandText = @"INSERT INTO Persons (PersonId, CurrentVisibleName, NormalizedName,
                 CurrentServiceNumberA, NormalizedServiceNumberA, FirstRecordedLocalDate, FirstRecordedAtUtc,
                 OrganizationalStatus, ActiveFlag, RowVersion)
-                VALUES ($id,'شخص مؤرشف','شخص مؤرشف','تج-أرشف','تج-أرشف','2025-01-01',$now,1,1,1);";
+                VALUES ($id,'شخص مؤرشف','شخص مؤرشف','900001','900001','2025-01-01',$now,1,1,1);";
             seed.Parameters.AddWithValue("$id", SyntheticFixtures.PersonId);
             seed.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O"));
             await seed.ExecuteNonQueryAsync();
