@@ -70,7 +70,7 @@ public sealed class SqliteIndexPerformanceFixture : IAsyncLifetime, IDisposable
         {
             string personId = $"TST-P-{i:D6}";
             string name = $"شخص تجريبي {i:D4}";           // "test person NNNN"
-            string serviceNumber = $"تج-{i:D6}";
+            string serviceNumber = $"93{i:D6}";
             string site = i % 2 == 0 ? "SITE-TST-B" : SyntheticFixtures.SiteId;
             Execute(connection, tx,
                 @"INSERT OR IGNORE INTO Persons (PersonId, CurrentVisibleName, NormalizedName, CurrentServiceNumberA,
