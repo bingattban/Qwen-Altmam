@@ -98,8 +98,16 @@ def main() -> None:
     check("التمام الشهري" not in iss, "obsolete monthly app name remains in installer")
     check("Task.Run(PrepareServicesAsync)" in window,
           "database startup no longer overlaps WebView2 initialization")
-    check("startupPanel.Visibility = Visibility.Collapsed" in window,
-          "loading placeholder must close after verified UI navigation")
+    viewmodel = (ROOT / "src/AlTamam.DesktopHost/Presentation/StartupViewModel.cs").read_text(encoding="utf-8")
+    check("DataContext = _startupViewModel;" in window, "native startup view model not assigned")
+    check('Visibility="{Binding PanelVisibility}"' in xaml,
+          "native startup progress visibility must bind to MVVM")
+    check('Text="{Binding Message}"' in xaml,
+          "native startup feedback must bind to MVVM")
+    check("_startupViewModel.PanelVisibility = Visibility.Collapsed" in window,
+          "loading view model must close after verified UI navigation")
+    check("_startupViewModel.Message =" in window and "INotifyPropertyChanged" in viewmodel,
+          "native startup errors must update the observable view model")
     check('x:Name="startupMessage"' in xaml, "Arabic native startup feedback missing")
     missing = [r["localAssetPath"] for r in manifest["screens"]
                if not (UI / r["localAssetPath"]).is_file()]
