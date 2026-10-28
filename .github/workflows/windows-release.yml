@@ -271,6 +271,11 @@ jobs:
             build/AlTamam-installer.iss
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compiler failed' }
           Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH.exe" -Force
+      - name: Real packaged Portable vs Installer install/uninstall/reinstall and AppData preservation (15.06 automated subset)
+        shell: pwsh
+        run: |
+          & ./build/test-package-appdata-preservation.ps1 -PortableArchive ("artifacts/AlTamam-Portable-" + $env:DISPLAY_ARCH + ".zip") -InstallerPath ("artifacts/AlTamam-Installer-" + $env:DISPLAY_ARCH + ".exe") -ExpectedArch $env:RUNTIME
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package preservation acceptance subset failed' }
       - name: Generate SHA-256 checksums + build metadata (15.07)
         run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
       # One download contains ONE customer-facing version, never both.
