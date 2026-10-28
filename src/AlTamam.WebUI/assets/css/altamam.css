@@ -1445,19 +1445,19 @@ body:has(.auto-attendance-overlay) #appModalBackdrop.open{z-index:1400}
    stays accessible to assistive technology. Other form fields are untouched. */
 input.app-unified-search{
   box-sizing:border-box;
-  width:min(147px,100%)!important;min-width:0!important;max-width:147px!important;
-  height:28px!important;min-height:28px!important;max-height:28px!important;
-  flex:0 0 147px!important;padding:3px 6px!important;
+  width:min(170px,100%)!important;min-width:0!important;max-width:170px!important;
+  height:35px!important;min-height:35px!important;max-height:35px!important;
+  flex:0 0 170px!important;padding:6px 8px!important;
   border:1px solid var(--border-color);border-radius:6px;
   background:var(--bg-surface);color:var(--text-main);
-  font-size:12px!important;font-weight:600;line-height:20px!important;
+  font-size:13px!important;font-weight:600;line-height:20px!important;
 }
 input.app-unified-search::placeholder{
-  color:var(--text-muted);opacity:1;font-size:11px;
+  color:var(--text-muted);opacity:1;font-size:12px;
 }
 label.app-unified-search-wrap{
-  width:147px!important;min-width:0!important;max-width:147px!important;
-  flex:0 0 147px!important;gap:0;
+  width:170px!important;min-width:0!important;max-width:170px!important;
+  flex:0 0 170px!important;gap:0;
 }
 label.app-unified-search-wrap>.app-unified-search-caption{
   position:absolute!important;width:1px!important;height:1px!important;
