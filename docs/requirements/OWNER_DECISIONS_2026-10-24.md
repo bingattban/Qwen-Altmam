@@ -66,7 +66,8 @@
 ## 9. OWNER DECISION — Portable direct-run with existing Windows AppData (2026-10-28)
 
 - **Decision explicitly approved:** The 32-bit/64-bit Portable ZIP packages run directly from the extracted executable without an installer; **both Portable and Installer use exactly the same per-Windows-user data root**: `%LOCALAPPDATA%\\AlTamam`.
-- Existing encrypted database, DPAPI-protected key, application WebView2 profile and backup directory stay at their original user-specific paths. This is NOT a portable-on-USB database model.
+- Existing encrypted database, DPAPI-protected key, application WebView2 profile and **internal rescue backup directory** stay at their original user-specific paths. This is NOT a portable-on-USB database model.
+- This decision does **not** change the previously approved user-selected backup/export directory policy: prefer `E:\AlTamamAlYawmi\Backups` only when writable, otherwise require the visible Windows folder selection; do not silently redirect files.
 - **Do not move, copy, migrate, delete, rename or import any existing user data automatically.** Changing extraction directory, drive or distribution type must not change the database location.
 - The executable resource directory remains read-only and separate from the writable AppData storage. Cross-PC database restoration remains subject to the existing protected recovery workflow and acceptance gates.
 - Remove the legacy unused `AppDataLayout.IsPortable` storage switch and its misleading adjacent-`data` documentation, without altering the logical contents, database schema, keys, operation logs or permission model.
