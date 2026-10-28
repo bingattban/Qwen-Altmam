@@ -43,7 +43,7 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
                 """;
             cmd.Parameters.AddWithValue("$id","TST-MOVEMENT-P"+i);
             cmd.Parameters.AddWithValue("$name","فرد تجريبي "+i);
-            cmd.Parameters.AddWithValue("$number","MOVEMENT-"+i);
+            cmd.Parameters.AddWithValue("$number","91"+i.ToString("D4"));
             cmd.Parameters.AddWithValue("$assignment","TST-MOVEMENT-A"+i);
             cmd.Parameters.AddWithValue("$start",Yesterday());
             cmd.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O"));
