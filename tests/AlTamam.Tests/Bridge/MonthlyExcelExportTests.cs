@@ -175,7 +175,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         }
         var selected=new JsonObject{
             ["year"]=2026,["month"]=10,["siteId"]="SITE-UNSPECIFIED",
-            ["term"]="EX٠٠١"
+            ["term"]="٩١٠٠١"
         };
         // Exports use the historical archive, including exited identities.
         selected["archiveMode"]=true;
@@ -196,12 +196,12 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         Assert.True(preview.Success,preview.UserMessage);
         Assert.Equal(grid["total"]!.GetValue<long>(),
             ((JsonObject)preview.Data!)["personCount"]!.GetValue<long>());
-        Assert.Equal("EX٠٠١",((JsonObject)preview.Data!)["term"]!.GetValue<string>());
+        Assert.Equal("٩١٠٠١",((JsonObject)preview.Data!)["term"]!.GetValue<string>());
         var export=await exporter.ExportAsync((JsonObject)selected.DeepClone(),CancellationToken.None);
         Assert.True(export.Success,export.UserMessage);
         var meta=Assert.IsType<JsonObject>(export.Data);
         Assert.Equal(2L,meta["personCount"]!.GetValue<long>());
-        Assert.Equal("EX٠٠١",meta["term"]!.GetValue<string>());
+        Assert.Equal("٩١٠٠١",meta["term"]!.GetValue<string>());
         string location=meta["filePath"]!.GetValue<string>();
         _exports.Add(location);
         using(var package=ZipFile.OpenRead(location))
@@ -212,7 +212,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
             var rows=xml.Descendants(ns+"row").ToArray();
             Assert.Equal(5,rows.Length);
             var header=rows[1].Descendants(ns+"t").Select(x=>x.Value).ToArray();
-            Assert.Contains("EX٠٠١",header);  // filter evidence in Excel itself
+            Assert.Contains("٩١٠٠١",header);  // filter evidence in Excel itself
             for(int i=0;i<people.Length;i++)
             {
                 var row=rows[i+3].Descendants(ns+"t").Select(x=>x.Value).ToArray();
@@ -270,7 +270,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
             var values = xml.Descendants(main + "t").Select(t => t.Value).ToArray();
             Assert.Contains("غياب", values);
             Assert.Contains("91000", values);
-            Assert.Contains("EX101", values);
+            Assert.Contains("91101", values);
             Assert.Contains(@"=HYPERLINK(""https://example.invalid"")", values);
             Assert.Empty(xml.Descendants(main + "f")); // formula injection prohibited
             Assert.Equal("1", xml.Descendants(main + "sheetView").Single()
