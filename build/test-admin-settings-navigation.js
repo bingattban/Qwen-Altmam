@@ -396,7 +396,7 @@ async function run() {
     "administrators can open a read-only comparison ONLY after native inspection");
   await previewRestore.handlers.click();
   assert.ok(calls.some(x=>x.name==="PreviewRestore"&&
-    x.body.path==="C:\\\\AlTamam\\\\verified.dbbackup"&&
+    x.body.path==="C:\\AlTamam\\verified.dbbackup"&&
     x.body.expectedSha256==="a".repeat(64)),
     "preview re-verifies the selected path and its known SHA-256");
   const lastReview=modalReviews[modalReviews.length-1];
