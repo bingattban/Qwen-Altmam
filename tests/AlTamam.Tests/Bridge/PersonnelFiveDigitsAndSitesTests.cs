@@ -115,6 +115,68 @@ public sealed class PersonnelFourDigitsAndSitesTests : IAsyncLifetime, IDisposab
         Assert.Equal(1,Count("SELECT COUNT(*) FROM Persons"));
     }
 
+
+    [Fact]
+    public async Task IdentityEdit_ArabicAndPersianDigits_AreCanonicalAndKeepHistoricalPersonId()
+    {
+        var service = new PersonRosterService(_db);
+        string firstDate = DateOnly.FromDateTime(DateTime.Today).AddDays(-2).ToString("yyyy-MM-dd");
+        var created = await service.CreatePersonAsync(Actor, "tester", new JsonObject
+        {
+            ["visibleName"]="اسم قديم للاختبار", ["serviceNumberA"]="0012",
+            ["firstRecordedLocalDate"]=firstDate
+        }, CancellationToken.None);
+        Assert.True(created.Success, created.UserMessage);
+        string personId = ((JsonObject)created.Data!)["personId"]!.GetValue<string>();
+        var request = new JsonObject
+        {
+            ["personId"]=personId, ["visibleName"]="اسم جديد للاختبار",
+            ["serviceNumberA"]="۰۰۳۴", ["baseRevision"]=1,
+            ["effectiveLocalDate"]=DateTime.Today.ToString("yyyy-MM-dd")
+        };
+        var preview = await service.PreviewPersonIdentityUpdateAsync(request, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        Assert.Equal("0034", ((JsonObject)preview.Data!)["newServiceNumberA"]!.GetValue<string>());
+
+        var commit = (JsonObject)request.DeepClone();
+        commit["expectedRevision"]=1;
+        var saved=await service.UpdatePersonIdentityAsync(Actor,"tester",commit,CancellationToken.None);
+        Assert.True(saved.Success, saved.UserMessage);
+        Assert.Equal("0034", Read("SELECT CurrentServiceNumberA FROM Persons WHERE PersonId='"+personId+"';"));
+        Assert.Equal("0034", Read("SELECT NormalizedServiceNumberA FROM Persons WHERE PersonId='"+personId+"';"));
+        Assert.Equal("0012", Read("SELECT ServiceNumberASnapshot FROM PersonIdentityHistory WHERE PersonId='"+personId+"' AND ValidToLocalDate IS NOT NULL;"));
+        Assert.Equal("0034", Read("SELECT ServiceNumberASnapshot FROM PersonIdentityHistory WHERE PersonId='"+personId+"' AND ValidToLocalDate IS NULL;"));
+        Assert.Equal(1, Count("SELECT COUNT(*) FROM Persons WHERE PersonId='"+personId+"';"));
+    }
+
+    [Fact]
+    public async Task IdentityEdit_InvalidShortOrNondigitNumber_IsRejectedBeforeSqlWrites()
+    {
+        var service = new PersonRosterService(_db);
+        var created=await service.CreatePersonAsync(Actor,"tester",new JsonObject
+        {
+            ["visibleName"]="اسم رقم صالح قديم", ["serviceNumberA"]="0013",
+            ["firstRecordedLocalDate"]=DateTime.Today.AddDays(-2).ToString("yyyy-MM-dd")
+        },CancellationToken.None);
+        Assert.True(created.Success,created.UserMessage);
+        string id=((JsonObject)created.Data!)["personId"]!.GetValue<string>();
+        foreach(string invalid in new[]{"١٢٣","۱۲A۴"})
+        {
+            var input=new JsonObject{
+                ["personId"]=id,["visibleName"]="اسم رقم غير صالح",
+                ["serviceNumberA"]=invalid,["baseRevision"]=1,
+                ["expectedRevision"]=1,
+                ["effectiveLocalDate"]=DateTime.Today.ToString("yyyy-MM-dd")
+            };
+            var preview=await service.PreviewPersonIdentityUpdateAsync(input,CancellationToken.None);
+            Assert.False(preview.Success);
+            var committed=await service.UpdatePersonIdentityAsync(Actor,"tester",input,CancellationToken.None);
+            Assert.False(committed.Success);
+        }
+        Assert.Equal("0013",Read("SELECT CurrentServiceNumberA FROM Persons WHERE PersonId='"+id+"';"));
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM PersonIdentityHistory WHERE PersonId='"+id+"';"));
+    }
+
     private static JsonObject Workbook()
     {
         using var stream = new MemoryStream();
