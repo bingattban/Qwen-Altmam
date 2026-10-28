@@ -157,7 +157,7 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
         });
         var rows = Items(answer);
         Assert.Equal(2, rows.Count);
-        Assert.Equal(2, answer.Response.Data!["total"]!.GetValue<long>());
+        Assert.Equal(2, Assert.IsType<JsonObject>(answer.Response.Data)["total"]!.GetValue<long>());
         Assert.DoesNotContain(rows, x => x!["personId"]!.GetValue<string>() == "TST-LOOKUP-X");
         Assert.All(rows, x =>
         {
@@ -184,7 +184,7 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
         });
         var rows = Items(answer);
         Assert.Equal(2, rows.Count);
-        Assert.Equal(2, answer.Response.Data!["total"]!.GetValue<long>());
+        Assert.Equal(2, Assert.IsType<JsonObject>(answer.Response.Data)["total"]!.GetValue<long>());
         Assert.DoesNotContain(rows, x => x!["personId"]!.GetValue<string>() == "TST-LOOKUP-X");
         Assert.All(rows, x => Assert.Equal("غير محضر", x!["statusName"]!.GetValue<string>()));
 
