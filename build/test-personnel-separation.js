@@ -70,6 +70,15 @@ async function run(){
  assert.ok(archive.all().some(x=>x.textContent.includes("فرد مفصول")));
  assert.ok(calls.includes("QuerySeparationArchive"));
  assert.ok(calls.includes("CommitSeparation"));
- console.log("SEPARATION UI PASS: reason, timed modal preview, cancel gate, one-use commit, archive");
+ const view=archive.all().find(x=>x.tag==="button"&&x.textContent==="عرض");
+ assert.ok(view,"separated archive entry must expose a details action");
+ await view.handlers.click();
+ assert.ok(calls.includes("GetSeparationDetails"),"details come from the encrypted archive");
+ assert.equal(previews.length,3,"archive details must open in the shared modal");
+ assert.ok(previews[2].details.rows.some(x=>x[0]==="سبب الفصل"&&
+   x[1]==="سبب فصل مسجل"));
+ assert.equal(previews[2].options.confirmLabel,"إغلاق التفاصيل");
+ assert.equal(commits.length,1,"opening or dismissing archived details never separates again");
+ console.log("SEPARATION UI PASS: timed preview, secure commit, read-only archive details popup");
 }
 run().catch(err=>{console.error(err);process.exitCode=1;});
