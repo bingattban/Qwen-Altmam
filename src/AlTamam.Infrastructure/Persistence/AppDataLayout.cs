@@ -2,8 +2,8 @@ namespace AlTamam.Infrastructure.Persistence;
 
 /// <summary>
 /// Resolves the local writable application-data layout on Windows.
-/// Installed mode stores the encrypted database under %LOCALAPPDATA% (per user);
-/// portable mode stores it in a "data" folder beside the executable.
+/// Both direct-run Portable ZIP and Installer store the encrypted database under
+/// the SAME per-Windows-user %LOCALAPPDATA% folder, independent of EXE location.
 /// The database is NEVER placed under Program Files (read-only for non-admins).
 /// Installation resources (templates, bundled assets) are read-only and live
 /// under the installation directory (<see cref="ResourceRoot"/>).
@@ -13,19 +13,17 @@ public static class AppDataLayout
     public const string ProductFolderName = "AlTamam";
     public const string DatabaseFileName = "altamam.db";
 
-    /// <summary>True when running as a portable build (data lives beside the executable).</summary>
-    public static bool IsPortable { get; set; }
+    // Owner decision (2026-10-28): packaging type must never select a second
+    // writable data root. No implicit migration, copy or relocation is performed.
 
     /// <summary>Directory that contains the running executable — read-only resource root.</summary>
     public static string ResourceRoot => AppContext.BaseDirectory;
 
-    /// <summary>The single writable data directory for this installation mode.</summary>
+    /// <summary>The single writable data directory, shared by Portable and Installer.</summary>
     public static string DataRoot
     {
         get
         {
-            if (IsPortable)
-                return Path.Combine(ResourceRoot, "data");
             string localAppData = Environment.GetFolderPath(
                 Environment.SpecialFolder.LocalApplicationData,
                 Environment.SpecialFolderOption.Create);

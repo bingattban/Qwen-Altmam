@@ -11,3 +11,6 @@
 **Non-automated gate:** the owner must configure repository rulesets/branch protection for `main` to enforce the required checks for other collaborators. The active connector cannot enforce branch protection. Actual clean offline Windows install/uninstall, DPAPI portability and recovery checks require manual Windows evidence before production handoff.
 
 **Test records:** use GitHub Actions run IDs, test-results-windows, core-test-results-windows, actual artifact names and checksum files from the exact tested SHA; never cite stale results as completion.
+
+
+**Owner-approved Portable semantics (2026-10-28):** `Portable` means the extracted WPF application can run without installation. Both x86/x64 Portable and Installer distributions share the existing `%LOCALAPPDATA%\\AlTamam` data root for that Windows account; CI must exercise `AppDataLayoutTests` in the full Windows test suite. The build must not migrate, move or delete existing databases. Clean-machine GUI acceptance and preservation of original DPAPI key files remain separate gates.
