@@ -42,7 +42,7 @@ public sealed class ManualCarryForwardIntegrationTests : IAsyncLifetime, IDispos
             cmd.Parameters.AddWithValue("$id","TST-CARRY-P"+i);
             cmd.Parameters.AddWithValue("$assignment","TST-CARRY-A"+i);
             cmd.Parameters.AddWithValue("$name","فرد اختبار "+i);
-            cmd.Parameters.AddWithValue("$number","CARRY-"+i);
+            cmd.Parameters.AddWithValue("$number","92"+i.ToString("D4"));
             cmd.Parameters.AddWithValue("$date",Yesterday);
             await cmd.ExecuteNonQueryAsync();
         }
