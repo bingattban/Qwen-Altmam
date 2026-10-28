@@ -22,11 +22,11 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
             INSERT INTO Persons (PersonId, CurrentVisibleName, NormalizedName, CurrentServiceNumberA,
                                 NormalizedServiceNumberA, FirstRecordedLocalDate, FirstRecordedAtUtc,
                                 OrganizationalStatus, ActiveFlag, RowVersion)
-            VALUES ('TST-P-1','شخص اختباري','شخص اختباري','X001','X001',
+            VALUES ('TST-P-1','شخص اختباري','شخص اختباري','930001','930001',
                     '2026-10-01','2026-10-01T07:00:00Z',1,1,1);
             INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
                 ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
-            VALUES('TST-P-1','شخص اختباري','X001','2026-10-01',NULL,'TST-U',
+            VALUES('TST-P-1','شخص اختباري','930001','2026-10-01',NULL,'TST-U',
                 '2026-10-01T07:00:00Z','هوية اختبار محفوظة');
             INSERT INTO PersonAssignments (AssignmentId, PersonId, SiteId, ValidFromLocalDate,
                                            ValidToLocalDate, SourceMovementId, CreatedAtUtc)
@@ -65,7 +65,7 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
         Assert.True(roster.Success);
         var rows = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(roster.Data)["items"]);
         Assert.Single(rows);
-        Assert.Equal("X001", rows[0]!["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("930001", rows[0]!["serviceNumberA"]!.GetValue<string>());
         var filtered = await svc.DailyRosterAsync(new JsonObject
         {
             ["businessDate"] = "2026-10-19", ["siteId"] = "SITE-UNKNOWN",
@@ -105,7 +105,7 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
 
         var automatic=await svc.DailyRosterAsync(new JsonObject{
             ["businessDate"]="2026-10-19",["siteId"]="SITE-UNSPECIFIED",
-            ["statusId"]="__AUTO_PREPARED__",["term"]="X001",
+            ["statusId"]="__AUTO_PREPARED__",["term"]="930001",
             ["page"]=1,["pageSize"]=100
         },default);
         Assert.True(automatic.Success,automatic.UserMessage);
@@ -353,7 +353,7 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
         }, CancellationToken.None);
         Assert.True(details.Success, details.UserMessage);
         var data = Assert.IsType<JsonObject>(details.Data);
-        Assert.Equal("X001", data["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("930001", data["serviceNumberA"]!.GetValue<string>());
         Assert.Equal("شخص اختباري", data["personName"]!.GetValue<string>());
         var attendance = Assert.IsType<JsonObject>(data["attendance"]);
         Assert.Equal("غياب", attendance["statusName"]!.GetValue<string>());
@@ -397,7 +397,7 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
                 INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
                     ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
                     DestinationExternalName,EffectiveLocalDate,CommittedAtUtc,ActorUserId,IdempotencyKey)
-                VALUES('TST-M-2','TST-P-1','شخص اختباري','X001',2,'SITE-UNSPECIFIED',
+                VALUES('TST-M-2','TST-P-1','شخص اختباري','930001',2,'SITE-UNSPECIFIED',
                     'غير محدد','جهة خارجية','2026-10-20','2026-10-20T08:00:00Z','TST-U','TST-M-IDEM');
                 """;
             await cmd.ExecuteNonQueryAsync();
