@@ -204,15 +204,19 @@
       try{
         const response=await api().invoke("GetSeparationDetails",{movementId:id});
         const data=response.data||{};
-        const box=el("section",undefined,"card");
-        box.append(el("h3","تفاصيل الفصل","section-title"),
-          el("p",data.name+" — ع: "+data.serviceNumberA),
-          el("p","الموقع قبل الفصل: "+data.siteName),
-          el("p","التاريخ: "+fullDate(data.date)),
-          el("p","سبب الفصل: "+data.reason),
-          el("p","منفذ العملية (معرّف): "+data.actorUserId),
-          button("إغلاق التفاصيل",()=>box.remove()));
-        out.appendChild(box);
+        const show=window.AltamamDialog?.detailsReview;
+        if(typeof show!=="function")
+          throw Error("نافذة تفاصيل الأرشيف غير متاحة؛ لم يتغير أي سجل.");
+        await show({rows:[
+          ["الاسم عند الفصل",data.name],
+          ["الرقم (ع) عند الفصل",data.serviceNumberA],
+          ["الموقع قبل الفصل",data.siteName],
+          ["تاريخ الفصل",fullDate(data.date)],
+          ["سبب الفصل",data.reason],
+          ["منفذ العملية (معرّف)",data.actorUserId]
+        ]},{title:"تفاصيل الفصل المحفوظة في الأرشيف",
+          message:"هذه بيانات تاريخية للقراءة فقط؛ لا تعيد الفصل ولا تغيّر السجل.",
+          confirmLabel:"إغلاق التفاصيل"});
       }catch(e){error(out,e);}
     }
     await load();
