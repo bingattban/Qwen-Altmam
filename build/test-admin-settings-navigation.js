@@ -52,7 +52,8 @@ const bridge = {
         automaticBackupNote:"الجدولة غير نشطة", defaultDriveAvailable:false },
       GetApplicationVersion: { productNameAr:"التمام اليومي", version:"0.4.0" },
       GetAutoAttendancePolicy: {configured:false,defaultStatusId:null,dueTimeLocal:"08:00",dailyLockTimeLocal:"20:00"},
-      SetAttendanceSchedule: {dueTimeLocal:"07:15",dailyLockTimeLocal:"19:30"},
+      SetAttendanceSchedule: {dueTimeLocal:"07:15",dailyLockTimeLocal:"19:30",
+        defaultStatusId:"STS-ABSENT"},
       SetAutoAttendanceDefaultStatus: {defaultStatusId:"STS-ABSENT",defaultStatusName:"غياب",configured:true},
       RunDatabaseIntegrityCheck: { integrity:"ok" },
       InspectBackup: {verified:true,fileName:"verified.dbbackup",
@@ -366,11 +367,14 @@ async function run() {
     x.className.includes("settings-action")&&x.textContent.includes("التحضير")).length,1,
     "attendance group must use one unified save control");
   await buttonNamed("حفظ إعدادات التحضير التلقائي").handlers.click();
-  assert.ok(calls.some(x=>x.name==="SetAttendanceSchedule"&&x.body.dueTimeLocal==="07:15"&&
-    x.body.dailyLockTimeLocal==="19:30"&&x.body.operationId.length>=16),
-    "times must persist on explicit unified save");
-  assert.ok(calls.some(x=>x.name==="SetAutoAttendanceDefaultStatus"&&x.body.statusId==="STS-ABSENT"),
-    "unified save also writes the chosen active fallback");
+  const combinedSaves=calls.filter(x=>x.name==="SetAttendanceSchedule");
+  assert.equal(combinedSaves.length,1,"unified save must issue one atomic mutation");
+  assert.equal(combinedSaves[0].body.defaultStatusId,"STS-ABSENT");
+  assert.equal(combinedSaves[0].body.dueTimeLocal,"07:15");
+  assert.equal(combinedSaves[0].body.dailyLockTimeLocal,"19:30");
+  assert.ok(combinedSaves[0].body.operationId.length>=16);
+  assert.equal(calls.filter(x=>x.name==="SetAutoAttendanceDefaultStatus").length,0,
+    "the settings page must never write the fallback in a separate transaction");
 
   assert.ok(buttonNamed("إنشاء نسخة احتياطية الآن").disabled,
     "manual backup disabled on a device without E: drive");
