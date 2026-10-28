@@ -149,9 +149,37 @@ async function archive(host,external){
        type:archiveType,term:search.value.trim(),siteId:site.value,
         dateFrom:dateFrom.value,dateTo:dateTo.value})).data||{};
      if(!card.isConnected)return;
-     const t=table(["الرقم (ع)","الاسم","النوع","الموقع السابق","الجهة الجديدة","التاريخ"]);
-     for(const m of data.items||[])row(t.body,[m.serviceNumberA,m.name,m.type,m.sourceSite,m.destination,m.date]);
-     if(!t.body.children.length){const tr=row(t.body,["لا توجد حركات مطابقة"]);tr.children[0].colSpan=6;}
+     const t=table(["الرقم (ع)","الاسم","النوع","الموقع السابق","الجهة الجديدة","التاريخ","التفاصيل"]);
+     for(const m of data.items||[]){
+       const tr=row(t.body,[m.serviceNumberA,m.name,m.type,m.sourceSite,m.destination,m.date]);
+       const cell=el("td");
+       cell.appendChild(btn("تفاصيل",async()=>{
+         notice.replaceChildren();
+         try{
+           const response=await api().invoke("GetMovementDetails",{movementId:m.movementId});
+           const detail=response.data||{};
+           if(detail.movementId!==m.movementId)
+             throw Error("لم تتطابق بيانات الحركة مع الأرشيف.");
+           const show=window.AltamamDialog?.detailsReview;
+           if(typeof show!=="function")
+             throw Error("نافذة عرض تفاصيل النقل غير متاحة.");
+           await show({rows:[
+             ["الاسم وقت النقل",detail.name],
+             ["الرقم (ع) وقت النقل",detail.serviceNumberA],
+             ["نوع النقل",detail.type],
+             ["الموقع السابق",detail.sourceSite],
+             ["الجهة الجديدة",detail.destination],
+             ["تاريخ النقل",detail.date],
+             ["وقت تسجيل العملية",detail.committedAtUtc],
+             ["منفذ العملية",detail.actorUsername]
+           ]},{title:"تفاصيل النقل المحفوظة في الأرشيف",
+             message:"بيانات تاريخية للقراءة فقط؛ لا تُعدّل حركة النقل أو كشوف القوة.",
+             confirmLabel:"إغلاق التفاصيل"});
+         }catch(e){err(notice,e);}
+       }));
+       tr.appendChild(cell);
+     }
+     if(!t.body.children.length){const tr=row(t.body,["لا توجد حركات مطابقة"]);tr.children[0].colSpan=7;}
      const pager=el("div",undefined,"functional-pager"),prev=btn("السابق",()=>{page--;load();}),next=btn("التالي",()=>{page++;load();});
      prev.disabled=page<=1;next.disabled=!data.hasNext;
      pager.append(el("span","إجمالي الحركات: "+(data.total||0)),prev,next);
