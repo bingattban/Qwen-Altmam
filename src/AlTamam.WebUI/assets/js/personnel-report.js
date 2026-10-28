@@ -78,11 +78,39 @@
          await window.AltamamDialog.confirm(description+" — هل تؤكد التصدير؟"):
          await Promise.resolve(window.confirm?.(description)||false);
        if(!confirm)return exportFeedback.replaceChildren();
-       exportFeedback.replaceChildren(el("p","جارٍ إنشاء ملف Excel والتأكد من اكتمال الصفوف..."));
-       const reply=await api().invoke("ExportPersonLifetimeExcel",
-         {...payload,exportId:preview.exportId});
-       if(!popup.hidden)exportFeedback.replaceChildren(el("p",
-         "تم حفظ Excel: "+reply.data.filePath,"settings-success"));
+       const progressText=el("p","جارٍ إنشاء ملف Excel والتأكد من اكتمال الصفوف...");
+       let monitoring=true,pollBusy=false;
+       const cancelExport=btn("إيقاف التصدير الجاري",async()=>{
+         cancelExport.disabled=true;
+         try{
+           await api().invoke("CancelExport",{});
+           progressText.textContent="طُلب إلغاء التصدير؛ جارٍ إيقاف الكتابة...";
+         }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
+       });
+       exportFeedback.replaceChildren(progressText,cancelExport);
+       const poll=(typeof setInterval === "function")?setInterval(async()=>{
+         if(!monitoring||pollBusy||popup.hidden)return;
+         pollBusy=true;
+         try{
+           const info=(await api().invoke("GetExportProgress",{},
+             {timeoutMs:10000})).data||{};
+           if(!monitoring||popup.hidden)return;
+           const ratio=Number.isInteger(info.percentage)?" — "+info.percentage+"%":"";
+           const rows=info.total?" ("+info.processed+" من "+info.total+" صف)":"";
+           progressText.textContent=info.cancelRequested?
+             "جارٍ إيقاف التصدير والتحقق من حذف الملف المؤقت...":
+             "جارٍ كتابة Excel"+ratio+rows;
+         }catch(e){
+           if(e?.errorCode!=="MissingData"&&monitoring)
+             progressText.textContent="جارٍ معالجة ملف Excel...";
+         }finally{pollBusy=false;}
+       },1250):null;
+       try{
+         const reply=await api().invoke("ExportPersonLifetimeExcel",
+           {...payload,exportId:preview.exportId},{timeoutMs:600000});
+         if(!popup.hidden)exportFeedback.replaceChildren(el("p",
+           "تم حفظ Excel: "+reply.data.filePath,"settings-success"));
+       }finally{monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);}
      }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
    }
    const exportButton=btn("تصدير التقرير إلى Excel",()=>{void exportExcel();});

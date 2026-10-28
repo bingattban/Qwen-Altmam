@@ -618,16 +618,51 @@
             ". يتم حفظ نفس كشف الموقع والبحث الظاهر في الصفحة في مجلد الإعدادات، دون تعديل التحضير.");
           const confirmSave=button("حفظ ملف Excel",async()=>{
             confirmSave.disabled=true;
-            exportPanel.replaceChildren(description,message("جارٍ إنشاء ملف Excel..."));
+            const progressText=message("جارٍ إنشاء ملف Excel...");
+            let monitoring=true, pollBusy=false;
+            const stopExport=button("إيقاف التصدير الجاري",async()=>{
+              stopExport.disabled=true;
+              try{
+                await bridge().invoke("CancelExport",{});
+                progressText.textContent="طُلب إلغاء التصدير؛ جارٍ التأكد من توقف الكتابة...";
+              }catch(error){showError(exportPanel,error);}
+            });
+            exportPanel.replaceChildren(description,progressText,stopExport);
+            const poll=(typeof setInterval === "function")?setInterval(async()=>{
+              if(!monitoring||pollBusy||STATE.monthEpoch!==epoch)return;
+              pollBusy=true;
+              try{
+                const info=parseData(await bridge().invoke("GetExportProgress",{},
+                  {timeoutMs:10000}));
+                if(!monitoring||STATE.monthEpoch!==epoch||!info)return;
+                const ratio=Number.isInteger(info.percentage)?
+                  " — "+info.percentage+"%":"";
+                const written=info.total?
+                  " ("+info.processed+" من "+info.total+" صف)":"";
+                progressText.textContent=info.cancelRequested?
+                  "جارٍ إيقاف التصدير والتحقق من حذف الملف المؤقت...":
+                  "جارٍ كتابة Excel"+ratio+written;
+              }catch(error){
+                if(error?.errorCode!=="MissingData"&&monitoring)
+                  progressText.textContent="جارٍ تنفيذ التصدير والتحقق من حالته...";
+              }finally{pollBusy=false;}
+            },1250):null;
             try{
-              const result=parseData(await bridge().invoke("ExportMonthlyWorkbookSet",chosen));
+              const result=parseData(await bridge().invoke("ExportMonthlyWorkbookSet",chosen,
+                {timeoutMs:600000}));
               if(STATE.monthEpoch!==epoch)return;
               if(!result||result.format!=="xlsx"||!result.filePath)
                 throw new Error("لم يؤكد الخادم إنشاء ملف Excel.");
               exportPanel.replaceChildren(message("تم حفظ الكشف بنجاح: "+result.filePath));
             }catch(error){
-              if(STATE.monthEpoch===epoch)showError(exportPanel,error);
-            }finally{confirmSave.disabled=false;}
+              if(STATE.monthEpoch===epoch){
+                if(error?.errorCode==="StorageBusy")
+                  exportPanel.replaceChildren(message("أُلغيت عملية التصدير قبل حفظ ملف Excel."));
+                else showError(exportPanel,error);
+              }
+            }finally{
+              monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);confirmSave.disabled=false;
+            }
           },"btn btn-primary");
           const cancel=button("إلغاء التصدير",()=>{
             exportPanel.replaceChildren();exportPanel.hidden=true;
