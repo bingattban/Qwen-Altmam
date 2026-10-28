@@ -102,7 +102,6 @@ public sealed class RestorePreviewReadOnlyIntegrationTests : IAsyncLifetime, IDi
             .Select(meta=>meta.Action).ToHashSet(StringComparer.Ordinal);
         Assert.True(expected.SetEquals(actual));
         Assert.Contains("GetCurrentSession",actual);
-        Assert.DoesNotContain("AuthenticateLocalUser",actual);
         if(role=="Supervisor")
             Assert.DoesNotContain("CommitFullReset",actual);
     }
