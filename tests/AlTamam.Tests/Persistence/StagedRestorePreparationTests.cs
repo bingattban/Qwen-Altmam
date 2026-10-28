@@ -31,7 +31,7 @@ public sealed class StagedRestorePreparationTests : IDisposable
                     FirstRecordedLocalDate,FirstRecordedAtUtc,
                     OrganizationalStatus,ActiveFlag,RowVersion)
                 VALUES('TST-RESTORE-STAGING-P1','فرد حاضر','فرد حاضر',
-                    '991','991','2026-10-26','2026-10-26T00:00:00Z',1,1,1);
+                    '0991','0991','2026-10-26','2026-10-26T00:00:00Z',1,1,1);
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
