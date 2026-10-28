@@ -35,7 +35,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
             cmd.Parameters.AddWithValue("$id","TST-ATTEND-P"+i);
             cmd.Parameters.AddWithValue("$assign","TST-ATTEND-A"+i);
             cmd.Parameters.AddWithValue("$name","فرد اختبار رقم "+i);
-            cmd.Parameters.AddWithValue("$number","TST-NUM-"+i);
+            cmd.Parameters.AddWithValue("$number","92"+i.ToString("D4"));
             cmd.Parameters.AddWithValue("$date",Today());
             cmd.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O"));
             await cmd.ExecuteNonQueryAsync();
