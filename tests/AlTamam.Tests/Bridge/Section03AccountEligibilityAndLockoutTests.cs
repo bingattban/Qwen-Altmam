@@ -58,7 +58,7 @@ public sealed class Section03AccountEligibilityAndLockoutTests : IAsyncLifetime,
                 INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
                     NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
                     OrganizationalStatus,ActiveFlag,RowVersion)
-                VALUES('TEST-ELIGIBLE-PERSON','مختبر صلاحية','مختبر صلاحية','TEST-713','TEST-713',
+                VALUES('TEST-ELIGIBLE-PERSON','مختبر صلاحية','مختبر صلاحية','96713','96713',
                        '2026-10-24','2026-10-24T00:00:00Z',1,1,1);
                 INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
                     ValidToLocalDate,SourceMovementId,CreatedAtUtc)
