@@ -1490,21 +1490,28 @@
           scheduledLabel.append(node("span","","وقت التحضير التلقائي"),scheduledTime);
           const lockLabel=node("label","admin-input");
           lockLabel.append(node("span","","وقت قفل التحضير اليومي"),lockTime);
+          // Retry a lost reply with the same operationId; new values are a new intent.
+          let attendanceIntent=null;
           const saveTimes=btn("حفظ إعدادات التحضير التلقائي",async()=>{
             if(!picker.value)return errors(feedback,new Error("اختر حالة افتراضية نشطة أولاً."));
             if(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(scheduledTime.value)||
                !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(lockTime.value))
               return errors(feedback,new Error("حدد وقتين صحيحين بصيغة HH:mm."));
             if(!await dialogs.confirm("اعتماد الحالة الافتراضية وأوقات التحضير والقفل معاً؟"))return;
+            const requested={
+              defaultStatusId:picker.value,
+              dueTimeLocal:scheduledTime.value,
+              dailyLockTimeLocal:lockTime.value
+            };
+            const signature=JSON.stringify(requested);
+            if(attendanceIntent?.signature!==signature)
+              attendanceIntent={signature,operationId:makeOperationId()};
             saveTimes.disabled=true;
             try{
-              await api().invoke("SetAutoAttendanceDefaultStatus",{
-                statusId:picker.value,operationId:makeOperationId()
-              });
               const result=await api().invoke("SetAttendanceSchedule",{
-                dueTimeLocal:scheduledTime.value,
-                dailyLockTimeLocal:lockTime.value,operationId:makeOperationId()
+                ...requested,operationId:attendanceIntent.operationId
               });
+              attendanceIntent=null;
               if(token!==currentRequest)return;
               feedback.replaceChildren(node("p","settings-success",
                 "تم حفظ الحالة الافتراضية وأوقات التحضير والقفل: "+
