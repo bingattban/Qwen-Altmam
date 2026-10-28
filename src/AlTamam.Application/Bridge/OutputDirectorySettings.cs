@@ -20,14 +20,9 @@ public sealed class OutputDirectorySettings
         q.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='PreferredBackupDirectory';";
         string? configured=(await q.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
         if(!string.IsNullOrWhiteSpace(configured))return configured;
-        // E: is preferred only when mounted. Never substitute an undisclosed
-        // alternate drive when E: is absent; the UI must request a valid folder.
-        if(Directory.Exists(@"E:\"))
-        {
-            try { Directory.CreateDirectory(DefaultDirectory); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            { /* The settings view will report the unavailable destination. */ }
-        }
+        // The default is a visible preference, not permission to create folders.
+        // An unavailable or unwritable path is reported by Overview; the native
+        // Windows folder picker lets the operator explicitly select a valid one.
         return DefaultDirectory;
     }
 
@@ -58,6 +53,13 @@ public sealed class OutputDirectorySettings
             if(folder.StartsWith(@"\\",StringComparison.Ordinal) ||
                folder.StartsWith("//",StringComparison.Ordinal) ||
                !Directory.Exists(folder))return false;
+            // A mapped drive letter can still point to LAN storage. Restrict
+            // user-selected backup/export paths to local, available media.
+            string root=Path.GetPathRoot(folder) ?? "";
+            if(string.IsNullOrWhiteSpace(root))return false;
+            DriveType driveType=new DriveInfo(root).DriveType;
+            if(driveType is DriveType.Network or DriveType.NoRootDirectory
+                or DriveType.CDRom or DriveType.Unknown)return false;
             var dbFolder=Path.TrimEndingDirectorySeparator(
                 Path.GetDirectoryName(Path.GetFullPath(databasePath)) ?? "");
             // Keep exports out of the live SQLCipher database directory and its descendants.
@@ -70,6 +72,7 @@ public sealed class OutputDirectorySettings
         catch(NotSupportedException){return false;}
         catch(IOException){return false;}
         catch(UnauthorizedAccessException){return false;}
+        catch(System.Security.SecurityException){return false;}
     }
 
     public async Task<BridgeResponse> SaveAsync(string? requested,BridgePrincipal actor,CancellationToken ct)
