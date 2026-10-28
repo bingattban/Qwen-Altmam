@@ -55,10 +55,15 @@ const bridge = {
       SetAttendanceSchedule: {dueTimeLocal:"07:15",dailyLockTimeLocal:"19:30"},
       SetAutoAttendanceDefaultStatus: {defaultStatusId:"STS-ABSENT",defaultStatusName:"غياب",configured:true},
       RunDatabaseIntegrityCheck: { integrity:"ok" },
-      InspectBackup: {verified:true,fileName:"verified.dbbackup",fileSizeBytes:4096,
+      InspectBackup: {verified:true,fileName:"verified.dbbackup",
+        path:"C:\\Temp\\verified.dbbackup",fileSizeBytes:4096,
         schemaVersion:9,schemaCompatible:true,people:5,attendance:8,
         auditEvents:9,users:1,sha256:"a".repeat(64),
         message:"النسخة المشفرة سليمة؛ الاستعادة ليست مفعلة بعد."},
+      PreviewRestore: {verified:true,previewOnly:true,restoreEnabled:false,
+        fileName:"verified.dbbackup",sha256:"a".repeat(64),
+        incoming:{people:5,attendance:8,auditEvents:9,users:1},
+        current:{people:7,attendance:12,auditEvents:13,users:2}},
       GetAllowedRoles: [{ role:"Supervisor",name:"مشرف" }],
       ListUserAccounts: { items:[],total:0,hasNext:false },
       QueryAuditLog: { items:[],total:0,hasNext:false },
@@ -379,12 +384,27 @@ async function run() {
   assert.ok(calls.some(x=>x.name==="RunDatabaseIntegrityCheck"));
   assert.ok(buttonNamed("اختيار نسخة مشفرة وفحص سلامتها"),
     "native backup inspection must be exposed as a real settings action");
+  assert.ok(buttonNamed("معاينة الاستعادة دون تنفيذ").disabled,
+    "restore preview cannot run before a verified candidate is selected");
   await buttonNamed("اختيار نسخة مشفرة وفحص سلامتها").handlers.click();
   assert.ok(calls.some(x=>x.name==="InspectBackup"),
     "backup verification must invoke the C# + native file picker");
   assert.ok(visible().some(x=>x.textContent==="verified.dbbackup"),
     "verified metadata is displayed only after real native inspection");
+  assert.equal(buttonNamed("معاينة الاستعادة دون تنفيذ").disabled,false);
+  const reviewCount=modalReviews.length;
+  await buttonNamed("معاينة الاستعادة دون تنفيذ").handlers.click();
+  assert.ok(calls.some(x=>x.name==="PreviewRestore"&&
+    x.body.path==="C:\\Temp\\verified.dbbackup"),
+    "verified candidate path is sent to C# for a second read-only validation");
+  assert.equal(modalReviews.length,reviewCount+1,"preview must open the shared modal");
+  assert.ok(modalReviews.at(-1).details.rows.some(x=>x[0].includes("الأفراد:")),
+    "restore comparison shows incoming and current personnel counts");
+  assert.equal(calls.filter(x=>x.name==="RestoreDatabaseAtomically").length,0,
+    "preview must never perform a destructive restore");
   await controller.renderSettings({role:"Supervisor",username:"test-supervisor"},()=>{});
+  assert.equal(buttonNamed("معاينة الاستعادة دون تنفيذ"),undefined,
+    "a supervisor can inspect a backup but cannot open a restore preview");
   assert.ok(!buttonNamed("حفظ إعدادات التحضير التلقائي"),
     "supervisors cannot see or invoke schedule and default-status policy changes");
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
