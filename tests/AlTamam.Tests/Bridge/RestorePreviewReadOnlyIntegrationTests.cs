@@ -71,6 +71,59 @@ public sealed class RestorePreviewReadOnlyIntegrationTests : IAsyncLifetime, IDi
             }));
     }
 
+    [Theory]
+    [InlineData(GaNonce, "GeneralAdministration")]
+    [InlineData(OaNonce, "OrdinaryAdministration")]
+    [InlineData(SvNonce, "Supervisor")]
+    public async Task NavigationPermissions_AreDerivedFromCanonicalRoleMatrix(
+        string nonce,string role)
+    {
+        var request=new JsonObject
+        {
+            ["requestId"]="TST-NAV-"+Guid.NewGuid().ToString("N"),
+            ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+            ["action"]="GetNavigationPermissions",
+            ["sessionNonce"]=nonce,
+            ["payload"]=new JsonObject { ["role"]="GeneralAdministration" }
+        };
+        var result=await _dispatcher.DispatchAsync(
+            request.ToJsonString(),LocalWebUiOrigin.BaseUrl,true,
+            n=>Task.FromResult<BridgePrincipal?>(n switch
+            {
+                GaNonce=>Ga,OaNonce=>Oa,SvNonce=>Sv,_=>null
+            }));
+        Assert.Equal(BridgeOutcomeKind.Success,result.Kind);
+        var data=Assert.IsType<JsonObject>(result.Response.Data);
+        Assert.Equal(role,data["role"]!.GetValue<string>());
+        var actual=Assert.IsType<JsonArray>(data["allowedActions"])
+            .Select(n=>n!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        var expected=ActionManifest.All
+            .Where(meta=>meta.AllowedRoles.Contains(role,StringComparer.Ordinal))
+            .Select(meta=>meta.Action).ToHashSet(StringComparer.Ordinal);
+        Assert.True(expected.SetEquals(actual));
+        Assert.Contains("GetCurrentSession",actual);
+        if(role=="Supervisor")
+            Assert.DoesNotContain("CommitFullReset",actual);
+    }
+
+    [Fact]
+    public async Task NavigationPermissions_RejectsUnauthenticatedCaller()
+    {
+        var request=new JsonObject
+        {
+            ["requestId"]="TST-NAV-UNAUTH",
+            ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+            ["action"]="GetNavigationPermissions",
+            ["sessionNonce"]="44444444444444444444444444444444",
+            ["payload"]=new JsonObject()
+        };
+        var result=await _dispatcher.DispatchAsync(
+            request.ToJsonString(),LocalWebUiOrigin.BaseUrl,true,
+            _=>Task.FromResult<BridgePrincipal?>(null));
+        Assert.Equal(BridgeOutcomeKind.Unauthorized,result.Kind);
+        Assert.False(result.Response.Success);
+    }
+
     private long CurrentCount()
     {
         using var c=_db.CreateOpenConnection();
