@@ -211,7 +211,11 @@
        });
        if(!accepted||!host.isConnected||previewVersion!==expectedPreviewVersion)return;
        const action=changing?"ReviseTodayAttendance":"SubmitAttendance";
-       const saved=await bridge.invoke(action,{previewToken:data.previewToken});
+       // Stable intent for bridge retries: never use a fresh id inside an
+       // automatic retry of the same confirmed preview.
+       const operationId=window.crypto?.randomUUID?.()||
+         ("attendance-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
+       const saved=await bridge.invoke(action,{previewToken:data.previewToken,operationId});
        if(!saved.data||!Number.isInteger(saved.data.count))
          throw Error("لم يؤكد الخادم نجاح عملية التحضير.");
        reset();pageNo=1;await load();
