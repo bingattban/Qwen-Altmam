@@ -124,6 +124,13 @@ public sealed class SqliteIndexPerformanceFixture : IAsyncLifetime, IDisposable
 
 }
 
+// Timed SQLCipher comparisons must not compete with unrelated, concurrently
+// running xUnit classes on a shared Windows runner. Keep all parity, latency,
+// throughput and concurrent-reader/writer assertions enabled and unchanged.
+[CollectionDefinition("SqlCipherPerformanceExclusive", DisableParallelization = true)]
+public sealed class SqlCipherPerformanceExclusiveCollection { }
+
+[Collection("SqlCipherPerformanceExclusive")]
 public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerformanceFixture>
 {
     private const int PersonCount = SqliteIndexPerformanceFixture.PersonCount;
