@@ -16,7 +16,8 @@ public sealed record AutoAttendanceRunResult(
     int SkippedTransferExemptCount,
     int SkippedManualCount,
     int UnrecoverableMissedCount,
-    string SummaryArabic);
+    string SummaryArabic,
+    bool IsCatchUpRun = false);
 
 /// <summary>
 /// Durable, database-authoritative implementation of the canonical 08:00 carry-forward rule
@@ -326,7 +327,7 @@ public sealed class AutoAttendanceService
             }
 
             return new AutoAttendanceRunResult(jobKey, businessDate, false, false,
-                copied, skipNoYesterday, skipTransfer, skipManual, 0, summary);
+                copied, skipNoYesterday, skipTransfer, skipManual, 0, summary, isCatchUp);
         }, ct).ConfigureAwait(false);
     }
 
@@ -352,7 +353,8 @@ public sealed class AutoAttendanceService
             {
                 DateOnly d = DateOnly.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
                 runs.Add(new AutoAttendanceRunResult(reader.GetString(0), d, true, false,
-                    reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0, reader.GetString(6)));
+                    reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0,
+                    reader.GetString(6), reader.GetInt32(2) == 1));
             }
         }
 
@@ -432,7 +434,8 @@ public sealed class AutoAttendanceService
         if (!await reader.ReadAsync(ct).ConfigureAwait(false)) return null;
         var date = DateOnly.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
         return new AutoAttendanceRunResult(reader.GetString(0), date, true, false,
-            reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0, reader.GetString(6));
+            reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0,
+            reader.GetString(6), reader.GetInt32(2) == 1);
     }
 
     private async Task<DateOnly?> GetLastCompletedBusinessDateAsync(CancellationToken ct)
