@@ -29,10 +29,10 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
                 CurrentServiceNumberA, NormalizedServiceNumberA, FirstRecordedLocalDate,
                 FirstRecordedAtUtc, OrganizationalStatus, ActiveFlag, RowVersion)
             VALUES ('TST-EX-0','=HYPERLINK("https://example.invalid")',
-                'اسم اختبار','EX000','EX000','2026-10-01','2026-10-01T07:00:00Z',1,1,1);
+                'اسم اختبار','91000','91000','2026-10-01','2026-10-01T07:00:00Z',1,1,1);
             INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
                 ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
-            VALUES('TST-EX-0','=HYPERLINK("https://example.invalid")','EX000',
+            VALUES('TST-EX-0','=HYPERLINK("https://example.invalid")','91000',
                 '2026-10-01',NULL,'TST-U','2026-10-01T07:00:00Z','سجل تجريبي');
             INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
                 ValidToLocalDate,SourceMovementId,CreatedAtUtc)
@@ -69,7 +69,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
                 """;
             c.Parameters.AddWithValue("$id", $"TST-EX-{i}");
             c.Parameters.AddWithValue("$name", $"فرد {i}");
-            c.Parameters.AddWithValue("$number", $"EX{i:000}");
+            c.Parameters.AddWithValue("$number", $"91{i:000}");
             c.Parameters.AddWithValue("$assignment", $"TST-EX-A{i}");
             await c.ExecuteNonQueryAsync();
         }
@@ -154,10 +154,10 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
                     CurrentServiceNumberA,NormalizedServiceNumberA,
                     FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
                 VALUES('TST-EX-ARCHIVED','فرد مفصول مستقل','فرد مفصول مستقل',
-                    'EX001','EX001','2026-09-01','2026-09-01T07:00:00Z',3,0,2);
+                    '91001','91001','2026-09-01','2026-09-01T07:00:00Z',3,0,2);
                 INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
                     ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
-                VALUES('TST-EX-ARCHIVED','فرد مفصول مستقل','EX001',
+                VALUES('TST-EX-ARCHIVED','فرد مفصول مستقل','91001',
                     '2026-09-01',NULL,'TST-U','2026-09-01T07:00:00Z','فصل مع أرشفة');
                 INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
                     ValidToLocalDate,SourceMovementId,CreatedAtUtc)
@@ -187,7 +187,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         Assert.Equal(2L,grid["total"]!.GetValue<long>());
         var people=Assert.IsType<JsonArray>(grid["items"]).OfType<JsonObject>().ToArray();
         Assert.Equal(2,people.Length);
-        Assert.All(people,p=>Assert.Equal("EX001",p["serviceNumberA"]!.GetValue<string>()));
+        Assert.All(people,p=>Assert.Equal("91001",p["serviceNumberA"]!.GetValue<string>()));
         Assert.Single(people,p=>p["personId"]!.GetValue<string>()=="TST-EX-ARCHIVED");
         Assert.Single(people,p=>p["personId"]!.GetValue<string>()=="TST-EX-1");
 
@@ -269,7 +269,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
             Assert.Equal(105, rows.Length); // 102 persons and three informational/header rows
             var values = xml.Descendants(main + "t").Select(t => t.Value).ToArray();
             Assert.Contains("غياب", values);
-            Assert.Contains("EX000", values);
+            Assert.Contains("91000", values);
             Assert.Contains("EX101", values);
             Assert.Contains(@"=HYPERLINK(""https://example.invalid"")", values);
             Assert.Empty(xml.Descendants(main + "f")); // formula injection prohibited
