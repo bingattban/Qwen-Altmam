@@ -444,6 +444,12 @@ public static class BridgeHandlerCatalog
             BridgeResponse result=await service.ArchiveAsync(req.Payload,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
+        "GetMovementDetails" => async(req,principal,ct) =>
+        {
+            var service=new PersonnelMovementService(services.Db,services.Time);
+            BridgeResponse result=await service.DetailsAsync(req.Payload,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         // Separation is a soft historical transition, not deletion.
         "PreviewSeparation" => async(req,principal,ct) =>
         {
