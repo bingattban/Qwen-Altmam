@@ -86,6 +86,36 @@ def main() -> int:
     except FileNotFoundError:
         errors.append(f"compiled table {CODE_PATH} not found — cannot verify drift")
 
+    # Every literal UI bridge invocation must be backed by an actual C# handler.
+    # The dispatcher registers all manifest actions, but its fallback deliberately
+    # returns "not implemented"; mere manifest membership is not enough.
+    # Switch arms can have aliases: "GetActiveAttendanceStatuses" or
+    # "QueryAttendanceStatuses" => ... . Inspect complete arm labels.
+    try:
+        from pathlib import Path
+        ui_dir = Path("src/AlTamam.WebUI/assets/js")
+        catalog = Path("src/AlTamam.Application/Bridge/BridgeHandlerCatalog.cs").read_text(encoding="utf-8")
+        arms = re.findall(
+            r'((?:"[A-Za-z][A-Za-z0-9]*"\s*(?:or\s*)?)+)\s*=>',
+            catalog)
+        wired = set()
+        for arm in arms:
+            wired.update(re.findall(r'"([A-Za-z][A-Za-z0-9]*)"', arm))
+        ui_calls = {}
+        for source in ui_dir.glob("*.js"):
+            js = source.read_text(encoding="utf-8")
+            for action in re.findall(
+                r'\b(?:invoke|invokeWithRetry|request)\(\s*["\x27]([A-Z][A-Za-z0-9]*)["\x27]',
+                js):
+                ui_calls.setdefault(action, set()).add(str(source))
+        for action, sources in sorted(ui_calls.items()):
+            if action not in names:
+                errors.append(f"UI calls action absent from manifest: {action} in {sorted(sources)}")
+            elif action not in wired:
+                errors.append(f"UI calls unwired backend action: {action} in {sorted(sources)}")
+    except (OSError, UnicodeError) as e:
+        errors.append(f"UI bridge coverage cannot be verified: {e}")
+
     csp = m.get("contentSecurityPolicy", "")
     if "unsafe-inline" in csp or "unsafe-eval" in csp:
         errors.append("CSP contains unsafe-inline/unsafe-eval")
