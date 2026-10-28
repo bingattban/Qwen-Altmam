@@ -253,10 +253,19 @@ public static class BridgeHandlerCatalog
                     "عملية تصدير جارية لهذه الجلسة؛ أكملها أو ألغها أولاً."));
             using(job!)
             {
-                var result = await new MonthlyExcelExportService(services.Db)
-                    .ExportAsync(req.Payload,job!.Token,job.Report).ConfigureAwait(false);
-                job.Finish(result.Success,(result.Data as JsonObject)?["filePath"]?.GetValue<string>());
-                return result with { RequestId = req.RequestId };
+                try
+                {
+                    var result = await new MonthlyExcelExportService(services.Db)
+                        .ExportAsync(req.Payload,job!.Token,job.Report).ConfigureAwait(false);
+                    job.Finish(result.Success,(result.Data as JsonObject)?["filePath"]?.GetValue<string>());
+                    return result with { RequestId = req.RequestId };
+                }
+                catch(OperationCanceledException) when (job!.Token.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    job.Finish(false);
+                    return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.StorageBusy,
+                        "أُلغيت عملية تصدير Excel قبل اكتمال حفظ الملف."));
+                }
             }
         },
         "GetExportProgress" => (req, principal, ct) =>
@@ -392,10 +401,19 @@ public static class BridgeHandlerCatalog
                     "عملية تصدير جارية لهذه الجلسة؛ أكملها أو ألغها أولاً."));
             using(job!)
             {
-                BridgeResponse result=await new PersonnelExcelExportService(services.Db)
-                    .ExportAsync(req.Payload,principal!,job!.Token,job.Report).ConfigureAwait(false);
-                job.Finish(result.Success,(result.Data as JsonObject)?["filePath"]?.GetValue<string>());
-                return result with {RequestId=req.RequestId};
+                try
+                {
+                    BridgeResponse result=await new PersonnelExcelExportService(services.Db)
+                        .ExportAsync(req.Payload,principal!,job!.Token,job.Report).ConfigureAwait(false);
+                    job.Finish(result.Success,(result.Data as JsonObject)?["filePath"]?.GetValue<string>());
+                    return result with {RequestId=req.RequestId};
+                }
+                catch(OperationCanceledException) when (job!.Token.IsCancellationRequested && !ct.IsCancellationRequested)
+                {
+                    job.Finish(false);
+                    return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.StorageBusy,
+                        "أُلغيت عملية تصدير Excel قبل اكتمال حفظ الملف."));
+                }
             }
         },
         "QueryPersons" => async (req, principal, ct) =>
