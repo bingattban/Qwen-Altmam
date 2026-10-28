@@ -16,6 +16,7 @@ public sealed class DesktopBridgeGateway
     private static readonly JsonSerializerOptions ResponseJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WebView2BridgeDispatcher _dispatcher;
     private readonly BridgeSharedServices _services;
+    private readonly NativeOfflineOperationDrain _operations = new();
     private CoreWebView2? _core;
 
     // Genuine browser mouse/key/touch input is visible to Windows via
@@ -86,20 +87,46 @@ public sealed class DesktopBridgeGateway
         _services = services;
     }
 
-    public Task RecordNativeInputAsync(CancellationToken ct=default)
-        => _services.RefreshActiveSessionFromNativeInputAsync(ct);
+    public async Task RecordNativeInputAsync(CancellationToken ct=default)
+    {
+        using var admitted = _operations.TryEnter();
+        if (admitted is null) return;
+        await _services.RefreshActiveSessionFromNativeInputAsync(ct).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Native offline-cutover prerequisite: atomically reject further WebView2
+    /// messages and idle activity, drain every previously accepted asynchronous
+    /// bridge action, THEN detach the event pipe. No service or DB is disposed
+    /// here: all schedulers, DB contexts/pools and host mutex require separate
+    /// native shutdown gates before any restore.
+    /// </summary>
+    public async Task StopReceivingAndDrainAsync()
+    {
+        await _operations.StopAndDrainAsync().ConfigureAwait(true);
+        if (_core is { } core)
+        {
+            core.WebMessageReceived -= OnWebMessageReceived;
+            _core = null;
+        }
+    }
 
     /// <summary>Attaches the gateway to one CoreWebView2 instance (postMessage pipe only).</summary>
     public void Attach(CoreWebView2 core)
     {
         ArgumentNullException.ThrowIfNull(core);
+        if (_operations.IsStopped)
+            throw new InvalidOperationException("The bridge has been permanently quiesced.");
+        if (_core is not null)
+            throw new InvalidOperationException("The bridge is already attached.");
         _core = core;
         core.WebMessageReceived += OnWebMessageReceived;
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (_core is null) return;
+        using var admitted = _operations.TryEnter();
+        if (admitted is null || _core is not { } core) return;
         try
         {
             string raw = e.TryGetWebMessageAsString();
@@ -107,7 +134,7 @@ public sealed class DesktopBridgeGateway
             // never the outer WebView's trusted Source as a substitute for a
             // message sent by an injected/foreign child frame.
             string originUri = e.Source;
-            bool isMainFrame = string.Equals(originUri, _core.Source,
+            bool isMainFrame = string.Equals(originUri, core.Source,
                 StringComparison.OrdinalIgnoreCase);
             var result = await _dispatcher.DispatchAsync(
                 raw,
@@ -126,12 +153,12 @@ public sealed class DesktopBridgeGateway
                 await _services.RefreshSessionIdleDeadlineAsync(activityNonce).ConfigureAwait(true);
 
             string json = JsonSerializer.Serialize(result.Response, ResponseJsonOptions);
-            _core.PostWebMessageAsString(json);
+            core.PostWebMessageAsString(json);
         }
         catch (Exception)
         {
             // Never leak exception details into the UI; answer with a canonical failure envelope.
-            _core.PostWebMessageAsString(JsonSerializer.Serialize(
+            core.PostWebMessageAsString(JsonSerializer.Serialize(
                 new BridgeResponse("", false, null, BridgeErrorCodes.ValidationError, "تعذر معالجة الرسالة."),
                 ResponseJsonOptions));
         }
@@ -140,8 +167,8 @@ public sealed class DesktopBridgeGateway
     /// <summary>Pushes an unsolicited bridge event (e.g. UiInvalidation broadcast) to the page.</summary>
     public void BroadcastEvent(object payload)
     {
-        if (_core is null) return;
+        if (_operations.IsStopped || _core is not { } core) return;
         string json = JsonSerializer.Serialize(payload, ResponseJsonOptions);
-        _core.PostWebMessageAsString(json);
+        core.PostWebMessageAsString(json);
     }
 }
