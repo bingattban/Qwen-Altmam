@@ -1,5 +1,7 @@
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
+using AlTamam.Contracts.Bridge;
+using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Tests.Fixtures;
 using Xunit;
@@ -279,6 +281,89 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
             new JsonObject{["personId"]="TST-REPORT-NOT-FOUND"},CancellationToken.None);
         Assert.False(result.Success);
     }
+
+    private const string ReportNonce = "77777777777777777777777777777777";
+    private static readonly BridgePrincipal ReportPrincipal = new(
+        "TST-REPORT-ROLE", "test-report-user", UserRole.Supervisor, ReportNonce);
+
+    private Task<BridgeDispatchResult> DispatchReportAlias(
+        string action, JsonObject payload, string nonce = ReportNonce)
+    {
+        var request = new JsonObject
+        {
+            ["requestId"] = "TST-REPORT-ALIAS-" + Guid.NewGuid().ToString("N"),
+            ["protocolVersion"] = BridgeProtocol.ProtocolVersion,
+            ["action"] = action,
+            ["sessionNonce"] = nonce,
+            ["payload"] = payload
+        };
+        var dispatcher = BridgeHandlerCatalog.Create(new BridgeSharedServices(_db));
+        return dispatcher.DispatchAsync(request.ToJsonString(), LocalWebUiOrigin.BaseUrl,
+            true, n => Task.FromResult<BridgePrincipal?>(n == ReportNonce ? ReportPrincipal : null));
+    }
+
+    [Theory]
+    [InlineData("QueryPersonAttendanceTimeline")]
+    [InlineData("QueryPersonAttendanceTotals")]
+    [InlineData("QueryPersonOperationsTimeline")]
+    [InlineData("QueryPersonMovements")]
+    public async Task LegacyReadContracts_UseTheOneCanonicalImmutablePersonReport(string action)
+    {
+        var filters = new JsonObject
+        {
+            ["personId"] = "TST-REPORT-1",
+            ["dateFrom"] = "2026-01-16",
+            ["dateTo"] = "2026-01-16",
+            ["siteId"] = "SITE-UNSPECIFIED"
+        };
+        var expected = await new PersonnelReportService(_db)
+            .ReportAsync((JsonObject)filters.DeepClone(), CancellationToken.None);
+        Assert.True(expected.Success, expected.UserMessage);
+
+        var response = await DispatchReportAlias(action, (JsonObject)filters.DeepClone());
+        Assert.Equal(BridgeOutcomeKind.Success, response.Kind);
+        var data = Assert.IsType<JsonObject>(response.Response.Data);
+        var canonical = Assert.IsType<JsonObject>(expected.Data);
+        // No competing report SQL/schema: the aliases return the exact same
+        // effective-dated PersonId projection as BuildPersonLifetimeReport.
+        Assert.Equal(canonical.ToJsonString(), data.ToJsonString());
+        Assert.Equal("TST-REPORT-1", data["person"]!["personId"]!.GetValue<string>());
+        Assert.Equal(1L, data["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(0L, data["movementTotal"]!.GetValue<long>());
+
+        using var connection = _db.CreateOpenConnection();
+        using var attendance = connection.CreateCommand();
+        attendance.CommandText = "SELECT COUNT(*) FROM AttendanceRecords;";
+        Assert.Equal(3L, Convert.ToInt64(await attendance.ExecuteScalarAsync()));
+        using var audit = connection.CreateCommand();
+        audit.CommandText = "SELECT COUNT(*) FROM AuditEvents;";
+        Assert.Equal(0L, Convert.ToInt64(await audit.ExecuteScalarAsync()));
+    }
+
+    [Theory]
+    [InlineData("QueryPersonAttendanceTimeline")]
+    [InlineData("QueryPersonAttendanceTotals")]
+    [InlineData("QueryPersonOperationsTimeline")]
+    [InlineData("QueryPersonMovements")]
+    public async Task LegacyReadContracts_DoNotBypassSessionOrFabricateMissingPerson(string action)
+    {
+        var payload = new JsonObject { ["personId"] = "TST-REPORT-1" };
+        var unauthenticated = await DispatchReportAlias(action, (JsonObject)payload.DeepClone(),
+            "ffffffffffffffffffffffffffffffff");
+        Assert.Equal(BridgeOutcomeKind.Unauthorized, unauthenticated.Kind);
+
+        var missing = await DispatchReportAlias(action,
+            new JsonObject { ["personId"] = "TST-REPORT-NOT-FOUND" });
+        Assert.False(missing.Response.Success);
+        Assert.Equal(BridgeErrorCodes.MissingData, missing.Response.ErrorCode);
+
+        var invalid = await DispatchReportAlias(action,
+            new JsonObject { ["personId"] = "TST-REPORT-1",
+                ["dateFrom"] = "2026-02-01", ["dateTo"] = "2026-01-01" });
+        Assert.False(invalid.Response.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError, invalid.Response.ErrorCode);
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {

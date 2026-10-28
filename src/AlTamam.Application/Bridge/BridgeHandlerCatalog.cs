@@ -346,6 +346,21 @@ public static class BridgeHandlerCatalog
             })),
         // Phase 05 already contains real person CRUD; expose its canonical bridge
         // contracts instead of accidentally routing QueryPersons to a 25-row search.
+        // Historical manifest read actions are compatibility entry points into
+        // the existing canonical PersonId-keyed lifetime report. Reuse its
+        // effective-dated filters, saved snapshots and paging WITHOUT creating
+        // a competing SQL history engine or changing the current report screen.
+        // The response is deliberately the canonical full report shape, so
+        // existing fields (attendance/statusTotals/audit/movements) retain their
+        // exact names and meaning for current and older consumers.
+        "QueryPersonAttendanceTimeline" or "QueryPersonAttendanceTotals"
+            or "QueryPersonOperationsTimeline" or "QueryPersonMovements" =>
+            async (req, principal, ct) =>
+        {
+            BridgeResponse result = await new PersonnelReportService(services.Db)
+                .ReportAsync(req.Payload, ct).ConfigureAwait(false);
+            return result with { RequestId = req.RequestId };
+        },
         "BuildPersonLifetimeReport" => async (req, principal, ct) =>
         {
             BridgeResponse result=req.Payload?["exportPreview"]?.GetValue<bool>()==true
