@@ -16,6 +16,62 @@ public sealed class BackupInspectionService
     private readonly AlTamamDbContext _db;
     public BackupInspectionService(AlTamamDbContext db)=>_db=db;
 
+    /// <summary>
+    /// Read-only comparison of a specifically inspected, SHA-256-pinned encrypted
+    /// backup with the CURRENT database. This cannot prepare/activate a restore.
+    /// No preview token is issued until the native shutdown/recovery gate exists.
+    /// </summary>
+    public async Task<BridgeResponse> PreviewRestoreAsync(
+        string? path,string? expectedSha256,CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(expectedSha256) ||
+            expectedSha256.Length != 64 ||
+            expectedSha256.Any(ch => !Uri.IsHexDigit(ch)))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "افحص النسخة الاحتياطية أولاً قبل معاينة الاستعادة.");
+
+        BridgeResponse verified = await VerifyAsync(path,ct).ConfigureAwait(false);
+        if (!verified.Success) return verified;
+        if (verified.Data is not JsonObject backup ||
+            !string.Equals(backup["sha256"]?.GetValue<string>(),
+                expectedSha256,StringComparison.OrdinalIgnoreCase))
+            return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
+                "تغيرت بصمة النسخة بعد فحصها. اختر الملف وافحصه مجدداً.");
+
+        using var connection = _db.CreateOpenConnection();
+        using var counts = connection.CreateCommand();
+        counts.CommandText = """
+            SELECT (SELECT COUNT(*) FROM Persons),
+                   (SELECT COUNT(*) FROM AttendanceRecords),
+                   (SELECT COUNT(*) FROM AuditEvents),
+                   (SELECT COUNT(*) FROM Users);
+            """;
+        using var reader = await counts.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await reader.ReadAsync(ct).ConfigureAwait(false))
+            return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
+                "تعذر قراءة ملخص البيانات الحالية.");
+        var current = new JsonObject
+        {
+            ["people"] = reader.GetInt64(0),
+            ["attendance"] = reader.GetInt64(1),
+            ["auditEvents"] = reader.GetInt64(2),
+            ["users"] = reader.GetInt64(3)
+        };
+        // The candidate can contain a DIFFERENT historical roster. A restore
+        // replaces the database: it is never a merge or a per-person import.
+        return BridgeHelpers.Ok(new JsonObject
+        {
+            ["verified"] = true,
+            ["previewOnly"] = true,
+            ["restoreEnabled"] = false,
+            ["schemaCompatible"] = backup["schemaCompatible"]?.GetValue<bool>() == true,
+            ["backup"] = backup.DeepClone(),
+            ["current"] = current,
+            ["message"] = "هذه معاينة قراءة فقط. لم تتغير قاعدة البيانات أو ملفات النسخ. " +
+                "الاستعادة النهائية غير متاحة حتى اعتماد إيقاف الخدمات والاستبدال الآمن والتعافي."
+        });
+    }
+
     public async Task<BridgeResponse> VerifyAsync(string? path,CancellationToken ct)
     {
         if(string.IsNullOrWhiteSpace(path)||path.Length>1024)
