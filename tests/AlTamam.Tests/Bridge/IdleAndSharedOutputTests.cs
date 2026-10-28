@@ -184,6 +184,59 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
 
 
     [Fact]
+    public async Task DefaultOutputIsOnlyAVisibleHint_NeverCreatesUserFoldersImplicitly()
+    {
+        var settings = new OutputDirectorySettings(_db);
+        string expected = OutputDirectorySettings.DefaultDirectory;
+        bool existedBefore = Directory.Exists(expected);
+
+        Assert.Equal(expected, await settings.GetAsync());
+        // Merely viewing Settings may not create E:\\AlTamamAlYawmi\\Backups.
+        Assert.Equal(existedBefore, Directory.Exists(expected));
+
+        var overview = await new SettingsReadBackupService(_db)
+            .OverviewAsync(_actor, CancellationToken.None);
+        Assert.True(overview.Success, overview.UserMessage);
+        var data = Assert.IsType<JsonObject>(overview.Data);
+        Assert.Equal(expected, data["backupDirectory"]!.GetValue<string>());
+        Assert.Equal(OutputDirectorySettings.IsUsableDirectory(expected, _dbPath),
+            data["defaultDriveAvailable"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task MissingSelectedOutputNeverFallsBackOrCreatesFalseSuccessfulBackup()
+    {
+        var settings = new OutputDirectorySettings(_db);
+        var saved = await settings.SaveAsync(_output, _actor, CancellationToken.None);
+        Assert.True(saved.Success, saved.UserMessage);
+        Directory.Delete(_output);
+        try
+        {
+            Assert.Equal(Path.GetFullPath(_output), await settings.GetAsync());
+            var overview = await new SettingsReadBackupService(_db)
+                .OverviewAsync(_actor, CancellationToken.None);
+            Assert.True(overview.Success, overview.UserMessage);
+            var data = Assert.IsType<JsonObject>(overview.Data);
+            Assert.Equal(Path.GetFullPath(_output),
+                data["backupDirectory"]!.GetValue<string>());
+            Assert.False(data["defaultDriveAvailable"]!.GetValue<bool>());
+            var result = await new SettingsReadBackupService(_db)
+                .BackupAsync(_actor, CancellationToken.None);
+            Assert.False(result.Success);
+            Assert.False(Directory.Exists(_output));
+            using var c = _db.CreateOpenConnection();
+            using var cmd = c.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM BackupHistory;";
+            Assert.Equal(0L, Convert.ToInt64(cmd.ExecuteScalar()));
+        }
+        finally
+        {
+            Directory.CreateDirectory(_output);
+        }
+    }
+
+
+    [Fact]
     public async Task AutomaticBackup_OnlyAfterDue_ExactlyOncePerDate_EncryptedAndAudited()
     {
         var outputSettings=new OutputDirectorySettings(_db);
