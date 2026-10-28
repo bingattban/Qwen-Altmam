@@ -529,6 +529,26 @@ public static class BridgeHandlerCatalog
                 .VerifyAsync(selected,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
+        // Read-only inspection for authorized administrators. The destructive
+        // RestoreDatabaseAtomically action remains unavailable until the native
+        // reauthentication, shutdown and offline acceptance gates are complete.
+        "PreviewRestore" => async(req,principal,ct) =>
+        {
+            string? path,sha256;
+            try
+            {
+                path=req.Payload?["path"]?.GetValue<string>();
+                sha256=req.Payload?["expectedSha256"]?.GetValue<string>();
+            }
+            catch(Exception e) when(e is InvalidOperationException or FormatException)
+            {
+                return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                    "بيانات النسخة غير صالحة؛ أعد اختيار الملف وفحصه."));
+            }
+            var result=await new BackupInspectionService(services.Db)
+                .PreviewRestoreAsync(path,sha256,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "RunDatabaseIntegrityCheck" => (req, principal, ct) =>
         {
             var svc = new SettingsReadBackupService(services.Db);
