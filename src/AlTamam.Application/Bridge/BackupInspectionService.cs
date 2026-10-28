@@ -76,4 +76,60 @@ public sealed class BackupInspectionService
                 "تعذر التحقق من النسخة: قد تكون تالفة أو لا يمكن فك تشفيرها بالمفتاح الحالي. لم تتغير بيانات البرنامج.");
         }
     }
+    /// <summary>
+    /// Strictly read-only preflight for a proposed restore. Compares the verified
+    /// encrypted candidate against the live store; does not stage, issue an
+    /// approval token, stop services or activate a database switch.
+    /// </summary>
+    public async Task<BridgeResponse> PreviewRestoreAsync(string? path,CancellationToken ct)
+    {
+        BridgeResponse verified=await VerifyAsync(path,ct).ConfigureAwait(false);
+        if(!verified.Success)return verified;
+        if(verified.Data is not JsonObject candidate ||
+           candidate["verified"]?.GetValue<bool>()!=true)
+            return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
+                "لم تكتمل معاينة النسخة المشفرة؛ لم تُغيَّر البيانات.");
+        if(candidate["schemaCompatible"]?.GetValue<bool>()!=true)
+            return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
+                "إصدار النسخة غير متوافق مع قاعدة البيانات الحالية؛ لا يمكن تجهيز الاستعادة.");
+
+        using var connection=_db.CreateOpenConnection();
+        using var command=connection.CreateCommand();
+        command.CommandText="""
+            SELECT (SELECT COUNT(*) FROM Persons),
+                   (SELECT COUNT(*) FROM AttendanceRecords),
+                   (SELECT COUNT(*) FROM AuditEvents),
+                   (SELECT COUNT(*) FROM Users);
+            """;
+        using var reader=await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if(!await reader.ReadAsync(ct).ConfigureAwait(false))
+            return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
+                "تعذرت قراءة ملخص قاعدة البيانات الحالية.");
+
+        var incoming=new JsonObject
+        {
+            ["people"]=candidate["people"]?.DeepClone(),
+            ["attendance"]=candidate["attendance"]?.DeepClone(),
+            ["auditEvents"]=candidate["auditEvents"]?.DeepClone(),
+            ["users"]=candidate["users"]?.DeepClone()
+        };
+        var current=new JsonObject
+        {
+            ["people"]=reader.GetInt64(0),
+            ["attendance"]=reader.GetInt64(1),
+            ["auditEvents"]=reader.GetInt64(2),
+            ["users"]=reader.GetInt64(3)
+        };
+        return BridgeHelpers.Ok(new JsonObject
+        {
+            ["verified"]=true,["previewOnly"]=true,["restoreEnabled"]=false,
+            ["fileName"]=candidate["fileName"]?.DeepClone(),
+            ["path"]=candidate["path"]?.DeepClone(),
+            ["sha256"]=candidate["sha256"]?.DeepClone(),
+            ["schemaVersion"]=candidate["schemaVersion"]?.DeepClone(),
+            ["incoming"]=incoming,["current"]=current,
+            ["message"]="هذه معاينة قراءة فقط للمقارنة. لم تُستبدل قاعدة البيانات أو تُعدَّل السجلات. الاستعادة الفعلية ما زالت معطلة حتى اعتماد فحوص الأمان."
+        });
+    }
+
 }
