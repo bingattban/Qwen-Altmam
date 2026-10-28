@@ -262,7 +262,7 @@ public static class BridgeHandlerCatalog
                 }
                 catch(OperationCanceledException) when (job!.Token.IsCancellationRequested && !ct.IsCancellationRequested)
                 {
-                    job.Finish(false);
+                    job!.Finish(false);
                     return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.StorageBusy,
                         "أُلغيت عملية تصدير Excel قبل اكتمال حفظ الملف."));
                 }
@@ -410,7 +410,7 @@ public static class BridgeHandlerCatalog
                 }
                 catch(OperationCanceledException) when (job!.Token.IsCancellationRequested && !ct.IsCancellationRequested)
                 {
-                    job.Finish(false);
+                    job!.Finish(false);
                     return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.StorageBusy,
                         "أُلغيت عملية تصدير Excel قبل اكتمال حفظ الملف."));
                 }
