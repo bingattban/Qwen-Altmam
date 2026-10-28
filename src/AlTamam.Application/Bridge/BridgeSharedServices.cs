@@ -416,22 +416,46 @@ public sealed class BridgeSharedServices
         return Ok(statuses);
     }
 
-    public async Task<BridgeResponse> SearchPersonsAsync(string term, int take, CancellationToken ct)
+    /// <summary>
+    /// Search the current normalized identity, with an explicit active-only
+    /// boundary for account pickers. Historical correction can still search
+    /// departed persons by immutable PersonId without exposing them as eligible
+    /// account targets. SQL LIKE metacharacters in user input are literal.
+    /// </summary>
+    public async Task<BridgeResponse> SearchPersonsAsync(string term, int take,
+        CancellationToken ct, bool activeOnly = false)
     {
         if (string.IsNullOrWhiteSpace(term))
             return Error(BridgeErrorCodes.MissingData, "أدخل اسماً أو رقماً للبحث.");
+        if (term.Length > 100 || term.Any(char.IsControl))
+            return Error(BridgeErrorCodes.ValidationError,
+                "بحث الأفراد لا يتجاوز 100 حرف ولا يقبل أحرف التحكم.");
+        string normalized = ArabicTextNormalizer.NormalizeForSearch(term);
+        if (normalized.Length == 0)
+            return Error(BridgeErrorCodes.ValidationError,
+                "أدخل اسماً أو رقماً صالحاً للبحث.");
         take = Math.Clamp(take <= 0 ? 25 : take, 1, 200);
+        string like = "%" + normalized
+            .Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace("%", @"\%", StringComparison.Ordinal)
+            .Replace("_", @"\_", StringComparison.Ordinal) + "%";
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = @"SELECT p.PersonId, p.CurrentVisibleName, p.CurrentServiceNumberA, p.OrganizationalStatus, p.RowVersion,
-                                   COALESCE((SELECT s.VisibleName FROM PersonAssignments a JOIN Sites s ON s.SiteId = a.SiteId
-                                             WHERE a.PersonId = p.PersonId AND a.ValidToLocalDate IS NULL), 'غير محدد')
-                            FROM Persons p
-                            WHERE p.NormalizedName LIKE $like OR p.NormalizedServiceNumberA LIKE $like2
-                            ORDER BY p.CurrentVisibleName LIMIT $take;";
-        string like = "%" + NormalizeUsername(term) + "%";
+        cmd.CommandText = """
+            SELECT p.PersonId, p.CurrentVisibleName, p.CurrentServiceNumberA,
+                   p.OrganizationalStatus, p.RowVersion,
+                   COALESCE((SELECT s.VisibleName FROM PersonAssignments a
+                             JOIN Sites s ON s.SiteId = a.SiteId
+                             WHERE a.PersonId = p.PersonId
+                               AND a.ValidToLocalDate IS NULL), 'غير محدد')
+            FROM Persons p
+            WHERE ($activeOnly = 0 OR (p.OrganizationalStatus = 1 AND p.ActiveFlag = 1))
+              AND (p.NormalizedName LIKE $like ESCAPE '\'
+                OR p.NormalizedServiceNumberA LIKE $like ESCAPE '\')
+            ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $take;
+            """;
+        cmd.Parameters.AddWithValue("$activeOnly", activeOnly ? 1 : 0);
         cmd.Parameters.AddWithValue("$like", like);
-        cmd.Parameters.AddWithValue("$like2", like);
         cmd.Parameters.AddWithValue("$take", take);
         var rows = new JsonArray();
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);

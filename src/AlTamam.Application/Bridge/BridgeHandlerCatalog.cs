@@ -175,13 +175,14 @@ public static class BridgeHandlerCatalog
         "GetActiveAttendanceStatuses" or "QueryAttendanceStatuses" => async (req, principal, ct) =>
         {
             BridgeResponse inner = await services.ListActiveStatusesAsync(ct).ConfigureAwait(false);
-            return Done(req, inner.Data);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
         "SearchPersons" or "SearchActivePersonsForAccount" => async (req, principal, ct) =>
         {
             string term = req.Payload?["term"]?.GetValue<string>() ?? "";
             int take = TryInt(req.Payload?["take"], 25);
-            BridgeResponse inner = await services.SearchPersonsAsync(term, take, ct).ConfigureAwait(false);
+            BridgeResponse inner = await services.SearchPersonsAsync(term, take, ct,
+                activeOnly: req.Action == "SearchActivePersonsForAccount").ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
         "SetClosedDayCorrectionPolicy" => async (req,principal,ct) =>
