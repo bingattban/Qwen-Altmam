@@ -77,6 +77,24 @@ public static class BridgeHandlerCatalog
             // OS input for this exact live session nonce.
             return Done(req,SessionData(principal));
         },
+        // A read-only projection of the canonical server-side role matrix.
+        // UI visibility is advisory; the dispatcher independently enforces RBAC.
+        "GetNavigationPermissions" => (req, principal, ct) =>
+        {
+            if(principal is null)
+                return Task.FromResult(Fail(req,BridgeSharedServices.Error(
+                    BridgeErrorCodes.SessionExpired,"لا توجد جلسة نشطة.")));
+            string role=principal.Role.ToString();
+            var allowed=new JsonArray();
+            foreach(var meta in ActionManifest.All)
+                if(meta.AllowedRoles.Contains(role,StringComparer.Ordinal))
+                    allowed.Add(meta.Action);
+            return Task.FromResult(Done(req,new JsonObject
+            {
+                ["role"]=role,
+                ["allowedActions"]=allowed
+            }));
+        },
         "Logout" => async (req, principal, ct) =>
         {
             await services.RevokeSessionAsync(req.SessionNonce, ct).ConfigureAwait(false);
