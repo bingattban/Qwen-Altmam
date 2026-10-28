@@ -12,7 +12,7 @@ namespace AlTamam.Application.Bridge;
 /// </summary>
 public sealed class ExportJobCoordinator
 {
-    private sealed class Job
+    internal sealed class Job
     {
         public readonly object Gate = new();
         public readonly CancellationTokenSource Source;
@@ -71,7 +71,7 @@ public sealed class ExportJobCoordinator
                     lock(pair.Value.Gate)
                     {
                         if(!pair.Value.Finished) continue;
-                        if(_jobs.TryRemove(new KeyValuePair<string,Job>(pair.Key,pair.Value)))
+                        if(((ICollection<KeyValuePair<string,Job>>)_jobs).Remove(pair))
                             pair.Value.Source.Dispose();
                     }
                 }
@@ -141,7 +141,7 @@ public sealed class ExportJobCoordinator
         private readonly string _session;
         private readonly Job _job;
 
-        private ExportRun(ExportJobCoordinator owner,string session,Job job)
+        internal ExportRun(ExportJobCoordinator owner,string session,Job job)
         { _owner=owner;_session=session;_job=job; }
         public CancellationToken Token => _job.Source.Token;
 

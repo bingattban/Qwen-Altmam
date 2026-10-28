@@ -63,7 +63,8 @@ public sealed class MonthlyExcelExportService
         });
     }
 
-    public async Task<BridgeResponse> ExportAsync(JsonObject? input, CancellationToken ct)
+    public async Task<BridgeResponse> ExportAsync(JsonObject? input, CancellationToken ct,
+        Action<int,int>? progress=null)
     {
         var preview = await PreviewAsync(input, ct).ConfigureAwait(false);
         if (!preview.Success) return preview;
@@ -84,6 +85,7 @@ public sealed class MonthlyExcelExportService
         string basename = $"التمام الشهري_{year:D4}-{month:D2}_تصدير-{DateTime.Now:yyyy-MM-dd}_{Guid.NewGuid():N}.xlsx";
         string destination = Path.Combine(directory, basename);
         string partial = destination + ".part";
+        progress?.Invoke(0,checked((int)total));
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -178,6 +180,7 @@ public sealed class MonthlyExcelExportService
                         }
                         WriteRow(writer, checked((int)rowNumber + 3), cols);
                     }
+                    progress?.Invoke(checked((int)rowNumber),checked((int)total));
                 }
                 writer.WriteEndElement();
                 writer.WriteEndElement();
@@ -185,6 +188,7 @@ public sealed class MonthlyExcelExportService
                 writer.Flush();
             }
             // Never overwrite a previous export. Atomic same-directory rename avoids partial .xlsx.
+            ct.ThrowIfCancellationRequested();
             File.Move(partial, destination, overwrite: false);
             return BridgeHelpers.Ok(new JsonObject
             {

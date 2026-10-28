@@ -550,6 +550,7 @@ public sealed class BridgeSharedServices
 
     // ---------------------------------------------------------------- helpers
 
+    internal ExportJobCoordinator ExportJobs { get; } = new();
     internal AlTamamDbContext Db => _db;
     internal TimeProvider Time => _time;
 
