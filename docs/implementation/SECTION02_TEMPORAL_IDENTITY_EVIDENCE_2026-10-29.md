@@ -25,7 +25,7 @@
 ## Test-first CI failure and synthetic-fixture repair
 
 - Initial PR Windows Core run [40779761870](https://github.com/bingattban2/Qwen-Altmam/actions/runs/40779761870) **FAILED: 97 failed / 735 passed / 832 total**. Most historical tests seeded nonnumeric personnel numbers like `EX001`, `C-1`, `TST-NUM-0`, or `تج-000001` directly through SQL. The new V010 insert guard correctly blocked those invalid synthetic writes, exposing stale fixtures rather than a production-data defect. A founding-account migration test separately assumed the hard-coded schema version `9`.
-- Corrected synthetic-only seed values **and their exact expected report/Excel results** across 14 test classes, with no production changes to number validation, SQLCipher triggers, real identities, case logic or history. Updated the founding migration assertion to derive its version from `CurrentSchemaVersion`.
+- Corrected synthetic-only seed values **and their exact expected report/Excel results** across 15 test classes, with no production changes to number validation, SQLCipher triggers, real identities, case logic or history. Updated the founding migration assertion to derive its version from `CurrentSchemaVersion`.
 - These repairs were split into two sequential groups of test-file edits. The original red run is retained as evidence, never represented as PASS. **The full suite must be re-executed on the final PR head**, then both x86/x64 packages generated after a fully passing Release suite before merge.
 - Historical nonconforming production rows, if any, were neither read nor modified by the fixture corrections.
 
