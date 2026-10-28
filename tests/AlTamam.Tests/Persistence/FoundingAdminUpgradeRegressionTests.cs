@@ -72,7 +72,7 @@ public sealed class FoundingAdminUpgradeRegressionTests : IDisposable
 
         await db.InitializeAsync(); // production forward-only migration path
 
-        Assert.Equal("9", Scalar(db, "SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion.ToString(), Scalar(db, "SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
         Assert.Equal(userId, Scalar(db, "SELECT UserId FROM Users WHERE Role=1;"));
         Assert.Equal("", Scalar(db, "SELECT LinkedPersonId FROM Users WHERE Role=1;"));
         Assert.Equal("1", Scalar(db, "SELECT ActiveFlag FROM Users WHERE Role=1;"));

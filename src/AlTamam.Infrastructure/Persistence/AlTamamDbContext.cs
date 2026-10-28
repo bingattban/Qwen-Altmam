@@ -7,8 +7,8 @@ namespace AlTamam.Infrastructure.Persistence;
 /// <summary>Encrypted SQLite connection management and atomic initialization of schema V001.</summary>
 public sealed class AlTamamDbContext : IDisposable
 {
-    /// <summary>Highest schema version this build understands (V009 enforces independent founding account).</summary>
-    public const int CurrentSchemaVersion = 9;
+    /// <summary>Highest known schema (V010 checks canonical personnel numbers on database writes).</summary>
+    public const int CurrentSchemaVersion = 10;
 
     /// <summary>The canonical, ordered migration set shipped with this build.</summary>
     public static readonly SchemaMigration[] CanonicalMigrations =
@@ -22,6 +22,7 @@ public sealed class AlTamamDbContext : IDisposable
         new(7, "V007_PermanentIdentifiers", "AlTamam.Infrastructure.Persistence.Migrations.V007_PermanentIdentifiers.sql"),
         new(8, "V008_MutationReceipts", "AlTamam.Infrastructure.Persistence.Migrations.V008_MutationReceipts.sql"),
         new(9, "V009_FoundingAdminIndependent", "AlTamam.Infrastructure.Persistence.Migrations.V009_FoundingAdminIndependent.sql"),
+        new(10, "V010_CanonicalServiceNumberIntegrity", "AlTamam.Infrastructure.Persistence.Migrations.V010_CanonicalServiceNumberIntegrity.sql"),
     ];
     private readonly string _databasePath;
     private readonly string _databaseKey;

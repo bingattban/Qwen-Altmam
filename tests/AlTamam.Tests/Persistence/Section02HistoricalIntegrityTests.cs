@@ -171,6 +171,130 @@ public sealed class Section02HistoricalIntegrityTests : IAsyncLifetime, IDisposa
         }
     }
 
+
+    // These tests deliberately bypass the C# service to exercise real SQLCipher
+    // table-boundary validation. The application layer already canonicalizes
+    // Arabic-Indic and Persian input before storing ASCII personnel numbers.
+    [Theory]
+    [InlineData("123")]
+    [InlineData("123٤")]
+    [InlineData("۱۲۳۴")]
+    [InlineData("12 34")]
+    [InlineData("12-34")]
+    [InlineData("1234A")]
+    public void V010_PersonInsert_RejectsNoncanonicalOrTooShortNumber(string number)
+    {
+        using var c = _db.CreateOpenConnection();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,
+                FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                ActiveFlag,RowVersion)
+            VALUES($id,'شخص اختبار','شخص اختبار',$num,$num,
+                '2025-01-01','2025-01-01T00:00:00Z',1,1,1);
+            """;
+        cmd.Parameters.AddWithValue("$id", "TST-INVALID-" + Guid.NewGuid().ToString("N"));
+        cmd.Parameters.AddWithValue("$num", number);
+        Assert.Throws<SqliteException>(() => cmd.ExecuteNonQuery());
+    }
+
+    [Fact]
+    public void V010_PersonInsert_PreservesLeadingZerosAndSeventyDigitMaximum()
+    {
+        using var c = _db.CreateOpenConnection();
+        string number = "00" + new string('1', 68);
+        using var insert = c.CreateCommand();
+        insert.CommandText = """
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,
+                FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                ActiveFlag,RowVersion)
+            VALUES('TST-VALID-70','شخص اختبار','شخص اختبار',$num,$num,
+                '2025-01-01','2025-01-01T00:00:00Z',1,1,1);
+            """;
+        insert.Parameters.AddWithValue("$num", number);
+        insert.ExecuteNonQuery();
+        Assert.Equal(number, Scalar(c,
+            "SELECT CurrentServiceNumberA FROM Persons WHERE PersonId='TST-VALID-70';"));
+        using var bad = c.CreateCommand();
+        bad.CommandText = """
+            UPDATE Persons SET CurrentServiceNumberA=$num,
+                NormalizedServiceNumberA=$num WHERE PersonId='TST-VALID-70';
+            """;
+        bad.Parameters.AddWithValue("$num", "00" + new string('1', 69));
+        Assert.Throws<SqliteException>(() => bad.ExecuteNonQuery());
+        Assert.Equal(number, Scalar(c,
+            "SELECT CurrentServiceNumberA FROM Persons WHERE PersonId='TST-VALID-70';"));
+    }
+
+    [Fact]
+    public void V010_MismatchedCanonicalColumnsAndInvalidIdentitySnapshot_FailAtStorageBoundary()
+    {
+        using var c = _db.CreateOpenConnection();
+        SeedPerson(c);
+        Assert.Throws<SqliteException>(() => Exec(c, """
+            UPDATE Persons SET CurrentServiceNumberA='12346'
+            WHERE PersonId='TST-SECTION02-PERSON';
+            """));
+        Assert.Throws<SqliteException>(() => Exec(c, """
+            INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+            VALUES('TST-SECTION02-PERSON','نسخة تاريخية','١٢٣٤٥',
+                '2025-01-01',NULL,'TST-USER','2025-01-01T00:00:00Z','تجربة');
+            """));
+        Assert.Equal("12345", Scalar(c,
+            "SELECT CurrentServiceNumberA FROM Persons WHERE PersonId='TST-SECTION02-PERSON';"));
+        Assert.Equal("0", Scalar(c,
+            "SELECT COUNT(*) FROM PersonIdentityHistory WHERE PersonId='TST-SECTION02-PERSON';"));
+    }
+
+
+    [Fact]
+    public async Task V010_ForwardUpgrade_DoesNotRewriteLegacyIdentityEvidence()
+    {
+        string upgradePath = SyntheticFixtures.CreateTempDatabasePath();
+        try
+        {
+            using var db = new AlTamamDbContext(upgradePath, SyntheticFixtures.TestKeyHex);
+            using (var old = db.CreateOpenConnection())
+            {
+                var throughV009 = new SchemaMigrationRunner(
+                    AlTamamDbContext.CanonicalMigrations.Take(9).ToArray());
+                await throughV009.UpgradeAsync(old);
+                Assert.Equal(9, SchemaMigrationRunner.GetCurrentVersion(old));
+                Exec(old, """
+                    INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                        CurrentServiceNumberA,NormalizedServiceNumberA,
+                        FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                        ActiveFlag,RowVersion)
+                    VALUES('TST-LEGACY-IDENT','شخص قديم','شخص قديم','تج-١','تج-١',
+                        '2025-01-01','2025-01-01T00:00:00Z',0,0,1);
+                    INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,
+                        ServiceNumberASnapshot,ValidFromLocalDate,ValidToLocalDate,
+                        ChangedByUserId,RecordedAtUtc,Reason)
+                    VALUES('TST-LEGACY-IDENT','شخص قديم','تج-١',
+                        '2025-01-01',NULL,'TST-USER',
+                        '2025-01-01T00:00:00Z','تراث تجريبي');
+                    """);
+            }
+            await db.InitializeAsync();
+            using var upgraded = db.CreateOpenConnection();
+            Assert.Equal(10, SchemaMigrationRunner.GetCurrentVersion(upgraded));
+            Assert.Equal("تج-١", Scalar(upgraded,
+                "SELECT CurrentServiceNumberA FROM Persons WHERE PersonId='TST-LEGACY-IDENT';"));
+            Assert.Equal("تج-١", Scalar(upgraded,
+                "SELECT ServiceNumberASnapshot FROM PersonIdentityHistory WHERE PersonId='TST-LEGACY-IDENT';"));
+            Assert.Throws<SqliteException>(() => Exec(upgraded, """
+                UPDATE Persons SET CurrentServiceNumberA='تج-٢',
+                    NormalizedServiceNumberA='تج-٢'
+                WHERE PersonId='TST-LEGACY-IDENT';
+                """));
+            Assert.Equal("ok", Scalar(upgraded, "PRAGMA integrity_check;"));
+        }
+        finally { SyntheticFixtures.DeleteTempDatabase(upgradePath); }
+    }
+
     [Fact]
     public async Task V004_ForwardMigration_PreservesExistingV003Personnel()
     {

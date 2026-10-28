@@ -33,7 +33,7 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
             INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
                 NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
                 OrganizationalStatus,ActiveFlag,RowVersion)
-            VALUES('TEST-SEP-P1','فرد مختبر للفصل','فرد مختبر للفصل','SEP-001','SEP-001',
+            VALUES('TEST-SEP-P1','فرد مختبر للفصل','فرد مختبر للفصل','980001','980001',
                    $yesterday,'2026-01-01T00:00:00Z',1,1,1);
             INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
                 ValidToLocalDate,SourceMovementId,CreatedAtUtc)
@@ -98,7 +98,7 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
             Actor,CancellationToken.None);
         Assert.False(second.Success);
         Assert.Equal(1L,Count("PersonnelMovements"));
-        var archive=await svc.ArchiveAsync(new JsonObject{["term"]="SEP-001"},CancellationToken.None);
+        var archive=await svc.ArchiveAsync(new JsonObject{["term"]="980001"},CancellationToken.None);
         var result=Assert.IsType<JsonObject>(archive.Data);
         Assert.Equal(1L,result["total"]!.GetValue<long>());
         var row=Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(result["items"])[0]);
