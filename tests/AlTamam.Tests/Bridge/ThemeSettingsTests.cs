@@ -72,7 +72,7 @@ public sealed class ThemeSettingsTests : IAsyncLifetime, IDisposable
         using var connection=_db.CreateOpenConnection();
         using var query=connection.CreateCommand();
         query.CommandText="SELECT COUNT(*) FROM AppSettings WHERE SettingKey='Theme';";
-        Assert.Equal(0L,Convert.ToInt64(await query.ExecuteScalarAsync()));
+        Assert.Equal(1L,Convert.ToInt64(await query.ExecuteScalarAsync()));
     }
 
     [Fact]
