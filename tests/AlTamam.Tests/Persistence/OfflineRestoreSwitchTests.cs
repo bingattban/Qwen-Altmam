@@ -10,6 +10,16 @@ namespace AlTamam.Tests.Persistence;
 /// Disposable SQLCipher databases exercise native offline transaction intent,
 /// unchanged historical state, crash boundaries and rollback.
 /// </summary>
+// File.Replace and checkpoint/reconcile legitimately call
+// SqliteConnection.ClearAllPools() process-wide. Running these tests beside
+// other SQLCipher test collections can dispose pooled handles underneath
+// unrelated active commands and produce ObjectDisposedException. xUnit only
+// serializes THIS collection against all other collections; normal suite
+// parallelism remains enabled for every other test.
+[CollectionDefinition("SQLCipherGlobalPool", DisableParallelization = true)]
+public sealed class SQLCipherGlobalPoolCollection { }
+
+[Collection("SQLCipherGlobalPool")]
 public sealed class OfflineRestoreSwitchTests : IDisposable
 {
     private readonly string _dir=Path.Combine(Path.GetTempPath(),
