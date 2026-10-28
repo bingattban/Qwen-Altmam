@@ -1693,7 +1693,7 @@
           if(token!==currentRequest)return;
           const data=result.data||{};
           if(data.verified!==true)throw Error("لم ينجح فحص النسخة.");
-          if(typeof data.path!=="string"||typeof data.sha256!=="string")
+          if(typeof data.path!=="string"||!/^[a-f0-9]{64}$/i.test(data.sha256||""))
             throw Error("ملف النسخة أو بصمتها غير صالح.");
           selectedRestore={path:data.path,sha256:data.sha256};
           if(previewRestore)previewRestore.disabled=false;
@@ -1720,7 +1720,7 @@
           previewFeedback.replaceChildren(warning("جارٍ مقارنة النسخة المختارة بقاعدة البيانات الحالية..."));
           try{
             const result=await api().invoke("PreviewRestore",
-              {path:selection.path},{timeoutMs:180000});
+              {path:selection.path,expectedSha256:selection.sha256},{timeoutMs:180000});
             if(token!==currentRequest||serial!==selectionSerial)return;
             const data=result.data||{};
             if(data.verified!==true||data.previewOnly!==true||
