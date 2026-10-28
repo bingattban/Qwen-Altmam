@@ -62,3 +62,13 @@
 - The existing GitHub `main` branch was checked and was **not protected** as of this change. GitHub branch protection / repository rulesets requiring the two checks are **not writable through the active connector**, so they must be configured by the repository owner in GitHub Settings to forbid bypass by other push-capable users. A documented policy by itself is not an enforced branch protection rule.
 - Candidate artifacts are **not** final release approval. Manual/tagged acceptance gates and owner-approved signing remain separate.
 - Production icon `src/AlTamam.DesktopHost/Assets/AlTamam.ico` is the owner-selected previously generated picture, not a replacement design.
+
+## 9. OWNER DECISION — Portable direct-run with existing Windows AppData (2026-10-28)
+
+- **Decision explicitly approved:** The 32-bit/64-bit Portable ZIP packages run directly from the extracted executable without an installer; **both Portable and Installer use exactly the same per-Windows-user data root**: `%LOCALAPPDATA%\\AlTamam`.
+- Existing encrypted database, DPAPI-protected key, application WebView2 profile and backup directory stay at their original user-specific paths. This is NOT a portable-on-USB database model.
+- **Do not move, copy, migrate, delete, rename or import any existing user data automatically.** Changing extraction directory, drive or distribution type must not change the database location.
+- The executable resource directory remains read-only and separate from the writable AppData storage. Cross-PC database restoration remains subject to the existing protected recovery workflow and acceptance gates.
+- Remove the legacy unused `AppDataLayout.IsPortable` storage switch and its misleading adjacent-`data` documentation, without altering the logical contents, database schema, keys, operation logs or permission model.
+- Include a regression test that verifies Portable and Installer share a single root and that no alternate storage switch remains exposed.
+- Any other policy conflict must be reported to the owner and left undecided until explicit approval.

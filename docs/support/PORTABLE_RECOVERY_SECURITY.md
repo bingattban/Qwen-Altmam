@@ -30,3 +30,11 @@ staged database restoration and crash-recoverable atomic activation remain
 mandatory and are **not implemented** in this batch. No recovery secret is
 passed to JavaScript or an action response. This code is intentionally not
 exposed to end users until native secure dialogs and authentication gates pass.
+
+
+**Distribution vs recovery clarification (owner decision 2026-10-28):**
+`PortableRecoveryKeyPackage` describes an encrypted *key-recovery file*, not the
+Portable ZIP application's data directory. Both the directly launched Portable
+EXE and the installed EXE keep the original encrypted database and DPAPI key
+under the same `%LOCALAPPDATA%\\AlTamam` folder for the current Windows user.
+No database or key relocation or automatic migration is permitted.

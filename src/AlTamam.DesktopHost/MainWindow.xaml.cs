@@ -89,9 +89,9 @@ public partial class MainWindow : Window
         try
         {
             ResolveBundledWebUiRoot();                       // throws if webui/index.html missing
-            string probe = AppDataLayout.IsPortable
-                ? AppDataLayout.DataRoot                     // portable: data beside exe
-                : Path.GetFullPath(AppDataLayout.DataRoot);  // installed: %LOCALAPPDATA%\AlTamam
+            // Both distribution types use the unchanged Windows-user AppData path.
+            // --layout-selfcheck must not create or move a database.
+            string probe = Path.GetFullPath(AppDataLayout.DataRoot);
             AppDataLayout.AssertWritableLocation(Path.Combine(probe, "altamam.db"));
             Console.WriteLine("LAYOUT-SELFCHECK PASS");
             return 0;
