@@ -395,8 +395,9 @@ async function run() {
   const reviewCount=modalReviews.length;
   await buttonNamed("معاينة الاستعادة دون تنفيذ").handlers.click();
   assert.ok(calls.some(x=>x.name==="PreviewRestore"&&
-    x.body.path==="C:\\Temp\\verified.dbbackup"),
-    "verified candidate path is sent to C# for a second read-only validation");
+    x.body.path==="C:\\Temp\\verified.dbbackup"&&
+    x.body.expectedSha256==="a".repeat(64)),
+    "verified candidate path and SHA-256 are pinned on the C# preview request");
   assert.equal(modalReviews.length,reviewCount+1,"preview must open the shared modal");
   assert.ok(modalReviews.at(-1).details.rows.some(x=>x[0].includes("الأفراد:")),
     "restore comparison shows incoming and current personnel counts");
