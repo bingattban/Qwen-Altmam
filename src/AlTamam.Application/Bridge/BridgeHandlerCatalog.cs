@@ -254,7 +254,7 @@ public static class BridgeHandlerCatalog
             using(job!)
             {
                 var result = await new MonthlyExcelExportService(services.Db)
-                    .ExportAsync(req.Payload,job.Token,job.Report).ConfigureAwait(false);
+                    .ExportAsync(req.Payload,job!.Token,job.Report).ConfigureAwait(false);
                 job.Finish(result.Success,(result.Data as JsonObject)?["filePath"]?.GetValue<string>());
                 return result with { RequestId = req.RequestId };
             }
@@ -393,7 +393,7 @@ public static class BridgeHandlerCatalog
             using(job!)
             {
                 BridgeResponse result=await new PersonnelExcelExportService(services.Db)
-                    .ExportAsync(req.Payload,principal!,job.Token,job.Report).ConfigureAwait(false);
+                    .ExportAsync(req.Payload,principal!,job!.Token,job.Report).ConfigureAwait(false);
                 job.Finish(result.Success,(result.Data as JsonObject)?["filePath"]?.GetValue<string>());
                 return result with {RequestId=req.RequestId};
             }
