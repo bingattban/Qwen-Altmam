@@ -13,7 +13,7 @@ class Element {
 }
 const root=new Element("div"),invoked=[],committed=[],archiveRequests=[];
 let allow=false;
-const modalReviews=[];
+const modalReviews=[],detailReviews=[];
 const responses={
  QuerySites:[{siteId:"SITE-SOURCE",name:"الموقع الأول",active:true},
   {siteId:"SITE-DEST",name:"الموقع الثاني",active:true}],
@@ -23,8 +23,12 @@ const responses={
    businessDate:"2026-10-25",external:false,destinationName:"الموقع الثاني",
    persons:[{name:"فرد تجريبي",serviceNumberA:"001",sourceSiteName:"الموقع الأول"}]},
  CommitInternalTransfer:{count:1},
- QueryMovementArchive:{total:1,hasNext:false,items:[{serviceNumberA:"001",name:"فرد تجريبي",
-  type:"داخلي",sourceSite:"الموقع الأول",destination:"الموقع الثاني",date:"2026-10-23"}]},
+ QueryMovementArchive:{total:1,hasNext:false,items:[{movementId:"MOV-TST-1",
+  serviceNumberA:"001",name:"فرد تجريبي",type:"داخلي",
+  sourceSite:"الموقع الأول",destination:"الموقع الثاني",date:"2026-10-23"}]},
+ GetMovementDetails:{movementId:"MOV-TST-1",serviceNumberA:"001",name:"فرد تجريبي",
+   type:"داخلي",sourceSite:"الموقع الأول",destination:"الموقع الثاني",
+   date:"2026-10-23",committedAtUtc:"2026-10-23T08:00:00Z",actorUsername:"test-admin"},
  ExportPersonLifetimeExcel:{filePath:"C:\\Reports\\نقل داخلي_2026-10-26.xlsx"}
 };
 const bridge={invoke:async(name,payload)=>{
@@ -37,6 +41,7 @@ const bridge={invoke:async(name,payload)=>{
 const ctx={document:{createElement:tag=>new Element(tag)},
  window:{AltamamBridge:bridge,AltamamDialog:{
    transferReview:async(data)=>{modalReviews.push(data);return allow;},
+   detailsReview:async(details)=>{detailReviews.push(details);return true;},
    confirm:async()=>true
  }},console,Date};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
@@ -72,6 +77,14 @@ async function run(){
  assert.ok(invoked.includes("QueryMovementArchive"),"real movement archive read");
  assert.equal(archiveRequests.at(-1).payload.type,"internal",
    "internal archive MUST bind SQL type=internal, not rely on UI-only filtering");
+ const movementDetails=archiveRoot.all().find(x=>x.tag==="button"&&x.textContent==="تفاصيل");
+ assert.ok(movementDetails,"movement archive has a details button for each immutable row");
+ await movementDetails.handlers.click();
+ assert.ok(invoked.includes("GetMovementDetails"),"details must be read from the C# bridge");
+ assert.equal(detailReviews.length,1,"movement details open inside the shared modal");
+ assert.ok(detailReviews[0].rows.some(([key,value])=>
+   key==="الرقم (ع) وقت النقل"&&value==="001"));
+ assert.equal(committed.length,1,"read-only archive details must not commit another transfer");
  const internalExport=archiveRoot.all().find(x=>x.tag==="button"&&
   x.textContent.includes("تصدير أرشيف النقل الداخلي"));
  assert.ok(internalExport);

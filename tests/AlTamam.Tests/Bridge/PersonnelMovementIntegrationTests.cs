@@ -101,8 +101,36 @@ public sealed class PersonnelMovementIntegrationTests:IAsyncLifetime,IDisposable
         var internalRow = Assert.IsType<JsonObject>(Assert.Single(
             Assert.IsType<JsonArray>(destination["items"])));
         Assert.Equal("TST-MOVEMENT-P1", internalRow["personId"]!.GetValue<string>());
+        var internalDetails=await svc.DetailsAsync(new JsonObject{
+            ["movementId"]=internalRow["movementId"]!.GetValue<string>()
+        },CancellationToken.None);
+        Assert.True(internalDetails.Success,internalDetails.UserMessage);
+        var internalSnapshot=Assert.IsType<JsonObject>(internalDetails.Data);
+        Assert.Equal("TST-MOVEMENT-P1",internalSnapshot["personId"]!.GetValue<string>());
+        Assert.Equal("داخلي",internalSnapshot["type"]!.GetValue<string>());
+        Assert.Equal("الموقع الجديد",internalSnapshot["destination"]!.GetValue<string>());
+        Assert.Equal("SITE-UNSPECIFIED",internalSnapshot["sourceSiteId"]!.GetValue<string>());
+        Assert.Equal(Actor.UserId,internalSnapshot["actorUserId"]!.GetValue<string>());
+
         var source = await Archive("SITE-UNSPECIFIED", "external", today, today);
         Assert.Equal(1L, source["total"]!.GetValue<long>());
+        var externalRow=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(source["items"])));
+        var externalDetails=await svc.DetailsAsync(new JsonObject{
+            ["movementId"]=externalRow["movementId"]!.GetValue<string>()
+        },CancellationToken.None);
+        Assert.True(externalDetails.Success,externalDetails.UserMessage);
+        var externalSnapshot=Assert.IsType<JsonObject>(externalDetails.Data);
+        Assert.Equal("خارجي",externalSnapshot["type"]!.GetValue<string>());
+        Assert.Equal("جهة خارجية معتمدة",externalSnapshot["destination"]!.GetValue<string>());
+        Assert.Null(externalSnapshot["destinationSiteId"]);
+
+        var invalid=await svc.DetailsAsync(new JsonObject{
+            ["movementId"]="missing"
+        },CancellationToken.None);
+        Assert.False(invalid.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,invalid.ErrorCode);
+        Assert.Equal(2L,Count("AuditEvents")); // Details never mutate the audit ledger.
         Assert.Equal(0L, (await Archive("SITE-DEST", "external", today, today))["total"]!.GetValue<long>());
         Assert.Equal(0L, (await Archive("", "", Yesterday(), Yesterday()))["total"]!.GetValue<long>());
         var local=DateOnly.Parse(today);
