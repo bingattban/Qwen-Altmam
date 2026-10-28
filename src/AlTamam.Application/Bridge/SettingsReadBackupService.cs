@@ -104,9 +104,11 @@ public sealed class SettingsReadBackupService
     public async Task<BridgeResponse> BackupAsync(BridgePrincipal person,CancellationToken ct)
     {
         string folder=await new OutputDirectorySettings(_db).GetAsync(ct);
-        if(!OutputDirectorySettings.IsSafeDirectory(folder,_db.DatabasePath,out folder))
+        // Fail visibly before creating any file: an existing folder may be
+        // disconnected, read-only, full, or no longer be local.
+        if(!OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "مجلد النسخ الاحتياطي المختار غير متاح. غيّره من الإعدادات.");
+                "مجلد النسخ الاحتياطي غير موجود أو غير قابل للكتابة. اختر مجلداً محلياً من إعدادات البرنامج.");
         string backupId="BKP-"+Guid.NewGuid().ToString("N");
         string filename="AlTamam-"+_time.GetLocalNow().ToString("yyyyMMdd-HHmmss")+"-"+backupId+".dbbackup";
         string destination=Path.Combine(folder,filename);
