@@ -204,7 +204,7 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
                 q.Parameters.AddWithValue("$person","TST-AUTO-P"+i);
                 q.Parameters.AddWithValue("$assignment","TST-AUTO-A"+i);
                 q.Parameters.AddWithValue("$name","فرد تلقائي "+i);
-                q.Parameters.AddWithValue("$number","AUTO-NUM-"+i);
+                q.Parameters.AddWithValue("$number","95"+i.ToString("D4"));
                 q.Parameters.AddWithValue("$yesterday",Date.AddDays(-1).ToString("yyyy-MM-dd"));
                 await q.ExecuteNonQueryAsync();
             }
