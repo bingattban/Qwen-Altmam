@@ -340,4 +340,45 @@ public sealed class PersonnelMovementService
             ["total"]=total,["hasNext"]=(long)page*size<total
         });
     }
+
+    /// <summary>
+    /// Read a single archived transfer from immutable movement snapshots.
+    /// Never resolves the original name/number/site from mutable current records.
+    /// </summary>
+    public async Task<BridgeResponse> DetailsAsync(JsonObject? payload,CancellationToken ct)
+    {
+        string movementId=Get(payload,"movementId");
+        if(movementId.Length is <3 or >128)
+            return Reject(BridgeErrorCodes.ValidationError,"حدد حركة نقل صحيحة من الأرشيف.");
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="""
+            SELECT m.MovementId,m.PersonId,m.PersonNameSnapshot,m.ServiceNumberASnapshot,
+                   m.MovementType,m.SourceSiteId,m.SourceSiteNameSnapshot,
+                   m.DestinationSiteId,m.DestinationSiteNameSnapshot,m.DestinationExternalName,
+                   m.EffectiveLocalDate,m.CommittedAtUtc,m.ActorUserId,u.Username
+            FROM PersonnelMovements m
+            LEFT JOIN Users u ON u.UserId=m.ActorUserId
+            WHERE m.MovementId=$id AND m.MovementType IN (1,2);
+            """;
+        q.Parameters.AddWithValue("$id",movementId);
+        using var r=await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if(!await r.ReadAsync(ct).ConfigureAwait(false))
+            return Reject(BridgeErrorCodes.ValidationError,"حركة النقل غير موجودة في الأرشيف.");
+        string destination=!r.IsDBNull(8)?r.GetString(8):
+            !r.IsDBNull(9)?r.GetString(9):"";
+        return BridgeHelpers.Ok(new JsonObject
+        {
+            ["movementId"]=r.GetString(0),["personId"]=r.GetString(1),
+            ["name"]=r.GetString(2),["serviceNumberA"]=r.GetString(3),
+            ["type"]=r.GetInt32(4)==1?"داخلي":"خارجي",
+            ["sourceSiteId"]=r.IsDBNull(5)?null:r.GetString(5),
+            ["sourceSite"]=r.GetString(6),
+            ["destinationSiteId"]=r.IsDBNull(7)?null:r.GetString(7),
+            ["destination"]=destination,["date"]=r.GetString(10),
+            ["committedAtUtc"]=r.GetString(11),
+            ["actorUserId"]=r.GetString(12),
+            ["actorUsername"]=r.IsDBNull(13)?r.GetString(12):r.GetString(13)
+        });
+    }
 }
