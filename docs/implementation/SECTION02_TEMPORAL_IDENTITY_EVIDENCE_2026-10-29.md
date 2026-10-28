@@ -1,3 +1,19 @@
+## Follow-up implementation — Section 02.01 / 02.02 / 02.14 (2026-10-29)
+
+**Baseline reviewed:** `main` at `9c25e7dab5881cd6bea37b2e1cad84984ed89355`; earlier Section 02 evidence remains below, unmodified.
+
+Two verified nonconflicting omissions were addressed in this review branch:
+
+1. **Identity edits, not just identity creation, must canonicalize.** The existing `CreatePersonAsync` validates and normalizes Arabic-Indic/Persian digits, but `PreviewPersonIdentityUpdateAsync` and `UpdatePersonIdentityAsync` previously forwarded the unnormalized entered string to `Persons.CurrentServiceNumberA` and `PersonIdentityHistory.ServiceNumberASnapshot`. Since schema V010 rightly rejects non-ASCII stored numbers, editing the identifier in Arabic-Indic/Persian glyphs could fail only after the confirmation. Both edit paths now validate and normalize using the same `ServiceNumberPolicy` *before* reading/writing any snapshots. Previous identity intervals, immutable PersonId and leading zeros are preserved.
+2. **Attendance's lost-response retry now has an ACID result receipt.** `AttendanceCommitService.CommitAsync` still requires a one-time actor-bound preview and verifies person assignments, day, statuses and revision inside its write transaction. A valid, matching `operationId` now supports returning the previously committed result when a WebView2 reply is lost; the receipt is written atomically with the attendance, corrections and permanent audit events. Reusing that operation ID with different request data returns a conflict without a write. A no-`operationId` legacy call preserves its prior one-time-token behavior rather than silently changing earlier client contracts. The WebUI sends one unique operation ID for each confirmed initial or revised attendance intent.
+3. **Regression scope:** two C# person-identity tests (canonical Persian input, preserved old number/PersonId, invalid input fails before SQLite), two C# attendance tests (first commit and revision retries leave one audit/revision only), plus JS UI assertions that both commit actions send bounded, distinct operation IDs.
+
+**Not claimed complete:** Requirement 02.14's universal mandatory-`operationId` coverage across every existing mutation API still needs per-action verification, including older clients and imports; do not globally enable a breaking requirement without inspecting each call. End-to-end offline Windows clean-PC acceptance, exhaustive historical Excel reports, clock rollback and power-loss tests, and production restore approval remain OPEN. These changes are not permission to rewrite V001–V010, backfill historical rows, or collapse two permanent PersonIds sharing an institutional number.
+
+**Merge gate:** Both Windows Core and Windows Release must be green on the exact PR HEAD SHA, with Release full test suite before 4 native x86/x64 Portable/Installer artifacts and SHA-256. Then merge and independently check new `main`. Do not mark this addendum as test-pass evidence until those run URLs and SHA actually exist.
+
+---
+
 # Section 02 — Domain, SQLCipher invariants and temporal identity (2026-10-29)
 
 **Governing requirements:** user-supplied Section 02.01–02.17, applying the latest written owner decisions and the original permanent identity/archival policies. **Audited main SHA:** `69337cd9705c598ca5d64359564830bdc3254868`. This is an implementation ledger, NOT independent production signoff.

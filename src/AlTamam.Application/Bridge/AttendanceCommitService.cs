@@ -206,6 +206,14 @@ public sealed class AttendanceCommitService
         if(token.Length<32)return Fail(BridgeErrorCodes.ValidationError,"معرّف المعاينة مطلوب.");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
+            // A lost WebView2 response may be retried with the same user-intent ID.
+            // Replay lookup MUST precede one-use preview and daily cutoff checks:
+            // an already committed action returns its original result, while a
+            // different payload reusing the ID fails without touching evidence.
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,revise?"ReviseTodayAttendance":"SubmitAttendance",actor.UserId,payload,ct)
+                .ConfigureAwait(false);
+            if(replay is not null)return replay;
             if(CutoffReached())return Fail(BridgeErrorCodes.HistoricDayLocked,
                 "انتهت صلاحية معاينة التحضير بعد وقت القفل المحدد في الإعدادات.");
             using var find=c.CreateCommand();find.Transaction=t;
@@ -336,11 +344,14 @@ public sealed class AttendanceCommitService
                     revise?"تعديل تحضير اليوم بسبب: "+reason:"تحضير اليوم",
                     revise?reason:null,date,corr,ct).ConfigureAwait(false);
             }
-            return BridgeHelpers.Ok(new JsonObject
+            var result=new JsonObject
             {
                 ["count"]=snapshots.Count,["date"]=date,["statusId"]=statusId,
                 ["revised"]=revise
-            },events:BridgeHelpers.InvalidationEvent(
+            };
+            await MutationIdempotency.StoreAsync(c,t,receipt,result,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(result,events:BridgeHelpers.InvalidationEvent(
                 revise?UiInvalidationEvents.AttendanceRevised:UiInvalidationEvents.AttendanceCommitted,
                 date,snapshots.Select(p=>p.PersonId)));
         },ct).ConfigureAwait(false);

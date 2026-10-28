@@ -428,6 +428,12 @@ public sealed class PersonRosterService
         long baseRevision = ReadLong(payload, "baseRevision", 0);
         string newName = ReadRequiredString(payload, "visibleName").Trim();
         string newNumber = ReadRequiredString(payload, "serviceNumberA").Trim();
+        // The SQLCipher boundary stores ASCII canonical text, never the raw
+        // Arabic-Indic/Persian glyphs entered by the operator. Preserve zeros.
+        if (!ServiceNumberPolicy.TryCanonicalize(newNumber, out string canonicalNumber))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "الرقم (ع) يجب أن يتكون من 4 إلى 70 رقماً دون حروف أو فراغات.");
+        newNumber = canonicalNumber;
         string effectiveDate = ReadEffectiveDate(payload);
 
         (PersonRow? Row, BridgeResponse? Failure) loaded = await LoadPersonAsync(personId, ct).ConfigureAwait(false);
@@ -485,6 +491,12 @@ public sealed class PersonRosterService
         long expectedRevision = ReadLong(payload, "expectedRevision", ReadLong(payload, "baseRevision", 0));
         string newName = ReadRequiredString(payload, "visibleName").Trim();
         string newNumber = ReadRequiredString(payload, "serviceNumberA").Trim();
+        // The SQLCipher boundary stores ASCII canonical text, never the raw
+        // Arabic-Indic/Persian glyphs entered by the operator. Preserve zeros.
+        if (!ServiceNumberPolicy.TryCanonicalize(newNumber, out string canonicalNumber))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "الرقم (ع) يجب أن يتكون من 4 إلى 70 رقماً دون حروف أو فراغات.");
+        newNumber = canonicalNumber;
         string effectiveDate = ReadEffectiveDate(payload);
         string reason = ReadString(payload, "reason") is { Length: > 0 } r ? r : "تحديث هوية بأمر المسؤول.";
 
