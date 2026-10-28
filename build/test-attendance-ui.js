@@ -89,6 +89,8 @@ async function main(){
  await one("معاينة التحضير").handlers.click();await flush();
  assert.equal(writes.length,1,"user confirms directly in one modal");
  assert.equal(writes[0].payload.previewToken,"SERVER_ONE_TIME_TOKEN");
+ assert.match(writes[0].payload.operationId,/^[A-Za-z0-9_-]{16,128}$/,
+   "confirmed initial attendance has a durable operationId");
  await context.window.AltamamAttendance.render(root);
  const choices=selects();
  choices[1].value="STS-ABSENT";
@@ -103,6 +105,10 @@ async function main(){
  assert.equal(writes.length,2,"status change requires same preview and approval");
  assert.equal(writes[1].name,"ReviseTodayAttendance");
  assert.equal(writes[1].payload.previewToken,"SERVER_ONE_TIME_TOKEN");
+ assert.match(writes[1].payload.operationId,/^[A-Za-z0-9_-]{16,128}$/,
+   "confirmed revision has a durable operationId");
+ assert.notEqual(writes[1].payload.operationId,writes[0].payload.operationId,
+   "different user intents never reuse an operationId");
  await context.window.AltamamAttendance.render(root);
  selects()[1].value="STS-PRESENT";
  await choose();
