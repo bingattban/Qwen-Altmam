@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
+using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Tests.Fixtures;
@@ -199,6 +200,110 @@ public sealed class AdminSettingsIntegrationTests : IAsyncLifetime, IDisposable
         using var c=copy.CreateOpenConnection();
         using var q=c.CreateCommand();q.CommandText="SELECT COUNT(*) FROM SchemaVersions;";
         Assert.True(Convert.ToInt64(q.ExecuteScalar())>=1);
+    }
+
+    [Fact]
+    public async Task RestorePreview_IsReadOnlyShaPinned_AndCannotActivateTheBackup()
+    {
+        string path=_path+".restore-preview.dbbackup";
+        try
+        {
+            // Deliberately back up the EMPTY roster, then create today's person:
+            // the preview must show different histories, not merge/overwrite them.
+            await _db.CreateVerifiedEncryptedBackupAsync(path);
+            var inspection=new BackupInspectionService(_db);
+            var inspected=await inspection.VerifyAsync(path,CancellationToken.None);
+            Assert.True(inspected.Success,inspected.UserMessage);
+            string sha=Assert.IsType<JsonObject>(inspected.Data)["sha256"]!.GetValue<string>();
+            var created=await new PersonRosterService(_db).CreatePersonAsync(
+                Actor.UserId,Actor.Username,
+                new JsonObject{["visibleName"]="فرد حاضر لم يكن في النسخة",
+                    ["serviceNumberA"]="99442",["siteName"]="غير محدد"},
+                CancellationToken.None);
+            Assert.True(created.Success,created.UserMessage);
+
+            var preview=await inspection.PreviewRestoreAsync(path,sha,CancellationToken.None);
+            Assert.True(preview.Success,preview.UserMessage);
+            var data=Assert.IsType<JsonObject>(preview.Data);
+            Assert.True(data["previewOnly"]!.GetValue<bool>());
+            Assert.False(data["restoreEnabled"]!.GetValue<bool>());
+            Assert.True(data["schemaCompatible"]!.GetValue<bool>());
+            var selected=Assert.IsType<JsonObject>(data["backup"]);
+            var current=Assert.IsType<JsonObject>(data["current"]);
+            Assert.Equal(0L,selected["people"]!.GetValue<long>());
+            Assert.Equal(1L,current["people"]!.GetValue<long>());
+            Assert.Equal(sha,selected["sha256"]!.GetValue<string>());
+
+            // The preview must not produce any activation, stage or rescue file.
+            Assert.Equal(1L,ReadCount("Persons"));
+            Assert.Equal(0L,(await _db.InspectEncryptedBackupAsync(path)).PeopleCount);
+            string folder=Path.GetDirectoryName(_path)!;
+            Assert.Empty(Directory.GetFiles(folder,".altamam-restore-stage-*"));
+            if(Directory.Exists(Path.Combine(folder,"backups")))
+                Assert.Empty(Directory.GetFiles(Path.Combine(folder,"backups"),"rescue-before-restore-*"));
+
+            var stale=await inspection.PreviewRestoreAsync(path,new string('0',64),CancellationToken.None);
+            Assert.False(stale.Success);
+            Assert.Equal(BridgeErrorCodes.BackupIntegrityFailed,stale.ErrorCode);
+            var missing=await inspection.PreviewRestoreAsync(path,null,CancellationToken.None);
+            Assert.False(missing.Success);
+            Assert.Equal(BridgeErrorCodes.ValidationError,missing.ErrorCode);
+
+            // Real manifest-driven dispatch allows admins, refuses supervisors,
+            // and leaves the dangerous activation action disabled.
+            var dispatcher=BridgeHandlerCatalog.Create(new BridgeSharedServices(_db));
+            static string Envelope(string action,string nonce,string requestId,JsonObject payload)
+                => new JsonObject
+                {
+                    ["requestId"]=requestId,
+                    ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+                    ["action"]=action,
+                    ["sessionNonce"]=nonce,
+                    ["payload"]=payload
+                }.ToJsonString();
+            var payload=new JsonObject{["path"]=path,["expectedSha256"]=sha};
+            var authorized=await dispatcher.DispatchAsync(
+                Envelope("PreviewRestore",Actor.SessionNonce,"TST-RESTORE-READ-1",payload),
+                LocalWebUiOrigin.BaseUrl,true,
+                nonce=>Task.FromResult<BridgePrincipal?>(
+                    nonce==Actor.SessionNonce?Actor:null));
+            Assert.Equal(BridgeOutcomeKind.Success,authorized.Kind);
+            Assert.True(authorized.Response.Success);
+
+            var supervisor=new BridgePrincipal("TST-RESTORE-SV","synthetic-supervisor",
+                UserRole.Supervisor,"cccccccccccccccccccccccccccccccc");
+            var forbidden=await dispatcher.DispatchAsync(
+                Envelope("PreviewRestore",supervisor.SessionNonce,"TST-RESTORE-READ-2",
+                    (JsonObject)payload.DeepClone()),
+                LocalWebUiOrigin.BaseUrl,true,
+                nonce=>Task.FromResult<BridgePrincipal?>(
+                    nonce==supervisor.SessionNonce?supervisor:null));
+            Assert.Equal(BridgeOutcomeKind.Forbidden,forbidden.Kind);
+            Assert.False(forbidden.Response.Success);
+            var disabled=await dispatcher.DispatchAsync(
+                Envelope("RestoreDatabaseAtomically",Actor.SessionNonce,
+                    "TST-RESTORE-DISABLED-1",new JsonObject()),
+                LocalWebUiOrigin.BaseUrl,true,
+                nonce=>Task.FromResult<BridgePrincipal?>(
+                    nonce==Actor.SessionNonce?Actor:null));
+            Assert.False(disabled.Response.Success);
+            Assert.Equal(1L,ReadCount("Persons"));
+        }
+        finally
+        {
+            try{if(File.Exists(path))File.Delete(path);}catch(IOException){}
+        }
+    }
+
+    private long ReadCount(string table)
+    {
+        // Only constant test-owned SQL, never user-controlled table names.
+        using var connection=_db.CreateOpenConnection();
+        using var q=connection.CreateCommand();
+        q.CommandText=table=="Persons"
+            ?"SELECT COUNT(*) FROM Persons;"
+            :"SELECT COUNT(*) FROM AuditEvents;";
+        return Convert.ToInt64(q.ExecuteScalar());
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;
