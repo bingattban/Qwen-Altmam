@@ -95,6 +95,27 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await read.DailyRosterAsync(req.Payload, ct).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
+        // A dedicated read-only unprepared view. Never trust a caller-supplied
+        // statusId: a transferred person must not be marked unprepared that day.
+        "QueryUnprepared" => async (req, principal, ct) =>
+        {
+            var filters = req.Payload?.DeepClone() as JsonObject ?? new JsonObject();
+            filters["statusId"] = "__UNPREPARED__";
+            var read = new DailyMonthlyReadService(services.Db);
+            BridgeResponse inner = await read.DailyRosterAsync(filters, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
+        // The movement picker must list live active identities only, even if
+        // JavaScript forges includeArchived or organizationalStatus filters.
+        "QueryActivePersonsBySite" => async (req, principal, ct) =>
+        {
+            var filters = req.Payload?.DeepClone() as JsonObject ?? new JsonObject();
+            filters["includeArchived"] = false;
+            filters["organizationalStatus"] = 1;
+            var roster = new PersonRosterService(services.Db);
+            BridgeResponse inner = await roster.QueryPersonsAsync(filters, ct).ConfigureAwait(false);
+            return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
+        },
         "GetAvailableArchivePeriods" => async (req, principal, ct) =>
         {
             var read = new DailyMonthlyReadService(services.Db);
