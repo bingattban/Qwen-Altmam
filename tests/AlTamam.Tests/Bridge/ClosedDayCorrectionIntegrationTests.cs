@@ -36,7 +36,7 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
             INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
                 NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
                 OrganizationalStatus,ActiveFlag,RowVersion)
-            VALUES('TST-CLOSED-P1','شخص اختبار مغلق','شخص اختبار مغلق','C-1','C-1',
+            VALUES('TST-CLOSED-P1','شخص اختبار مغلق','شخص اختبار مغلق','940001','940001',
                 '2026-10-01','2026-10-01T07:00:00Z',1,1,1);
             INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
                 ValidToLocalDate,SourceMovementId,CreatedAtUtc)
@@ -329,7 +329,7 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
                 INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
                     ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
                     DestinationExternalName,EffectiveLocalDate,CommittedAtUtc,ActorUserId,IdempotencyKey)
-                VALUES('TST-CLOSED-M1','TST-CLOSED-P1','شخص اختبار مغلق','C-1',
+                VALUES('TST-CLOSED-M1','TST-CLOSED-P1','شخص اختبار مغلق','940001',
                   2,'SITE-UNSPECIFIED','غير محدد','جهة أخرى','2026-10-10',
                   '2026-10-10T12:00:00Z','TST-OLD-ACTOR','TST-CLOSED-MV');
                 """;
