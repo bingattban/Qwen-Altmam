@@ -111,13 +111,30 @@ public sealed class OfflineRestoreSwitch
         string json=await File.ReadAllTextAsync(Journal(live),ct).ConfigureAwait(false);
         var state=JsonSerializer.Deserialize<Intent>(json)
             ??throw new InvalidDataException("Restore intent is incomplete.");
+        // This file is on the local disk and must be treated as untrusted
+        // after a power loss. Never let a mutated journal approve an otherwise
+        // valid live file, or direct a rollback to an arbitrary sibling path.
+        if(state.Live is null||state.Stage is null||state.Rollback is null||
+           state.Rescue is null||state.OldDigest is null||state.NewDigest is null)
+            throw new InvalidDataException("Restore intent is incomplete.");
+        string root=Path.GetDirectoryName(Path.GetFullPath(live))!;
+        const string rollbackPrefix=".altamam-restore-rollback-";
+        const string suffix=".dbbackup";
+        string rollbackName=Path.GetFileName(state.Rollback);
+        string id=rollbackName.StartsWith(rollbackPrefix,StringComparison.Ordinal) &&
+                  rollbackName.EndsWith(suffix,StringComparison.OrdinalIgnoreCase) &&
+                  rollbackName.Length==rollbackPrefix.Length+32+suffix.Length
+                  ? rollbackName.Substring(rollbackPrefix.Length,32):string.Empty;
         if(!string.Equals(Path.GetFullPath(live),Path.GetFullPath(state.Live),
+                StringComparison.OrdinalIgnoreCase)||
+           id.Length!=32||!id.All(Uri.IsHexDigit)||
+           !string.Equals(Path.GetFullPath(state.Rollback),
+               Path.Combine(root,rollbackPrefix+id+suffix),StringComparison.OrdinalIgnoreCase)||
+           !string.Equals(Path.GetFullPath(state.Rescue),
+               Path.Combine(root,"backups","rescue-at-activation-"+id+suffix),
                StringComparison.OrdinalIgnoreCase)||
-           !string.Equals(Path.GetDirectoryName(Path.GetFullPath(state.Rollback)),
-               Path.GetDirectoryName(Path.GetFullPath(live)),StringComparison.OrdinalIgnoreCase)||
-           !Path.GetFileName(state.Rollback).StartsWith(".altamam-restore-rollback-",
-               StringComparison.Ordinal)||
-           state.OldDigest.Length!=64||state.NewDigest.Length!=64)
+           state.OldDigest.Length!=64||!state.OldDigest.All(Uri.IsHexDigit)||
+           state.NewDigest.Length!=64||!state.NewDigest.All(Uri.IsHexDigit))
             throw new InvalidDataException("Restore intent paths/digests are not trusted.");
         ValidateStagePath(live,state.Stage);
         return state;
