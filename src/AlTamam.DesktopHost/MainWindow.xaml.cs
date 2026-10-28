@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
 using AlTamam.DesktopHost.Bridge;
+using AlTamam.DesktopHost.Presentation;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
@@ -19,6 +20,7 @@ namespace AlTamam.DesktopHost;
 public partial class MainWindow : Window
 {
     private readonly WebView2 _webView = new();
+    private readonly StartupViewModel _startupViewModel = new();
     private AlTamamDbContext? _dbContext;
     private DesktopBridgeGateway? _gateway;
     private Scheduling.EightPmSchedulerService? _scheduler;
@@ -41,6 +43,7 @@ public partial class MainWindow : Window
         ShowInTaskbar = true;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         InitializeComponent();
+        DataContext = _startupViewModel;
         webViewHost.Children.Add(_webView);
         Panel.SetZIndex(_webView, 0); // keep the native Arabic startup message above the browser
         Loaded += OnLoadedOrSelfCheck;
@@ -133,7 +136,7 @@ public partial class MainWindow : Window
             string? recoveryMessage =
                 AlTamam.Infrastructure.Security.DatabaseStartupFailureClassifier
                     .UserMessage(ex);
-            startupMessage.Text = recoveryMessage ??
+            _startupViewModel.Message = recoveryMessage ??
                 "تعذر فتح التطبيق. تحقّق من قاعدة البيانات وبيئة WebView2.";
             MessageBox.Show(
                 recoveryMessage ?? ("تعذر تشغيل واجهة التطبيق: " + ex.Message),
@@ -342,7 +345,7 @@ public partial class MainWindow : Window
             if (webViewSelfCheck) return;
             if (args.IsSuccess)
             {
-                startupPanel.Visibility = Visibility.Collapsed;
+                _startupViewModel.PanelVisibility = Visibility.Collapsed;
                 _scheduler?.Start(); // start catch-up after UI is ready; never delay first paint
                 _backupScheduler?.Start(); // independent verified automatic snapshots
                 return;
