@@ -22,9 +22,9 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
             INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
               NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
               OrganizationalStatus,ActiveFlag,RowVersion)
-            VALUES('TST-REPORT-1','فرد التقرير','فرد التقرير','R001','R001',
+            VALUES('TST-REPORT-1','فرد التقرير','فرد التقرير','990001','990001',
               '2026-01-01','2026-01-01T08:00:00Z',1,1,1),
-              ('TST-REPORT-2','فرد آخر','فرد آخر','R002','R002',
+              ('TST-REPORT-2','فرد آخر','فرد آخر','990002','990002',
               '2026-01-01','2026-01-01T08:00:00Z',1,1,1);
             INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
               ValidToLocalDate,SourceMovementId,CreatedAtUtc)
@@ -56,7 +56,7 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         var result=await svc.ReportAsync(new JsonObject{["personId"]="TST-REPORT-1"},CancellationToken.None);
         Assert.True(result.Success,result.UserMessage);
         var data=Assert.IsType<JsonObject>(result.Data);
-        Assert.Equal("R001",data["person"]!["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("990001",data["person"]!["serviceNumberA"]!.GetValue<string>());
         Assert.Equal(2L,data["attendanceTotal"]!.GetValue<long>());
         var statuses=Assert.IsType<JsonArray>(data["statusTotals"]);
         Assert.Equal(2,statuses.Count);
@@ -82,10 +82,10 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
                     CurrentServiceNumberA,NormalizedServiceNumberA,
                     FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
                 VALUES('TST-REPORT-NEW','فرد جديد مستقل','فرد جديد مستقل',
-                    'R001','R001','2026-02-01','2026-02-01T08:00:00Z',1,1,1);
+                    '990001','990001','2026-02-01','2026-02-01T08:00:00Z',1,1,1);
                 INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
                     ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
-                VALUES('TST-REPORT-NEW','فرد جديد مستقل','R001','2026-02-01',NULL,
+                VALUES('TST-REPORT-NEW','فرد جديد مستقل','990001','2026-02-01',NULL,
                     'TEST','2026-02-01T08:00:00Z','إدراج مستقل');
                 INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
                     ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
@@ -115,8 +115,8 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         Assert.Equal(0L,people[0]!["attendanceTotal"]!.GetValue<long>());
         Assert.Equal("TST-REPORT-1",people[1]!["personId"]!.GetValue<string>());
         Assert.Equal(2L,people[1]!["attendanceTotal"]!.GetValue<long>());
-        Assert.Equal("R001",people[0]!["serviceNumberA"]!.GetValue<string>());
-        Assert.Equal("R001",people[1]!["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("990001",people[0]!["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("990001",people[1]!["serviceNumberA"]!.GetValue<string>());
         var single=await svc.ReportAsync(new JsonObject{
             ["personId"]="TST-REPORT-NEW"
         },CancellationToken.None);
@@ -240,10 +240,10 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
                     ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
                     DestinationExternalName,EffectiveLocalDate,CommittedAtUtc,ActorUserId,
                     IdempotencyKey,SeparationReason)
-                VALUES('TST-RPT-MOV-1','TST-REPORT-1','فرد التقرير','R001',2,
+                VALUES('TST-RPT-MOV-1','TST-REPORT-1','فرد التقرير','990001',2,
                     'SITE-UNSPECIFIED','غير محدد','شركة أخرى','2026-01-18',
                     '2026-01-18T09:00:00Z','TEST','RPT-MOV-ONE',NULL),
-                      ('TST-RPT-MOV-2','TST-REPORT-1','فرد التقرير','R001',4,
+                      ('TST-RPT-MOV-2','TST-REPORT-1','فرد التقرير','990001',4,
                     'SITE-UNSPECIFIED','غير محدد',NULL,'2026-01-19',
                     '2026-01-19T09:00:00Z','TEST','RPT-MOV-TWO',NULL);
                 """;
