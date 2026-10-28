@@ -5,18 +5,16 @@ namespace AlTamam.Tests.Persistence;
 
 /// <summary>
 /// Phase 01 step 01.07 — local writable AppData paths vs read-only installation
-/// resources; portable/install distinction; never store the database under
-/// Program Files. Path-shape assertions are platform-safe so they also run in
-/// Linux CI smoke jobs; full Windows behavior is proven on windows-latest.
+/// resources. The owner has approved a single per-Windows-user AppData root for
+/// BOTH installer and direct-run Portable ZIP. No per-executable database branch
+/// or automated migration is allowed. The tests run on Windows CI.
 /// </summary>
-public sealed class AppDataLayoutTests : IDisposable
+public sealed class AppDataLayoutTests
 {
-    private readonly bool _originalPortable = AppDataLayout.IsPortable;
 
     [Fact]
     public void InstalledMode_DataRoot_UnderLocalApplicationData()
     {
-        AppDataLayout.IsPortable = false;
         string root = AppDataLayout.DataRoot;
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         Assert.StartsWith(localAppData, root, StringComparison.OrdinalIgnoreCase);
@@ -25,18 +23,28 @@ public sealed class AppDataLayoutTests : IDisposable
     }
 
     [Fact]
-    public void PortableMode_DataRoot_SitsBesideExecutable()
+    public void PortableAndInstaller_AlwaysShareWindowsLocalAppDataRoot()
     {
-        AppDataLayout.IsPortable = true;
-        try
-        {
-            string root = AppDataLayout.DataRoot;
-            Assert.Equal(Path.Combine(AppContext.BaseDirectory, "data"), root);
-        }
-        finally
-        {
-            AppDataLayout.IsPortable = false;
-        }
+        string expected = Path.Combine(Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData,
+            Environment.SpecialFolderOption.Create), AppDataLayout.ProductFolderName);
+        Assert.Equal(expected, AppDataLayout.DataRoot, StringComparer.OrdinalIgnoreCase);
+        // No second per-executable write mode may silently point to a new database.
+        Assert.Null(typeof(AppDataLayout).GetProperty("IsPortable",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static));
+    }
+
+    [Fact]
+    public void DatabaseAndBackupPaths_RetainTheirExistingWindowsUserLocation()
+    {
+        var root = AppDataLayout.DataRoot;
+        Assert.Equal(Path.Combine(root, AppDataLayout.DatabaseFileName),
+            AppDataLayout.ResolveDatabasePath(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(Path.Combine(root, "backups"), AppDataLayout.ResolveBackupDirectory(),
+            StringComparer.OrdinalIgnoreCase);
+        // An extracted ZIP beside another folder must not become an implicit data source.
+        Assert.NotEqual(Path.Combine(AppContext.BaseDirectory, "data"),
+            AppDataLayout.DataRoot, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -69,5 +77,4 @@ public sealed class AppDataLayoutTests : IDisposable
         Assert.Throws<ArgumentException>(() => AppDataLayout.AssertWritableLocation(" "));
     }
 
-    public void Dispose() => AppDataLayout.IsPortable = _originalPortable;
 }
