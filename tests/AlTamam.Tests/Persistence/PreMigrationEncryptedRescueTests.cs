@@ -37,7 +37,7 @@ public sealed class PreMigrationEncryptedRescueTests : IDisposable
                 SchemaMigrationRunner.GetCurrentVersion(current));
         }
 
-        var backups = Directory.GetFiles(RescueFolder, "pre-migration-v001-to-v009-*.db");
+        var backups = Directory.GetFiles(RescueFolder, $"pre-migration-v001-to-v{AlTamamDbContext.CurrentSchemaVersion:D3}-*.db");
         Assert.Single(backups);
         // Windows keeps an SQLCipher database file locked while its connection is
         // open. Dispose all handles BEFORE inspecting raw encrypted bytes or
