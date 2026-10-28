@@ -1679,14 +1679,24 @@
       planned.appendChild(forthcoming);
       const inspectFeedback=node("div","settings-feedback");
       inspectFeedback.setAttribute("aria-live","polite");
+      const previewFeedback=node("div","settings-feedback");
+      previewFeedback.setAttribute("aria-live","polite");
+      let inspectedBackup=null,previewButton=null;
       const inspect=btn("اختيار نسخة مشفرة وفحص سلامتها",async()=>{
         inspect.disabled=true;
+        inspectedBackup=null;
+        if(previewButton)previewButton.disabled=true;
+        previewFeedback.replaceChildren();
         inspectFeedback.replaceChildren(warning("جارٍ اختيار الملف والتحقق من التشفير والبيانات..."));
         try{
           const result=await api().invoke("InspectBackup",{}, {timeoutMs:180000});
           if(token!==currentRequest)return;
           const data=result.data||{};
           if(data.verified!==true)throw Error("لم ينجح فحص النسخة.");
+          if(typeof data.path!=="string"||!/^[a-f0-9]{64}$/i.test(data.sha256||""))
+            throw Error("نتيجة فحص النسخة غير مكتملة؛ أعد اختيار الملف.");
+          inspectedBackup={path:data.path,expectedSha256:data.sha256};
+          if(previewButton)previewButton.disabled=false;
           const detail=node("div","settings-properties");
           for(const [label,value] of [
             ["اسم النسخة",data.fileName],
@@ -1703,6 +1713,47 @@
         finally{inspect.disabled=false;}
       },"btn btn-outline settings-action");
       planned.append(inspect,inspectFeedback);
+      if(session.role==="GeneralAdministration"||session.role==="OrdinaryAdministration"){
+        previewButton=btn("معاينة الاستعادة دون تنفيذ",async()=>{
+          if(!inspectedBackup){
+            previewFeedback.replaceChildren(warning("اختر النسخة المشفرة وافحصها أولاً."));
+            return;
+          }
+          const selected={...inspectedBackup};
+          previewButton.disabled=true;
+          previewFeedback.replaceChildren(warning("جارٍ مقارنة النسخة بالبيانات الحالية دون أي تعديل..."));
+          try{
+            const response=await api().invoke("PreviewRestore",selected,{timeoutMs:180000});
+            if(token!==currentRequest)return;
+            const data=response.data||{},backup=data.backup||{},current=data.current||{};
+            if(data.verified!==true||data.previewOnly!==true||data.restoreEnabled!==false||
+                backup.sha256?.toLowerCase()!==selected.expectedSha256.toLowerCase())
+              throw Error("لم يرجع الخادم معاينة قراءة فقط مطابقة للنسخة المفحوصة.");
+            const review=window.AltamamDialog?.detailsReview;
+            if(typeof review!=="function")
+              throw Error("نافذة المعاينة غير متاحة. لم تُجرَ أي استعادة.");
+            await review({rows:[
+              ["اسم النسخة",backup.fileName],
+              ["توافق إصدار القاعدة",data.schemaCompatible?"متوافق":"غير متوافق — لا يمكن الاستعادة"],
+              ["الأفراد في النسخة",backup.people],["الأفراد الحاليون",current.people],
+              ["التحضير في النسخة",backup.attendance],["التحضير الحالي",current.attendance],
+              ["سجل العمليات في النسخة",backup.auditEvents],["سجل العمليات الحالي",current.auditEvents],
+              ["الحسابات في النسخة",backup.users],["الحسابات الحالية",current.users],
+              ["بصمة النسخة SHA-256",backup.sha256],
+              ["نتيجة المعاينة","قراءة فقط؛ الاستعادة غير مفعلة"]
+            ]},{title:"معاينة الاستعادة — دون تنفيذ",
+              message:"الاستعادة تستبدل قاعدة البيانات كاملة ولا تدمج الأفراد. "+
+                "هذه المعاينة لا تمنح صلاحية التنفيذ، ولن يُغيَّر أي ملف.",
+              confirmLabel:"إغلاق المعاينة دون استعادة"});
+            if(token===currentRequest)
+              previewFeedback.replaceChildren(node("p","settings-copy",
+                "اكتملت المعاينة فقط. لم تُستعد بيانات ولم تُعدّل النسخة أو القاعدة الحالية."));
+          }catch(e){if(token===currentRequest)errors(previewFeedback,e);}
+          finally{if(token===currentRequest)previewButton.disabled=!inspectedBackup;}
+        },"btn btn-outline settings-action");
+        previewButton.disabled=true;
+        planned.append(previewButton,previewFeedback);
+      }
       if(session.role==="GeneralAdministration"){
         const resetBox=node("section","settings-danger-zone");
         const notice=node("p","settings-copy",
