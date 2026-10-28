@@ -131,13 +131,13 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
             ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
         Assert.False(rejected.Success);
         Assert.Contains("فرد اختبار رقم 1",rejected.UserMessage);
-        Assert.Contains("TST-NUM-1",rejected.UserMessage);
+        Assert.Contains("920001",rejected.UserMessage);
         Assert.Equal(1L,Count("AttendanceRecords"));
         var same=await service.PreviewAsync(Payload("revise","STS-PRESENT",
             ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
         Assert.False(same.Success);
         Assert.Contains("فرد اختبار رقم 1",same.UserMessage);
-        Assert.Contains("TST-NUM-1",same.UserMessage);
+        Assert.Contains("920001",same.UserMessage);
         Assert.Equal(0L,Count("AttendanceRevisions"));
     }
 
@@ -157,7 +157,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
             ["TST-ATTEND-P1","TST-ATTEND-P2"]),Actor,CancellationToken.None);
         Assert.False(rejected.Success);
         Assert.Contains("فرد اختبار رقم 2",rejected.UserMessage);
-        Assert.Contains("TST-NUM-2",rejected.UserMessage);
+        Assert.Contains("920002",rejected.UserMessage);
         Assert.Equal(0L,Count("AttendanceRecords"));
         Assert.Equal(0L,Count("AuditEvents"));
     }
@@ -180,7 +180,7 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
             Actor,false,CancellationToken.None);
         Assert.False(stale.Success);
         Assert.Contains("فرد اختبار رقم 1",stale.UserMessage);
-        Assert.Contains("TST-NUM-1",stale.UserMessage);
+        Assert.Contains("920001",stale.UserMessage);
         Assert.Equal(1L,Count("AttendanceRecords"));
     }
 
