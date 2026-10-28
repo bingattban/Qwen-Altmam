@@ -1,3 +1,30 @@
+# Current evidence addendum — 2026-10-29 (owner plan, introductory directive)
+
+**Current governing repository:** [`bingattban2/Qwen-Altmam`](https://github.com/bingattban2/Qwen-Altmam).
+**Verified `main` commit:** `0290ebbf235741395bea42eb77cd74fd777865db` (merged PR [#108](https://github.com/bingattban2/Qwen-Altmam/pull/108); later than the owner plan's PR #107 reference).
+**State:** CI CANDIDATE BUILT AND TESTED; **NOT A PRODUCTION ACCEPTANCE OR OWNER SIGNOFF**.
+
+This addendum records **live, exact-SHA evidence** for the October 28 owner-reconciled master directive. The October 23 report below is retained as an **unaltered historical snapshot**, not the current test/build state. Its statements about zero tests ever having run, packages never having been produced, the former repository name, and absence of a remote are **obsolete**. The current source-of-truth precedence is: latest explicit owner instruction, approved written owner decisions, reconciled plan, then nonconflicting previous concepts. No historical report is evidence of final approval.
+
+## Verified Windows CI at the exact main SHA
+
+- [Windows Core Build, run 40770099467](https://github.com/bingattban2/Qwen-Altmam/actions/runs/40770099467): **success**; manifest/Arabic UI checks, production build, Windows .NET test suite and measured synthetic search diagnostic passed.
+- [Windows Release Packages, run 40770099535](https://github.com/bingattban2/Qwen-Altmam/actions/runs/40770099535): **success**; independent preflight, full C# suite **821 passed, 0 failed, 0 skipped** (Windows `net10.0`), then native x86 and x64 packaging. The package jobs depend on the successful Release test job; Core and Release workflows are separately triggered on PR and main.
+- The Release run uploaded **four independent executable distribution artifacts** (not mock binaries): `AlTamam-Portable-Windows-32bit-rc-0.0.478-ci` (artifact 12852717376); `AlTamam-Installer-Windows-32bit-rc-0.0.478-ci` (12851254107); `AlTamam-Portable-Windows-64bit-rc-0.0.478-ci` (12851933029); `AlTamam-Installer-Windows-64bit-rc-0.0.478-ci` (12852553652). The same run uploaded separate SHA-256/build-metadata artifacts for both architectures and a full-suite `.trx` result artifact.
+- Runner validation included bundled standalone offline WebView2 setup, genuine WebView2 local-UI self-check, native layout/PE/SQLCipher checks, and an automated real Portable/Installer install-uninstall-reinstall **AppData-preservation subset** on both architectures. This does **not** establish a complete offline user journey on separate clean Windows PCs.
+
+## Open acceptance and scope constraints
+
+1. The run's **`Clean-machine acceptance matrix (15.06) — manual evidence gate` was SKIPPED** on the push workflow; independent offline physical/VM E2E validation, real power interruption/disk-full and cross-PC encrypted recovery still require separate reproducible evidence and owner approval.
+2. Destructive `RestoreDatabaseAtomically` remains deliberately **DISABLED**. Its native security prerequisites are partial and must not be bypassed. The latest PR #108 adds a bridge stop-and-drain barrier, **not an enabled final restore workflow**.
+3. No final signed release or owner authorization is established by these candidate artifacts; GitHub Releases had no published entries at review. Existing terminology in the historical report concerning `Phase 16` predates the October 28 **phases 00–15** directive and must not silently alter current owner-approved scope.
+4. The reconciled full master-prompt file referenced by the historical implementation ledger was **not present** in the examined repository tree at this SHA. The owner is sending approved execution parts sequentially; preserve the owner's priority order and flag a *new* unresolved business-policy contradiction rather than inventing a decision.
+5. The artifacts above use the existing Release naming pattern. Final handover filenames must be checked against the owner-approved four-variant naming convention, with independently reproducible checksums.
+
+**Disposition:** verification of the introductory implementation/build directive is complete for the **existing** architecture and CI plumbing. **Overall release remains NO-GO**, and this addendum does not change any historical data, source, code, acceptance-test outcomes, or gate status.
+
+---
+
 # AlTamam — FINAL_ACCEPTANCE_REPORT (Phase 16)
 
 **Report generated:** 2026-10-23 (UTC), by the implementation agent in the production repository workspace.
