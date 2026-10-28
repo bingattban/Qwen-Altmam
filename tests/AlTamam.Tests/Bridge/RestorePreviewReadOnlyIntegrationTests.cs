@@ -85,7 +85,8 @@ public sealed class RestorePreviewReadOnlyIntegrationTests : IAsyncLifetime, IDi
     public async Task Preview_ReturnsEncryptedBackupAndLiveCounts_WithoutAlteringDatabase(string nonce)
     {
         var original=await _db.InspectEncryptedBackupAsync(_backup);
-        var response=await Call(nonce,new JsonObject{["path"]=_backup});
+        var response=await Call(nonce,new JsonObject{
+            ["path"]=_backup,["expectedSha256"]=original.Sha256});
         Assert.Equal(BridgeOutcomeKind.Success,response.Kind);
         var data=Assert.IsType<JsonObject>(response.Response.Data);
         Assert.True(data["verified"]!.GetValue<bool>());
@@ -101,7 +102,8 @@ public sealed class RestorePreviewReadOnlyIntegrationTests : IAsyncLifetime, IDi
     [Fact]
     public async Task SupervisorCannotPreviewRestore_AndCannotReadCounts()
     {
-        var forbidden=await Call(SvNonce,new JsonObject{["path"]=_backup});
+        var forbidden=await Call(SvNonce,new JsonObject{
+            ["path"]=_backup,["expectedSha256"]=new string('a',64)});
         Assert.Equal(BridgeOutcomeKind.Forbidden,forbidden.Kind);
         Assert.False(forbidden.Response.Success);
         Assert.Null(forbidden.Response.Data);
@@ -112,13 +114,30 @@ public sealed class RestorePreviewReadOnlyIntegrationTests : IAsyncLifetime, IDi
     public async Task MissingOrCorruptBackup_FailsClosedAndPreservesExistingData()
     {
         var missing=await Call(GaNonce,new JsonObject{["path"]=
-            Path.Combine(Path.GetDirectoryName(_path)!,"not-here.dbbackup")});
+            Path.Combine(Path.GetDirectoryName(_path)!,"not-here.dbbackup"),
+            ["expectedSha256"]=new string('a',64)});
         Assert.False(missing.Response.Success);
         var corrupt=Path.Combine(Path.GetDirectoryName(_path)!,"corrupt-preview.dbbackup");
         await File.WriteAllTextAsync(corrupt,"not an encrypted SQLite database");
-        var broken=await Call(GaNonce,new JsonObject{["path"]=corrupt});
+        var broken=await Call(GaNonce,new JsonObject{
+            ["path"]=corrupt,["expectedSha256"]=new string('a',64)});
         Assert.False(broken.Response.Success);
         Assert.Null(broken.Response.Data);
+        Assert.Equal(1L,CurrentCount());
+    }
+
+    [Fact]
+    public async Task PreviewRejectsMissingOrChangedDigest_BeforeAnyDatabaseMutation()
+    {
+        var noPin=await Call(GaNonce,new JsonObject{["path"]=_backup});
+        Assert.False(noPin.Response.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,noPin.Response.ErrorCode);
+        Assert.Equal(1L,CurrentCount());
+
+        var mismatch=await Call(GaNonce,new JsonObject{
+            ["path"]=_backup,["expectedSha256"]=new string('0',64)});
+        Assert.False(mismatch.Response.Success);
+        Assert.Equal(BridgeErrorCodes.BackupIntegrityFailed,mismatch.Response.ErrorCode);
         Assert.Equal(1L,CurrentCount());
     }
 
