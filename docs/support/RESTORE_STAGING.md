@@ -31,7 +31,8 @@ schema rejection. They are not a substitute for two-machine manual testing.
 The authenticated `PreviewRestore` bridge action now permits GeneralAdministration
 and OrdinaryAdministration to inspect a user-selected, **already verified**
 SQLCipher backup without changing the live database. It validates the
-candidate again against the actual encrypted key and SHA-256 catalog, requires
+candidate again against the actual encrypted key and the SHA-256 digest
+pinned at native file inspection (plus any stored SHA-256 catalog), requires
 the current schema, and reports incoming versus current counts for persons,
 attendance, users and audit events in a modal. Supervisors cannot invoke it;
 no activation/approval token is issued.
