@@ -101,6 +101,57 @@ public static class BridgeHandlerCatalog
             return Done(req, new JsonObject { ["loggedOut"] = true }, Invalidation(UiInvalidationEvents.SessionEnded));
         },
         // Real read-only projections: all SQL executes locally against SQLCipher.
+        // Phase 07: actual, read-only SQLCipher ledger status; never create a
+        // run on page load, and never pretend an unrecorded failure succeeded.
+        "GetAutoAttendanceRun" => async (req, principal, ct) =>
+        {
+            int take = 10;
+            if (req.Payload?["take"] is JsonNode requested)
+            {
+                try { take = requested.GetValue<int>(); }
+                catch
+                {
+                    return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                        "عدد سجلات التحضير المطلوبة غير صالح."));
+                }
+                if (take < 1 || take > 60)
+                    return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                        "حدد عدد السجلات من 1 إلى 60."));
+            }
+            var snapshot = await new AlTamam.Application.Scheduling.AutoAttendanceService(
+                services.Db, services.Time).ReadStatusAsync(take, ct).ConfigureAwait(false);
+            var history = new JsonArray();
+            foreach (var run in snapshot.Runs)
+            {
+                history.Add(new JsonObject
+                {
+                    ["jobKey"] = run.JobKey,
+                    ["businessDate"] = run.BusinessDate.ToString("yyyy-MM-dd"),
+                    ["completed"] = true,
+                    ["isCatchUpRun"] = run.IsCatchUpRun,
+                    ["copiedCount"] = run.CopiedCount,
+                    ["skippedNoYesterdayCount"] = run.SkippedNoYesterdayCount,
+                    ["skippedTransferExemptCount"] = run.SkippedTransferExemptCount,
+                    ["summaryArabic"] = run.SummaryArabic
+                });
+            }
+            return Done(req, new JsonObject
+            {
+                ["runs"] = history,
+                ["hasCompletedRuns"] = snapshot.Runs.Count > 0,
+                ["lastRunDate"] = snapshot.Runs.Count > 0
+                    ? snapshot.Runs[0].BusinessDate.ToString("yyyy-MM-dd") : null,
+                ["nowUtc"] = snapshot.NowUtc.ToString("O"),
+                ["localNow"] = snapshot.LocalNowIso,
+                ["nextDueLocal"] = snapshot.NextDueLocalWallClock,
+                ["currentDayDue"] = snapshot.CurrentDayDue,
+                ["clockIntegrityOk"] = snapshot.ClockIntegrityOk,
+                ["pendingCatchUpDays"] = snapshot.PendingCatchUpDays,
+                // Only successful runs are recorded in AutoAttendanceRuns.
+                // Missing/failed attempts cannot be inferred from the lack of a row.
+                ["failureHistoryAvailable"] = false
+            });
+        },
         "GetDashboardSummary" => async (req, principal, ct) =>
         {
             var read = new DailyMonthlyReadService(services.Db);
