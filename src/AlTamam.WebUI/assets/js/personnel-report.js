@@ -88,7 +88,7 @@
          }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
        });
        exportFeedback.replaceChildren(progressText,cancelExport);
-       const poll=setInterval(async()=>{
+       const poll=(typeof setInterval === "function")?setInterval(async()=>{
          if(!monitoring||pollBusy||popup.hidden)return;
          pollBusy=true;
          try{
@@ -104,13 +104,13 @@
            if(e?.errorCode!=="MissingData"&&monitoring)
              progressText.textContent="جارٍ معالجة ملف Excel...";
          }finally{pollBusy=false;}
-       },1250);
+       },1250):null;
        try{
          const reply=await api().invoke("ExportPersonLifetimeExcel",
            {...payload,exportId:preview.exportId},{timeoutMs:600000});
          if(!popup.hidden)exportFeedback.replaceChildren(el("p",
            "تم حفظ Excel: "+reply.data.filePath,"settings-success"));
-       }finally{monitoring=false;clearInterval(poll);}
+       }finally{monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);}
      }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
    }
    const exportButton=btn("تصدير التقرير إلى Excel",()=>{void exportExcel();});

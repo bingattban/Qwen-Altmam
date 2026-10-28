@@ -627,7 +627,7 @@
               }catch(error){showError(exportPanel,error);}
             });
             exportPanel.replaceChildren(description,progressText,stopExport);
-            const poll=setInterval(async()=>{
+            const poll=(typeof setInterval === "function")?setInterval(async()=>{
               if(!monitoring||pollBusy||STATE.monthEpoch!==epoch)return;
               pollBusy=true;
               try{
@@ -645,7 +645,7 @@
                 if(error?.errorCode!=="MissingData"&&monitoring)
                   progressText.textContent="جارٍ تنفيذ التصدير والتحقق من حالته...";
               }finally{pollBusy=false;}
-            },1250);
+            },1250):null;
             try{
               const result=parseData(await bridge().invoke("ExportMonthlyWorkbookSet",chosen,
                 {timeoutMs:600000}));
@@ -660,7 +660,7 @@
                 else showError(exportPanel,error);
               }
             }finally{
-              monitoring=false;clearInterval(poll);confirmSave.disabled=false;
+              monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);confirmSave.disabled=false;
             }
           },"btn btn-primary");
           const cancel=button("إلغاء التصدير",()=>{
