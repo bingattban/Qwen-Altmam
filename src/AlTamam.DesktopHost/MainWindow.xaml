@@ -9,11 +9,11 @@
     <!-- The WebView2 control is created in code-behind and fills the window. -->
     <Grid x:Name="webViewHost" Background="#F5F7FA">
         <!-- Native startup feedback is visible immediately while WebView2 and the encrypted DB initialize. -->
-        <Border x:Name="startupPanel" Panel.ZIndex="10" Background="#F5F7FA">
+        <Border x:Name="startupPanel" Visibility="{Binding PanelVisibility}" Panel.ZIndex="10" Background="#F5F7FA">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock Text="التمام اليومي" FontSize="30" FontWeight="Bold"
                            HorizontalAlignment="Center" Foreground="#15314D" />
-                <TextBlock x:Name="startupMessage" Text="جارٍ تجهيز التطبيق..."
+                <TextBlock x:Name="startupMessage" Text="{Binding Message}"
                            FontSize="16" Margin="0,18,0,0" HorizontalAlignment="Center"
                            Foreground="#52677A" />
             </StackPanel>
