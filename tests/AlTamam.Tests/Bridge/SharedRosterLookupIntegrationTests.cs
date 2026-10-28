@@ -145,10 +145,62 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
     }
 
     [Fact]
+    public async Task QueryActivePersonsBySite_CannotBeCoercedIntoListingDepartedIdentities()
+    {
+        var answer = await Call("QueryActivePersonsBySite", new JsonObject
+        {
+            ["siteId"] = "SITE-UNSPECIFIED",
+            ["includeArchived"] = true,
+            ["organizationalStatus"] = 2,
+            ["page"] = 1,
+            ["pageSize"] = 10
+        });
+        var rows = Items(answer);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(2, answer.Response.Data!["total"]!.GetValue<long>());
+        Assert.DoesNotContain(rows, x => x!["personId"]!.GetValue<string>() == "TST-LOOKUP-X");
+        Assert.All(rows, x =>
+        {
+            Assert.Equal(1, x!["organizationalStatus"]!.GetValue<int>());
+            Assert.True(x["active"]!.GetValue<bool>());
+        });
+
+        var foreign = Items(await Call("QueryActivePersonsBySite", new JsonObject
+        {
+            ["siteId"] = "SITE-NOT-EXIST", ["includeArchived"] = true
+        }));
+        Assert.Empty(foreign);
+    }
+
+    [Fact]
+    public async Task QueryUnprepared_IgnoresForgedStatusFilterAndRequiresValidBusinessDate()
+    {
+        var answer = await Call("QueryUnprepared", new JsonObject
+        {
+            ["businessDate"] = "2026-10-02",
+            ["statusId"] = "__TRANSFER_DAY__",
+            ["siteId"] = "SITE-UNSPECIFIED",
+            ["pageSize"] = 20
+        });
+        var rows = Items(answer);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(2, answer.Response.Data!["total"]!.GetValue<long>());
+        Assert.DoesNotContain(rows, x => x!["personId"]!.GetValue<string>() == "TST-LOOKUP-X");
+        Assert.All(rows, x => Assert.Equal("غير محضر", x!["statusName"]!.GetValue<string>()));
+
+        var invalid = await Call("QueryUnprepared", new JsonObject
+        {
+            ["businessDate"] = "2026-02-30", ["statusId"] = ""
+        });
+        Assert.False(invalid.Response.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError, invalid.Response.ErrorCode);
+    }
+
+    [Fact]
     public async Task SearchAndStatusCalls_RequireAuthenticatedSession()
     {
         foreach (var action in new[] { "GetActiveAttendanceStatuses", "SearchPersons",
-            "SearchActivePersonsForAccount" })
+            "SearchActivePersonsForAccount", "QueryActivePersonsBySite", "QueryUnprepared" })
         {
             var answer = await Call(action, new JsonObject { ["term"] = "احمد" },
                 authenticated: false);
