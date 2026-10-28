@@ -130,8 +130,41 @@ function navigateTop(section, updateUrl) {
   if (updateUrl !== false) history.replaceState(null, "", "#" + encodeURIComponent(section));
 }
 
-function toggleTheme() {
-  document.body.classList.toggle("dark-theme");
+// AppSettings.Theme is the only persisted theme. Before authentication the
+// existing button remains a local preview; after login it reads/writes C#.
+let themeAuthorized=false,themeWriteInFlight=false,themeEpoch=0;
+async function syncThemeFromSettings() {
+  themeAuthorized=true;
+  const epoch=++themeEpoch;
+  const bridge=window.AltamamBridge;
+  if(!bridge?.hasBridge?.())return;
+  try {
+    const reply=await bridge.invoke("GetSettingsOverview",{});
+    if(epoch!==themeEpoch||!themeAuthorized)return;
+    const theme=reply?.data?.theme;
+    if(theme==="dark"||theme==="light")
+      document.body.classList.toggle("dark-theme",theme==="dark");
+  } catch {
+    // An unavailable settings read may not silently write over the saved theme.
+  }
+}
+function clearThemeAuthorization(){themeAuthorized=false;themeEpoch++;}
+async function toggleTheme() {
+  if(themeWriteInFlight)return;
+  const dark=!document.body.classList.contains("dark-theme");
+  themeEpoch++;
+  document.body.classList.toggle("dark-theme",dark);
+  if(!themeAuthorized)return;
+  const bridge=window.AltamamBridge;
+  if(!bridge?.hasBridge?.())return;
+  themeWriteInFlight=true;
+  try {
+    await bridge.invoke("SetTheme",{theme:dark?"dark":"light"});
+  } catch {
+    document.body.classList.toggle("dark-theme",!dark);
+    if(window.AltamamDialog?.alert)
+      void window.AltamamDialog.alert("تعذر حفظ المظهر. تأكد من صلاحية الجلسة.");
+  } finally { themeWriteInFlight=false; }
 }
 
 function closeModal() {
@@ -162,4 +195,8 @@ window.addEventListener("DOMContentLoaded", () => {
 window.AltamamNavigation = Object.freeze({ navigateTop, openScreen, sectionForRoute });
 window.navigateTop = navigateTop;
 window.toggleTheme = toggleTheme;
+window.AltamamTheme=Object.freeze({
+  sync:syncThemeFromSettings,
+  clearAuthorization:clearThemeAuthorization
+});
 window.closeModal = closeModal;
