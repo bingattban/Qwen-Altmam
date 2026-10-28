@@ -96,7 +96,7 @@ public sealed class ManualCarryForwardIntegrationTests : IAsyncLifetime, IDispos
         var service = new ManualCarryForwardService(_db,_clock);
         var preview = await service.PreviewAsync(Selection("TST-CARRY-P1","TST-CARRY-P2"),Actor,default);
         Assert.False(preview.Success);
-        Assert.Contains("CARRY-2",preview.UserMessage);
+        Assert.Contains("920002",preview.UserMessage);
         Assert.Equal(2,Count("AttendanceRecords"));
     }
 
@@ -143,7 +143,7 @@ public sealed class ManualCarryForwardIntegrationTests : IAsyncLifetime, IDispos
         var already = await service.PreviewAsync(Selection("TST-CARRY-P1","TST-CARRY-P3"),Actor,default);
         Assert.False(already.Success);
         Assert.Contains("فرد اختبار 3",already.UserMessage);
-        Assert.Contains("CARRY-3",already.UserMessage);
+        Assert.Contains("920003",already.UserMessage);
         var preview=await service.PreviewAsync(Selection("TST-CARRY-P1","TST-CARRY-P2"),Actor,default);
         Assert.True(preview.Success,preview.UserMessage);
         using (var c=_db.CreateOpenConnection())
