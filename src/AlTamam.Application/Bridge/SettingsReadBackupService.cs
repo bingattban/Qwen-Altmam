@@ -49,6 +49,35 @@ public sealed class SettingsReadBackupService
             ["theme"]=theme
         });
     }
+    /// <summary>
+    /// Writes the existing, program-wide AppSettings.Theme setting. No new
+    /// storage location, user roster mutation, or client-only preference.
+    /// </summary>
+    public async Task<BridgeResponse> SetThemeAsync(JsonObject? input,CancellationToken ct)
+    {
+        string? theme;
+        try { theme=input?["theme"]?.GetValue<string>(); }
+        catch { theme=null; }
+        if(theme is not ("light" or "dark"))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "اختر الوضع النهاري أو الليلي فقط.");
+        await _db.ExecuteInWriteTransactionAsync(async(connection,tx)=>{
+            using var command=connection.CreateCommand();
+            command.Transaction=tx;
+            command.CommandText="""
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('Theme',$theme,$now)
+                ON CONFLICT(SettingKey) DO UPDATE SET
+                   SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                """;
+            command.Parameters.AddWithValue("$theme",theme);
+            command.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
+            await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            return 0;
+        },ct).ConfigureAwait(false);
+        return BridgeHelpers.Ok(new JsonObject{["theme"]=theme});
+    }
+
     public async Task<BridgeResponse> ScheduleAsync(CancellationToken ct)
     {
         var scheduler=new AutomaticBackupService(_db,_time);

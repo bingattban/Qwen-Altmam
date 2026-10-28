@@ -604,6 +604,13 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.OverviewAsync(principal!, ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
+        "SetTheme" => async (req, principal, ct) =>
+        {
+            var service=new SettingsReadBackupService(services.Db,services.Time);
+            BridgeResponse result=await service.SetThemeAsync(req.Payload as JsonObject,ct)
+                .ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "GetBackupSchedule" => async (req, principal, ct) =>
         {
             var svc = new SettingsReadBackupService(services.Db);
