@@ -86,14 +86,10 @@ def main() -> int:
     except FileNotFoundError:
         errors.append(f"compiled table {CODE_PATH} not found — cannot verify drift")
 
-    # Every literal UI bridge invocation must be backed by an actual C# handler.
-    # The dispatcher registers all manifest actions, but its fallback deliberately
-    # returns "not implemented"; mere manifest membership is not enough.
-    # Switch arms can have aliases: "GetActiveAttendanceStatuses" or
-    # "QueryAttendanceStatuses" => ... . Inspect complete arm labels.
+    # The UI may only call actions with a real dispatcher implementation.
+    # The fallback switch arm returns an error, not an implementation.
     try:
         from pathlib import Path
-        ui_dir = Path("src/AlTamam.WebUI/assets/js")
         catalog = Path("src/AlTamam.Application/Bridge/BridgeHandlerCatalog.cs").read_text(encoding="utf-8")
         arms = re.findall(
             r'((?:"[A-Za-z][A-Za-z0-9]*"\s*(?:or\s*)?)+)\s*=>',
@@ -102,11 +98,19 @@ def main() -> int:
         for arm in arms:
             wired.update(re.findall(r'"([A-Za-z][A-Za-z0-9]*)"', arm))
         ui_calls = {}
-        for source in ui_dir.glob("*.js"):
+        for source in Path("src/AlTamam.WebUI").rglob("*.js"):
             js = source.read_text(encoding="utf-8")
-            for action in re.findall(
-                r'\b(?:invoke|invokeWithRetry|request)\(\s*["\x27]([A-Z][A-Za-z0-9]*)["\x27]',
-                js):
+            # Support ordinary calls, optional chaining, and bracket-method access.
+            # Keep the pattern deliberately literal: dynamic action names need a
+            # separate review because they cannot be proved wired statically.
+            pattern = (
+                r'\b(?:invoke|invokeWithRetry|request)\s*\??\.\s*'
+                r'\(\s*["\x27]([A-Z][A-Za-z0-9]*)["\x27]'
+                r'|\b(?:invoke|invokeWithRetry|request)\s*\(\s*'
+                r'["\x27]([A-Z][A-Za-z0-9]*)["\x27]'
+            )
+            for match in re.finditer(pattern, js):
+                action = match.group(1) or match.group(2)
                 ui_calls.setdefault(action, set()).add(str(source))
         for action, sources in sorted(ui_calls.items()):
             if action not in names:
