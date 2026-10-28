@@ -529,6 +529,18 @@ public static class BridgeHandlerCatalog
                 .VerifyAsync(selected,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
+        // Read-only inspection for authorized administrators. The destructive
+        // RestoreDatabaseAtomically action remains unavailable until the native
+        // reauthentication, shutdown and offline acceptance gates are complete.
+        "PreviewRestore" => async(req,principal,ct) =>
+        {
+            string? path;
+            try{path=req.Payload?["path"]?.GetValue<string>();}
+            catch{path=null;}
+            var result=await new BackupInspectionService(services.Db)
+                .PreviewRestoreAsync(path,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "RunDatabaseIntegrityCheck" => (req, principal, ct) =>
         {
             var svc = new SettingsReadBackupService(services.Db);
