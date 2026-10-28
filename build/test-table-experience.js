@@ -116,8 +116,9 @@ const css=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
 assert.match(css,/\.table-expanded-paged>\.table-expanded-scroll/);
 assert.match(css,/\.table-local-search/);
-assert.match(css,/height:28px!important;min-height:28px!important;max-height:28px!important/);
-assert.match(css,/width:min\(147px,100%\)!important/);
+assert.match(css,/height:35px!important;min-height:35px!important;max-height:35px!important/);
+assert.match(css,/width:min\(170px,100%\)!important/);
+assert.match(css,/label\.app-unified-search-wrap\{\s*width:170px!important/);
 const html=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/index.html"),"utf8");
 assert.match(html,/assets\/js\/table-experience\.js/);
