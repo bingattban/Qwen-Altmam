@@ -88,6 +88,59 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
             """;
         Assert.Equal(2L,Convert.ToInt64(check.ExecuteScalar()));
     }
+
+    [Fact]
+    public async Task AttendanceCommit_LostResponseRetry_ReturnsOriginalResultWithoutDuplicateAudit()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var preview=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        string token=Token(preview);
+        var request=new JsonObject{
+            ["previewToken"]=token,["operationId"]="attendance-intent-20261029-one"
+        };
+        var first=await service.CommitAsync(request,Actor,false,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var retry=await service.CommitAsync((JsonObject)request.DeepClone(),
+            Actor,false,CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal(((JsonObject)first.Data!).ToJsonString(),
+            ((JsonObject)retry.Data!).ToJsonString());
+        Assert.Equal(1L,Count("AttendanceRecords"));
+        Assert.Equal(1L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
+
+        var changed=(JsonObject)request.DeepClone();
+        changed["previewToken"]=new string('a',64);
+        var collision=await service.CommitAsync(changed,Actor,false,CancellationToken.None);
+        Assert.False(collision.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,collision.ErrorCode);
+        Assert.Equal(1L,Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task AttendanceRevision_LostResponseRetry_DoesNotDuplicateCorrection()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var first=await service.PreviewAsync(Payload("initial","STS-PRESENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        Assert.True((await service.CommitAsync(new JsonObject{
+            ["previewToken"]=Token(first)},Actor,false,CancellationToken.None)).Success);
+        var preview=await service.PreviewAsync(Payload("revise","STS-ABSENT",
+            ["TST-ATTEND-P1"]),Actor,CancellationToken.None);
+        var req=new JsonObject{
+            ["previewToken"]=Token(preview),["operationId"]="attendance-intent-20261029-revise"
+        };
+        var done=await service.CommitAsync(req,Actor,true,CancellationToken.None);
+        Assert.True(done.Success,done.UserMessage);
+        var retry=await service.CommitAsync((JsonObject)req.DeepClone(),
+            Actor,true,CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRevisions"));
+        Assert.Equal(2L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
+    }
+
     [Fact]
     public async Task ReviseTodayWithoutTypedReason_RequiresPreviewAndPreservesAutomaticAuditReason()
     {
