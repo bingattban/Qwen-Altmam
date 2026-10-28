@@ -81,14 +81,25 @@ public sealed class BackupInspectionService
     /// encrypted candidate against the live store; does not stage, issue an
     /// approval token, stop services or activate a database switch.
     /// </summary>
-    public async Task<BridgeResponse> PreviewRestoreAsync(string? path,CancellationToken ct)
+    public async Task<BridgeResponse> PreviewRestoreAsync(
+        string? path,string? expectedSha256,CancellationToken ct)
     {
+        // Bind the preview to the exact bytes previously inspected through the
+        // trusted native picker. A direct path alone is not an approval.
+        if(string.IsNullOrWhiteSpace(expectedSha256)||
+           expectedSha256.Length!=64||expectedSha256.Any(ch=>!Uri.IsHexDigit(ch)))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "افحص النسخة أولاً للحصول على بصمتها الصحيحة قبل المعاينة.");
         BridgeResponse verified=await VerifyAsync(path,ct).ConfigureAwait(false);
         if(!verified.Success)return verified;
         if(verified.Data is not JsonObject candidate ||
            candidate["verified"]?.GetValue<bool>()!=true)
             return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
                 "لم تكتمل معاينة النسخة المشفرة؛ لم تُغيَّر البيانات.");
+        if(!string.Equals(candidate["sha256"]?.GetValue<string>(),
+            expectedSha256,StringComparison.OrdinalIgnoreCase))
+            return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
+                "تغيرت بصمة النسخة منذ الفحص. أعد اختيار الملف والتحقق منه.");
         if(candidate["schemaCompatible"]?.GetValue<bool>()!=true)
             return BridgeHelpers.Error(BridgeErrorCodes.BackupIntegrityFailed,
                 "إصدار النسخة غير متوافق مع قاعدة البيانات الحالية؛ لا يمكن تجهيز الاستعادة.");
