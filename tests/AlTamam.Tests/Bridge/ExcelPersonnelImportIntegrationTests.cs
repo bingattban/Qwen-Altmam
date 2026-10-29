@@ -278,6 +278,47 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
     }
 
     [Fact]
+    public async Task FormulaInOneRow_DoesNotDiscardValidPersons_AndCreatesErrorReportEvidence()
+    {
+        var workbook=Workbook(("فرد سليم أول","00521"),
+            ("فرد خطأ حسابي","00999"),("فرد سليم ثان","00522"));
+        using var bytes=new MemoryStream();
+        bytes.Write(workbook);
+        bytes.Position=0;
+        using(var zip=new ZipArchive(bytes,ZipArchiveMode.Update,leaveOpen:true))
+        {
+            var original=zip.GetEntry("xl/worksheets/sheet1.xml")!;
+            string content;
+            using(var reader=new StreamReader(original.Open(),Encoding.UTF8,leaveOpen:false))
+                content=reader.ReadToEnd();
+            original.Delete();
+            const string previous="""<c r="B3" t="inlineStr"><is><t>00999</t></is></c>""";
+            const string malformed="""<c r="B3"><f>1+1</f><v>999</v></c>""";
+            Assert.Contains(previous,content);
+            using var writer=new StreamWriter(zip.CreateEntry("xl/worksheets/sheet1.xml").Open(),Encoding.UTF8);
+            writer.Write(content.Replace(previous,malformed,StringComparison.Ordinal));
+        }
+        var chosen=await Service.SelectAsync(FilePayload(bytes.ToArray()),Owner,CancellationToken.None);
+        Assert.True(chosen.Success,chosen.UserMessage);
+        string workbookToken=Assert.IsType<JsonObject>(chosen.Data)["workbookToken"]!.GetValue<string>();
+        var preview=await Service.PreviewAsync(new JsonObject{["workbookToken"]=workbookToken},
+            Owner,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var plan=Assert.IsType<JsonObject>(preview.Data);
+        Assert.Equal(2,plan["newCount"]!.GetValue<int>());
+        Assert.Equal(1,plan["issueCount"]!.GetValue<int>());
+        var rejected=Assert.IsType<JsonObject>(Assert.Single(Assert.IsType<JsonArray>(plan["issues"])));
+        Assert.Equal(3,rejected["row"]!.GetValue<int>());
+        var commit=await Service.CommitAsync(new JsonObject{
+            ["previewToken"]=plan["previewToken"]!.GetValue<string>()
+        },Owner,"owner",CancellationToken.None);
+        Assert.True(commit.Success,commit.UserMessage);
+        Assert.Equal("2",Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM ImportIssues"));
+        Assert.Equal("3",Scalar("SELECT RowNumber FROM ImportIssues LIMIT 1"));
+    }
+
+    [Fact]
     public async Task InvalidWorkbookAndNumericServiceNumberAreRejected()
     {
         var fake=await Service.SelectAsync(new JsonObject {
