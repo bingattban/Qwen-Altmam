@@ -144,9 +144,10 @@ async function main(){
    "the automatic register must show the persisted source of preparation");
  assert.ok(readOnly.all().some(x=>x.textContent==="2026-10-29"),
    "the automatic register must display the date of the saved attendance");
- assert.ok(!readOnly.all().some(x=>x.tag==="input"&&x.type==="checkbox"),
-   "automatic register allows targeted changes without selecting bulk checkboxes");
- const dropdown=readOnly.all().find(x=>x.tag==="select");
+ const personCheckbox=readOnly.all().find(x=>x.tag==="input"&&x.type==="checkbox");
+ assert.ok(personCheckbox,"automatic register supports individual and bulk selection");
+ const dropdown=readOnly.all().find(x=>x.tag==="select"&&
+   x.className.includes("auto-attendance-status-select"));
  assert.ok(dropdown,"each automatically prepared person needs a status dropdown");
  dropdown.value="STS-PRESENT";
  const edit=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="معاينة التعديل");
@@ -156,6 +157,23 @@ async function main(){
    "server-side revision is committed only following modal approval");
  assert.ok(readOnly.all().some(x=>x.textContent==="P3"),
    "auto-prepared register remains displayed following a successful revision");
+ const picked=readOnly.all().find(x=>x.tag==="input"&&x.type==="checkbox");
+ picked.checked=true;picked.handlers.change();
+ const bulk=readOnly.all().find(x=>x.tag==="select"&&
+   x.className.includes("auto-attendance-bulk-status"));
+ assert.ok(bulk,"bulk status selector must be available");
+ bulk.value="STS-PRESENT";
+ const bulkPreview=readOnly.all().find(x=>x.tag==="button"&&
+   x.textContent==="معاينة تغيير المحددين");
+ const previousCommits=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await bulkPreview.handlers.click();await settle();
+ const lastPreview=calls.filter(x=>x.action==="PreviewAttendanceChange"&&
+   x.payload.mode==="revise").at(-1);
+ assert.deepEqual(Array.from(lastPreview.payload.personIds),["P3"],
+   "bulk review uses the explicitly selected PersonIds");
+ assert.equal(reviews.length,2,"bulk changes also require the server-verified modal");
+ assert.equal(reviews[1].data.persons[0].previousStatusName,"غياب");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,previousCommits+1);
  expandedRoster=true;
  counter("all").handlers.click();await settle();
  const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));
