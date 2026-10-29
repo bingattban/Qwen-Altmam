@@ -84,13 +84,29 @@ public sealed class AutomaticBackupService
             string folder=await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
             if(!OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
                 return BridgeHelpers.Error(BridgeErrorCodes.ScheduleUnavailable,
-                    "لا يمكن تفعيل النسخ التلقائي قبل اختيار مجلد محلي متاح وقابل للكتابة.");
+                    "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. لا يمكن تفعيل النسخ قبل اختيار مجلد محلي قابل للكتابة.");
         }
         return await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,tx,"UpdateBackupSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
             if(replay is not null)return replay;
+            string previousEnabled="false",previousTime="16:00";
+            using(var prior=c.CreateCommand())
+            {
+                prior.Transaction=tx;
+                prior.CommandText="""
+                    SELECT SettingKey,SettingValue FROM AppSettings
+                    WHERE SettingKey IN ('AutoBackupEnabled','AutoBackupTimeLocal');
+                    """;
+                using var reader=await prior.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while(await reader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    if(reader.GetString(0)=="AutoBackupEnabled")
+                        previousEnabled=reader.GetString(1);
+                    else previousTime=reader.GetString(1);
+                }
+            }
             using var cmd=c.CreateCommand();
             cmd.Transaction=tx;
             cmd.CommandText="""
@@ -110,7 +126,8 @@ public sealed class AutomaticBackupService
             await BridgeAuditWriter.WriteAsync(c,tx,_time,
                 "AUTO_BACKUP_SCHEDULE_CHANGED","تعديل جدولة النسخ الاحتياطي",
                 actor.UserId,actor.Username,null,"AppSettings","AutoBackupTimeLocal",
-                "النسخ التلقائي",null,
+                "النسخ التلقائي",
+                new JsonObject{["enabled"]=previousEnabled=="true",["time"]=previousTime}.ToJsonString(),
                 new JsonObject{["enabled"]=enabled,["time"]=time}.ToJsonString(),
                 "حفظ وقت النسخ التلقائي وتفعيل الجدولة أو إيقافها",
                 null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
