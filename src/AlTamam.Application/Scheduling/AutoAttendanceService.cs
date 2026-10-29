@@ -399,7 +399,7 @@ public sealed class AutoAttendanceService
 
     private DateTime LocalNow() => _time.GetLocalNow().DateTime;
 
-    internal List<DateOnly> EnumeratePendingDates(DateOnly today, bool dayDue, int catchUpDays,
+    public List<DateOnly> EnumeratePendingDates(DateOnly today, bool dayDue, int catchUpDays,
         DateOnly? lastCompleted, out int unrecoverable)
     {
         unrecoverable = 0;
