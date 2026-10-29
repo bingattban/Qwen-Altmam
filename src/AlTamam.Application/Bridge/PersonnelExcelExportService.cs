@@ -134,28 +134,29 @@ public sealed class PersonnelExcelExportService
         string[] ids,CancellationToken ct)
     {
         var service=new PersonnelReportService(_db);
-        var summary=Start("ملخص التقرير","PersonId","الرقم (ع)","الاسم","حالة القيد",
+        var summary=Start("ملخص التقرير","رقم الفرد في التقرير","الرقم (ع)","الاسم","حالة القيد",
             "تاريخ الإدراج","عدد أيام التحضير","عدد الحركات","الفترة من","الفترة إلى",
             "حالات التحضير وأعداد الأيام");
-        var daily=Start("التفاصيل التاريخية","PersonId","الرقم (ع) التاريخي",
+        var daily=Start("التفاصيل التاريخية","رقم الفرد في التقرير","الرقم (ع) التاريخي",
             "الاسم التاريخي","تاريخ التحضير","الحالة","الموقع المسجل",
             "مصدر التحضير","رقم المراجعة","زمن الاعتماد");
-        var movements=Start("سجل التنقلات","PersonId","الرقم (ع)","الاسم",
+        var movements=Start("سجل التنقلات","رقم الفرد في التقرير","الرقم (ع)","الاسم",
             "نوع الحركة","الموقع السابق","الجهة الجديدة","تاريخ الحركة",
             "السبب","منفذ الحركة","زمن الاعتماد");
-        var audit=Start("تغييرات العمليات","PersonId","الاسم","الرقم (ع)",
+        var audit=Start("تغييرات العمليات","رقم الفرد في التقرير","الاسم","الرقم (ع)",
             "العملية","منفذ العملية","التاريخ","الوصف","القيمة السابقة",
             "القيمة الجديدة","السبب");
-        var membership=Start("الهوية والمواقع","PersonId","نوع الفترة",
-            "الاسم / الموقع","الرقم (ع) / SiteId","من","إلى","السبب / المنفذ");
+        var membership=Start("الهوية والمواقع","رقم الفرد في التقرير","نوع الفترة",
+            "الاسم / الموقع","الرقم (ع)","من","إلى","السبب / المنفذ");
         var sheets=new List<Sheet>{summary,daily,movements,audit,membership};
         int exportedEvents=0;
         for(int i=0;i<ids.Length;i++)
         {
             ct.ThrowIfCancellationRequested();
             string personId=ids[i];
+            string sectionNumber=(i+1).ToString(CultureInfo.InvariantCulture);
              var per=ids.Length<=12?Start("فرد "+(i+1).ToString("D2",CultureInfo.InvariantCulture),
-                "PersonId","الرقم (ع)","الاسم","نوع القيد","التاريخ","الحالة / العملية","الموقع","التفاصيل"):null;
+                "رقم الفرد في التقرير","الرقم (ع)","الاسم","نوع القيد","التاريخ","الحالة / العملية","الموقع","التفاصيل"):null;
             for(int page=1;;page++)
             {
                 var request=(JsonObject)payload.DeepClone();
@@ -171,7 +172,7 @@ public sealed class PersonnelExcelExportService
                  var person=(JsonObject)data["person"]!;
                 string name=Val(person,"name"),number=Val(person,"serviceNumberA");
                 if(page==1)
-                    summary.Add(personId,number,name,
+                    summary.Add(sectionNumber,number,name,
                         Val(person,"active")=="true"?"نشط":"مؤرشف",
                         Val(person,"firstRecordedDate"),Number(data,"attendanceTotal").ToString(CultureInfo.InvariantCulture),
                         Number(data,"movementTotal").ToString(CultureInfo.InvariantCulture),
@@ -181,45 +182,45 @@ public sealed class PersonnelExcelExportService
                                 Number(st,"count").ToString(CultureInfo.InvariantCulture)+")")));
                 foreach(var record in Array(data,"attendance")??new JsonArray())
                 {
-                    daily.Add(personId,Val(record,"serviceNumberA"),Val(record,"name"),
+                    daily.Add(sectionNumber,Val(record,"serviceNumberA"),Val(record,"name"),
                         Val(record,"date"),Val(record,"statusName"),Val(record,"site"),
                         Val(record,"source"),Val(record,"revision"),Val(record,"committedAtUtc"));
-                    per?.Add(personId,number,name,"تحضير",Val(record,"date"),
+                    per?.Add(sectionNumber,number,name,"تحضير",Val(record,"date"),
                         Val(record,"statusName"),Val(record,"site"),Val(record,"source"));
                     exportedEvents++;
                 }
                 foreach(var record in Array(data,"movements")??new JsonArray())
                 {
-                    movements.Add(personId,Val(record,"serviceNumberA"),Val(record,"name"),
+                    movements.Add(sectionNumber,Val(record,"serviceNumberA"),Val(record,"name"),
                         Val(record,"type"),Val(record,"source"),Val(record,"destination"),
                         Val(record,"date"),Val(record,"reason"),Val(record,"actorUserId"),
                         Val(record,"committedAtUtc"));
-                    per?.Add(personId,number,name,"حركة",Val(record,"date"),
+                    per?.Add(sectionNumber,number,name,"حركة",Val(record,"date"),
                         Val(record,"type"),Val(record,"source"),Val(record,"destination"));
                     exportedEvents++;
                 }
                 foreach(var record in Array(data,"audit")??new JsonArray())
                 {
-                    audit.Add(personId,name,number,Val(record,"operation"),
+                    audit.Add(sectionNumber,name,number,Val(record,"operation"),
                         Val(record,"executor"),Val(record,"executedAtUtc"),
                         Val(record,"description"),Val(record,"oldValueJson"),
                         Val(record,"newValueJson"),Val(record,"reason"));
-                    per?.Add(personId,number,name,"تعديل / عملية",
+                    per?.Add(sectionNumber,number,name,"تعديل / عملية",
                         Val(record,"executedAtUtc"),Val(record,"operation"),"",
                         Val(record,"description"));
                     exportedEvents++;
                 }
                 foreach(var record in Array(data,"identityHistory")??new JsonArray())
                 {
-                    membership.Add(personId,"هوية",Val(record,"name"),
+                    membership.Add(sectionNumber,"هوية",Val(record,"name"),
                         Val(record,"serviceNumberA"),Val(record,"from"),
                         Val(record,"to"),Val(record,"reason"));
                     exportedEvents++;
                 }
                 foreach(var record in Array(data,"siteHistory")??new JsonArray())
                 {
-                    membership.Add(personId,"موقع",Val(record,"siteName"),
-                        Val(record,"siteId"),Val(record,"from"),Val(record,"to"),"");
+                    membership.Add(sectionNumber,"موقع",Val(record,"siteName"),
+                        "",Val(record,"from"),Val(record,"to"),"");
                     exportedEvents++;
                 }
                 if(exportedEvents>MaxExportEvents)
@@ -266,12 +267,14 @@ public sealed class PersonnelExcelExportService
             throw new ArgumentException("اختر أرشيف النقل الداخلي أو الخارجي.");
         var title=dismissal?"أرشيف الفصل":type=="internal"?"نقل داخلي":"نقل خارجي";
         var sheet=dismissal
-            ? Start(title,"MovementId","PersonId","الرقم (ع)","اسم الفرد",
+            ? Start(title,"رقم الفرد في التقرير","الرقم (ع)","اسم الفرد",
                 "الموقع","سبب الفصل","تاريخ الفصل","زمن الاعتماد","منفذ العملية")
-            : Start(title,"MovementId","PersonId","الرقم (ع)","اسم الفرد",
+            : Start(title,"رقم الفرد في التقرير","الرقم (ع)","اسم الفرد",
                 "نوع النقل","من موقع","إلى جهة","تاريخ النقل","زمن الاعتماد");
         var svc=new PersonnelMovementService(_db);
         var sep=new PersonnelSeparationService(_db);
+        // Workbook-local ordinals preserve distinct persons without exposing PersonId.
+        var archiveOrdinals=new Dictionary<string,int>(StringComparer.Ordinal);
         int page=1;
         for(;;page++)
         {
@@ -296,12 +299,19 @@ public sealed class PersonnelExcelExportService
                 throw new InvalidDataException("الأرشيف يتجاوز حجم تصدير واحد؛ ضيّق نطاق البحث أو الفترة.");
             foreach(var row in Array(data,"items")??new JsonArray())
             {
+                string key=Val(row,"personId");
+                if(!archiveOrdinals.TryGetValue(key,out int sequence))
+                {
+                    sequence=archiveOrdinals.Count+1;
+                    archiveOrdinals[key]=sequence;
+                }
+                string section=sequence.ToString(CultureInfo.InvariantCulture);
                 if(dismissal)
-                    sheet.Add(Record(row,"movementId","personId","serviceNumberA","name",
-                        "siteName","reason","date","committedAtUtc","actorUserId"));
+                    sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
+                        "siteName","reason","date","committedAtUtc","actorUserId")).ToArray());
                 else
-                    sheet.Add(Record(row,"movementId","personId","serviceNumberA","name",
-                        "type","sourceSite","destination","date","committedAtUtc"));
+                    sheet.Add(Record(row,"serviceNumberA","name",
+                        "type","sourceSite","destination","date","committedAtUtc")).ToArray());
             }
             if(!data["hasNext"]!.GetValue<bool>())break;
             if(page>=100000)throw new InvalidDataException("لم يكتمل استعراض صفحات الأرشيف.");
