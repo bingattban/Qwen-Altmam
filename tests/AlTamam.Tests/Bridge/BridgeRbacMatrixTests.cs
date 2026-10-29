@@ -275,15 +275,12 @@ public sealed class BridgeRbacMatrixTests
         Assert.Empty(executed);
     }
 
+    public static IEnumerable<object[]> AllMutationsExceptLogout() =>
+        ActionManifest.All.Where(a => a.IsMutating && a.Action != "Logout")
+            .Select(a => new object[] { a.Action });
+
     [Theory]
-    [InlineData("CreatePerson")]
-    [InlineData("CommitInternalTransfer")]
-    [InlineData("SubmitAttendance")]
-    [InlineData("RenameSite")]
-    [InlineData("CommitImport")]
-    [InlineData("UpdateAuditPresentation")]
-    [InlineData("CreateUserAccount")]
-    [InlineData("CommitFullReset")]
+    [MemberData(nameof(AllMutationsExceptLogout))]
     public async Task EveryDomainMutation_MissingOrMalformedOperationId_FailsBeforeHandler(string action)
     {
         int executed=0;
