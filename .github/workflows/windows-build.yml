@@ -46,6 +46,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Monthly cell details UI regression' }
           node build/test-dashboard-counter-filters.js
           if ($LASTEXITCODE -ne 0) { throw 'Dashboard counter filter UI regression' }
+          node build/test-operation-id-contract.js
+          if ($LASTEXITCODE -ne 0) { throw 'Mandatory operation ID bridge contract regression' }
           node build/test-attendance-ui.js
           if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
           node build/test-table-experience.js
