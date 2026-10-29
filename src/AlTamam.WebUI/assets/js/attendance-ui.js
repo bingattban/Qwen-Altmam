@@ -181,8 +181,14 @@
      finally{saveDraftButton.disabled=false;}
    }
    const saveDraftButton=button("حفظ مسودة",saveDraft);
+   const cancelSelections=button("إلغاء التحديد",async()=>{
+     if(selected.size>0 && !await modalConfirm(
+       "لديك "+selected.size+" فرداً محدداً دون اعتماد. هل تريد إلغاء التحديد؟"))return;
+     reset();info.replaceChildren();await load();
+   });
    draftPanel.insertBefore(button("تحديث المسودات",refreshDrafts),draftResults);
    header.insertBefore(saveDraftButton,choice);
+   header.insertBefore(cancelSelections,choice);
    async function preview(){
      if(!status.value||selected.size===0)
        return showError(info,new Error("اختر الحالة والأفراد."));
@@ -231,7 +237,10 @@
    const previewButton=button("معاينة التحضير",preview);
    previewButton.className="btn btn-primary";
    header.insertBefore(previewButton,choice);
-   header.insertBefore(button("العودة إلى إدارة القوة",()=>{
+   header.insertBefore(button("العودة إلى إدارة القوة",async()=>{
+     if(selected.size>0 && !await modalConfirm(
+       "لديك "+selected.size+" فرداً محدداً لم يُحفظ تحضيرهم. هل تريد المغادرة دون اعتماد؟"))return;
+     reset();
      window.AltamamAdminSettings.renderGroup("force");
    }),filters);
    try{
