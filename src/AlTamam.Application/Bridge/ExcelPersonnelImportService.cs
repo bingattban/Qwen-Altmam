@@ -205,8 +205,10 @@ public sealed class ExcelPersonnelImportService
         var staged = await ReadStagedAsync(ticket, WorkbookOperation, actor, connection, null, ct).ConfigureAwait(false);
         if (staged is null) return Stale();
         var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
+        var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
+            ["newSites"]=newSites,
             ["totalRows"] = accepted.Count + issues.Count, ["newCount"] = accepted.Count,
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted)
@@ -222,10 +224,12 @@ public sealed class ExcelPersonnelImportService
         var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
         if (accepted.Count == 0)
             return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد أسماء جديدة صالحة للاستيراد.");
+        var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
         // Only approved, conflict-free new rows are carried forward to the signed, one-use plan.
         string token = BridgePreviewTokens.Issue(_db, _time, PlanOperation, actor,
             new JsonObject { ["fileName"] = Read(staged, "fileName"),
                 ["sha256"] = Read(staged, "sha256"),
+                ["newSites"] = newSites.DeepClone(),
                 ["totalRows"] = accepted.Count + issues.Count,
                 ["issues"] = issues.DeepClone(),
                 ["rows"] = new JsonArray(accepted.Select(node =>
@@ -241,7 +245,8 @@ public sealed class ExcelPersonnelImportService
             }).ToArray()) }, accepted.Count, ct);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["previewToken"] = token, ["newCount"] = accepted.Count,
+            ["previewToken"] = token, ["newSites"] = newSites.DeepClone(),
+            ["newCount"] = accepted.Count,
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted),
             ["requiresExplicitConfirmation"] = true
@@ -351,7 +356,7 @@ public sealed class ExcelPersonnelImportService
                                 "SITE_CREATE", "إنشاء موقع أثناء الاستيراد", actor, username, username,
                                 "Site", siteId, item.SiteName, null,
                                 new JsonObject { ["siteId"] = siteId, ["name"] = item.SiteName }.ToJsonString(),
-                                "تعريف موقع جديد تلقائياً من كشف Excel", null, today,
+                                "إنشاء موقع بعد معاينة منفصلة وموافقة المستخدم أثناء الاستيراد", null, today,
                                 ct.CorrelationId(), ct).ConfigureAwait(false);
                         }
                         siteIds[normalizedSite] = siteId;
