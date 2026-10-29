@@ -17,7 +17,7 @@
 | 03.13 | `AccountLifecycleService.SuspendAccountsForPersonnelExitAsync` disables roster-linked accounts and revokes sessions in same transaction as archive, external movement or dismissal; reactivation requires separate authorized audited operation. |
 | 03.14–03.15 | `UserAccountManagementService.ListAsync` exposes paginated index, A number, roster full name, role and frozen creator snapshot. Password editing forbids changing username, role or person link; disable/reactivate audited. |
 | 03.16 | V009 already detaches linked legacy founders and protects founder links; **V011 additionally forbids the founder's role demotion** that could have bypassed V009 before relinking. Existing V009 may already have detached earlier linked founders without recording their old `LinkedPersonId` in the audit chain; a new migration cannot truthfully reconstruct evidence already lost. Real pre-V009 legacy reconciliation/audit provenance remains a separate acceptance item. |
-| 03.17 | Native principal/role gates and permanent `PersonId` scoping preserve identity boundaries; Section02 reuse and Section03 RBAC tests cover hostile payloads. Independent end-to-end cross-person historical data exposure tests remain relevant. |
+| 03.17 | Native principal/role gates and permanent `PersonId` scoping preserve identity boundaries; Section02 reuse and Section03 RBAC tests cover hostile payloads. **This branch** additionally checks user-management authorization before querying account existence or roster eligibility and tests that a Supervisor gets identical denials for known and unknown users. Independent end-to-end cross-person historical data exposure tests remain relevant. |
 
 ## New regression tests and migration
 
@@ -26,6 +26,7 @@
 3. `Section03FoundingAccountTests.NewNonFounderAccountsMustBeLinkedToAnActiveRosterPersonAtSqlCipherBoundary`: direct orphan insert rejected.
 4. V011 `V011_PermanentFoundingRoleAndAccountRoster.sql`: NEW forward-only SHA-pinned embedded migration, no rewriting V001–V010, no direct production data mutation. Active account reactivation verifies roster eligibility. Existing inactive legacy rows are not silently changed.
 5. `BridgeSharedServices.CreateUserInternalAsync` is now solely a strong-credential, nonrepeatable founder bootstrap; other roles must use roster-linked role-gated account management.
+6. `UserAccountManagementIntegrationTests.SupervisorRejectedAccountActions_NeverRevealAccountExistenceOrRosterEligibility` proves denied password and reactivation operations cannot reveal whether a target exists, belongs to a historical person, or is eligible. C# service checks role authorization before target-specific data reads.
 
 ## Merge and release gate
 
