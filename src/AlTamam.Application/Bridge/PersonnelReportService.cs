@@ -495,7 +495,7 @@ public sealed class PersonnelReportService
                          AND audit.ActorUserId=rev.ActorUserId
                          AND audit.EffectiveLocalDate=rev.TargetLocalDate
                          AND audit.OperationCode IN ('ATTENDANCE_REVISE','CLOSED_DAY_CORRECTED')
-                       ORDER BY ABS(julianday(audit.ExecutedAtUtc)-julianday(rev.ExecutedAtUtc))
+                       ORDER BY audit.ExecutedAtUtc DESC
                        LIMIT 1),'غير موثق')
             """+revisionWhere.Replace(";","")+"""
             ORDER BY rev.TargetLocalDate DESC,rev.ExecutedAtUtc DESC
