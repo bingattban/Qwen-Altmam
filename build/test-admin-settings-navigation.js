@@ -417,14 +417,19 @@ async function run() {
     x.className.includes("settings-action")&&x.textContent.includes("التحضير")).length,1,
     "attendance group must use one unified save control");
   await buttonNamed("حفظ إعدادات التحضير التلقائي").handlers.click();
-  const combinedSaves=calls.filter(x=>x.name==="SetAttendanceSchedule");
-  assert.equal(combinedSaves.length,1,"unified save must issue one atomic mutation");
-  assert.equal(combinedSaves[0].body.defaultStatusId,"STS-ABSENT");
-  assert.equal(combinedSaves[0].body.dueTimeLocal,"07:15");
-  assert.equal(combinedSaves[0].body.dailyLockTimeLocal,"19:30");
-  assert.ok(combinedSaves[0].body.operationId.length>=16);
-  assert.equal(calls.filter(x=>x.name==="SetAutoAttendanceDefaultStatus").length,0,
-    "the settings page must never write the fallback in a separate transaction");
+  const clockSaves=calls.filter(x=>x.name==="SetAttendanceSchedule");
+  assert.equal(clockSaves.length,2,"each attendance clock must save independently");
+  assert.equal(clockSaves[0].body.dueTimeLocal,"07:15");
+  assert.equal(clockSaves[0].body.dailyLockTimeLocal,undefined);
+  assert.equal(clockSaves[1].body.dailyLockTimeLocal,"19:30");
+  assert.equal(clockSaves[1].body.dueTimeLocal,undefined);
+  assert.ok(clockSaves.every(x=>x.body.operationId.length>=16));
+  assert.notEqual(clockSaves[0].body.operationId,clockSaves[1].body.operationId);
+  const statusSaves=calls.filter(x=>x.name==="SetAutoAttendanceDefaultStatus");
+  assert.equal(statusSaves.length,1,
+    "default attendance status is a third independent mutation");
+  assert.equal(statusSaves[0].body.statusId,"STS-ABSENT");
+  assert.ok(statusSaves[0].body.operationId.length>=16);
 
   assert.ok(buttonNamed("إنشاء نسخة احتياطية الآن").disabled,
     "manual backup disabled on a device without E: drive");
