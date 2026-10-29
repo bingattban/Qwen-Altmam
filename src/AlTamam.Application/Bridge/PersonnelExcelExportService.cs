@@ -308,7 +308,7 @@ public sealed class PersonnelExcelExportService
                 string section=sequence.ToString(CultureInfo.InvariantCulture);
                 if(dismissal)
                     sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
-                        "siteName","reason","date","committedAtUtc","actorUserId")).ToArray());
+                        "siteName","reason","date","committedAtUtc","actorDisplay")).ToArray());
                 else
                     sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
                         "type","sourceSite","destination","date","committedAtUtc")).ToArray());
