@@ -123,7 +123,7 @@ public sealed class SettingsReadBackupService
         // disconnected, read-only, full, or no longer be local.
         if(!OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "مجلد النسخ الاحتياطي غير موجود أو غير قابل للكتابة. اختر مجلداً محلياً من إعدادات البرنامج.");
+                "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. تحقق من وجود مجلد النسخ وصلاحيات الكتابة عليه، ثم اختر مساراً آخر من الإعدادات.");
         string backupId="BKP-"+Guid.NewGuid().ToString("N");
         string filename="AlTamam-"+_time.GetLocalNow().ToString("yyyyMMdd-HHmmss")+"-"+backupId+".dbbackup";
         string destination=Path.Combine(folder,filename);
