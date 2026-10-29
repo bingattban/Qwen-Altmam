@@ -374,16 +374,28 @@ public sealed class PersonnelReportService
         long totalMovements=Convert.ToInt64(await movementCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
         using var movements=conn.CreateCommand();
         movements.CommandText="""
-            SELECT MovementType,SourceSiteNameSnapshot,
-                   COALESCE(DestinationSiteNameSnapshot,DestinationExternalName,''),
-                   SeparationReason,EffectiveLocalDate,CommittedAtUtc,ActorUserId,
-                   PersonNameSnapshot,ServiceNumberASnapshot
-            FROM PersonnelMovements WHERE PersonId=$id
-              AND ($from='' OR EffectiveLocalDate >= $from)
-              AND ($to='' OR EffectiveLocalDate <= $to)
-              AND ($site='' OR SourceSiteId=$site OR DestinationSiteId=$site)
-              AND ($moveType=0 OR MovementType=$moveType)
-            ORDER BY EffectiveLocalDate DESC,CommittedAtUtc DESC LIMIT $size OFFSET $offset;
+            SELECT m.MovementType,m.SourceSiteNameSnapshot,
+                   COALESCE(m.DestinationSiteNameSnapshot,m.DestinationExternalName,''),
+                   m.SeparationReason,m.EffectiveLocalDate,m.CommittedAtUtc,m.ActorUserId,
+                   m.PersonNameSnapshot,m.ServiceNumberASnapshot,
+                   COALESCE((SELECT a.ActorUsernameSnapshot || ' - ' ||
+                             COALESCE(a.ActorRosterFullNameSnapshot,'')
+                     FROM AuditEvents a
+                     WHERE a.TargetEntityType='Person' AND a.TargetEntityId=m.PersonId
+                       AND a.ActorUserId=m.ActorUserId
+                       AND a.EffectiveLocalDate=m.EffectiveLocalDate
+                       AND a.OperationCode=CASE m.MovementType
+                           WHEN 1 THEN 'TRANSFER_INTERNAL'
+                           WHEN 2 THEN 'TRANSFER_EXTERNAL'
+                           WHEN 3 THEN 'PERSON_SEPARATE'
+                           ELSE 'PERSON_RETURN' END
+                     ORDER BY a.ExecutedAtUtc DESC LIMIT 1),'—')
+            FROM PersonnelMovements m WHERE m.PersonId=$id
+              AND ($from='' OR m.EffectiveLocalDate >= $from)
+              AND ($to='' OR m.EffectiveLocalDate <= $to)
+              AND ($site='' OR m.SourceSiteId=$site OR m.DestinationSiteId=$site)
+              AND ($moveType=0 OR m.MovementType=$moveType)
+            ORDER BY m.EffectiveLocalDate DESC,m.CommittedAtUtc DESC LIMIT $size OFFSET $offset;
             """;
         movements.Parameters.AddWithValue("$id",personId);
         filters.Bind(movements);
@@ -401,7 +413,8 @@ public sealed class PersonnelReportService
                     ["reason"]=r.IsDBNull(3)?null:r.GetString(3),
                     ["date"]=r.GetString(4),["committedAtUtc"]=r.GetString(5),
                     ["actorUserId"]=r.GetString(6),
-                    ["name"]=r.GetString(7),["serviceNumberA"]=r.GetString(8)
+                    ["name"]=r.GetString(7),["serviceNumberA"]=r.GetString(8),
+                    ["executor"]=r.GetString(9)
                 });
 
         using var auditCount=conn.CreateCommand();
