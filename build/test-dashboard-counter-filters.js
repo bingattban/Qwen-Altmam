@@ -146,10 +146,24 @@ async function main(){
    "the automatic register must display the date of the saved attendance");
  assert.ok(!readOnly.all().some(x=>x.tag==="input"&&x.type==="checkbox"),
    "automatic register allows targeted changes without selecting bulk checkboxes");
- const dropdown=readOnly.all().find(x=>x.tag==="select");
- assert.ok(dropdown,"each automatically prepared person needs a status dropdown");
+ assert.equal(readOnly.all().filter(x=>x.tag==="select").length,0,
+   "the automatic attendance register must be a read-only table, not an editable grid");
+ const entry=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="فتح مراجعة الحالة");
+ assert.ok(entry,"a row can open a separate controlled revision dialog");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
+   "opening the register must never commit attendance");
+ await entry.handlers.click();await settle();
+ const separate=viewport.all().find(x=>x.className.includes("auto-revision-overlay"));
+ assert.ok(separate,"reviewing an automatic record must open a distinct dialog");
+ assert.equal(separate.attrs.role,"dialog");
+ assert.ok(separate.all().some(x=>x.textContent==="غياب"),
+   "the separate review must present the currently saved status");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
+   "opening the revision dialog must not commit attendance");
+ const dropdown=separate.all().find(x=>x.tag==="select");
+ assert.ok(dropdown,"the separate review dialog has a new-status selector");
  dropdown.value="STS-PRESENT";
- const edit=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="معاينة التعديل");
+ const edit=separate.all().find(x=>x.tag==="button"&&x.textContent==="معاينة تغيير الحالة");
  await edit.handlers.click();await settle();
  assert.equal(reviews.length,1,"changes require a server-verified modal review");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,1,
