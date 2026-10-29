@@ -217,6 +217,7 @@ public sealed class PersonnelReportService
         if(personId.Length<3||personId.Length>128)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"حدد الفرد من كشف البرنامج.");
         int attendPage=Page(payload,"attendancePage"),auditPage=Page(payload,"auditPage"),
+            revisionPage=Page(payload,"revisionPage"),
             identityPage=Page(payload,"identityPage"),movementPage=Page(payload,"movementPage"),
             sitePage=Page(payload,"sitePage");
         const int limit=100;
@@ -461,6 +462,61 @@ public sealed class PersonnelReportService
                     ["oldValueJson"]=r.IsDBNull(7)?null:r.GetString(7),
                     ["newValueJson"]=r.IsDBNull(8)?null:r.GetString(8)
                 });
+        // AttendanceRevisions is immutable evidence separate from current attendance
+        // and audit presentation. Read it directly so every correction remains
+        // visible, including revisions made to a subsequently dismissed person.
+        const string revisionWhere="""
+            FROM AttendanceRevisions rev WHERE rev.PersonId=$id
+              AND ($from='' OR rev.TargetLocalDate >= $from)
+              AND ($to='' OR rev.TargetLocalDate <= $to)
+              AND ($status='' OR rev.BeforeStatusId=$status OR rev.AfterStatusId=$status)
+              AND ($site='' OR EXISTS(
+                  SELECT 1 FROM PersonAssignments assignment
+                  WHERE assignment.PersonId=rev.PersonId AND assignment.SiteId=$site
+                    AND assignment.ValidFromLocalDate<=rev.TargetLocalDate
+                    AND (assignment.ValidToLocalDate IS NULL OR assignment.ValidToLocalDate>rev.TargetLocalDate)));
+            """;
+        using var revisionCount=conn.CreateCommand();
+        revisionCount.CommandText="SELECT COUNT(*) "+revisionWhere;
+        revisionCount.Parameters.AddWithValue("$id",personId);
+        filters.Bind(revisionCount);
+        long totalRevisions=Convert.ToInt64(await revisionCount.ExecuteScalarAsync(ct).ConfigureAwait(false));
+        using var revisionsQuery=conn.CreateCommand();
+        revisionsQuery.CommandText="""
+            SELECT rev.TargetLocalDate,rev.BeforeStatusNameSnapshot,
+                   rev.AfterStatusNameSnapshot,rev.Reason,rev.ExecutedAtUtc,
+                   rev.AuthorizationMethod,
+                   COALESCE((
+                       SELECT audit.ActorUsernameSnapshot || ' - ' ||
+                              COALESCE(audit.ActorRosterFullNameSnapshot,'')
+                       FROM AuditEvents audit
+                       WHERE audit.TargetEntityType='Person'
+                         AND audit.TargetEntityId=rev.PersonId
+                         AND audit.ActorUserId=rev.ActorUserId
+                         AND audit.EffectiveLocalDate=rev.TargetLocalDate
+                         AND audit.OperationCode IN ('ATTENDANCE_REVISE','CLOSED_DAY_CORRECTED')
+                       ORDER BY ABS(julianday(audit.ExecutedAtUtc)-julianday(rev.ExecutedAtUtc))
+                       LIMIT 1),'غير موثق')
+            """+revisionWhere.Replace(";","")+"""
+            ORDER BY rev.TargetLocalDate DESC,rev.ExecutedAtUtc DESC
+            LIMIT $size OFFSET $offset;
+            """;
+        revisionsQuery.Parameters.AddWithValue("$id",personId);
+        filters.Bind(revisionsQuery);
+        revisionsQuery.Parameters.AddWithValue("$size",limit);
+        revisionsQuery.Parameters.AddWithValue("$offset",(long)(revisionPage-1)*limit);
+        var revisionHistory=new JsonArray();
+        using(var reader=await revisionsQuery.ExecuteReaderAsync(ct).ConfigureAwait(false))
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+                revisionHistory.Add(new JsonObject
+                {
+                    ["date"]=reader.GetString(0),["before"]=reader.GetString(1),
+                    ["after"]=reader.GetString(2),
+                    ["reason"]=reader.IsDBNull(3)?null:reader.GetString(3),
+                    ["executedAtUtc"]=reader.GetString(4),
+                    ["authorizationMethod"]=reader.IsDBNull(5)?null:reader.GetString(5),
+                    ["executor"]=reader.GetString(6)
+                });
         // Historical site memberships are independently effective-dated and
         // keyed by the same immutable PersonId, never by mutable personnel no.
         using var assignmentCount=conn.CreateCommand();
@@ -508,6 +564,9 @@ public sealed class PersonnelReportService
             ["movements"]=moves,["movementTotal"]=totalMovements,
             ["movementPage"]=movementPage,
             ["movementHasNext"]=(long)movementPage*limit<totalMovements,
+            ["revisions"]=revisionHistory,["revisionTotal"]=totalRevisions,
+            ["revisionPage"]=revisionPage,
+            ["revisionHasNext"]=(long)revisionPage*limit<totalRevisions,
             ["audit"]=events,["auditTotal"]=audits,["auditPage"]=auditPage,
             ["auditHasNext"]=(long)auditPage*limit<audits,
             ["pageSize"]=limit
