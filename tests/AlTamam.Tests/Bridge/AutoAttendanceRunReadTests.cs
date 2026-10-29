@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
+using AlTamam.Application.Scheduling;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
@@ -74,6 +75,20 @@ public sealed class AutoAttendanceRunReadTests : IAsyncLifetime, IDisposable
         cmd.Parameters.AddWithValue("$catch", catchUp ? 1 : 0);
         cmd.Parameters.AddWithValue("$copied", copied);
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public void CatchUpIncludesAllMissedDays_WithoutSevenDayTruncation()
+    {
+        var svc=new AutoAttendanceService(_db);
+        var end=new DateOnly(2026,10,30);
+        var since=new DateOnly(2026,8,1);
+        var due=svc.EnumeratePendingDates(end,true,7,since,out int omitted);
+        Assert.Equal(0,omitted);
+        Assert.Equal(since.AddDays(1),due[0]);
+        Assert.Equal(end,due[^1]);
+        Assert.Equal(end.DayNumber-since.DayNumber,due.Count);
+        Assert.Empty(svc.EnumeratePendingDates(end,false,7,null,out _));
     }
 
     [Fact]
