@@ -161,6 +161,13 @@ public sealed class AdminSettingsIntegrationTests : IAsyncLifetime, IDisposable
         Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
         q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_CREATE' AND TargetEntityId=$id;";
         Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        var audit=new AuditOverlayService(_db);
+        var byNumber=await audit.QueryAuditLogAsync(
+            new JsonObject{["term"]="4782"},CancellationToken.None,Actor);
+        Assert.True(byNumber.Success,byNumber.UserMessage);
+        var returned=Assert.IsType<JsonObject>(byNumber.Data);
+        Assert.Contains(Assert.IsType<JsonArray>(returned["items"]),
+            entry=>entry!["operationCode"]!.GetValue<string>()=="PERSON_CREATE");
     }
 
     [Fact]
