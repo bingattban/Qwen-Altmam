@@ -38,7 +38,7 @@ public sealed class ExcelPersonnelImportService
         catch { return ""; }
     }
 
-    private sealed record PersonInput(int Row, string Name, string Number, string NormalizedName, string NormalizedNumber, string SiteName);
+    private sealed record PersonInput(int Row, string Name, string Number, string NormalizedName, string NormalizedNumber, string SiteName, string Worksheet);
 
     public async Task<BridgeResponse> SelectAsync(JsonObject? payload, string actor, CancellationToken ct)
     {
@@ -53,7 +53,7 @@ public sealed class ExcelPersonnelImportService
         try
         {
             if (bytes.Length > MaxWorkbookBytes) return Invalid("ملف Excel كبير جداً (الحد 160 كيلوبايت).");
-            var rows = ParseWorkbook(bytes);
+            var rows = ParseWorkbook(bytes, payload);
             if (rows.Count == 0) return Invalid("الكشف لا يحتوي على صفوف أفراد صالحة للمعالجة.");
             var data = new JsonArray();
             foreach (var row in rows)
@@ -61,7 +61,7 @@ public sealed class ExcelPersonnelImportService
                 {
                     ["row"] = row.Row, ["name"] = row.Name, ["number"] = row.Number,
                     ["normalizedName"] = row.NormalizedName, ["normalizedNumber"] = row.NormalizedNumber,
-                    ["siteName"] = row.SiteName
+                    ["siteName"] = row.SiteName, ["worksheet"] = row.Worksheet
                 });
             string sha256 = Convert.ToHexString(
                 System.Security.Cryptography.SHA256.HashData(bytes));
@@ -70,7 +70,9 @@ public sealed class ExcelPersonnelImportService
                     ["sha256"] = sha256 }, 0, ct);
             return BridgeHelpers.Ok(new JsonObject { ["workbookToken"] = token,
                 ["rowCount"] = rows.Count, ["fileName"] = fileName,
-                ["maxRows"] = MaxRecords });
+                ["maxRows"] = MaxRecords,
+                ["selectedWorksheets"] = new JsonArray(rows.Select(x=>x.Worksheet)
+                    .Distinct(StringComparer.Ordinal).Select(n=>(JsonNode?)JsonValue.Create(n)).ToArray()) });
         }
         catch (InvalidDataException e) { return Invalid(e.Message); }
         catch (XmlException) { return Invalid("تعذر قراءة بنية ملف Excel."); }
@@ -111,7 +113,8 @@ public sealed class ExcelPersonnelImportService
             return new PersonInput(obj["row"]!.GetValue<int>(),
                 obj["name"]!.GetValue<string>(), obj["number"]!.GetValue<string>(),
                 obj["normalizedName"]!.GetValue<string>(), obj["normalizedNumber"]!.GetValue<string>(),
-                obj["siteName"]?.GetValue<string>() ?? "غير محدد");
+                obj["siteName"]?.GetValue<string>() ?? "غير محدد",
+                obj["worksheet"]?.GetValue<string>() ?? "الورقة الأولى");
         }).ToList();
     }
 
@@ -157,11 +160,13 @@ public sealed class ExcelPersonnelImportService
             }
             if (reason is not null)
                 issues.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
-                    ["serviceNumberA"] = item.Number, ["siteName"] = item.SiteName, ["reason"] = reason });
+                    ["serviceNumberA"] = item.Number, ["siteName"] = item.SiteName,
+                    ["worksheet"] = item.Worksheet, ["reason"] = reason });
             else
                 accepted.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
                     ["serviceNumberA"] = item.Number, ["normalizedName"] = item.NormalizedName,
-                    ["normalizedNumber"] = item.NormalizedNumber, ["siteName"] = item.SiteName });
+                    ["normalizedNumber"] = item.NormalizedNumber, ["siteName"] = item.SiteName,
+                    ["worksheet"] = item.Worksheet });
         }
         return (accepted, issues);
     }
@@ -240,7 +245,8 @@ public sealed class ExcelPersonnelImportService
                     ["number"] = p["serviceNumberA"]!.GetValue<string>(),
                     ["normalizedName"] = p["normalizedName"]!.GetValue<string>(),
                     ["normalizedNumber"] = p["normalizedNumber"]!.GetValue<string>(),
-                    ["siteName"] = p["siteName"]!.GetValue<string>()
+                    ["siteName"] = p["siteName"]!.GetValue<string>(),
+                    ["worksheet"] = p["worksheet"]?.GetValue<string>() ?? "الورقة الأولى"
                 };
             }).ToArray()) }, accepted.Count, ct);
         return BridgeHelpers.Ok(new JsonObject
@@ -317,9 +323,10 @@ public sealed class ExcelPersonnelImportService
                 record.CommandText = """
                     INSERT INTO ImportIssues(ImportBatchId,WorksheetName,RowNumber,
                         RawServiceNumberA,RawPersonName,RawSiteName,IssueReasonArabic)
-                    VALUES($batch,'الورقة الأولى',$row,$number,$name,$site,$reason);
+                    VALUES($batch,$worksheet,$row,$number,$name,$site,$reason);
                     """;
                 record.Parameters.AddWithValue("$batch", batchId);
+                record.Parameters.AddWithValue("$worksheet", rejected["worksheet"]?.GetValue<string>() ?? "الورقة الأولى");
                 record.Parameters.AddWithValue("$row", rejected["row"]!.GetValue<int>());
                 record.Parameters.AddWithValue("$number", rejected["serviceNumberA"]?.GetValue<string>() ?? "");
                 record.Parameters.AddWithValue("$name", rejected["name"]?.GetValue<string>() ?? "");
