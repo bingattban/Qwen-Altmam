@@ -86,6 +86,36 @@ def main() -> int:
     except FileNotFoundError:
         errors.append(f"compiled table {CODE_PATH} not found — cannot verify drift")
 
+    # Section 02.14: hard-fail release when a business-data mutation is
+    # missing from the offline JS bridge auto-token list, or C# exclusions drift.
+    non_data_mutations = {
+        "Logout", "ExportPersonLifetimeExcel", "ExportImportIssues",
+        "ExportMonthlyWorkbookSet", "CancelExport"
+    }
+    required_ids = {a["action"] for a in actions
+                    if a["isMutating"] and a["action"] not in non_data_mutations}
+    try:
+        from pathlib import Path
+        client = Path("src/AlTamam.WebUI/assets/js/bridge-client.js").read_text(encoding="utf-8")
+        match = re.search(r'const OPERATION_ID_ACTIONS = new Set\(\[([\s\S]*?)\]\);', client)
+        if match is None:
+            errors.append("Missing explicit OPERATION_ID_ACTIONS contract in JS client")
+        else:
+            listed = re.findall(r'"([^"]+)"', match.group(1))
+            if len(listed) != len(set(listed)):
+                errors.append("Duplicate JS operation ID action names")
+            if set(listed) != required_ids:
+                errors.append(f"Mandatory operation ID drift: missing {sorted(required_ids-set(listed))}, extra {sorted(set(listed)-required_ids)}")
+        policy = re.search(r'public static bool RequiresOperationId[\s\S]*?public static BridgeActionMetadata', cs)
+        if policy is None:
+            errors.append("Missing C# mandatory operation ID policy")
+        else:
+            found = set(re.findall(r'"([^"]+)"', policy.group(0)))
+            if found != non_data_mutations:
+                errors.append(f"C# operation ID exceptions drift: {sorted(found)}")
+    except (OSError, UnicodeError) as e:
+        errors.append(f"Operation ID contract could not be verified: {e}")
+
     # The UI may only call actions with a real dispatcher implementation.
     # The fallback switch arm returns an error, not an implementation.
     try:
