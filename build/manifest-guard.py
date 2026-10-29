@@ -86,6 +86,25 @@ def main() -> int:
     except FileNotFoundError:
         errors.append(f"compiled table {CODE_PATH} not found — cannot verify drift")
 
+    # Every manifest mutation except Logout must be assigned an intent ID by
+    # the packaged bridge client; reject any future manifest/UI drift in CI.
+    try:
+        from pathlib import Path
+        ui_bridge = Path("src/AlTamam.WebUI/assets/js/bridge-client.js").read_text(encoding="utf-8")
+        match = re.search(r"const MUTATING_ACTIONS = new Set\\(\\[([\\s\\S]*?)\\]\\);", ui_bridge)
+        if not match:
+            errors.append("bridge-client.js does not define MUTATING_ACTIONS")
+        else:
+            ui_mutations = re.findall(r'"([A-Za-z][A-Za-z0-9]*)"', match.group(1))
+            expected = {a["action"] for a in actions if a["isMutating"] and a["action"] != "Logout"}
+            if len(ui_mutations) != len(set(ui_mutations)) or set(ui_mutations) != expected:
+                errors.append(f"bridge mutation intent actions out of sync: missing {sorted(expected-set(ui_mutations))}, extra {sorted(set(ui_mutations)-expected)}")
+        dispatcher = Path("src/AlTamam.Application/Bridge/WebView2BridgeDispatcher.cs").read_text(encoding="utf-8")
+        if 'registration.IsMutating && request.Action != "Logout"' not in dispatcher:
+            errors.append("C# dispatcher is missing the mandatory mutation operationId gate")
+    except (OSError, UnicodeError) as e:
+        errors.append(f"operationId policy source unavailable: {e}")
+
     # The UI may only call actions with a real dispatcher implementation.
     # The fallback switch arm returns an error, not an implementation.
     try:
