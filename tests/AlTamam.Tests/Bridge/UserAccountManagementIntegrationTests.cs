@@ -395,7 +395,7 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         using(var queryCreator=creatorCheck.CreateCommand())
         {
             queryCreator.CommandText="SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='roster-admin';";
-            Assert.Equal("ga-test",queryCreator.ExecuteScalar());
+            Assert.Equal("الإدارة العامة - ga-test",queryCreator.ExecuteScalar());
             queryCreator.CommandText="SELECT LinkedPersonId FROM Users WHERE Role=1;";
             Assert.Equal(DBNull.Value,queryCreator.ExecuteScalar());
         }
