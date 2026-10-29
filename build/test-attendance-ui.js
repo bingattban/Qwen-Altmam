@@ -15,6 +15,7 @@ class El{
 }
 const root=new El("main"),calls=[],writes=[],reviews=[];
 let approved=false, errorName="",expandedRoster=false;
+let cancelConfirmed=false,confirmations=0,navigations=0;
 const bridge={invoke:async(name,payload)=>{
  calls.push({name,payload});
  if(name==="QueryDailyRoster"&&expandedRoster){
@@ -50,13 +51,13 @@ const bridge={invoke:async(name,payload)=>{
 }};
 const context={
  document:{createElement:tag=>new El(tag)},window:{AltamamBridge:bridge,
-   AltamamAdminSettings:{renderGroup:()=>{}},
+   AltamamAdminSettings:{renderGroup:()=>{navigations++;}},
    AltamamDialog:{
      attendanceReview:async(data,opts)=>{
        reviews.push({data,opts});
        return approved;
      },
-     confirm:async()=>{throw Error("No second dialog is permitted after preview");}
+     confirm:async()=>{confirmations++;return cancelConfirmed;}
    }},
  console,Date
 };
@@ -138,6 +139,30 @@ async function main(){
   one("السابق").handlers.click();await flush();
   assert.equal(dailyRows().length,100);
   assert.equal(writes.length,committed,"paging must never save attendance");
-  console.log("ATTENDANCE UI PASS: 100-person scrollable roster, paging, review and confirmation");
+
+  // 04.03(b): cancel/back with a pending human selection requires
+  // an explicit confirmation, and neither path may commit attendance.
+  await choose();
+  assert.ok(root.all().some(x=>x.textContent==="الأفراد المحددون: 1 من 100"));
+  const cancelSelections=one("إلغاء التحديد");
+  assert.ok(cancelSelections,"attendance has a visible Cancel selection action");
+  await cancelSelections.handlers.click();await flush();
+  assert.equal(confirmations,1);
+  assert.equal(root.all().filter(x=>x.tag==="input"&&x.type==="checkbox")[0].checked,true,
+    "refusing cancellation must preserve pending selections");
+  cancelConfirmed=true;
+  await cancelSelections.handlers.click();await flush();
+  assert.equal(confirmations,2);
+  assert.ok(root.all().some(x=>x.textContent==="الأفراد المحددون: 0 من 100"));
+  assert.equal(writes.length,committed);
+  await choose();
+  cancelConfirmed=false;
+  await one("العودة إلى إدارة القوة").handlers.click();await flush();
+  assert.equal(navigations,0,"declined back confirmation must keep attendance editing open");
+  cancelConfirmed=true;
+  await one("العودة إلى إدارة القوة").handlers.click();await flush();
+  assert.equal(navigations,1,"approved back confirmation may leave attendance");
+  assert.equal(writes.length,committed,"cancel/back never saves attendance");
+  console.log("ATTENDANCE UI PASS: 100-person roster, preview and confirmed pending-selection cancellation");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
