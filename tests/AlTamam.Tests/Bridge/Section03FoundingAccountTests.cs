@@ -91,6 +91,20 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
             """));
     }
 
+    [Theory]
+    [InlineData(UserRole.OrdinaryAdministration)]
+    [InlineData(UserRole.Supervisor)]
+    public async Task InternalFirstUseHelper_MustNotCreateUnlinkedNonfounderAccounts(
+        UserRole role)
+    {
+        var attempted = await _service.CreateUserInternalAsync(
+            "unlinked-user", "Abc123!secure", role,
+            requiresSetup: false, CancellationToken.None);
+        Assert.False(attempted.Success);
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+        Assert.False(await _service.IsProvisionedAsync());
+    }
+
     [Fact]
     public async Task FounderNameMayBeOmitted_AndRoleUsernameRemainVisible()
     {
