@@ -348,9 +348,13 @@ public sealed class BridgeRbacMatrixTests
         var dispatcher = new WebView2BridgeDispatcher(new[] { registration });
 
         BridgeDispatchResult first = await dispatcher.DispatchAsync(
-            Envelope("SubmitAttendance", NonceSv, "REPLAY-1"), ValidOrigin, true, Authenticate);
+            Envelope("SubmitAttendance", NonceSv, "REPLAY-1",
+                new JsonObject { ["operationId"] = "section02-replay-intent-123456" }),
+            ValidOrigin, true, Authenticate);
         BridgeDispatchResult second = await dispatcher.DispatchAsync(
-            Envelope("SubmitAttendance", NonceSv, "REPLAY-1"), ValidOrigin, true, Authenticate);
+            Envelope("SubmitAttendance", NonceSv, "REPLAY-1",
+                new JsonObject { ["operationId"] = "section02-replay-intent-123456" }),
+            ValidOrigin, true, Authenticate);
 
         Assert.Equal(BridgeOutcomeKind.Success, first.Kind);
         Assert.Equal(BridgeOutcomeKind.Conflict, second.Kind);
@@ -367,7 +371,8 @@ public sealed class BridgeRbacMatrixTests
             IsMutating: true, AllowUnauthenticated: false,
             Handler: (req, principal, ct) => Task.FromResult(new BridgeResponse(req.RequestId, true)));
         var dispatcher = new WebView2BridgeDispatcher(new[] { registration });
-        var payload = new JsonObject { ["expectedRevision"] = 7, ["baseRevision"] = 5 };
+        var payload = new JsonObject { ["expectedRevision"] = 7, ["baseRevision"] = 5,
+            ["operationId"] = "section02-stale-intent-123456" };
 
         BridgeDispatchResult result = await dispatcher.DispatchAsync(
             Envelope("ReviseTodayAttendance", NonceSv, "REV-1", payload), ValidOrigin, true, Authenticate);
