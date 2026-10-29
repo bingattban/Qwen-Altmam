@@ -101,12 +101,18 @@ public sealed class Section02EvidenceAndReportsTests : IAsyncLifetime, IDisposab
     public async Task AuditOverlay_ExactRetryPreservesOneVersionAndOneMetaAudit_AndHiddenIsAdminOnly()
     {
         Sql("""
+            -- A nonfounding Ordinary Admin MUST own a real active roster link.
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+              CurrentServiceNumberA,NormalizedServiceNumberA,FirstRecordedLocalDate,
+              FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+            VALUES('TST-EVID-OA-PERSON','مسؤول اختباري','مسؤول اختباري',
+              '9100','9100','2026-01-01','2026-01-01T00:00:00Z',1,1,1);
             INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
               CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,FailedLoginCount,
               CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,RowVersion)
             VALUES('TST-EVID-GA',NULL,'test-evid-ga','test-evid-ga',1,
               'test-hash','test-salt',0,1,0,'USR-SYSTEM','النظام','2026-01-01T00:00:00Z',1),
-              ('TST-EVID-OA',NULL,'test-evid-oa','test-evid-oa',2,
+              ('TST-EVID-OA','TST-EVID-OA-PERSON','test-evid-oa','test-evid-oa',2,
               'test-hash','test-salt',0,1,0,'USR-SYSTEM','النظام','2026-01-01T00:00:00Z',1);
             """);
         await _db.ExecuteInWriteTransactionAsync(async (c,t) =>
@@ -205,12 +211,18 @@ public sealed class Section02EvidenceAndReportsTests : IAsyncLifetime, IDisposab
     public async Task DisplayOverlay_IsAuthorizedAppendOnlyAndAudited()
     {
         Sql("""
+            -- A nonfounding Ordinary Admin MUST own a real active roster link.
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+              CurrentServiceNumberA,NormalizedServiceNumberA,FirstRecordedLocalDate,
+              FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+            VALUES('TST-EVID-OA-PERSON','مسؤول اختباري','مسؤول اختباري',
+              '9100','9100','2026-01-01','2026-01-01T00:00:00Z',1,1,1);
             INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
               CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,FailedLoginCount,
               CreatedByUserId,CreatedByDisplaySnapshot,CreatedAtUtc,RowVersion)
             VALUES('TST-EVID-GA',NULL,'test-evid-ga','test-evid-ga',1,
               'test-hash','test-salt',0,1,0,'USR-SYSTEM','النظام','2026-01-01T00:00:00Z',1),
-              ('TST-EVID-OA',NULL,'test-evid-oa','test-evid-oa',2,
+              ('TST-EVID-OA','TST-EVID-OA-PERSON','test-evid-oa','test-evid-oa',2,
               'test-hash','test-salt',0,1,0,'USR-SYSTEM','النظام','2026-01-01T00:00:00Z',1);
             """);
         await _db.ExecuteInWriteTransactionAsync(async (c, t) =>
