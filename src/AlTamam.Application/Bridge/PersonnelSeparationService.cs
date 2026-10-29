@@ -247,7 +247,15 @@ public sealed class PersonnelSeparationService
         cmd.CommandText="""
             SELECT m.MovementId,m.PersonId,m.PersonNameSnapshot,m.ServiceNumberASnapshot,
                    m.SourceSiteNameSnapshot,m.SeparationReason,m.EffectiveLocalDate,
-                   m.CommittedAtUtc,m.ActorUserId
+                   m.CommittedAtUtc,m.ActorUserId,
+                   COALESCE((SELECT a.ActorUsernameSnapshot || ' - ' ||
+                             COALESCE(a.ActorRosterFullNameSnapshot,'')
+                         FROM AuditEvents a
+                         WHERE a.OperationCode='PERSON_SEPARATE'
+                           AND a.TargetEntityType='Person'
+                           AND a.TargetEntityId=m.PersonId
+                           AND a.EffectiveLocalDate=m.EffectiveLocalDate
+                         ORDER BY a.ExecutedAtUtc DESC LIMIT 1),'—')
             FROM PersonnelMovements m
             """+"\n"+filter+"\n"+"""
             ORDER BY m.EffectiveLocalDate DESC,m.CommittedAtUtc DESC,m.MovementId
@@ -265,7 +273,8 @@ public sealed class PersonnelSeparationService
                 ["name"]=reader.GetString(2),["serviceNumberA"]=reader.GetString(3),
                 ["siteName"]=reader.GetString(4),["reason"]=reader.GetString(5),
                 ["date"]=reader.GetString(6),["committedAtUtc"]=reader.GetString(7),
-                ["actorUserId"]=reader.GetString(8)
+                ["actorUserId"]=reader.GetString(8),
+                ["actorDisplay"]=reader.GetString(9)
             });
         return BridgeHelpers.Ok(new JsonObject
         {
