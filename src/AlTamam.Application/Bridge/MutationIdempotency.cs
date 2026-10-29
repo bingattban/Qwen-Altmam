@@ -10,8 +10,8 @@ namespace AlTamam.Application.Bridge;
 /// ACID replay receipts for mutating requests. The operation ID belongs to an
 /// explicit user intent, not to the generated personnel number/DB primary key.
 /// Only successful writes are receipted, in the SAME SQLCipher transaction.
-/// Every covered domain mutation requires an explicit caller operationId.
-/// Missing IDs fail closed, including requests from legacy clients.
+/// Legacy clients without an operationId keep their existing validation path;
+/// the WebView2 forms supply operationId for new creates.
 /// </summary>
 internal static class MutationIdempotency
 {
@@ -25,9 +25,7 @@ internal static class MutationIdempotency
         try {operationId=payload?["operationId"]?.GetValue<string>()?.Trim()??"";}
         catch {return (BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
             "معرف عملية الإنشاء غير صالح."),null);}
-        if(operationId.Length==0)
-            return (BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "معرف العملية operationId إلزامي لحفظ أي تعديل."),null);
+        if(operationId.Length==0)return (null,null);
         if(operationId.Length is <16 or >128 ||
            operationId.Any(ch=>!char.IsAsciiLetterOrDigit(ch)&&ch!='-'&&ch!='_'))
             return (BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
