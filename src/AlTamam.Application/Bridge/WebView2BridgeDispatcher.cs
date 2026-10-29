@@ -121,6 +121,17 @@ public sealed class WebView2BridgeDispatcher
                     $"صلاحية '{roleLabel}' لا تسمح بتنفيذ '{request.Action}'.", BridgeOutcomeKind.Forbidden);
         }
 
+        // Owner-approved Section 02.14 rule: reject old WebView2 clients that
+        // omit an operationId for ANY business/state mutation. This is checked
+        // AFTER server authentication/RBAC and BEFORE request replay tracking or
+        // handler execution, so neither JS manipulation nor a stale client can
+        // bypass the rule or consume a replay slot with an invalid request.
+        if (ActionManifest.RequiresOperationId(request.Action, registration.IsMutating)
+            && !MutationIdempotency.HasValidOperationId(request.Payload))
+            return Fail(request.RequestId, BridgeErrorCodes.ValidationError,
+                "معرّف العملية operationId إلزامي وصيغته 16–128 حرفاً لاتينياً أو رقماً أو - أو _.",
+                BridgeOutcomeKind.ProtocolError);
+
         // 6) Anti-replay: a requestId is accepted only once per authenticated
         // session, or once per unauthenticated login flow. Prune ONLY revoked
         // sessions; NEVER evict a still-valid request ID or use a short TTL.
