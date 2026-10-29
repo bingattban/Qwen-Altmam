@@ -40,6 +40,23 @@ public sealed class MonthlyExcelExportService
             && term.Length <= 100 && !term.Any(char.IsControl);
     }
 
+    private static bool SafeOutputName(string? input,out string name)
+    {
+        name="";
+        if(input is null)return true;
+        string proposed=input.Trim();
+        if(proposed.Length is <5 or >124 ||
+           !proposed.EndsWith(".xlsx",StringComparison.OrdinalIgnoreCase))return false;
+        string stem=proposed[..^5];
+        if(stem.Length is <1 or >119 || stem!=stem.Trim() ||
+           !stem.All(c=>char.IsLetterOrDigit(c)||c is ' ' or '-' or '_' or '(' or ')'))
+            return false;
+        if(new[]{"CON","PRN","AUX","NUL","COM1","COM2","COM3","LPT1","LPT2"}
+            .Contains(stem,StringComparer.OrdinalIgnoreCase))return false;
+        name=stem+".xlsx";
+        return true;
+    }
+
     public Task<BridgeResponse> PeriodsAsync(CancellationToken ct) => _read.ArchivePeriodsAsync(ct);
 
     public async Task<BridgeResponse> PreviewAsync(JsonObject? input, CancellationToken ct)
@@ -82,12 +99,30 @@ public sealed class MonthlyExcelExportService
         int days = previewData["daysInMonth"]!.GetValue<int>();
         string site = previewData["siteId"]!.GetValue<string>();
         string term = previewData["term"]!.GetValue<string>();
-        // The same audited output folder is used by backups and all Excel reports.
-        string selected = await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
+        // The output directory is explicitly selected locally and validated again on
+        // the C# side; never allow filenames to supply path separators.
+        string selected;
+        string? requestedName;
+        try
+        {
+            selected=input?["directory"]?.GetValue<string>() ??
+                await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
+            requestedName=input?["fileName"]?.GetValue<string>();
+        }
+        catch(InvalidOperationException)
+        {
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "مجلد أو اسم ملف التصدير غير صالح.");
+        }
+        if(!SafeOutputName(requestedName,out string chosenName))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "اسم الملف يجب أن يكون نصاً محلياً آمناً وينتهي بالامتداد xlsx.");
         if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
             return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
                 "مجلد النسخ والتصدير غير متاح؛ غيّره من الإعدادات.");
-        string basename = $"التمام الشهري_{year:D4}-{month:D2}_تصدير-{DateTime.Now:yyyy-MM-dd}_{Guid.NewGuid():N}.xlsx";
+        string basename = requestedName is null ?
+            $"التمام الشهري_{year:D4}-{month:D2}_تصدير-{DateTime.Now:yyyy-MM-dd}_{Guid.NewGuid():N}.xlsx" :
+            chosenName;
         string destination = Path.Combine(directory, basename);
         string partial = destination + ".part";
         progress?.Invoke(0,checked((int)total));
@@ -254,16 +289,24 @@ public sealed class MonthlyExcelExportService
         bool success=false;
         try
         {
-            async Task<BridgeResponse> OneAsync(string siteId)
+            async Task<BridgeResponse> OneAsync(string siteId,int siteOrdinal)
             {
                 var selected=(JsonObject)input.DeepClone();
                 selected["siteId"]=siteId;
+                if(siteOrdinal>0 && selected["fileName"] is not null)
+                {
+                    string requested=selected["fileName"]!.GetValue<string>();
+                    if(!SafeOutputName(requested,out string safe))
+                        return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                            "اسم ملف التصدير المقترح غير صالح.");
+                    selected["fileName"]=safe[..^5]+"-موقع-"+siteOrdinal.ToString("D2",CultureInfo.InvariantCulture)+".xlsx";
+                }
                 selected["consolidatedOnly"]=true;
                 int before=completed;
                 return await ExportAsync(selected,ct,(done,total)=>
                     progress?.Invoke(checked(before+done),checked((int)sum))).ConfigureAwait(false);
             }
-            var all=await OneAsync("").ConfigureAwait(false);
+            var all=await OneAsync("",0).ConfigureAwait(false);
             if(!all.Success)return all;
             var combinedData=(JsonObject)all.Data!;
             string combinedPath=combinedData["filePath"]!.GetValue<string>();
@@ -271,10 +314,11 @@ public sealed class MonthlyExcelExportService
             files.Add(new JsonObject{["siteId"]="",
                 ["filePath"]=combinedPath,["personCount"]=combined});
             completed=checked((int)combined);
-            foreach(var plan in sitePlans)
+            for(int siteOrdinal=0;siteOrdinal<sitePlans.Count;siteOrdinal++)
             {
                 ct.ThrowIfCancellationRequested();
-                var individual=await OneAsync(plan.SiteId).ConfigureAwait(false);
+                var plan=sitePlans[siteOrdinal];
+                var individual=await OneAsync(plan.SiteId,siteOrdinal+1).ConfigureAwait(false);
                 if(!individual.Success)return individual;
                 var entry=(JsonObject)individual.Data!;
                 string file=entry["filePath"]!.GetValue<string>();
