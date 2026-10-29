@@ -268,7 +268,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
             "UPDATE Users SET Role=1,LinkedPersonId='PER-FOUNDER-TEST' WHERE Role=1;"));
         Assert.Equal("",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
         Assert.Equal(userId,Scalar("SELECT UserId FROM Users WHERE Role=1;"));
-        Assert.Equal("الإدارة العامة - صاحب الحساب المؤسس",Scalar(
+        Assert.Equal("صاحب الحساب المؤسس",Scalar(
             "SELECT FoundingFullName FROM Users WHERE Role=1;"));
 
         var accounts=await new UserAccountManagementService(_db).ListAsync(
@@ -283,7 +283,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
             listed["fullName"]!.GetValue<string>());
         Assert.DoesNotContain(ActionManifest.All,
             action=>action.Action=="LinkFoundingAdministrator");
-        Assert.Equal("صاحب الحساب المؤسس",Scalar(
+        Assert.Equal("الإدارة العامة - صاحب الحساب المؤسس",Scalar(
             "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
         Assert.Equal("0",Scalar(
             "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ACCOUNT_LINKED';"));
