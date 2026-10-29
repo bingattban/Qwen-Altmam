@@ -194,14 +194,29 @@ public sealed class UserAccountManagementService
             {
                 creator.Transaction=t;
                 creator.CommandText="""
-                    SELECT p.CurrentVisibleName FROM Users u
-                    JOIN Persons p ON p.PersonId=u.LinkedPersonId
+                    SELECT u.Username,u.Role,u.FoundingFullName,p.CurrentVisibleName
+                    FROM Users u LEFT JOIN Persons p ON p.PersonId=u.LinkedPersonId
                     WHERE u.UserId=$creator;
                     """;
                 creator.Parameters.AddWithValue("$creator",actor.UserId);
-                string? roster=await creator.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
-                if(!string.IsNullOrWhiteSpace(roster))
-                    creatorName=actor.Username+" - "+roster;
+                using var reader=await creator.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if(await reader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    string storedUsername=reader.GetString(0);
+                    if((UserRole)reader.GetInt32(1)==UserRole.GeneralAdministration)
+                    {
+                        // Founder has no PersonId; freeze the special role label and
+                        // the optional founding name, never a fictional roster identity.
+                        string optionalName=reader.IsDBNull(2)?"":reader.GetString(2).Trim();
+                        creatorName="الإدارة العامة - "+storedUsername+
+                            (optionalName.Length==0?"":" ("+optionalName+")");
+                    }
+                    else if(!reader.IsDBNull(3) &&
+                            !string.IsNullOrWhiteSpace(reader.GetString(3)))
+                        creatorName=storedUsername+" - "+reader.GetString(3);
+                    else
+                        creatorName=storedUsername;
+                }
             }
             using var cmd=c.CreateCommand();cmd.Transaction=t;
             cmd.CommandText="""
