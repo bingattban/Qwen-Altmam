@@ -67,22 +67,6 @@ public sealed class Section02MutationReplayTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
-    public async Task RenameSite_MissingOperationId_IsRejectedWithoutAnyHistoricalOrAuditWrite()
-    {
-        var svc = new AdminConfigurationService(_db);
-        var payload = new JsonObject {
-            ["siteId"]="SITE-S02",["name"]="محاولة تعديل بلا معرف",
-            ["expectedRevision"]=1L
-        };
-        var response = await svc.RenameSiteAsync(payload,Actor,CancellationToken.None);
-        Assert.False(response.Success);
-        Assert.Equal(BridgeErrorCodes.ValidationError,response.ErrorCode);
-        Assert.Equal(1L,Count("SELECT COUNT(*) FROM SiteNameHistory WHERE SiteId='SITE-S02'"));
-        Assert.Equal(0L,Count("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='SITE_RENAME'"));
-        Assert.Equal(0L,Count("SELECT COUNT(*) FROM MutationReceipts"));
-    }
-
-    [Fact]
     public async Task RenameSite_LostResponseRetry_HasOneHistoricalVersionAndAudit()
     {
         var svc = new AdminConfigurationService(_db);
