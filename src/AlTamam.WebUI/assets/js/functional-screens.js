@@ -264,11 +264,60 @@
     (document.body?.appendChild?document.body:view()).appendChild(overlay);
     autoPreparedOverlay=overlay;
     let disposed=false,page=1,term="",generation=0,choices=[];
+    let revisionOverlay=null;
+    function closeRevision(){
+      const current=revisionOverlay;
+      revisionOverlay=null;
+      if(current)current.remove?.();
+    }
+    function openRevision(person){
+      if(disposed)return;
+      closeRevision();
+      const overlay=el("div","auto-revision-overlay");
+      overlay.setAttribute("role","dialog");
+      overlay.setAttribute("aria-modal","true");
+      overlay.setAttribute("aria-label","مراجعة حالة محضّر تلقائياً");
+      const panel=el("section","auto-attendance-dialog card");
+      const title=el("h2","page-title","مراجعة حالة الفرد — "+person.name);
+      const details=el("p","section-description",
+        "الرقم (ع): "+person.serviceNumberA+" — الموقع: "+person.siteName+
+        " — التاريخ: "+(person.savedBusinessDate||date));
+      const current=el("p","section-description","الحالة المحفوظة: "+person.statusName+
+        " — المصدر: "+(person.autoSource||"مصدر غير موثق"));
+      const selector=el("select","form-select auto-attendance-status-select");
+      selector.setAttribute("aria-label","الحالة الجديدة لـ "+person.name);
+      const empty=el("option","","اختر حالة جديدة");empty.value="";
+      selector.appendChild(empty);
+      for(const item of choices){
+        if(item.statusId===person.statusId)continue;
+        const option=el("option","",item.displayName);option.value=item.statusId;
+        selector.appendChild(option);
+      }
+      const tools=el("div","functional-toolbar");
+      const cancel=button("إلغاء المراجعة",closeRevision);
+      const preview=button("معاينة تغيير الحالة",async()=>{
+        preview.disabled=true;
+        try{
+          if(await editAutoStatus(person,selector.value))closeRevision();
+        }finally{preview.disabled=false;}
+      });
+      append(tools,preview,cancel);
+      append(panel,title,details,current,selector,tools);
+      overlay.appendChild(panel);
+      (document.body?.appendChild?document.body:view()).appendChild(overlay);
+      revisionOverlay=overlay;
+      overlay.addEventListener("click",event=>{
+        if(event.target===overlay)closeRevision();
+      });
+      overlay.addEventListener("keydown",event=>{
+        if(event.key==="Escape"){event.preventDefault();closeRevision();}
+      });
+    }
     async function editAutoStatus(person,statusId){
       const chosen=choices.find(item=>item.statusId===statusId);
-      if(!chosen){showError(content,new Error("اختر الحالة الجديدة من القائمة المنسدلة."));return;}
+      if(!chosen){showError(content,new Error("اختر الحالة الجديدة من نافذة المراجعة."));return false;}
       if(chosen.statusId===person.statusId){
-        showError(content,new Error("اختر حالة مختلفة عن الحالة المعتمدة حالياً."));return;
+        showError(content,new Error("اختر حالة مختلفة عن الحالة المعتمدة حالياً."));return false;
       }
       try{
         const payload={businessDate:date,personIds:[person.personId],
@@ -282,7 +331,7 @@
         const accepted=await review(preview,{title:"معاينة تغيير حالة المحضّر تلقائياً",
           message:"راجع الاسم والرقم (ع) والحالة السابقة والجديدة قبل الاعتماد.",
           confirmLabel:"تأكيد تغيير الحالة"});
-        if(!accepted||disposed)return;
+        if(!accepted||disposed)return false;
         const saved=parseData(await bridge().invoke("ReviseTodayAttendance",{
           previewToken:preview.previewToken,
           operationId:window.crypto?.randomUUID?.()||
@@ -290,10 +339,12 @@
         }));
         if(!saved||!Number.isInteger(saved.count)||saved.count<1)
           throw Error("لم يؤكد الخادم نجاح تعديل الحالة.");
-        if(!disposed)await load(); // Keep the auto-prepared dialog on screen.
-      }catch(error){if(!disposed)showError(content,error);}
+        if(!disposed)await load(); // Keep the read-only register open.
+        return true;
+      }catch(error){if(!disposed)showError(content,error);return false;}
     }
     function close(){
+      closeRevision();
       disposed=true;generation++;
       overlay.remove?.();
       if(!overlay.remove&&overlay.parentNode)overlay.parentNode.removeChild(overlay);
@@ -320,7 +371,7 @@
         const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
           {label:"الاسم"},{label:"الموقع"},{label:"تاريخ التحضير"},
           {label:"مصدر التحضير"},{label:"الحالة المحفوظة"},
-          {label:"الحالة الجديدة"},{label:"الإجراء"}]);
+          {label:"المراجعة المنفصلة"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
@@ -328,18 +379,8 @@
             person.name,person.siteName,person.savedBusinessDate||date,
             person.autoSource||"مصدر غير موثق",person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
-          const selectCell=el("td"),statusSelect=el("select","form-select auto-attendance-status-select");
-          statusSelect.setAttribute("aria-label","الحالة الجديدة لـ "+person.name);
-          const placeholder=el("option","","اختر حالة");placeholder.value="";
-          statusSelect.appendChild(placeholder);
-          for(const item of choices){
-            if(item.statusId===person.statusId)continue;
-            const opt=el("option","",item.displayName);opt.value=item.statusId;
-            statusSelect.appendChild(opt);
-          }
-          selectCell.appendChild(statusSelect);row.appendChild(selectCell);
-          const action=el("td");action.appendChild(button("معاينة التعديل",
-            ()=>void editAutoStatus(person,statusSelect.value)));
+          const action=el("td");
+          action.appendChild(button("فتح مراجعة الحالة",()=>openRevision(person)));
           row.appendChild(action);
           tb.body.appendChild(row);
         });
