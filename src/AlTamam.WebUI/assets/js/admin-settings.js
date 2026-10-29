@@ -384,9 +384,10 @@
             });
             if(!accepted){previewToken="";return;}
             const token=previewToken;
+            const operationId=makeOperationId();
             const commit=async()=>{
               try{
-                const done=await api().invoke("CommitImport",{previewToken:token});
+                const done=await api().invoke("CommitImport",{previewToken:token,operationId});
                 if(!valid())return;
                 if(!Number.isInteger(done.data?.createdCount))
                   throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
