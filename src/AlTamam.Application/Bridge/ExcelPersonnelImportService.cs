@@ -455,7 +455,7 @@ public sealed class ExcelPersonnelImportService
         BridgeErrorCodes.ImportPlanStale, "انتهت صلاحية المعاينة أو تغيرت البيانات؛ أعد استيراد الملف.");
     private static BridgeResponse Invalid(string text) => BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, text);
 
-    private static List<PersonInput> ParseWorkbook(byte[] bytes)
+    private static List<PersonInput> ParseWorkbook(byte[] bytes, JsonObject? options)
     {
         try
         {
@@ -474,8 +474,40 @@ public sealed class ExcelPersonnelImportService
             if (zip.GetEntry("[Content_Types].xml") is null ||
                 zip.GetEntry("xl/workbook.xml") is null)
                 throw new InvalidDataException("هذا ليس ملف Excel بصيغة xlsx.");
-            var sheet = zip.GetEntry("xl/worksheets/sheet1.xml")
-                ?? throw new InvalidDataException("الورقة الأولى غير متاحة (sheet1.xml).");
+            var sheets=new List<ZipArchiveEntry>();
+            for(int i=1;i<=50;i++)
+            {
+                var found=zip.GetEntry($"xl/worksheets/sheet{i}.xml");
+                if(found is not null)sheets.Add(found);
+            }
+            if(sheets.Count==0)
+                throw new InvalidDataException("ملف Excel لا يحتوي على أوراق أفراد متاحة.");
+            var sheetNames=SafeXml(zip.GetEntry("xl/workbook.xml")!)
+                .Descendants(Ns+"sheet")
+                .Select(x=>(string?)x.Attribute("name")??"").ToArray();
+            var picked=options?["sheetIndexes"] as JsonArray;
+            var indices=new List<int>();
+            if(picked is null)indices.Add(1);
+            else
+            {
+                if(picked.Count is <1 or >50)
+                    throw new InvalidDataException("اختر ورقة Excel واحدة على الأقل.");
+                foreach(var node in picked)
+                {
+                    int n;
+                    try{n=node!.GetValue<int>();}
+                    catch{throw new InvalidDataException("رقم ورقة Excel غير صحيح.");}
+                    if(n<1 || n>sheets.Count || indices.Contains(n))
+                        throw new InvalidDataException("رقم ورقة Excel خارج النطاق أو مكرر.");
+                    indices.Add(n);
+                }
+            }
+            string nameHeading=Read(options,"nameHeading");
+            string numberHeading=Read(options,"numberHeading");
+            string siteHeading=Read(options,"siteHeading");
+            if(new[]{nameHeading,numberHeading,siteHeading}
+                .Any(x=>x.Length>100 || x.Any(char.IsControl)))
+                throw new InvalidDataException("عنوان عمود Excel مخصص غير صالح.");
             string[] strings = [];
             var shared = zip.GetEntry("xl/sharedStrings.xml");
             if (shared is not null)
@@ -485,10 +517,7 @@ public sealed class ExcelPersonnelImportService
                     .Select(si => string.Concat(si.Descendants(Ns + "t").Select(n => n.Value))).ToArray();
                 if (strings.Length > 50_000) throw new InvalidDataException("عدد النصوص داخل Excel كبير جداً.");
             }
-            XDocument document = SafeXml(sheet);
-            var rows = document.Descendants(Ns + "sheetData").Elements(Ns + "row").ToList();
-            if (rows.Count is < 2 or > MaxRecords + 6)
-                throw new InvalidDataException("يجب أن يحتوي الكشف على عناوين وصفوف أفراد (الحد 500 فرد).");
+            var records = new List<PersonInput>();
             string Value(XElement cell)
             {
                 string raw = cell.Element(Ns + "v")?.Value ?? "";
@@ -514,6 +543,14 @@ public sealed class ExcelPersonnelImportService
                 }
                 return idx;
             }
+            foreach(int sheetIndex in indices)
+            {
+            XDocument document=SafeXml(sheets[sheetIndex-1]);
+            var rows=document.Descendants(Ns+"sheetData").Elements(Ns+"row").ToList();
+            if(rows.Count is <2 or >MaxRecords+6)
+                throw new InvalidDataException("ورقة Excel لا تحتوي على صفوف وأعمدة صالحة.");
+            string worksheet=sheetIndex<=sheetNames.Length && sheetNames[sheetIndex-1].Length>0
+                ?sheetNames[sheetIndex-1]:("الورقة "+sheetIndex.ToString(CultureInfo.InvariantCulture));
             // Some official monthly workbooks put a report title and period above the header.
             // Locate the first valid header within five rows, never interpret title rows as persons.
             int headerIndex = -1, nameCol = 0, numberCol = 0, siteCol = 0;
@@ -521,21 +558,20 @@ public sealed class ExcelPersonnelImportService
             {
                 var headers = rows[index].Elements(Ns + "c")
                     .Select(cell => (column: Col(cell), value: Value(cell))).ToList();
-                int name = headers.Where(x => x.value is "الاسم" or "الاسم الكامل" or "اسم الفرد")
+                int name = headers.Where(x => x.value is "الاسم" or "الاسم الكامل" or "اسم الفرد" || (nameHeading.Length>0 && x.value==nameHeading))
                     .Select(x => x.column).FirstOrDefault();
-                int number = headers.Where(x => x.value is "الرقم (ع)" or "الرقم ع" or "الرقم(ع)")
+                int number = headers.Where(x => x.value is "الرقم (ع)" or "الرقم ع" or "الرقم(ع)" || (numberHeading.Length>0 && x.value==numberHeading))
                     .Select(x => x.column).FirstOrDefault();
                 if (name > 0 && number > 0 && name != number)
                 {
                     headerIndex = index; nameCol = name; numberCol = number;
-                    siteCol = headers.Where(x => x.value is "الموقع" or "اسم الموقع" or "موقع الفرد")
+                    siteCol = headers.Where(x => x.value is "الموقع" or "اسم الموقع" or "موقع الفرد" || (siteHeading.Length>0 && x.value==siteHeading))
                         .Select(x => x.column).FirstOrDefault();
                     break;
                 }
             }
             if (headerIndex < 0)
                 throw new InvalidDataException("تحتاج ورقة Excel إلى عمودي «الاسم» و«الرقم (ع)» ضمن الصفوف الخمسة الأولى.");
-            var records = new List<PersonInput>();
             foreach (var row in rows.Skip(headerIndex + 1))
             {
                 int rowIndex = int.TryParse((string?)row.Attribute("r"), out int n) ? n : records.Count + 2;
@@ -551,8 +587,9 @@ public sealed class ExcelPersonnelImportService
                 bool isValidNumber=ServiceNumberPolicy.TryCanonicalize(number,out string canonical);
                 records.Add(new PersonInput(rowIndex, name, isValidNumber ? canonical : number,
                     ArabicTextNormalizer.NormalizeForSearch(name),
-                    isValidNumber ? canonical : ArabicTextNormalizer.NormalizeForSearch(number), siteName));
+                    isValidNumber ? canonical : ArabicTextNormalizer.NormalizeForSearch(number), siteName,worksheet));
                 if (records.Count > MaxRecords) throw new InvalidDataException("تجاوز عدد الأفراد الحد الآمن.");
+            }
             }
             return records;
         }
