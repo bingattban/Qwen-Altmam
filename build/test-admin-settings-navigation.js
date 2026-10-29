@@ -39,6 +39,7 @@ class Element {
 }
 const viewport = new Element("main");
 const calls = [];
+let showRosterPerson = false;
 const document = {
   getElementById: key => key === "appViewport" ? viewport : null,
   createElement: tag => new Element(tag)
@@ -86,7 +87,19 @@ const bridge = {
       QuerySites:[{siteId:"SITE-RETURN",name:"الموقع الجديد",active:true},
         {siteId:"SITE-REMOVABLE",name:"موقع تجريبي قابل للإزالة",active:true,rowVersion:3},
         {siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true,rowVersion:1}],
-      QueryPersons:{items:[],total:body?.siteId==="SITE-REMOVABLE"?2:0,hasNext:false},
+      QueryPersons: showRosterPerson && name === "QueryPersons" &&
+        body?.organizationalStatus === 1
+        ? {items:[{personId:"TST-ACTIVE-1",displayName:"فرد في القوة",
+            serviceNumberA:"91001",siteName:"غير محدد",revision:1}],
+            total:1,hasNext:false}
+        : {items:[],total:body?.siteId==="SITE-REMOVABLE"?2:0,hasNext:false},
+      PreviewArchivePersons:{candidates:[{personId:"TST-ACTIVE-1",
+        displayName:"فرد في القوة",serviceNumberA:"91001",
+        currentSiteName:"غير محدد",attendanceDays:3,blocker:null}],
+        effectiveLocalDate:"2026-10-29",baseRevision:1,
+        previewToken:"P".repeat(64),reversible:true},
+      ArchivePersons:{archivedPersonIds:["TST-ACTIVE-1"],
+        effectiveLocalDate:"2026-10-29"},
       RemoveSiteAndReassignCurrentPersons:{siteId:"SITE-REMOVABLE",reassignedCount:2,active:false},
       PreviewArchivedIdentity:body.serviceNumberA==="4141"
         ?{requiresResolution:true,previewToken:"T".repeat(64),
@@ -327,6 +340,39 @@ async function run() {
   assert.ok(calls.some(x=>x.name==="CreatePerson"&&x.body.identityDecision==="different"&&
     x.body.identityResolutionToken==="U".repeat(64)),
     "independent identity requires the token-bound archived-name resolution");
+
+  // 04.03(c): real authorized roster removal is a separate verified
+  // modal, not a direct delete and never offered to Supervisors.
+  showRosterPerson=true;
+  controller.renderAdmin(admin);
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="persons").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const removal=buttonNamed("إزالة من القوة");
+  assert.ok(removal,"GeneralAdmin must have a protected roster-removal action");
+  approveDetailPreview=false;
+  const priorArchiveCommits=calls.filter(x=>x.name==="ArchivePersons").length;
+  await removal.handlers.click();
+  assert.equal(calls.filter(x=>x.name==="ArchivePersons").length,priorArchiveCommits,
+    "review rejected: no archive transaction may occur");
+  assert.ok(calls.some(x=>x.name==="PreviewArchivePersons"),
+    "removal must first use the C# actor-bound preview");
+  approveDetailPreview=true;
+  await removal.handlers.click();
+  const savedArchive=calls.filter(x=>x.name==="ArchivePersons").at(-1);
+  assert.ok(savedArchive,"approved removal must call the audited C# archive service");
+  assert.equal(savedArchive.body.previewToken,"P".repeat(64));
+  assert.equal(savedArchive.body.baseRevision,1);
+  assert.equal(savedArchive.body.expectedRevision,1);
+  assert.ok(savedArchive.body.operationId.length>=16);
+  assert.equal(savedArchive.body.personIds[0],"TST-ACTIVE-1");
+  controller.renderAdmin({role:"Supervisor",username:"supervisor"});
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="persons").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(buttonNamed("إزالة من القوة"),undefined,
+    "Supervisor must never see active-roster removal");
+  showRosterPerson=false;
 
   controller.renderAdmin(admin);
   byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
