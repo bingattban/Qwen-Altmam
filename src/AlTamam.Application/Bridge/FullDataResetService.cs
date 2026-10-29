@@ -183,8 +183,8 @@ public sealed class FullDataResetService
                 issued.Parameters.AddWithValue("$operation",Operation);
                 issued.Parameters.AddWithValue("$actor",actor.UserId);
                 string? issuedUtc=(await issued.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
-                if(!DateTimeOffset.TryParse(issuedUtc,out var start) ||
-                   _clock.GetUtcNow()-start<TimeSpan.FromSeconds(5))
+                if(!DateTimeOffset.TryParse(issuedUtc,out var previewIssuedAt) ||
+                   _clock.GetUtcNow()-previewIssuedAt<TimeSpan.FromSeconds(5))
                     return Refuse(BridgeErrorCodes.ValidationError,
                         "لم تنتهِ مهلة الخمس ثوانٍ اللازمة قبل تصفير البيانات.");
             }
