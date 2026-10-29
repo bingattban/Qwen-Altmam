@@ -758,7 +758,42 @@
             (STATE.monthTerm?" وفق البحث «"+STATE.monthTerm+"»":"")+
             (STATE.siteId?" في ملف واحد.":". لجميع المواقع: ملف موحد وملف منفصل لكل موقع لديه أفراد في هذا الشهر.")+
             " يتم الحفظ في المجلد المختار من الإعدادات دون تغيير التحضير.");
+          const fileLabel=el("label","section-description","اسم ملف Excel المقترح");
+          const fileInput=el("input","form-control");
+          fileInput.type="text";
+          fileInput.value="التمام الشهري_"+year+"-"+String(month).padStart(2,"0")+".xlsx";
+          fileInput.setAttribute("aria-label","اسم ملف التصدير الشهري");
+          const destination=message("جارٍ قراءة مجلد الحفظ الحالي...");
+          let directory="";
+          const chooseFolder=button("اختيار مجلد الحفظ من Windows",async()=>{
+            chooseFolder.disabled=true;
+            try{
+              const answer=parseData(await bridge().invoke("SetOutputDirectory",{choose:true}));
+              if(STATE.monthEpoch!==epoch)return;
+              if(!answer?.directory)throw new Error("لم يتم تحديد مجلد صالح.");
+              directory=answer.directory;
+              destination.textContent="مجلد الحفظ: "+directory+
+                " — سيُستخدم أيضاً في عمليات النسخ والتصدير التالية.";
+            }catch(error){showError(exportPanel,error);}
+            finally{chooseFolder.disabled=false;}
+          },"btn btn-outline");
+          try{
+            const info=parseData(await bridge().invoke("GetSettingsOverview",{}));
+            if(STATE.monthEpoch!==epoch)return;
+            directory=info?.backupDirectory||"";
+            destination.textContent=directory?"مجلد الحفظ الحالي: "+directory:
+              "يجب اختيار مجلد حفظ محلي من Windows قبل التصدير.";
+          }catch(error){
+            destination.textContent="تعذر قراءة مجلد الحفظ؛ اختر مجلداً من Windows.";
+          }
           const confirmSave=button("حفظ ملف Excel",async()=>{
+            const fileName=fileInput.value.trim();
+            if(!/^[\\p{L}\\p{N} _()\\-]+\\.xlsx$/iu.test(fileName) ||
+               fileName.length>124 || fileName.length<6 || !directory){
+              destination.textContent="حدد مجلداً محلياً واسم ملف آمن بصيغة xlsx.";
+              return;
+            }
+            chosen.fileName=fileName;chosen.directory=directory;
             confirmSave.disabled=true;
             const progressText=message("جارٍ إنشاء ملف Excel...");
             let monitoring=true, pollBusy=false;
@@ -816,7 +851,8 @@
           const cancel=button("إلغاء التصدير",()=>{
             exportPanel.replaceChildren();exportPanel.hidden=true;
           });
-          exportPanel.replaceChildren(description,confirmSave,cancel);
+          exportPanel.replaceChildren(description,fileLabel,fileInput,destination,
+            chooseFolder,confirmSave,cancel);
         }catch(error){
           if(STATE.monthEpoch===epoch)showError(exportPanel,error);
         }finally{previewExport.disabled=false;}
