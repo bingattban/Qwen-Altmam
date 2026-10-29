@@ -277,6 +277,10 @@
     let disposed=false,page=1,term="",generation=0,choices=[];
     let visiblePeople=[],busy=false,selectionVersion=0;
     const selected=new Map();
+    batchStatus.addEventListener("change",()=>{
+      selectionVersion++;
+      notice.replaceChildren();
+    });
     function updateSelected(){
       selectedInfo.textContent="المحددون: "+selected.size+" من 100";
       previewSelected.disabled=busy||selected.size===0;
