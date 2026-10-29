@@ -49,6 +49,36 @@ public sealed class Section03AccountEligibilityAndLockoutTests : IAsyncLifetime,
     }
 
     [Fact]
+    public async Task LoginFailureSuccessAndLogout_CreateSeparateImmutableEvents_WithoutSecrets()
+    {
+        var (bad,denied)=await _auth.AuthenticateAsync("founding-owner","wrong-password",default);
+        Assert.Null(bad);
+        Assert.NotNull(denied);
+        var (live,error)=await _auth.AuthenticateAsync("founding-owner",Password,default);
+        Assert.Null(error);
+        Assert.NotNull(live);
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='AUTH_LOGIN_FAILED'"));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='AUTH_LOGIN_SUCCESS'"));
+        await _auth.RevokeSessionAsync(live!.SessionNonce);
+        Assert.Null(await _auth.ResolveSessionAsync(live.SessionNonce));
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='AUTH_LOGOUT'"));
+        using var connection=_db.CreateOpenConnection();
+        using var q=connection.CreateCommand();
+        q.CommandText="""
+            SELECT COALESCE(OldValueJson,'') || COALESCE(NewValueJson,'')
+            FROM AuditEvents WHERE OperationCode IN
+              ('AUTH_LOGIN_FAILED','AUTH_LOGIN_SUCCESS','AUTH_LOGOUT');
+            """;
+        using var rows=await q.ExecuteReaderAsync();
+        while(await rows.ReadAsync())
+        {
+            string evidence=rows.GetString(0);
+            Assert.DoesNotContain(Password,evidence);
+            Assert.DoesNotContain(live.SessionNonce,evidence);
+        }
+    }
+
+    [Fact]
     public async Task InactiveLinkedPerson_ImmediatelyRejectsSessionAndDisablesOrphanAccountWithAudit()
     {
         using(var c=_db.CreateOpenConnection())
