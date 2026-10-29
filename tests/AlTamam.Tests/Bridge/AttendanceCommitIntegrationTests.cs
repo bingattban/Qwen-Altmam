@@ -161,6 +161,48 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     }
 
     [Fact]
+    public async Task AutomaticRegister_StaleOneOfTwo_BlocksEntireBatchWithoutPartialRevision()
+    {
+        var service = new AttendanceCommitService(_db, new SyntheticDaytimeClock());
+        var ids = new[] { "TST-ATTEND-P1", "TST-ATTEND-P2" };
+        var initial = await service.PreviewAsync(Payload("initial","STS-ABSENT",ids),
+            Actor,CancellationToken.None);
+        Assert.True((await service.CommitAsync(new JsonObject {
+            ["previewToken"] = Token(initial)
+        },Actor,false,CancellationToken.None)).Success);
+
+        var bulkPreview = await service.PreviewAsync(
+            Payload("revise","STS-PRESENT",ids),Actor,CancellationToken.None);
+        Assert.True(bulkPreview.Success,bulkPreview.UserMessage);
+        var concurrentPreview = await service.PreviewAsync(Payload(
+            "revise","STS-PRESENT",["TST-ATTEND-P2"]),Actor,CancellationToken.None);
+        Assert.True((await service.CommitAsync(new JsonObject {
+            ["previewToken"] = Token(concurrentPreview)
+        },Actor,true,CancellationToken.None)).Success);
+
+        var rejected = await service.CommitAsync(new JsonObject {
+            ["previewToken"] = Token(bulkPreview),
+            ["operationId"] = "auto-stale-bulk-20261029"
+        },Actor,true,CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Contains("فرد اختبار رقم 2",rejected.UserMessage);
+        Assert.Contains("920002",rejected.UserMessage);
+        Assert.Equal(1L,Count("AttendanceRevisions"));
+        Assert.Equal(3L,Count("AuditEvents"));
+
+        using var c = _db.CreateOpenConnection();
+        using var q = c.CreateCommand();
+        q.CommandText = """
+            SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1';
+            """;
+        Assert.Equal("STS-ABSENT",q.ExecuteScalar());
+        q.CommandText = """
+            SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P2';
+            """;
+        Assert.Equal("STS-PRESENT",q.ExecuteScalar());
+    }
+
+    [Fact]
     public async Task AttendanceCommit_LostResponseRetry_ReturnsOriginalResultWithoutDuplicateAudit()
     {
         var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
