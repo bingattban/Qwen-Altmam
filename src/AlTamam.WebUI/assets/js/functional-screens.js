@@ -235,8 +235,11 @@
   }
 
   // Keep this dialog mounted across dashboard invalidations and redraws.
-  let autoPreparedOverlay=null;
-  function dismissAutoPrepared(){if(autoPreparedOverlay){autoPreparedOverlay.remove?.();autoPreparedOverlay=null;}}
+  let autoPreparedOverlay=null,autoPreparedRevisionOverlay=null;
+  function dismissAutoPrepared(){
+    if(autoPreparedRevisionOverlay){autoPreparedRevisionOverlay.remove?.();autoPreparedRevisionOverlay=null;}
+    if(autoPreparedOverlay){autoPreparedOverlay.remove?.();autoPreparedOverlay=null;}
+  }
   // Automatic register supports the same audited preview/commit pipeline as daily attendance.
   function openAutoPreparedList(){
     dismissAutoPrepared();
@@ -264,10 +267,9 @@
     (document.body?.appendChild?document.body:view()).appendChild(overlay);
     autoPreparedOverlay=overlay;
     let disposed=false,page=1,term="",generation=0,choices=[];
-    let revisionOverlay=null;
     function closeRevision(){
-      const current=revisionOverlay;
-      revisionOverlay=null;
+      const current=autoPreparedRevisionOverlay;
+      autoPreparedRevisionOverlay=null;
       if(current)current.remove?.();
     }
     function openRevision(person){
@@ -305,7 +307,7 @@
       append(panel,title,details,current,selector,tools);
       overlay.appendChild(panel);
       (document.body?.appendChild?document.body:view()).appendChild(overlay);
-      revisionOverlay=overlay;
+      autoPreparedRevisionOverlay=overlay;
       overlay.addEventListener("click",event=>{
         if(event.target===overlay)closeRevision();
       });
