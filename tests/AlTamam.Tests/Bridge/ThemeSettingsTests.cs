@@ -39,6 +39,13 @@ public sealed class ThemeSettingsTests : IAsyncLifetime, IDisposable
         using var q=conn.CreateCommand();
         q.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='Theme';";
         Assert.Equal("dark",(await q.ExecuteScalarAsync())?.ToString());
+        q.CommandText="SELECT OldValueJson,NewValueJson FROM AuditEvents WHERE OperationCode='THEME_CHANGE' ORDER BY rowid;";
+        using(var evidence=await q.ExecuteReaderAsync())
+        {
+            Assert.True(await evidence.ReadAsync());
+            Assert.Equal("light",JsonNode.Parse(evidence.GetString(0))!["theme"]!.GetValue<string>());
+            Assert.Equal("dark",JsonNode.Parse(evidence.GetString(1))!["theme"]!.GetValue<string>());
+        }
         var light=await reopened.SetThemeAsync(new JsonObject{["theme"]="light"},CancellationToken.None);
         Assert.True(light.Success,light.UserMessage);
         var after=await service.OverviewAsync(Actor,CancellationToken.None);
@@ -98,6 +105,10 @@ public sealed class ThemeSettingsTests : IAsyncLifetime, IDisposable
             ["operationId"]="section02-theme-mutation-intent"});
         Assert.Equal(BridgeOutcomeKind.Success,allowed.Kind);
         Assert.Equal("dark",((JsonObject)allowed.Response.Data!)["theme"]!.GetValue<string>());
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT ActorUsernameSnapshot FROM AuditEvents WHERE OperationCode='THEME_CHANGE' ORDER BY rowid DESC LIMIT 1;";
+        Assert.Equal(Actor.Username,await q.ExecuteScalarAsync());
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;
