@@ -99,7 +99,14 @@ public sealed class OutputDirectorySettings
             previous.Transaction=t;
             previous.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='PreferredBackupDirectory';";
             string? oldFolder=(await previous.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
-            if(string.Equals(oldFolder,folder,StringComparison.OrdinalIgnoreCase))return 0;
+            using var priorSchedule=c.CreateCommand();
+            priorSchedule.Transaction=t;
+            priorSchedule.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='AutoBackupEnabled';";
+            string? previousEnabled=(await priorSchedule.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
+            bool folderChanged=!string.Equals(oldFolder,folder,StringComparison.OrdinalIgnoreCase);
+            if(!folderChanged && previousEnabled=="true")return 0;
+            if(folderChanged)
+            {
             using var cmd=c.CreateCommand();cmd.Transaction=t;
             cmd.CommandText="""
                 INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
@@ -119,6 +126,31 @@ public sealed class OutputDirectorySettings
                 "تغيير المجلد الموحد للنسخ الاحتياطي وتقارير Excel",
                 null,DateTime.Now.ToString("yyyy-MM-dd"),ct.CorrelationId(),ct)
                 .ConfigureAwait(false);
+            }
+            // A folder chosen in the native Windows picker is explicit consent
+            // to start automatic 16:00 backups. Do not create hidden fallback paths.
+            if(previousEnabled!="true")
+            {
+                using var enable=c.CreateCommand();
+                enable.Transaction=t;
+                enable.CommandText="""
+                    INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                    VALUES('AutoBackupEnabled','true',$at)
+                    ON CONFLICT(SettingKey) DO UPDATE SET
+                      SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                    """;
+                enable.Parameters.AddWithValue("$at",DateTimeOffset.UtcNow.ToString("O"));
+                await enable.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                await BridgeAuditWriter.WriteAsync(c,t,TimeProvider.System,
+                    "AUTO_BACKUP_AUTO_ENABLED","تفعيل النسخ تلقائياً بعد اختيار المجلد",
+                    actor.UserId,actor.Username,null,"AppSettings","AutoBackupEnabled",
+                    "تفعيل النسخ الاحتياطي التلقائي",
+                    new JsonObject{["enabled"]=previousEnabled=="true"}.ToJsonString(),
+                    new JsonObject{["enabled"]=true}.ToJsonString(),
+                    "المستخدم اختار مجلداً محلياً صالحاً ففُعّلت الجدولة الافتراضية",
+                    null,DateTime.Now.ToString("yyyy-MM-dd"),ct.CorrelationId(),ct)
+                    .ConfigureAwait(false);
+            }
             return 0;
         },ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject{["directory"]=folder});
