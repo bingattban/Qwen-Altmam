@@ -53,3 +53,10 @@
 - Both server-side native-input and foreground heartbeat idle-renewal SQL require the same role agreement. A stale-role nonce therefore cannot extend its five-minute expiry, even if physical input is observed.
 - `IdleAndSharedOutputTests.AccountRoleDowngrade_ImmediatelyInvalidatesOldAdminSession_AndCannotExtendDeadline` exercises a real SQLCipher account with a real roster PersonId and role downgrade, then checks session rejection and unchanged expiration across both renewal paths.
 - This does not turn ordinary password editing into role editing; no new role-edit command is exposed. Physical Windows sleep/resume, unexpected clock change and power-loss evidence remain open for the combined Section 02+03 acceptance.
+
+
+## Founding creator snapshot consistency (03.04, 03.14)
+
+- For **new** Admin/Supervisor accounts, `CreatedByDisplaySnapshot` is frozen from the SQLCipher creator record within the same creation transaction. A roster-linked creator uses `username - real roster full name`; the permanently unlinked founding GeneralAdmin uses `الإدارة العامة - username` with ` (optional founding full name)` only when supplied.
+- The account listing displays this preserved creator snapshot. Later founder-name or personnel-name edits must not rewrite previous account-creation evidence. Existing historical creator snapshots remain unchanged (no backfill, no migration).
+- `UserAccountManagementIntegrationTests.FounderCreatorSnapshot_UsesSpecialLabelWithOptionalName_WithoutPersonLink` runs both absent and present founder full-name cases using actual encrypted database creation, and asserts immutable creator snapshots and no founder PersonId.
