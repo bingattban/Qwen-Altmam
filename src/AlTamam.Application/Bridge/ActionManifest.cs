@@ -112,6 +112,15 @@ public static class ActionManifest
         new("GetApplicationVersion", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
     };
 
+    // Section 02.14 — every user-invoked state/data mutation must carry a
+    // caller-owned operationId. Exports and Logout do not mutate business data:
+    // they keep requestId replay protection, without an invented row version.
+    // This policy uses the canonical manifest's IsMutating flag, so newly added
+    // mutating actions fail closed unless explicitly classified as non-data.
+    public static bool RequiresOperationId(string action, bool isMutating) =>
+        isMutating && action is not ("Logout" or "ExportPersonLifetimeExcel"
+            or "ExportImportIssues" or "ExportMonthlyWorkbookSet" or "CancelExport");
+
     public static BridgeActionMetadata? Find(string action) =>
         Array.Find(All, m => m.Action == action);
 }
