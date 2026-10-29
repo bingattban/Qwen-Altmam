@@ -274,6 +274,10 @@
     }
     function openRevision(person){
       if(disposed)return;
+      if(!choices.length){
+        showError(content,new Error("لا توجد حالات تحضير فعّالة متاحة للتعديل حالياً؛ يمكن عرض السجل دون تعديل."));
+        return;
+      }
       closeRevision();
       const overlay=el("div","auto-revision-overlay");
       overlay.setAttribute("role","dialog");
@@ -398,13 +402,15 @@
         if(!disposed&&current===generation)showError(content,error);
       }
     }
+    // Reading committed automatic records must NOT depend on which statuses
+    // are currently editable. The register is read-only even when the active
+    // catalog is empty or temporarily unavailable.
+    void load();
     void bridge().invoke("GetActiveAttendanceStatuses",{}).then(reply=>{
       if(disposed)return;
       const data=parseData(reply);
       choices=Array.isArray(data)?data:(data?.items||[]);
-      if(!choices.length)throw Error("لا توجد حالات تحضير فعّالة للاختيار.");
-      void load();
-    }).catch(error=>{if(!disposed)showError(content,error);});
+    }).catch(()=>{choices=[];});
   }
 
   async function renderDashboard() {
