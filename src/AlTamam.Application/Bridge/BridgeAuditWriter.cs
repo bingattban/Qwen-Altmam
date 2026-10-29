@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json.Nodes;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -89,11 +87,11 @@ public static class BridgeAuditWriter
         }
         _ = actorDisplayName; // kept only for compatibility with existing service signatures.
 
-        string body = string.Join('\n',
-            operationCode, operationArabicName, actorUserId, actorUsername, actorRosterFullName ?? "",
-            targetEntityType, targetEntityId, targetDisplay, oldValueJson ?? "", newValueJson ?? "",
-            description, reason ?? "", effectiveLocalDate, nowUtc.ToString("O"), correlationId, priorHash);
-        string eventHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(body))).ToLowerInvariant();
+        string eventHash = AuditCanonicalHash.Compute(
+            operationCode, operationArabicName, actorUserId, actorUsername,
+            actorRosterFullName, targetEntityType, targetEntityId, targetDisplay,
+            oldValueJson, newValueJson, description, reason,
+            effectiveLocalDate, nowUtc.ToString("O"), correlationId, priorHash);
 
         using var insert = connection.CreateCommand();
         insert.Transaction = transaction;
