@@ -276,7 +276,7 @@ public sealed class BridgeSharedServices
         }, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Resolves a live, unexpired, unrevoked session nonce to its principal (server-side truth).</summary>
+    /// <summary>Resolves a live nonce only while its saved role matches the current authorized user role.</summary>
     public async Task<BridgePrincipal?> ResolveSessionAsync(string sessionNonce, CancellationToken ct = default)
     {
         if (!BridgeProtocol.IsValidSessionNonceFormat(sessionNonce) ||
@@ -286,7 +286,7 @@ public sealed class BridgeSharedServices
         cmd.CommandText = @"SELECT u.UserId, u.Username, s.Role
                             FROM UserSessions s JOIN Users u ON u.UserId = s.UserId
                             WHERE s.SessionNonce = $n AND s.RevokedFlag=0 AND s.ExpiresAtUtc>$now
-                              AND u.ActiveFlag=1
+                              AND u.ActiveFlag=1 AND s.Role=u.Role
                               AND (u.Role=1 OR (u.LinkedPersonId IS NOT NULL AND EXISTS(
                                   SELECT 1 FROM Persons p WHERE p.PersonId=u.LinkedPersonId
                                     AND p.ActiveFlag=1 AND p.OrganizationalStatus=1)));";
@@ -321,7 +321,7 @@ public sealed class BridgeSharedServices
             UPDATE UserSessions SET ExpiresAtUtc=$newExpiry
             WHERE SessionNonce=$nonce AND RevokedFlag=0 AND ExpiresAtUtc>$now
               AND EXISTS(SELECT 1 FROM Users u WHERE u.UserId=UserSessions.UserId
-                AND u.ActiveFlag=1 AND (u.Role=1 OR
+                AND u.ActiveFlag=1 AND u.Role=UserSessions.Role AND (u.Role=1 OR
                 (u.LinkedPersonId IS NOT NULL AND EXISTS(
                   SELECT 1 FROM Persons p WHERE p.PersonId=u.LinkedPersonId
                     AND p.ActiveFlag=1 AND p.OrganizationalStatus=1))));
@@ -356,7 +356,7 @@ public sealed class BridgeSharedServices
             UPDATE UserSessions SET ExpiresAtUtc=$deadline
             WHERE RevokedFlag=0 AND ExpiresAtUtc>$now
               AND EXISTS(SELECT 1 FROM Users u WHERE u.UserId=UserSessions.UserId
-                AND u.ActiveFlag=1 AND (u.Role=1 OR
+                AND u.ActiveFlag=1 AND u.Role=UserSessions.Role AND (u.Role=1 OR
                 (u.LinkedPersonId IS NOT NULL AND EXISTS(
                   SELECT 1 FROM Persons p WHERE p.PersonId=u.LinkedPersonId
                     AND p.ActiveFlag=1 AND p.OrganizationalStatus=1))));
