@@ -256,7 +256,13 @@
     search.input.maxLength=100;
     const searchButton=button("بحث",()=>{term=search.input.value.trim();page=1;void load();});
     const actions=el("div","functional-toolbar");
-    append(actions,search.wrapper,searchButton);
+    const selected=new Map();
+    const bulkStatus=el("select","form-select auto-attendance-bulk-status");
+    bulkStatus.setAttribute("aria-label","الحالة الجديدة للأفراد المحددين");
+    const bulkCount=el("span","","المحددون: 0");
+    const bulkButton=button("معاينة تغيير المحددين",()=>void reviseSelected());
+    const updateSelection=()=>{bulkCount.textContent="المحددون: "+selected.size;};
+    append(actions,search.wrapper,searchButton,bulkStatus,bulkCount,bulkButton);
     const content=el("div","auto-attendance-results");
     const footer=el("div","functional-pager");
     append(panel,heading,description,actions,content,footer);
@@ -264,14 +270,24 @@
     (document.body?.appendChild?document.body:view()).appendChild(overlay);
     autoPreparedOverlay=overlay;
     let disposed=false,page=1,term="",generation=0,choices=[];
+    async function reviseSelected(){
+      if(!selected.size){showError(content,new Error("حدد فرداً واحداً على الأقل."));return;}
+      if(!bulkStatus.value){showError(content,new Error("اختر الحالة الجديدة للمحددين."));return;}
+      const people=Array.from(selected.values());
+      if(people.some(p=>p.statusId===bulkStatus.value)){
+        showError(content,new Error("بعض الأفراد المحددين لديهم الحالة المطلوبة بالفعل؛ راجع الاختيار."));return;
+      }
+      await editAutoStatus(people,bulkStatus.value);
+    }
     async function editAutoStatus(person,statusId){
+      const people=Array.isArray(person)?person:[person];
       const chosen=choices.find(item=>item.statusId===statusId);
       if(!chosen){showError(content,new Error("اختر الحالة الجديدة من القائمة المنسدلة."));return;}
-      if(chosen.statusId===person.statusId){
+      if(people.some(p=>chosen.statusId===p.statusId)){
         showError(content,new Error("اختر حالة مختلفة عن الحالة المعتمدة حالياً."));return;
       }
       try{
-        const payload={businessDate:date,personIds:[person.personId],
+        const payload={businessDate:date,personIds:people.map(p=>p.personId),
           statusId:chosen.statusId,mode:"revise"};
         const response=await bridge().invoke("PreviewAttendanceChange",payload);
         const preview=parseData(response);
@@ -290,7 +306,7 @@
         }));
         if(!saved||!Number.isInteger(saved.count)||saved.count<1)
           throw Error("لم يؤكد الخادم نجاح تعديل الحالة.");
-        if(!disposed)await load(); // Keep the auto-prepared dialog on screen.
+        if(!disposed){selected.clear();updateSelection();await load();} // Keep register open.
       }catch(error){if(!disposed)showError(content,error);}
     }
     function close(){
@@ -317,13 +333,22 @@
         if(disposed||current!==generation)return;
         if(!result||!Array.isArray(result.items))
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
-        const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
+        const tb=createTable([{label:"تحديد"},{label:"الرقم"},{label:"الرقم (ع)"},
           {label:"الاسم"},{label:"الموقع"},{label:"تاريخ التحضير"},
           {label:"مصدر التحضير"},{label:"الحالة المحفوظة"},
           {label:"الحالة الجديدة"},{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
+          const pickCell=el("td"),pick=el("input");
+          pick.type="checkbox";pick.checked=selected.has(person.personId);
+          pick.setAttribute("aria-label","تحديد "+person.name);
+          pick.addEventListener("change",()=>{
+            if(pick.checked)selected.set(person.personId,person);
+            else selected.delete(person.personId);
+            updateSelection();
+          });
+          pickCell.appendChild(pick);row.appendChild(pickCell);
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
             person.name,person.siteName,person.savedBusinessDate||date,
             person.autoSource||"مصدر غير موثق",person.statusName].forEach(value=>
@@ -360,6 +385,13 @@
       const data=parseData(reply);
       choices=Array.isArray(data)?data:(data?.items||[]);
       if(!choices.length)throw Error("لا توجد حالات تحضير فعّالة للاختيار.");
+      bulkStatus.replaceChildren();
+      const placeholder=el("option","","اختر الحالة الجديدة للمحددين");
+      placeholder.value="";bulkStatus.appendChild(placeholder);
+      choices.forEach(item=>{
+        const option=el("option","",item.displayName);
+        option.value=item.statusId;bulkStatus.appendChild(option);
+      });
       void load();
     }).catch(error=>{if(!disposed)showError(content,error);});
   }
