@@ -1331,6 +1331,27 @@ body{min-width:0}
   .auto-attendance-dialog .section-description{font-size:12px}
 }
 
+/* Section 04.01: editing belongs to a distinct controlled dialog, never to
+   the read-only automatic attendance register grid. The C#-verified review
+   backdrop remains at z-index 1400, above both local layers. */
+.auto-revision-overlay{
+  position:fixed;inset:0;z-index:1300;display:flex;
+  align-items:center;justify-content:center;padding:clamp(8px,3vw,24px);
+  background:rgba(0,0,0,.76)
+}
+.auto-revision-overlay>.auto-attendance-dialog{
+  width:min(94vw,600px);max-height:90dvh;overflow:auto;gap:14px;
+  border-radius:12px;padding:clamp(14px,3vw,24px)
+}
+.auto-revision-overlay .auto-attendance-status-select{
+  width:100%;min-height:44px
+}
+.auto-revision-overlay .functional-toolbar{display:flex;flex-wrap:wrap;gap:10px}
+.auto-revision-overlay .functional-toolbar .btn{flex:1 1 190px}
+@media(max-width:520px){
+  .auto-revision-overlay>.auto-attendance-dialog{max-height:96dvh}
+}
+
 /* Distinct legible dashboard column titles, while compact data rows remain untouched. */
 #appViewport.daily-dashboard>.daily-roster-panel>.functional-table-wrap
   .functional-table thead th{
