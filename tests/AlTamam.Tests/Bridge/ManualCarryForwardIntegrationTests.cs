@@ -135,6 +135,32 @@ public sealed class ManualCarryForwardIntegrationTests : IAsyncLifetime, IDispos
         Assert.Equal(4L,Count("AttendanceRecords"));
     }
 
+
+    [Fact]
+    public async Task ManualCarry_LostResponseRetry_DoesNotDuplicateAttendanceOrAudit()
+    {
+        await ConfigureDefaultAsync();
+        var service=new ManualCarryForwardService(_db,_clock);
+        var preview=await service.PreviewAsync(
+            Selection("TST-CARRY-P1","TST-CARRY-P2"),Actor,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var payload=Commit((JsonObject)preview.Data!);
+        payload["operationId"]="section02-manual-carry-batch-one";
+        var first=await service.CommitAsync(payload,Actor,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var retry=await service.CommitAsync((JsonObject)payload.DeepClone(),
+            Actor,CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal(((JsonObject)first.Data!).ToJsonString(),
+            ((JsonObject)retry.Data!).ToJsonString());
+        Assert.Equal(4L,Count("AttendanceRecords")); // two historical + two committed
+        Assert.Equal(3L,Count("AuditEvents")); // policy + two approvals
+        Assert.Equal(2L,Count("MutationReceipts")); // policy + one batch
+        var changed=(JsonObject)payload.DeepClone();
+        changed["previewToken"]=new string('f',64);
+        Assert.False((await service.CommitAsync(changed,Actor,CancellationToken.None)).Success);
+    }
+
     [Fact]
     public async Task AlreadyPreparedOrChangedAfterPreviewBlocksEntireBatch()
     {

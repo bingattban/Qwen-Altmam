@@ -191,6 +191,12 @@ public sealed class ManualCarryForwardService
             return Error("رمز معاينة صالح مطلوب.", BridgeErrorCodes.ValidationError);
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            // A successful commit can be retried after the manual lock:
+            // only an identical durable receipt replays, never a new write.
+            var (replay, receipt) = await MutationIdempotency.StartAsync(
+                connection, tx, "CommitManualCarryForward", actor.UserId, payload, ct)
+                .ConfigureAwait(false);
+            if (replay is not null) return replay;
             if (IsAfterCutoff()) return Error("انتهت مهلة الاعتماد اليدوي الساعة الثامنة.",
                 BridgeErrorCodes.HistoricDayLocked);
             using var find = connection.CreateCommand();
@@ -276,12 +282,15 @@ public sealed class ManualCarryForwardService
                     "اعتماد حالة اليوم من أمس أو الحالة الافتراضية بتأكيد المستخدم",null,
                     date,correlation,ct).ConfigureAwait(false);
             }
-            return BridgeHelpers.Ok(new JsonObject
+            var outcome = new JsonObject
             {
                 ["count"] = selected.Count,
                 ["date"] = date,
                 ["carriedForward"] = true
-            }, events: BridgeHelpers.InvalidationEvent(
+            };
+            await MutationIdempotency.StoreAsync(connection, tx, receipt, outcome, _time, ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome, events: BridgeHelpers.InvalidationEvent(
                 UiInvalidationEvents.AttendanceCommitted,date,selected.Select(p=>p.PersonId)));
         },ct).ConfigureAwait(false);
     }

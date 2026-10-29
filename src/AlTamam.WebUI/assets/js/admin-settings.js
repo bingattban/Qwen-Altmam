@@ -384,9 +384,10 @@
             });
             if(!accepted){previewToken="";return;}
             const token=previewToken;
+            const operationId=makeOperationId();
             const commit=async()=>{
               try{
-                const done=await api().invoke("CommitImport",{previewToken:token});
+                const done=await api().invoke("CommitImport",{previewToken:token,operationId});
                 if(!valid())return;
                 if(!Number.isInteger(done.data?.createdCount))
                   throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
@@ -919,7 +920,7 @@
                 item.name+"» إلى «"+next+"»؟"))return;
             try{
               await api().invoke("RenameSite",{siteId:item.siteId,
-                name:next.trim(),expectedRevision:item.rowVersion});
+                name:next.trim(),expectedRevision:item.rowVersion,operationId:makeOperationId()});
               await sites();
             }catch(e){void dialogs.alert(e.message||"تعذرت إعادة التسمية.");}
           }));
@@ -999,13 +1000,13 @@
           if(!await dialogs.confirm("تأكيد تعديل الحالة «"+item.displayName+"»؟"))return;
           try{await api().invoke("UpdateAttendanceStatus",{
             statusId:item.statusId,name:newName,symbol:newSymbol,color:newColor,
-            expectedRevision:item.version});await statuses();}
+            expectedRevision:item.version,operationId:makeOperationId()});await statuses();}
           catch(e){void dialogs.alert(e.message);}
         }));
         td.appendChild(btn("تعطيل",async()=>{
           if(!await dialogs.confirm("تعطيل الحالة «"+item.displayName+"» دون حذف سجلات تحضيرها التاريخية؟"))return;
           try{await api().invoke("DeactivateOrDeleteStatus",{
-            statusId:item.statusId,expectedRevision:item.version});await statuses();}
+            statusId:item.statusId,expectedRevision:item.version,operationId:makeOperationId()});await statuses();}
           catch(e){void dialogs.alert(e.message);}
         },"btn btn-danger"));
         tr.appendChild(td);t.body.appendChild(tr);
@@ -1241,7 +1242,8 @@
         if(!await dialogs.confirm("اعتماد تعديل «"+preview.oldName+"» (ع: "+preview.oldServiceNumberA+
           ") إلى «"+preview.newName+"» (ع: "+preview.newServiceNumberA+")؟"))return;
         await api().invoke("UpdatePersonIdentity",{...payload,
-          expectedRevision:person.revision,reason:"تعديل من شاشة إدارة القوة"});
+          expectedRevision:person.revision,reason:"تعديل من شاشة إدارة القوة",
+          operationId:makeOperationId()});
         await load();
       }catch(e){void dialogs.alert(e.message);}
     }

@@ -1,3 +1,31 @@
+## Finalization follow-up — October 29, 2026: mutation and clock hardening
+
+**Audited baseline:** `efd1af163d4da88a20f0c4861ed2d2903bd8d8b2`. This supplement is a code-and-test implementation record, **not a final production release certificate**.
+
+The full canonical action manifest contains **101 actions, 42 marked mutating**, including non-domain writes such as file exports, draft saving, theme settings, backups, session logout and the intentionally DISABLED destructive restore. Section 02.14 is assessed at the **domain evidence mutation** boundary: person identity/lifecycle, status and site history, attendance, transfers, imports and audit, not a false claim that an Excel file export has a personnel RowVersion.
+
+**Pre-existing verified safeguards:** SQLCipher's forward-only V001–V010 constraints/foreign keys, temporal half-open history, permanent PersonId, mandatory unique active numbers, distinct historical identity/site/status snapshots, append-only audit, RowVersion checks in lifecycle/configuration operations, committed attendance uniqueness, actor-bound one-use previews, source/destination transfer provenance, and 08:00 ledger/20:00 manual lock. Already present `MonthlyHistoryReuseTests`, `MonthlyExcelExportTests`, and `Section02EvidenceAndReportsTests` verify historical attribution across identical institutional numbers, including genuine historical Excel exports. `AutoAttendanceService.RunPendingAsync` already rejects timestamp rollback before processing the daily ledger.
+
+**New test-first hardening in this review:**
+
+- `AdminConfigurationService.RenameSiteAsync`, `UpdateStatusAsync`, and `DeactivateStatusAsync` now replay matching `MutationReceipts` inside the SAME serialized SQLCipher write transaction *before* stale RowVersion checks. Historic label intervals, soft deletion, and audit events are written once. Mismatched reuse of an OperationId fails as a conflict.
+- `PersonRosterService.UpdatePersonIdentityAsync` now resolves an existing receipt even when the successful first write has already advanced the individual's RowVersion, then re-verifies/records the receipt atomically during the actual mutation. Both the original PersonId and closed earlier identity interval remain untouched.
+- `PersonRosterService.ArchivePersonsAsync` and `RestoreArchivedPersonAsync` now record one durable result per optional caller OperationId in the same transaction as the memberships, active-state changes, and permanent audit. The old one-use preview and strict expected member versions remain in force; different humans never inherit the old PersonId.
+- `ExcelPersonnelImportService.CommitAsync` now returns its previous batch result for an identical lost-response retry instead of trying to create duplicate PersonIds. `ManualCarryForwardService.CommitAsync` has the same write-atomic receipt before lock/preview revalidation. In both services legacy token-only calls retain their original single-use behavior and cannot apply twice.
+- In-app site/status/person editing and imported Excel confirmation now send distinct operation IDs; an Excel retry confirmation **retains the same operation ID** within its UI closure.
+- Added encrypted integration tests for site rename/status change/status deactivation, identity update, archive/re-activation, Excel import, manual batch carry, plus a synthetic reversed-Windows-clock fail-closed test. No pre-existing release migration is edited, no production rows are touched, no historical facts are rewritten.
+
+**Unresolved acceptance distinctions:**
+
+1. **Compatibility boundary:** old/third-party callers that omit `operationId` keep single-use preview tokens, optimistic version conflicts or existing validation; a blanket mandatory request-field switch would break historic clients and many unchanged tests. Fully enforcing mandatory caller OperationId on *every* domain action remains a separate compatibility decision and is not falsely claimed here. The presence of a preview-token-based one-use key prevents double application but does not necessarily return success on a lost-response retry unless a receipt was supplied.
+2. **Timing and hardware:** a new deterministic rollback test verifies zero ledger/attendance/audit writes. Independent physical Windows power-loss, timezone/DST transitions, delayed-start testing and customer-machine performance still require acceptance evidence. The older 20:00 scheduler ledger is preserved as historical evidence only.
+3. **End-to-end external output and release:** SQLCipher integration tests and synthetic real `.xlsx` comparison cover old-month reuse, but the independent disconnected Windows-machine Excel/UI acceptance matrix and authorizing signoff remain outstanding.
+4. **Full reset / restore:** a whole-application reset and the disabled destructive database restore are NOT treated as ordinary reversible mutations. Their own separate authorization/recovery gates remain intact.
+
+**Gating for merge:** exact-PR-head Windows Core and Release MUST both pass all tests; Release tests must finish before x86/x64 Portable ZIP and Installer EXE packaging; four real artifacts and SHA-256 evidence must exist. Then merge and separately verify the resulting `main` SHA. No green CI is an independent production signoff.
+
+---
+
 ## Follow-up implementation — Section 02.01 / 02.02 / 02.14 (2026-10-29)
 
 **Baseline reviewed:** `main` at `9c25e7dab5881cd6bea37b2e1cad84984ed89355`; earlier Section 02 evidence remains below, unmodified.

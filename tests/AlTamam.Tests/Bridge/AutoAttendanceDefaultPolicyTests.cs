@@ -39,6 +39,31 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         return Convert.ToInt64(q.ExecuteScalar());
     }
 
+
+    [Fact]
+    public async Task BackwardWindowsClock_StopsSchedulerBeforeAnyLedgerOrAttendanceMutation()
+    {
+        using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('LastObservedUtcTimestamp',$last,$now)
+                ON CONFLICT(SettingKey) DO UPDATE SET SettingValue=excluded.SettingValue,
+                    UpdatedAtUtc=excluded.UpdatedAtUtc;
+                """;
+            cmd.Parameters.AddWithValue("$last", DateTimeOffset.UtcNow.AddMinutes(10).ToString("O"));
+            cmd.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var scheduler=new AutoAttendanceService(_db);
+        await Assert.ThrowsAsync<BridgeProtocolException>(
+            () => scheduler.RunPendingAsync(CancellationToken.None));
+        Assert.Equal(0L,Count("AutoAttendanceRuns"));
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        Assert.Equal(0L,Count("AuditEvents"));
+    }
+
     [Fact]
     public async Task AdministratorSetsStatus_IdempotentlyAuditedAndCannotDeactivateActiveDefault()
     {

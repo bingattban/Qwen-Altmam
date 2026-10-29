@@ -500,6 +500,20 @@ public sealed class PersonRosterService
         string effectiveDate = ReadEffectiveDate(payload);
         string reason = ReadString(payload, "reason") is { Length: > 0 } r ? r : "تحديث هوية بأمر المسؤول.";
 
+        // A completed reply can be lost after the row version changed. Return its
+        // durable result *before* rejecting the retry as stale. This is a
+        // read-only receipt preflight under the same serialized write gate.
+        if (ReadString(payload, "operationId").Length != 0)
+        {
+            var prior = await _db.ExecuteInWriteTransactionAsync(async (c, tx) =>
+            {
+                var (replayed, _) = await MutationIdempotency.StartAsync(
+                    c, tx, "UpdatePersonIdentity", userId, payload, ct).ConfigureAwait(false);
+                return replayed;
+            }, ct).ConfigureAwait(false);
+            if (prior is not null) return prior;
+        }
+
         (PersonRow? Row, BridgeResponse? Failure) loaded = await LoadPersonAsync(personId, ct).ConfigureAwait(false);
         if (loaded.Failure is not null) return loaded.Failure;
         if (loaded.Row!.RowVersion != expectedRevision)
@@ -512,6 +526,9 @@ public sealed class PersonRosterService
         DateTimeOffset nowUtc = _time.GetUtcNow();
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            var (replayed, receipt) = await MutationIdempotency.StartAsync(
+                connection, tx, "UpdatePersonIdentity", userId, payload, ct).ConfigureAwait(false);
+            if (replayed is not null) return replayed;
             using var conflict = connection.CreateCommand();
             conflict.Transaction = tx;
             conflict.CommandText = """
@@ -618,9 +635,11 @@ public sealed class PersonRosterService
                 description: $"عُدّلت هوية الفرد اعتباراً من {effectiveDate} مع حفظ لقطة الهوية السابقة.",
                 reason: reason, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
 
-            return BridgeHelpers.Ok(
-                new JsonObject { ["personId"] = personId, ["revision"] = expectedRevision + 1 },
-                revision: expectedRevision + 1,
+            var outcome = new JsonObject {
+                ["personId"] = personId, ["revision"] = expectedRevision + 1 };
+            await MutationIdempotency.StoreAsync(connection, tx, receipt, outcome, _time, ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome, revision: expectedRevision + 1,
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonIdentityUpdated, effectiveDate, [personId]));
         }, ct).ConfigureAwait(false);
     }
@@ -738,6 +757,9 @@ public sealed class PersonRosterService
 
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            var (replay, receipt) = await MutationIdempotency.StartAsync(
+                connection, tx, "ArchivePersons", userId, payload, ct).ConfigureAwait(false);
+            if (replay is not null) return replay;
             // Do not trust the client-supplied ID list: it must match the immutable
             // preview issued to the SAME authenticated actor.
             var memberExpectedVersions = new Dictionary<string,long>(StringComparer.Ordinal);
@@ -861,10 +883,11 @@ public sealed class PersonRosterService
                     connection,tx,person.Id,"PERSON_ARCHIVE",userId,username,_time,
                     effectiveDate,ct).ConfigureAwait(false);
             }
-            return BridgeHelpers.Ok(
-                new JsonObject { ["archivedPersonIds"] = archived,
-                    ["effectiveLocalDate"] = effectiveDate, ["operationId"] = token },
-                revision: baseRevision + people.Count,
+            var outcome = new JsonObject { ["archivedPersonIds"] = archived,
+                ["effectiveLocalDate"] = effectiveDate, ["operationId"] = token };
+            await MutationIdempotency.StoreAsync(connection, tx, receipt, outcome, _time, ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome, revision: baseRevision + people.Count,
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelArchived, effectiveDate, ids));
         }, ct).ConfigureAwait(false);
     }
@@ -887,6 +910,9 @@ public sealed class PersonRosterService
                 "إصدار الفرد السابق مطلوب للاسترجاع؛ حدّث بيانات الفرد أولاً.");
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            var (replay, receipt) = await MutationIdempotency.StartAsync(
+                connection, tx, "RestoreArchivedPerson", userId, payload, ct).ConfigureAwait(false);
+            if (replay is not null) return replay;
             using var find = connection.CreateCommand();
             find.Transaction = tx;
             find.CommandText = """
@@ -974,9 +1000,12 @@ public sealed class PersonRosterService
                 reason: ReadString(payload, "reason"), effectiveLocalDate: effectiveDate,
                 correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
 
-            return BridgeHelpers.Ok(new JsonObject { ["personId"] = personId, ["restored"] = true,
+            var outcome = new JsonObject { ["personId"] = personId, ["restored"] = true,
                 ["assignmentId"] = assignmentId, ["siteId"] = destinationSite,
-                ["revision"] = revision + 1 },
+                ["revision"] = revision + 1 };
+            await MutationIdempotency.StoreAsync(connection, tx, receipt, outcome, _time, ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome,
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonnelArchived, effectiveDate, [personId]));
         }, ct).ConfigureAwait(false);
     }

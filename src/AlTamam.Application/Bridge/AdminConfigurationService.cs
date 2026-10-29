@@ -101,6 +101,10 @@ public sealed class AdminConfigurationService
         if(id=="SITE-UNSPECIFIED")return Fail("موقع غير محدد محمي ولا يمكن تعديله.");
         string normalized=ArabicTextNormalizer.NormalizeForSearch(name);
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{
+            // Look up a committed user intent before checking the now-stale version.
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"RenameSite",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var check=c.CreateCommand();check.Transaction=t;
             check.CommandText="SELECT VisibleName,RowVersion,IsSystemSite FROM Sites WHERE SiteId=$id AND ActiveFlag=1;";
             check.Parameters.AddWithValue("$id",id);
@@ -140,7 +144,10 @@ public sealed class AdminConfigurationService
             await Audit(c,t,actor,"SITE_RENAME","إعادة تسمية موقع","Site",id,name,
                 new JsonObject{["name"]=oldName}.ToJsonString(),
                 new JsonObject{["name"]=name}.ToJsonString(),ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject{["siteId"]=id,["rowVersion"]=version+1});
+            var outcome=new JsonObject{["siteId"]=id,["rowVersion"]=version+1};
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
         },ct).ConfigureAwait(false);
     }
 
@@ -381,6 +388,10 @@ public sealed class AdminConfigurationService
             return Fail("معرّف الحالة، الإصدار، الاسم، الرمز ولون HEX مطلوبة.");
         string norm=ArabicTextNormalizer.NormalizeForSearch(name);
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{
+            // Look up a committed user intent before checking the now-stale version.
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"UpdateAttendanceStatus",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var find=c.CreateCommand();find.Transaction=t;
             find.CommandText="SELECT VisibleName,ShortSymbol,ChosenColorHex,RowVersion FROM AttendanceStatusDefinitions WHERE StatusId=$id AND ActiveFlag=1;";
             find.Parameters.AddWithValue("$id",id);
@@ -421,7 +432,10 @@ public sealed class AdminConfigurationService
             await Audit(c,t,actor,"STATUS_UPDATE","تعديل حالة","Status",id,name,
                 new JsonObject{["name"]=oldName,["symbol"]=oldSymbol,["color"]=oldColor}.ToJsonString(),
                 new JsonObject{["name"]=name,["symbol"]=symbol,["color"]=color}.ToJsonString(),ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject{["statusId"]=id,["rowVersion"]=ver+1});
+            var outcome=new JsonObject{["statusId"]=id,["rowVersion"]=ver+1};
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
         },ct).ConfigureAwait(false);
     }
 
@@ -430,6 +444,10 @@ public sealed class AdminConfigurationService
         string id=Read(payload,"statusId");long ver=ReadVersion(payload);
         if(id.Length==0||ver<1)return Fail("معرّف الحالة وإصدارها مطلوبان.");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{
+            // Look up a committed user intent before checking the now-stale version.
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"DeactivateOrDeleteStatus",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
             using var find=c.CreateCommand();find.Transaction=t;
             find.CommandText="SELECT VisibleName,RowVersion FROM AttendanceStatusDefinitions WHERE StatusId=$id AND ActiveFlag=1;";
             find.Parameters.AddWithValue("$id",id);
@@ -459,7 +477,10 @@ public sealed class AdminConfigurationService
             await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             await Audit(c,t,actor,"STATUS_DEACTIVATE","تعطيل حالة","Status",id,name,null,
                 new JsonObject{["active"]=false}.ToJsonString(),ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject{["statusId"]=id,["active"]=false});
+            var outcome=new JsonObject{["statusId"]=id,["active"]=false};
+            await MutationIdempotency.StoreAsync(c,t,receipt,outcome,_time,ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome);
         },ct).ConfigureAwait(false);
     }
 }
