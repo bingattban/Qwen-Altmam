@@ -245,6 +245,32 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task MonthlyExport_UsesApprovedFolderAndSafeFilename_RejectsPathInjection()
+    {
+        var service=new MonthlyExcelExportService(_db);
+        var request=Period("SITE-UNSPECIFIED");
+        request["fileName"]="كشف الشهر المعتمد.xlsx";
+        request["directory"]=_output;
+        var approved=await service.ExportAsync(request,CancellationToken.None);
+        Assert.True(approved.Success,approved.UserMessage);
+        string file=Assert.IsType<JsonObject>(approved.Data)["filePath"]!.GetValue<string>();
+        _exports.Add(file);
+        Assert.Equal(Path.Combine(_output,"كشف الشهر المعتمد.xlsx"),file);
+        Assert.True(File.Exists(file));
+        var repeated=await service.ExportAsync(request,CancellationToken.None);
+        Assert.False(repeated.Success); // an existing workbook is never overwritten
+        Assert.True(File.Exists(file));
+        foreach(string candidate in new[]{"../inside.xlsx","C:\\unsafe.xlsx",
+            "CON.xlsx","report.xlsm","a?.xlsx"})
+        {
+            request["fileName"]=candidate;
+            var result=await service.ExportAsync(request,CancellationToken.None);
+            Assert.False(result.Success,"Unsafe candidate must be rejected: "+candidate);
+        }
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
     public async Task ExcelArchive_IsReadableNativeXlsx_AllRowsEscapedAndHistoricalDaysRetained()
     {
         var excel = new MonthlyExcelExportService(_db);
