@@ -94,7 +94,13 @@ public sealed class ThemeSettingsTests : IAsyncLifetime, IDisposable
         var denied=await Run("ffffffffffffffffffffffffffffffff",
             new JsonObject{["theme"]="dark",["role"]="GeneralAdministration"});
         Assert.Equal(BridgeOutcomeKind.Unauthorized,denied.Kind);
-        var allowed=await Run(Actor.SessionNonce,new JsonObject{["theme"]="dark"});
+        var missingId=await Run(Actor.SessionNonce,new JsonObject{["theme"]="dark"});
+        Assert.False(missingId.Response.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,missingId.Response.ErrorCode);
+        // This is an authenticated data write, so the caller must supply its
+        // independently generated, reusable operation ID.
+        var allowed=await Run(Actor.SessionNonce,new JsonObject{
+            ["theme"]="dark",["operationId"]="section02-theme-intent-0123456789"});
         Assert.Equal(BridgeOutcomeKind.Success,allowed.Kind);
         Assert.Equal("dark",((JsonObject)allowed.Response.Data!)["theme"]!.GetValue<string>());
     }
