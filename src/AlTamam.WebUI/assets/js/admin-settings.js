@@ -1090,7 +1090,7 @@
         if(!scanned.previewToken)throw Error("تعذر توثيق معاينة هوية الأرشيف.");
         const review=card("تحقق من هوية محفوظة في الأرشيف");
         review.appendChild(warning("يوجد تطابق محتمل؛ راجع كل مرشح وحدد هل الفرد نفسه عاد للخدمة أم شخص مختلف. لن تُنشأ هوية جديدة تلقائياً."));
-        const t=table(["الاسم المؤرشف","الرقم (ع)","نوع الخروج","تاريخ الخروج","سبب التطابق","قرار الهوية"]);
+        const t=table(["الاسم المؤرشف","الرقم (ع)","الموقع السابق","نوع الخروج","تاريخ الخروج","سبب التطابق","قرار الهوية"]);
         const submitted=async(fn)=>{
           if(!unchanged())return errors(addMessage,new Error("تغيرت بيانات الفرد؛ أعد التحقق قبل الحفظ."));
           saveNew.disabled=true;
@@ -1100,14 +1100,15 @@
         for(const candidate of candidates){
           const tr=node("tr");
           for(const value of [candidate.name,candidate.serviceNumberA,
-            candidate.exitType,candidate.exitDate,
+            candidate.previousSiteName||"غير موثق",candidate.exitType,candidate.exitDate,
             candidate.numberMatch?"تطابق الرقم (ع)":"تطابق الاسم فقط"])
             tr.appendChild(node("td","",value));
           const action=node("td","admin-row-buttons");
           action.appendChild(btn("عاد نفس الفرد",()=>submitted(async()=>{
             const agreement="أؤكد أن «"+name+"» (ع: "+canonicalNumber+
               ") هو الشخص نفسه المسجل سابقاً باسم «"+candidate.name+
-              "» (ع: "+candidate.serviceNumberA+")؛ خروج: "+candidate.exitType+
+              "» (ع: "+candidate.serviceNumberA+")؛ الموقع السابق: "+
+              (candidate.previousSiteName||"غير موثق")+"؛ خروج: "+candidate.exitType+
               " بتاريخ "+candidate.exitDate+". ستُحفظ هويته وتاريخه القديمان. متابعة العودة إلى «"+siteName+"»؟";
             if(!await dialogs.confirm(agreement))return;
             const result=await api().invoke("CommitArchivedReturn",{
@@ -1128,7 +1129,8 @@
           const former=dismissedNumberCandidates[0];
           review.appendChild(btn("إضافة فرد جديد مستقل بهذا الرقم (ع)",()=>submitted(async()=>{
             const detail="الرقم (ع) «"+canonicalNumber+"» يخص المفصول «"+former.name+
-              "» (تاريخ الفصل "+former.exitDate+").";
+              "» (الموقع السابق "+(former.previousSiteName||"غير موثق")+
+              "، تاريخ الفصل "+former.exitDate+").";
             const confirmed=await dialogs.confirm(detail+" هل تؤكد أن «"+name+
               "» شخص آخر مختلف تماماً؟ سيُنشأ له سجل جديد من الصفر ومعرّف داخلي مستقل؛ "+
               "لن يُنقل إليه أي تحضير أو حركة أو تاريخ من المفصول، "+
@@ -1148,6 +1150,7 @@
         if(!contested){
           review.appendChild(btn("فرد آخر مختلف عن جميع المرشحين",()=>submitted(async()=>{
             const detail=candidates.map(x=>x.name+" (ع: "+x.serviceNumberA+
+              "، الموقع السابق: "+(x.previousSiteName||"غير موثق")+
               "، "+x.exitType+" "+x.exitDate+")").join("؛ ");
             if(!await dialogs.confirm("تأكيد نهائي: «"+name+"» شخص مختلف عن جميع الهويات المؤرشفة التالية: "+
               detail+". إنشاء هوية جديدة مستقلة بهذا الرقم المختلف؟"))return;
