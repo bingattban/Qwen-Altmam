@@ -38,7 +38,7 @@ public sealed class ExcelPersonnelImportService
         catch { return ""; }
     }
 
-    private sealed record PersonInput(int Row, string Name, string Number, string NormalizedName, string NormalizedNumber, string SiteName, string Worksheet);
+    private sealed record PersonInput(int Row, string Name, string Number, string NormalizedName, string NormalizedNumber, string SiteName, string Worksheet, string? Issue=null);
 
     public async Task<BridgeResponse> SelectAsync(JsonObject? payload, string actor, CancellationToken ct)
     {
@@ -61,7 +61,8 @@ public sealed class ExcelPersonnelImportService
                 {
                     ["row"] = row.Row, ["name"] = row.Name, ["number"] = row.Number,
                     ["normalizedName"] = row.NormalizedName, ["normalizedNumber"] = row.NormalizedNumber,
-                    ["siteName"] = row.SiteName, ["worksheet"] = row.Worksheet
+                    ["siteName"] = row.SiteName, ["worksheet"] = row.Worksheet,
+                    ["issue"] = row.Issue
                 });
             string sha256 = Convert.ToHexString(
                 System.Security.Cryptography.SHA256.HashData(bytes));
@@ -114,7 +115,8 @@ public sealed class ExcelPersonnelImportService
                 obj["name"]!.GetValue<string>(), obj["number"]!.GetValue<string>(),
                 obj["normalizedName"]!.GetValue<string>(), obj["normalizedNumber"]!.GetValue<string>(),
                 obj["siteName"]?.GetValue<string>() ?? "غير محدد",
-                obj["worksheet"]?.GetValue<string>() ?? "الورقة الأولى");
+                obj["worksheet"]?.GetValue<string>() ?? "الورقة الأولى",
+                obj["issue"]?.GetValue<string>());
         }).ToList();
     }
 
@@ -138,18 +140,18 @@ public sealed class ExcelPersonnelImportService
         foreach (var item in rows)
         {
             ct.ThrowIfCancellationRequested();
-            string? reason = null;
-            if (item.Name.Length is < 3 or > 180 ||
+            string? reason = item.Issue;
+            if (reason is null && (item.Name.Length is < 3 or > 180 ||
                 item.Name.Any(char.IsControl) || item.NormalizedName.Length == 0 ||
                 item.NormalizedName != ArabicTextNormalizer.NormalizeForSearch(item.Name) ||
                 !ServiceNumberPolicy.TryCanonicalize(item.Number, out string canonical) ||
-                item.NormalizedNumber != canonical)
+                item.NormalizedNumber != canonical))
                 reason = "الرقم (ع) يجب أن يتكون من أربعة أرقام على الأقل، وهو غير الرقم التسلسلي العادي.";
-            else if (item.SiteName.Length is < 2 or > 100 || item.SiteName.Any(char.IsControl))
+            else if (reason is null && (item.SiteName.Length is < 2 or > 100 || item.SiteName.Any(char.IsControl)))
                 reason = "اسم الموقع غير صالح.";
-            else if (!seen.Add(item.NormalizedNumber))
+            else if (reason is null && !seen.Add(item.NormalizedNumber))
                 reason = "«الرقم (ع)» مكرر داخل الملف.";
-            else
+            else if(reason is null)
             {
                 param.Value = item.NormalizedNumber;
                 int clash=Convert.ToInt32(await exists.ExecuteScalarAsync(ct).ConfigureAwait(false));
@@ -583,6 +585,8 @@ public sealed class ExcelPersonnelImportService
             foreach (var row in rows.Skip(headerIndex + 1))
             {
                 int rowIndex = int.TryParse((string?)row.Attribute("r"), out int n) ? n : records.Count + 2;
+                try
+                {
                 var cells = row.Elements(Ns + "c").ToDictionary(Col);
                 cells.TryGetValue(nameCol, out var nameCell);
                 cells.TryGetValue(numberCol, out var numberCell);
@@ -596,6 +600,12 @@ public sealed class ExcelPersonnelImportService
                 records.Add(new PersonInput(rowIndex, name, isValidNumber ? canonical : number,
                     ArabicTextNormalizer.NormalizeForSearch(name),
                     isValidNumber ? canonical : ArabicTextNormalizer.NormalizeForSearch(number), siteName,worksheet));
+                }
+                catch(Exception ex) when(ex is InvalidDataException or ArgumentException or OverflowException or FormatException or InvalidOperationException)
+                {
+                    records.Add(new PersonInput(rowIndex,"","","","","غير محدد",worksheet,
+                        "صف Excel غير صالح: "+(ex is InvalidDataException ? ex.Message : "بيانات خلية أو تنسيق غير صالح.")));
+                }
                 if (records.Count > MaxRecords) throw new InvalidDataException("تجاوز عدد الأفراد الحد الآمن.");
             }
             }
@@ -616,21 +626,18 @@ public sealed class ExcelPersonnelImportService
     private static string ServiceNumber(XElement cell, string raw, int rowIndex)
     {
         if (cell.Element(Ns + "f") is not null)
-            throw new InvalidDataException(
-                $"الرقم (ع) في الصف {rowIndex} يجب أن يكون قيمة مباشرة وليس صيغة Excel.");
+            return "#INVALID-FORMULA"; // only this row is rejected during InspectAsync
         string kind = (string?)cell.Attribute("t") ?? "";
         if (kind is "inlineStr" or "s" or "str")
             return raw; // preserve legacy leading zeroes from genuine text cells
         if (kind is not ("" or "n"))
-            throw new InvalidDataException(
-                $"نوع خلية الرقم (ع) في الصف {rowIndex} غير مدعوم؛ استخدم رقماً صحيحاً.");
+            return "#INVALID-TYPE";
         if (raw.Length == 0) return ""; // mark incomplete row as an import issue
         if (!decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture,
                 out decimal value) ||
             value < 0m || value > 999_999_999_999_999m ||
             decimal.Truncate(value) != value)
-            throw new InvalidDataException(
-                $"الرقم (ع) في الصف {rowIndex} يجب أن يكون عدداً صحيحاً غير سالب لا يزيد عن 15 خانة.");
+            return "#INVALID-NUMBER";
         return value.ToString("0", CultureInfo.InvariantCulture);
     }
 
