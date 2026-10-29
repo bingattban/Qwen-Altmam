@@ -79,15 +79,25 @@ public sealed class DailyMonthlyReadService
             {
                 long amount = reader.GetInt64(2);
                 force += amount;
-                if (reader.GetInt64(1) != 0)
+                bool transferredToday = reader.GetInt64(1) != 0;
+                if (transferredToday)
                 {
-                    // Membership counts from transfer date; ordinary attendance
-                    // at destination starts on the following business day.
+                    // The movement is a separate event, not a replacement for
+                    // attendance already committed before today's transfer.
                     transferDay += amount;
                 }
-                else if (reader.IsDBNull(0)) unprepared += amount;
-                else totals[reader.GetString(0)] = totals.GetValueOrDefault(reader.GetString(0)) + amount;
-                if (reader.GetInt64(1) == 0) autoPrepared += reader.GetInt64(3);
+                if (reader.IsDBNull(0))
+                {
+                    if (!transferredToday) unprepared += amount;
+                }
+                else
+                {
+                    string statusId = reader.GetString(0);
+                    totals[statusId] = totals.GetValueOrDefault(statusId) + amount;
+                }
+                // Auto preparation remains a recorded fact after a later move
+                // and continues to appear under its actual saved status.
+                autoPrepared += reader.GetInt64(3);
             }
         }
 
@@ -160,7 +170,7 @@ public sealed class DailyMonthlyReadService
               AND ($status = '' OR ar.StatusId = $status
                    OR ($status = '__UNPREPARED__' AND ar.StatusId IS NULL
                         AND m.MovementId IS NULL)
-                   OR ($status = '__AUTO_PREPARED__' AND m.MovementId IS NULL
+                   OR ($status = '__AUTO_PREPARED__'
                         AND (ar.IdempotencyKey LIKE 'AUTO08H-%'
                              OR ar.IdempotencyKey LIKE 'AUTO20H-%'))
                    OR ($status = '__TRANSFER_DAY__' AND m.MovementId IS NOT NULL)
@@ -176,7 +186,8 @@ public sealed class DailyMonthlyReadService
             SELECT p.PersonId, p.CurrentServiceNumberA, p.CurrentVisibleName,
                    COALESCE(s.VisibleName, 'غير محدد'),
                    ar.StatusId, ar.StatusNameSnapshot, ar.StatusColorSnapshot,
-                    m.MovementId, m.SourceSiteNameSnapshot, m.DestinationSiteNameSnapshot
+                   m.MovementId, m.SourceSiteNameSnapshot, m.DestinationSiteNameSnapshot,
+                   ar.IdempotencyKey, ar.AttendanceLocalDate
             """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
@@ -193,15 +204,21 @@ public sealed class DailyMonthlyReadService
                 ["serviceNumberA"] = reader.GetString(1),
                 ["name"] = reader.GetString(2),
                 ["siteName"] = reader.GetString(3),
-                ["statusId"] = reader.IsDBNull(7)
-                    ? (reader.IsDBNull(4) ? null : reader.GetString(4))
-                    : "__TRANSFER_DAY__",
+                ["statusId"] = !reader.IsDBNull(4) ? reader.GetString(4)
+                    : reader.IsDBNull(7) ? null : "__TRANSFER_DAY__",
+                ["savedStatusName"] = reader.IsDBNull(5) ? null : reader.GetString(5),
                 ["statusName"] = reader.IsDBNull(7)
                     ? (reader.IsDBNull(5) ? "غير محضر" : reader.GetString(5))
-                    : "تم نقله من " + reader.GetString(8) + " إلى " + reader.GetString(9),
-                ["statusColor"] = reader.IsDBNull(7)
-                    ? (reader.IsDBNull(6) ? null : reader.GetString(6))
-                    : "#D8B4FE",
+                    : (reader.IsDBNull(5) ? "" : reader.GetString(5) + " — ") +
+                      "تم نقله من " + reader.GetString(8) + " إلى " + reader.GetString(9),
+                ["statusColor"] = reader.IsDBNull(6)
+                    ? (reader.IsDBNull(7) ? null : "#D8B4FE") : reader.GetString(6),
+                ["savedBusinessDate"] = reader.IsDBNull(11) ? null : reader.GetString(11),
+                ["autoSource"] = reader.IsDBNull(10) ? null :
+                    reader.GetString(10).StartsWith("AUTO08H-", StringComparison.Ordinal)
+                        ? "تحضير تلقائي 08:00" :
+                    reader.GetString(10).StartsWith("AUTO20H-", StringComparison.Ordinal)
+                        ? "تحضير تلقائي 20:00" : null,
                 ["transferDay"] = !reader.IsDBNull(7)
             });
         }
