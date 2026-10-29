@@ -139,7 +139,12 @@ public sealed class AuditOverlayService
                    COALESCE((SELECT o.IsTombstoned FROM AuditLogPresentationEdits o
                              WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), 0),
                    COALESCE((SELECT o.OverlayVersion FROM AuditLogPresentationEdits o
-                             WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), 0)
+                             WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), 0),
+                   e.ActorPersonId, e.OldValueJson, e.NewValueJson,
+                   CASE WHEN e.ActorPersonId IS NULL AND EXISTS(
+                     SELECT 1 FROM Users u WHERE u.UserId=e.ActorUserId
+                       AND u.Role=1 AND u.LinkedPersonId IS NULL)
+                     THEN 1 ELSE 0 END
             FROM AuditEvents e
             {whereSql}
             ORDER BY e.ExecutedAtUtc DESC, e.AuditEventId DESC
@@ -155,8 +160,23 @@ public sealed class AuditOverlayService
         {
             string rawDescription = reader.GetString(8);
             string corrected = reader.IsDBNull(13) ? "" : reader.GetString(13);
+            string usernameSnapshot=reader.GetString(3);
+            string? rosterSnapshot=reader.IsDBNull(4)?null:reader.GetString(4);
+            bool founder=reader.GetInt32(19)==1;
+            string founderName=rosterSnapshot?.StartsWith("الإدارة العامة",StringComparison.Ordinal)==true
+                ? rosterSnapshot["الإدارة العامة".Length..].Trim(' ','-')
+                : rosterSnapshot??"";
+            string display=founder
+                ? "الإدارة العامة - "+usernameSnapshot+
+                    (founderName.Length>0?" ("+founderName+")":"")
+                : usernameSnapshot+(string.IsNullOrWhiteSpace(rosterSnapshot)?"":" - "+rosterSnapshot);
             items.Add(new JsonObject
             {
+                ["sequence"]=(long)(page-1)*pageSize+items.Count+1,
+                ["actorDisplay"]=display,
+                ["outcome"]="تم الاعتماد",
+                ["oldValue"]=reader.IsDBNull(17)?null:JsonNode.Parse(reader.GetString(17)),
+                ["newValue"]=reader.IsDBNull(18)?null:JsonNode.Parse(reader.GetString(18)),
                 ["auditEventId"] = reader.GetString(0),
                 ["operationCode"] = reader.GetString(1),
                 ["operationArabicName"] = reader.GetString(2),
@@ -221,6 +241,12 @@ public sealed class AuditOverlayService
             ["actorUserId"] = reader.GetString(2),
             ["actorUsername"] = reader.GetString(3),
             ["actorRosterFullName"] = reader.IsDBNull(4) ? null : reader.GetString(4),
+            ["actorDisplay"] = reader.IsDBNull(4)?reader.GetString(3):
+                (reader.GetString(4).StartsWith("الإدارة العامة",StringComparison.Ordinal)
+                    ? "الإدارة العامة - "+reader.GetString(3)+
+                        (reader.GetString(4).Length>"الإدارة العامة".Length
+                            ? " ("+reader.GetString(4)["الإدارة العامة".Length..].Trim(' ','-')+")":"")
+                    : reader.GetString(3)+" - "+reader.GetString(4)),
             ["targetEntityType"] = reader.GetString(5),
             ["targetEntityId"] = reader.GetString(6),
             ["targetDisplay"] = reader.GetString(7),
