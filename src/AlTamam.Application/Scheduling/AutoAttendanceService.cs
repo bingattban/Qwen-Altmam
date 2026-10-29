@@ -469,10 +469,6 @@ public sealed class AutoAttendanceService
         return value is null or DBNull ? null : value.ToString();
     }
 
-    private async Task<int> GetSettingIntAsync(string key, int fallback, CancellationToken ct)
-        => int.TryParse(await GetSettingAsync(key, ct).ConfigureAwait(false), NumberStyles.Integer,
-            CultureInfo.InvariantCulture, out int parsed) ? parsed : fallback;
-
     private async Task PersistLastObservedAsync(DateTimeOffset nowUtc, CancellationToken ct)
     {
         await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>

@@ -575,16 +575,6 @@ public sealed class AuditOverlayService
         catch { return fallback; }
     }
 
-    private static long ReadLong(JsonObject payload, string key, long fallback)
-    {
-        try
-        {
-            var v = payload[key];
-            return v is null ? fallback : v.GetValue<long>();
-        }
-        catch { return fallback; }
-    }
-
     private static bool ReadBool(JsonObject payload, string key, bool fallback)
     {
         try

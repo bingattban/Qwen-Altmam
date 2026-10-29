@@ -82,9 +82,6 @@ public sealed class ExcelPersonnelImportService
         finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes); }
     }
 
-    private static JsonObject? ParseToken(JsonObject? payload, string property) =>
-        payload is not null && Read(payload, property).Length == 64 ? payload : null;
-
     private async Task<JsonObject?> ReadStagedAsync(string token, string operation,
         string actor, SqliteConnection connection, SqliteTransaction? tx, CancellationToken ct)
     {
