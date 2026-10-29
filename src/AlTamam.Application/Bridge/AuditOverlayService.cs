@@ -176,7 +176,8 @@ public sealed class AuditOverlayService
             {
                 ["sequence"]=(long)(page-1)*pageSize+items.Count+1,
                 ["actorDisplay"]=display,
-                ["outcome"]="تم الاعتماد",
+                ["outcome"]=reader.GetString(1).EndsWith("FAILED",StringComparison.OrdinalIgnoreCase)
+                    ? "فشل" : "تم الاعتماد",
                 ["oldValue"]=reader.IsDBNull(17)?null:JsonNode.Parse(reader.GetString(17)),
                 ["newValue"]=reader.IsDBNull(18)?null:JsonNode.Parse(reader.GetString(18)),
                 ["auditEventId"] = reader.GetString(0),
