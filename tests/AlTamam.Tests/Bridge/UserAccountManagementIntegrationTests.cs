@@ -159,6 +159,45 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     }
 
     [Fact]
+    public async Task SupervisorRejectedAccountActions_NeverRevealAccountExistenceOrRosterEligibility()
+    {
+        var service=new UserAccountManagementService(_db);
+        var created=await service.CreateAsync(new JsonObject {
+            ["username"]="private-account",["password"]=SafePassword,
+            ["passwordConfirmation"]=SafePassword,["personId"]="TST-ACTIVE-1",
+            ["role"]="OrdinaryAdministration"
+        },_general,CancellationToken.None);
+        Assert.True(created.Success,created.UserMessage);
+        string id=Assert.IsType<JsonObject>(created.Data)["userId"]!.GetValue<string>();
+        var supervisor=new BridgePrincipal("TST-SUP-REJECT","supervisor",
+            UserRole.Supervisor,"8899aabbccddeeff0011223344556677");
+        async Task<AlTamam.Contracts.Bridge.BridgeResponse> Change(string userId)
+            => await service.ChangePasswordAsync(new JsonObject {
+                ["userId"]=userId,["expectedRevision"]=1L,["password"]="Abc123!another"
+            },supervisor,CancellationToken.None);
+        async Task<AlTamam.Contracts.Bridge.BridgeResponse> Reactivate(string userId)
+            => await service.ReactivateAsync(new JsonObject {
+                ["userId"]=userId,["expectedRevision"]=1L,["reason"]="مراجعة حساب مصرح بها"
+            },supervisor,CancellationToken.None);
+
+        var foundChange=await Change(id);
+        var missingChange=await Change("USR-PERSON-NEVER-EXISTED");
+        var foundReturn=await Reactivate(id);
+        var missingReturn=await Reactivate("USR-PERSON-NEVER-EXISTED");
+        foreach(var denied in new[]{foundChange,missingChange,foundReturn,missingReturn})
+        {
+            Assert.False(denied.Success);
+            Assert.Equal(AlTamam.Contracts.Bridge.BridgeErrorCodes.Unauthorized,denied.ErrorCode);
+        }
+        Assert.Equal(foundChange.UserMessage,missingChange.UserMessage);
+        Assert.Equal(foundReturn.UserMessage,missingReturn.UserMessage);
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode IN ('USER_PASSWORD_CHANGE','USER_REACTIVATE');";
+        Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
+    [Fact]
     public async Task RotationRevokesPriorSessionsAndDisablingDoesNotEraseAccount()
     {
         var svc=new UserAccountManagementService(_db);
