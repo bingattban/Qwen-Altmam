@@ -90,6 +90,77 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
     }
 
     [Fact]
+    public async Task AutomaticRegister_BulkStatusRevision_IsAtomicAuditedAndRetainsSource()
+    {
+        var service = new AttendanceCommitService(_db, new SyntheticDaytimeClock());
+        var ids = new[] { "TST-ATTEND-P1", "TST-ATTEND-P2" };
+        var initial = await service.PreviewAsync(
+            Payload("initial", "STS-ABSENT", ids), Actor, CancellationToken.None);
+        Assert.True((await service.CommitAsync(new JsonObject {
+            ["previewToken"] = Token(initial),
+            ["operationId"] = "auto-bulk-initial-20261029"
+        }, Actor, false, CancellationToken.None)).Success);
+
+        // Simulate records committed by the actual local auto-attendance scheduler;
+        // revision must not erase this immutable automatic origin marker.
+        using (var c = _db.CreateOpenConnection())
+        using (var q = c.CreateCommand())
+        {
+            q.CommandText = """
+                UPDATE AttendanceRecords
+                SET IdempotencyKey = 'AUTO08H-' || PersonId
+                WHERE PersonId IN ('TST-ATTEND-P1','TST-ATTEND-P2');
+                """;
+            Assert.Equal(2, await q.ExecuteNonQueryAsync());
+        }
+
+        var read = new DailyMonthlyReadService(_db);
+        var filter = new JsonObject {
+            ["businessDate"] = Today(), ["statusId"] = "__AUTO_PREPARED__",
+            ["siteId"] = "SITE-UNSPECIFIED", ["page"] = 1, ["pageSize"] = 50
+        };
+        var before = await read.DailyRosterAsync(filter, CancellationToken.None);
+        Assert.True(before.Success, before.UserMessage);
+        Assert.Equal(2L, ((JsonObject)before.Data!)["total"]!.GetValue<long>());
+        Assert.Equal(0L, Count("AttendanceRevisions"));
+
+        var preview = await service.PreviewAsync(Payload("revise", "STS-PRESENT", ids),
+            Actor, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        var reviewed = (JsonArray)((JsonObject)preview.Data!)["persons"]!;
+        Assert.Equal(2, reviewed.Count);
+        Assert.All(reviewed, item =>
+            Assert.Equal("غياب", ((JsonObject)item!)["previousStatusName"]!.GetValue<string>()));
+        Assert.Equal(0L, Count("AttendanceRevisions"));
+
+        var intent = new JsonObject {
+            ["previewToken"] = Token(preview),
+            ["operationId"] = "auto-bulk-revise-20261029"
+        };
+        var result = await service.CommitAsync(intent, Actor, true, CancellationToken.None);
+        Assert.True(result.Success, result.UserMessage);
+        Assert.Equal(2, ((JsonObject)result.Data!)["count"]!.GetValue<int>());
+        Assert.Equal(2L, Count("AttendanceRevisions"));
+        Assert.Equal(4L, Count("AuditEvents"));
+
+        var after = await read.DailyRosterAsync(filter, CancellationToken.None);
+        Assert.True(after.Success, after.UserMessage);
+        var rows = (JsonArray)((JsonObject)after.Data!)["items"]!;
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, item => {
+            var person = (JsonObject)item!;
+            Assert.Equal("موجود", person["statusName"]!.GetValue<string>());
+            Assert.Equal("تحضير تلقائي 08:00", person["autoSource"]!.GetValue<string>());
+        });
+
+        var retry = await service.CommitAsync((JsonObject)intent.DeepClone(),
+            Actor, true, CancellationToken.None);
+        Assert.True(retry.Success, retry.UserMessage);
+        Assert.Equal(2L, Count("AttendanceRevisions"));
+        Assert.Equal(4L, Count("AuditEvents"));
+    }
+
+    [Fact]
     public async Task AttendanceCommit_LostResponseRetry_ReturnsOriginalResultWithoutDuplicateAudit()
     {
         var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
