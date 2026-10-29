@@ -9,6 +9,53 @@
 (function () {
   const PROTOCOL_VERSION = 1;
   const DEFAULT_TIMEOUT_MS = 15000;
+  // Generated from action-manifest.json's mutating actions, excluding Logout.
+  // The C# bridge independently REJECTS missing/malformed operationId; this
+  // helper supplies an intent ID to every current UI caller, including legacy
+  // views that never previously attached one.
+  const MUTATING_ACTIONS = new Set([
+    "SubmitAttendance",
+    "ReviseTodayAttendance",
+    "SaveAttendanceDraft",
+    "DeleteAttendanceDraft",
+    "CommitArchivedReturn",
+    "CreatePerson",
+    "UpdatePersonIdentity",
+    "ArchivePersons",
+    "CommitInternalTransfer",
+    "CommitExternalTransfer",
+    "CommitSeparation",
+    "ExportPersonLifetimeExcel",
+    "CreateAttendanceStatus",
+    "UpdateAttendanceStatus",
+    "DeactivateOrDeleteStatus",
+    "CreateSite",
+    "RenameSite",
+    "RemoveSiteAndReassignCurrentPersons",
+    "CreateCustomFieldDefinition",
+    "UpdateCustomFieldMetadata",
+    "DeactivateCustomField",
+    "CommitImport",
+    "ExportImportIssues",
+    "ExportMonthlyWorkbookSet",
+    "CancelExport",
+    "CreateUserAccount",
+    "ChangeUserPassword",
+    "DeactivateUserAccount",
+    "ReactivateUserAccount",
+    "UpdateAuditPresentation",
+    "DeleteAuditPresentation",
+    "SetAutoAttendanceDefaultStatus",
+    "SetAttendanceSchedule",
+    "SetOutputDirectory",
+    "CreateVerifiedBackup",
+    "RestoreDatabaseAtomically",
+    "UpdateBackupSchedule",
+    "CommitFullReset",
+    "SetTheme",
+    "SetClosedDayCorrectionPolicy",
+    "CommitClosedDayCorrection"
+  ]);
   const SESSION_NONCE_STORAGE_KEY = 'altamam.sessionNonce.v1';
   const CANONICAL_ERROR_CODES = ["Unauthorized", "SessionExpired", "MissingData", "ValidationError", "DuplicateServiceNumber", "DuplicateUsername", "ConflictStale", "AlreadyPrepared", "TransferDayAttendanceForbidden", "InvalidTransferSites", "OverlappingAssignments", "HistoricDayLocked", "CustomStatusInactive", "ImportPlanStale", "InvalidWorkbook", "ExcelExportFailed", "BackupIntegrityFailed", "WrongRecoveryKey", "MissingEVolume", "InsufficientDiskSpace", "ScheduleUnavailable", "ResetBackupGateFailed", "StorageBusy", "ClockRollbackSuspected"];
   const UI_INVALIDATION_EVENTS = ["AttendanceCommitted", "AttendanceRevised", "PersonnelMoved", "PersonnelArchived", "SiteCreated", "SiteRenamed", "StatusDefinitionCreated", "StatusDefinitionChanged", "PersonIdentityUpdated", "VisibleAuditOverlayChanged", "UserAccountChanged", "BackupRestored", "SessionEnded"];
@@ -92,12 +139,19 @@
         return;
       }
       const requestId = newRequestId();
+      const intent = payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? payload : {};
+      if (MUTATING_ACTIONS.has(action) && intent.operationId == null) {
+        // Reusing the same payload object for an explicit retry preserves the ID.
+        // An existing UI-provided ID is never replaced.
+        intent.operationId = newRequestId();
+      }
       const envelope = {
         requestId: requestId,
         protocolVersion: PROTOCOL_VERSION,
         action: action,
         sessionNonce: opts.sessionNonce || getSessionNonce(),
-        payload: payload || {}
+        payload: intent
       };
       const settleLoading = function (busy) {
         document.dispatchEvent(new CustomEvent('altamam:bridge-loading', { detail: { action: action, requestId: requestId, busy: busy } }));
