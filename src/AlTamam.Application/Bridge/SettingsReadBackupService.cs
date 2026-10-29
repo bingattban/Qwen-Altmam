@@ -53,7 +53,8 @@ public sealed class SettingsReadBackupService
     /// Writes the existing, program-wide AppSettings.Theme setting. No new
     /// storage location, user roster mutation, or client-only preference.
     /// </summary>
-    public async Task<BridgeResponse> SetThemeAsync(JsonObject? input,CancellationToken ct)
+    public async Task<BridgeResponse> SetThemeAsync(JsonObject? input,CancellationToken ct,
+        BridgePrincipal? actor=null)
     {
         string? theme;
         try { theme=input?["theme"]?.GetValue<string>(); }
@@ -62,6 +63,11 @@ public sealed class SettingsReadBackupService
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "اختر الوضع النهاري أو الليلي فقط.");
         await _db.ExecuteInWriteTransactionAsync(async(connection,tx)=>{
+            using var before=connection.CreateCommand();
+            before.Transaction=tx;
+            before.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='Theme';";
+            string oldTheme=(await before.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString()??"light";
+            if(oldTheme==theme)return 0;
             using var command=connection.CreateCommand();
             command.Transaction=tx;
             command.CommandText="""
@@ -73,6 +79,15 @@ public sealed class SettingsReadBackupService
             command.Parameters.AddWithValue("$theme",theme);
             command.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
             await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            await BridgeAuditWriter.WriteAsync(connection,tx,_time,
+                "THEME_CHANGE","تغيير مظهر البرنامج",
+                actor?.UserId??"USR-SYSTEM",actor?.Username??"النظام",null,
+                "AppSettings","Theme","المظهر",
+                new JsonObject{["theme"]=oldTheme}.ToJsonString(),
+                new JsonObject{["theme"]=theme}.ToJsonString(),
+                "تغيير المظهر المحفوظ للبرنامج",null,
+                _time.GetLocalNow().ToString("yyyy-MM-dd"),
+                ct.CorrelationId(),ct).ConfigureAwait(false);
             return 0;
         },ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject{["theme"]=theme});
