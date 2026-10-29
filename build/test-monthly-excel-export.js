@@ -165,9 +165,11 @@ async function main(){
   assert.ok(clear);
   clear.handlers.click();await tick();await tick();
   assert.equal(calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1).payload.term,"");
+  assert.equal(calls.filter(x=>x.action==="SetOutputDirectory").length,1,
+    "folder selection occurs only on the explicit Windows-picker action");
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
     "QueryMonthlyGrid","GetMonthlyCellDetails","PreviewMonthlyExport","ExportMonthlyWorkbookSet",
-    "GetSettingsOverview","GetDashboardSummary"].includes(x.action)).length,0,
+    "GetSettingsOverview","GetDashboardSummary","SetOutputDirectory"].includes(x.action)).length,0,
     "read-only click must never commit attendance or modify history");
   console.log("MONTHLY EXCEL + MONTHLY CELL UI PASS: guarded preview, native export response, date-bound read-only details");
 }
