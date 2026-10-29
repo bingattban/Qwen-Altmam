@@ -232,9 +232,20 @@ public sealed class PersonnelFourDigitsAndSitesTests : IAsyncLifetime, IDisposab
         Assert.Equal(1,report["issueCount"]!.GetValue<int>());
         var preview=await service.PreviewAsync(new JsonObject {["workbookToken"]=workbook},Actor,CancellationToken.None);
         Assert.True(preview.Success,preview.UserMessage);
-        string token=((JsonObject)preview.Data!)["previewToken"]!.GetValue<string>();
-        var committed=await service.CommitAsync(new JsonObject {["previewToken"]=token},
-            Actor,"tester",CancellationToken.None);
+        var plan=Assert.IsType<JsonObject>(preview.Data);
+        string token=plan["previewToken"]!.GetValue<string>();
+        var proposed=Assert.IsType<JsonArray>(plan["newSites"]);
+        var proposedSite=Assert.IsType<JsonObject>(Assert.Single(proposed));
+        Assert.Equal("الموقع الشرقي",proposedSite["name"]!.GetValue<string>());
+        Assert.Equal(2,proposedSite["personCount"]!.GetValue<int>());
+        var unapproved=await service.CommitAsync(new JsonObject{
+            ["previewToken"]=token},Actor,"tester",CancellationToken.None);
+        Assert.False(unapproved.Success);
+        Assert.Equal(0,Count("SELECT COUNT(*) FROM Persons"));
+        var committed=await service.CommitAsync(new JsonObject {
+            ["previewToken"]=token,["confirmNewSites"]=true,
+            ["approvedSiteNames"]=new JsonArray("الموقع الشرقي")
+        },Actor,"tester",CancellationToken.None);
         Assert.True(committed.Success,committed.UserMessage);
         Assert.Equal(2,Count("SELECT COUNT(*) FROM Persons"));
         Assert.Equal(1,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='الموقع الشرقي'"));
