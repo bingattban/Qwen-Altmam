@@ -97,6 +97,37 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         Assert.Equal("2",Scalar("SELECT COUNT(*) FROM Persons"));
     }
 
+
+    [Fact]
+    public async Task CommittedExcelImport_LostResponseRetry_ReturnsSameBatchAndOneAudit()
+    {
+        var file = await Service.SelectAsync(FilePayload(Workbook(
+            ("فرد الاستيراد المستقل", "00991"))), Owner, CancellationToken.None);
+        Assert.True(file.Success,file.UserMessage);
+        string ticket=((JsonObject)file.Data!)["workbookToken"]!.GetValue<string>();
+        var preview=await Service.PreviewAsync(new JsonObject{
+            ["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var commit=new JsonObject{
+            ["previewToken"]=((JsonObject)preview.Data!)["previewToken"]!.GetValue<string>(),
+            ["operationId"]="section02-import-batch-00991"
+        };
+        var first=await Service.CommitAsync(commit,Owner,"owner",CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var retry=await Service.CommitAsync((JsonObject)commit.DeepClone(),
+            Owner,"owner",CancellationToken.None);
+        Assert.True(retry.Success,retry.UserMessage);
+        Assert.Equal(((JsonObject)first.Data!).ToJsonString(),
+            ((JsonObject)retry.Data!).ToJsonString());
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM ImportBatches WHERE Status='COMMITTED'"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSONNEL_IMPORT'"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM MutationReceipts"));
+        var other=(JsonObject)commit.DeepClone();
+        other["previewToken"]=new string('f',64);
+        Assert.False((await Service.CommitAsync(other,Owner,"owner",CancellationToken.None)).Success);
+    }
+
     [Fact]
     public async Task DuplicateWithinFileAndPreviouslyImportedNumber_AreReportedButNeverOverwritten()
     {
