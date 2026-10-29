@@ -57,8 +57,7 @@ public sealed class PersonnelSeparationService
         using var q=c.CreateCommand();q.Transaction=tx;
         q.CommandText="""
             SELECT
-              (SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId=$id AND AttendanceLocalDate=$date)
-              +(SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId=$id AND EffectiveLocalDate=$date)
+              (SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId=$id AND EffectiveLocalDate=$date)
               +(SELECT COUNT(*) FROM PeriodClosures WHERE IsClosed=1
                    AND ((PeriodType='DAY' AND PeriodKey=$date)
                         OR (PeriodType='MONTH' AND PeriodKey=$month)));
@@ -130,6 +129,8 @@ public sealed class PersonnelSeparationService
                 issued=DateTimeOffset.Parse(reader.GetString(2),CultureInfo.InvariantCulture);
             }
             // Server-side enforcement, not just a cosmetic JavaScript countdown.
+            // A saved attendance on the dismissal date stays immutable; the separation
+            // is a distinct movement and the monthly grid annotates both facts.
             if(_time.GetUtcNow()-issued<TimeSpan.FromSeconds(5))
                 return Fail(BridgeErrorCodes.ValidationError,"لا يمكن الفصل قبل انتهاء مهلة التأكيد (5 ثوانٍ).");
             if(JsonNode.Parse(original) is not JsonObject preview ||
