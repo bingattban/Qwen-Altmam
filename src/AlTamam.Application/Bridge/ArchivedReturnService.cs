@@ -76,7 +76,19 @@ public sealed class ArchivedReturnService
                        CASE WHEN p.NormalizedName=$name THEN 1 ELSE 0 END,
                        COALESCE((SELECT m.MovementType FROM PersonnelMovements m
                            WHERE m.PersonId=p.PersonId AND m.MovementType IN(2,3)
-                           ORDER BY m.EffectiveLocalDate DESC,m.CommittedAtUtc DESC LIMIT 1),0)
+                           ORDER BY m.EffectiveLocalDate DESC,m.CommittedAtUtc DESC LIMIT 1),0),
+                       COALESCE((SELECT m.SourceSiteNameSnapshot FROM PersonnelMovements m
+                           WHERE m.PersonId=p.PersonId AND m.MovementType IN(2,3)
+                           ORDER BY m.EffectiveLocalDate DESC,m.CommittedAtUtc DESC LIMIT 1),
+                           (SELECT COALESCE(
+                               (SELECT hn.VisibleNameSnapshot FROM SiteNameHistory hn
+                                WHERE hn.SiteId=a.SiteId AND
+                                  hn.ValidFromLocalDate<=DATE(COALESCE(a.ValidToLocalDate,$date),'-1 day')
+                                ORDER BY hn.ValidFromLocalDate DESC LIMIT 1),
+                               CASE WHEN a.SiteId='SITE-UNSPECIFIED' THEN 'غير محدد' END)
+                            FROM PersonAssignments a WHERE a.PersonId=p.PersonId
+                            ORDER BY a.ValidFromLocalDate DESC LIMIT 1),
+                           'غير موثق')
                 FROM Persons p
                 WHERE p.ActiveFlag=0 AND p.OrganizationalStatus IN(2,3,4)
                   AND (p.NormalizedServiceNumberA=$number OR p.NormalizedName=$name)
@@ -84,6 +96,7 @@ public sealed class ArchivedReturnService
                 """;
             cmd.Parameters.AddWithValue("$number",number);
             cmd.Parameters.AddWithValue("$name",normalized);
+            cmd.Parameters.AddWithValue("$date",date);
             using var reader=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while(await reader.ReadAsync(ct).ConfigureAwait(false))
             {
@@ -98,6 +111,7 @@ public sealed class ArchivedReturnService
                     ["revision"]=reader.GetInt64(3),
                     ["organizationalStatus"]=reader.GetInt32(4),
                     ["exitDate"]=reader.GetString(5),
+                    ["previousSiteName"]=reader.GetString(9),
                     ["exitType"]=exitType==2?"نقل خارجي":
                                  exitType==3?"فصل":"أرشيف القوة",
                     ["numberMatch"]=reader.GetInt32(6)!=0,
