@@ -91,7 +91,7 @@ const bridge = {
       PreviewArchivedIdentity:body.serviceNumberA==="4141"
         ?{requiresResolution:true,previewToken:"T".repeat(64),
           candidates:[{personId:"TST-ARCHIVED-P1",name:"شخص تجريبي قديم",
-            serviceNumberA:"4141",exitDate:"2026-10-12",exitType:"نقل خارجي",numberMatch:true,nameMatch:false}]}
+            serviceNumberA:"4141",previousSiteName:"الموقع التاريخي",exitDate:"2026-10-12",exitType:"نقل خارجي",numberMatch:true,nameMatch:false}]}
         :{requiresResolution:true,previewToken:"U".repeat(64),
           candidates:[{personId:"TST-ARCHIVED-P2",name:"شخص جديد مكرر",
             serviceNumberA:"5151",exitDate:"2026-10-12",exitType:"فصل",numberMatch:false,nameMatch:true}]},
@@ -135,12 +135,12 @@ async function run() {
   byDataset("adminSection")[0].handlers.click();
   assert.equal(byDataset("adminSection").length,0,"top-level cards hidden in subgroup");
   assert.deepEqual(byDataset("adminScreen").map(x=>x.dataset.adminScreen),
-    ["attendance","persons","transfers","separation","personReport","closedCorrection"]);
+    ["attendance","persons","transfers","separation","separatedArchive","personReport","closedCorrection"]);
   byDataset("adminScreen")[0].handlers.click();
   assert.equal(byDataset("adminScreen").length,0,"only selected detail page is visible");
   assert.ok(buttonNamed("العودة إلى إدارة القوة"),"back from detail to parent");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  assert.equal(byDataset("adminScreen").length,6,"re-open all force management screens");
+  assert.equal(byDataset("adminScreen").length,7,"re-open every distinct force-management screen");
   buttonNamed("العودة إلى الإدارة").handlers.click();
   assert.equal(byDataset("adminSection").length,5,"return to clean admin landing");
 
@@ -156,8 +156,10 @@ async function run() {
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="separation").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["separatePerson","separatedArchive"],"dismissal and its archive share the dismissal screen");
+    ["separatePerson"],"dismissal and the archived-personnel register are separate cards");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
+  assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="separatedArchive"),
+    "the dismissed-personnel archive has its own navigable roster card");
   assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="personReport"),
     "one unified report card is present on roster landing");
   assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="archives"),
@@ -306,6 +308,8 @@ async function run() {
   assert.ok(buttonNamed("عاد نفس الفرد"),"archived identity list shows explicit return choice");
   assert.ok(visible().some(x=>x.textContent==="2026-10-12"),
     "candidate exit date is visible before identity decision");
+  assert.ok(visible().some(x=>x.textContent==="الموقع التاريخي"),
+    "identity decision must show the archived source-site snapshot");
   assert.equal(calls.filter(x=>x.name==="CreatePerson").length,0,
     "matching archived number must not silently create a new identity");
   await buttonNamed("عاد نفس الفرد").handlers.click();
