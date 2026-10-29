@@ -144,8 +144,9 @@ public sealed class AuditOverlayService
                              WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), 0),
                    e.ActorPersonId, e.OldValueJson, e.NewValueJson,
                    CASE WHEN e.ActorPersonId IS NULL AND EXISTS(
-                     SELECT 1 FROM Users u WHERE u.UserId=e.ActorUserId
-                       AND u.Role=1 AND u.LinkedPersonId IS NULL)
+                     SELECT 1 FROM AuditEvents founder
+                     WHERE founder.ActorUserId=e.ActorUserId
+                       AND founder.OperationCode='FOUNDING_ADMIN_CREATED')
                      THEN 1 ELSE 0 END
             FROM AuditEvents e
             {whereSql}
@@ -228,7 +229,12 @@ public sealed class AuditOverlayService
             SELECT OperationCode, OperationArabicName, ActorUserId, ActorUsernameSnapshot,
                    ActorRosterFullNameSnapshot, TargetEntityType, TargetEntityId, TargetDisplaySnapshot,
                    OldValueJson, NewValueJson, DefaultArabicDescription, Reason, EffectiveLocalDate,
-                   ExecutedAtUtc, CorrelationId, EventHash, PriorEventHash
+                   ExecutedAtUtc, CorrelationId, EventHash, PriorEventHash,
+                   CASE WHEN ActorPersonId IS NULL AND EXISTS(
+                       SELECT 1 FROM AuditEvents founder
+                       WHERE founder.ActorUserId=AuditEvents.ActorUserId
+                         AND founder.OperationCode='FOUNDING_ADMIN_CREATED')
+                     THEN 1 ELSE 0 END
             FROM AuditEvents WHERE AuditEventId = $id;
             """;
         cmd.Parameters.AddWithValue("$id", auditEventId);
@@ -244,12 +250,14 @@ public sealed class AuditOverlayService
             ["actorUserId"] = reader.GetString(2),
             ["actorUsername"] = reader.GetString(3),
             ["actorRosterFullName"] = reader.IsDBNull(4) ? null : reader.GetString(4),
-            ["actorDisplay"] = reader.IsDBNull(4)?reader.GetString(3):
-                (reader.GetString(4).StartsWith("الإدارة العامة",StringComparison.Ordinal)
-                    ? "الإدارة العامة - "+reader.GetString(3)+
-                        (reader.GetString(4).Length>"الإدارة العامة".Length
-                            ? " ("+reader.GetString(4)["الإدارة العامة".Length..].Trim(' ','-')+")":"")
-                    : reader.GetString(3)+" - "+reader.GetString(4)),
+            ["actorDisplay"] = reader.GetInt32(17)==1
+                ? "الإدارة العامة - "+reader.GetString(3)+
+                    (reader.IsDBNull(4) || reader.GetString(4).Length==0 ||
+                     reader.GetString(4)=="الإدارة العامة"?""
+                        :" ("+(reader.GetString(4).StartsWith("الإدارة العامة",StringComparison.Ordinal)
+                           ? reader.GetString(4)["الإدارة العامة".Length..].Trim(' ','-')
+                           : reader.GetString(4))+")")
+                : reader.GetString(3)+(reader.IsDBNull(4)?"":" - "+reader.GetString(4)),
             ["targetEntityType"] = reader.GetString(5),
             ["targetEntityId"] = reader.GetString(6),
             ["targetDisplay"] = reader.GetString(7),
