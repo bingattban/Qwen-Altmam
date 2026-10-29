@@ -217,6 +217,10 @@ public sealed class AdminSettingsIntegrationTests : IAsyncLifetime, IDisposable
         Assert.Equal(1L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
         cmd.CommandText="SELECT COUNT(*) FROM BackupHistory WHERE VerificationPassed=1;";
         Assert.Equal(0L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        var log=await new AuditOverlayService(_db).QueryAuditLogAsync(
+            new JsonObject{["operation"]="AUTO_BACKUP_FAILED"},CancellationToken.None,Actor);
+        var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(log.Data)["items"]);
+        Assert.Equal("فشل",Assert.IsType<JsonObject>(Assert.Single(items))["outcome"]!.GetValue<string>());
     }
 
     [Fact]
