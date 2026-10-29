@@ -41,3 +41,7 @@
 - The founding GeneralAdmin is created while `Persons` may be empty, with `Users.LinkedPersonId=NULL` forever. Optional full name is not a roster person or service number. PR #119 tests omitted, empty, and whitespace-only names through the real bridge and does not send the field when empty.
 - PR #117 enforces the founder strong-password policy directly at the C# bootstrap. PR #118 records legacy founder detachment in the migration audit chain. These committed changes are retained during V011 integration.
 - The separately named `FullDataResetService` is an explicit GeneralAdmin-only password-and-preview-gated **destructive new-database-epoch** exception: its current documented contract removes all users and prompts fresh setup, not an ordinary second founding account during the same persisted dataset. Document this special lifecycle at acceptance.
+
+## Section 03.17 — additional unauthorized-target non-enumeration
+
+`UserAccountManagementIntegrationTests.OrdinaryAdmin_CannotEnumerateInaccessibleAccountsThroughPasswordOrReactivation` covers denied password, deactivation and reactivation attempts by ordinary Admin against inaccessible Admin accounts versus nonexistent UserIds. Both must return the same Unauthorized code and public message without any account state write or audit event. GeneralAdmin retains an accurate not-found error for appropriately authorized full account management. This is enforced in C# services and does not rely on hidden UI routes.
