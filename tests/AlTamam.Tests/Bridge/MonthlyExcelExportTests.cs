@@ -256,6 +256,15 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         Assert.Equal("xlsx", metadata["format"]!.GetValue<string>());
         Assert.EndsWith(".xlsx", name, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(102L, metadata["personCount"]!.GetValue<long>());
+        var allFiles=Assert.IsType<JsonArray>(metadata["files"]);
+        Assert.Equal(2,allFiles.Count); // consolidated + non-empty Unspecified site
+        Assert.Equal(2,metadata["fileCount"]!.GetValue<int>());
+        Assert.All(allFiles,entry=>{
+            var path=Assert.IsType<JsonObject>(entry)["filePath"]!.GetValue<string>();
+            Assert.True(File.Exists(path),"Every monthly workbook must exist before success.");
+        });
+        Assert.Equal("",allFiles[0]!["siteId"]!.GetValue<string>());
+        Assert.Equal("SITE-UNSPECIFIED",allFiles[1]!["siteId"]!.GetValue<string>());
         using (var archive = ZipFile.OpenRead(name))
         {
             foreach (var path in new[] {
