@@ -191,10 +191,10 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
     }
 
     [Theory]
-    [InlineData("internal","نقل داخلي","TST-XLSX-INT")]
-    [InlineData("external","نقل خارجي","TST-XLSX-EXT")]
+    [InlineData("internal","نقل داخلي")]
+    [InlineData("external","نقل خارجي")]
     public async Task MovementArchives_ExportOnlyMatchingType_WithNamedFiles(
-        string type,string title,string movementId)
+        string type,string title)
     {
         var svc=new PersonnelExcelExportService(_db);
         var payload=new JsonObject{["mode"]="movementArchive",["type"]=type,
