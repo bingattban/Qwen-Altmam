@@ -368,6 +368,21 @@ public sealed class AuditOverlayService
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                     $"تم تعديل القيد من مستخدم آخر (الإصدار الحالي {currentVersion}). حدّث الشاشة وأعد المحاولة.");
 
+            // Meta-audit: the overlay action itself is immutable evidence (atomic in same tx).
+            await BridgeAuditWriter.WriteAsync(connection, transaction, _time,
+                tombstone ? "DeleteAuditPresentation" : "UpdateAuditPresentation",
+                tombstone ? "إخفاء قيد في سجل العمليات" : "تعديل الوصف الظاهر لقيد في سجل العمليات",
+                principal.UserId, principal.Username, actorDisplayName: null,
+                "AuditEvent", auditEventId, auditEventId,
+                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion }),
+                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion + 1,
+                                                        ["tombstoned"] = tombstone, ["correctedDescription"] = corrected }),
+                tombstone
+                    ? $"أُخفي القيد {auditEventId} ظاهرياً بواسطة {principal.Username}."
+                    : $"عُدّل الوصف الظاهر للقيد {auditEventId} بواسطة {principal.Username}.",
+                reason, DateOnly.FromDateTime(_time.GetUtcNow().DateTime).ToString("yyyy-MM-dd"),
+                ct.CorrelationId(), ct).ConfigureAwait(false);
+
             // Append-only overlay version; raw evidence is never mutated.
             using var ins = connection.CreateCommand();
             ins.Transaction = transaction;
@@ -383,24 +398,35 @@ public sealed class AuditOverlayService
             ins.Parameters.AddWithValue("$corrected", tombstone ? DBNull.Value : corrected);
             ins.Parameters.AddWithValue("$reason", reason);
             ins.Parameters.AddWithValue("$by", principal.UserId);
-            ins.Parameters.AddWithValue("$byDisplay", principal.Username);
+            // The actor's immutable event-time identity was just captured by
+            // BridgeAuditWriter in the same transaction. Never use a later roster lookup.
+            string byDisplay=principal.Username;
+            using(var identity=connection.CreateCommand())
+            {
+                identity.Transaction=transaction;
+                identity.CommandText="""
+                    SELECT ActorUsernameSnapshot,ActorRosterFullNameSnapshot
+                    FROM AuditEvents WHERE OperationCode=$code AND TargetEntityId=$id
+                    ORDER BY rowid DESC LIMIT 1;
+                    """;
+                identity.Parameters.AddWithValue("$code",
+                    tombstone?"DeleteAuditPresentation":"UpdateAuditPresentation");
+                identity.Parameters.AddWithValue("$id",auditEventId);
+                using var actor=await identity.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if(await actor.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    string name=actor.GetString(0);
+                    string? historical=actor.IsDBNull(1)?null:actor.GetString(1);
+                    byDisplay=historical?.StartsWith("الإدارة العامة",StringComparison.Ordinal)==true
+                        ? "الإدارة العامة - "+name+
+                            (historical.Length>"الإدارة العامة".Length
+                                ?" ("+historical["الإدارة العامة".Length..].Trim(' ','-')+")":"")
+                        : name+(string.IsNullOrWhiteSpace(historical)?"":" - "+historical);
+                }
+            }
+            ins.Parameters.AddWithValue("$byDisplay", byDisplay);
             ins.Parameters.AddWithValue("$at", editedAtUtc);
             await ins.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-
-            // Meta-audit: the overlay action itself is immutable evidence (atomic in same tx).
-            await BridgeAuditWriter.WriteAsync(connection, transaction, _time,
-                tombstone ? "DeleteAuditPresentation" : "UpdateAuditPresentation",
-                tombstone ? "إخفاء قيد في سجل العمليات" : "تعديل الوصف الظاهر لقيد في سجل العمليات",
-                principal.UserId, principal.Username, actorDisplayName: null,
-                "AuditEvent", auditEventId, auditEventId,
-                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion }),
-                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion + 1,
-                                                        ["tombstoned"] = tombstone, ["correctedDescription"] = corrected }),
-                tombstone
-                    ? $"أُخفي القيد {auditEventId} ظاهرياً بواسطة {principal.Username}."
-                    : $"عُدّل الوصف الظاهر للقيد {auditEventId} بواسطة {principal.Username}.",
-                reason, DateOnly.FromDateTime(_time.GetUtcNow().DateTime).ToString("yyyy-MM-dd"),
-                ct.CorrelationId(), ct).ConfigureAwait(false);
 
             var result = new JsonObject
             {
