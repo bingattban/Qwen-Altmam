@@ -156,6 +156,21 @@ async function main(){
   assert.ok(visiblePager,"monthly prev/next pages must remain visible outside table scrolling");
   assert.ok(visiblePager.all().some(x=>x.textContent==="السابق"));
   assert.ok(visiblePager.all().some(x=>x.textContent==="التالي"));
+  assert.ok(visiblePager.all().some(x=>String(x.textContent).includes("صفحة 1 من 1")),
+    "month pagination shows current page and total pages in the fixed footer");
+  const sizeSelect=visiblePager.all().find(x=>x.tag==="select"&&
+    x.attrs["aria-label"]==="عدد الأفراد في الصفحة");
+  assert.ok(sizeSelect,"monthly size selector stays with always-visible page controls");
+  assert.equal(sizeSelect.value,"100");
+  sizeSelect.value="25";sizeSelect.handlers.change();await tick();await tick();
+  const smallerPage=calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1);
+  assert.equal(smallerPage.payload.pageSize,25,
+    "monthly page-size change is applied to the actual C# data query");
+  assert.equal(smallerPage.payload.page,1,
+    "page-size change resets pagination safely to page one");
+  const afterSizePager=viewport.all().find(x=>x.className.includes("functional-pager"));
+  assert.ok(afterSizePager.all().some(x=>x.tag==="select"&&x.value==="25"),
+    "the selected page size survives monthly rerender");
   const goForward=viewport.all().find(x=>x.tag==="button"&&x.textContent==="الشهر التالي");
   assert.ok(goForward&&!goForward.disabled);
   goForward.handlers.click();await tick();await tick();
