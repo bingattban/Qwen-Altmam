@@ -173,7 +173,8 @@ public sealed class BridgeRbacMatrixTests
         var dispatcher = new WebView2BridgeDispatcher(new[] { registration });
         JsonNode?[] invalid = [null, JsonValue.Create(""), JsonValue.Create("short"),
             JsonValue.Create("١٢٣٤٥٦٧٨٩٠١٢٣٤٥٦"), JsonValue.Create("bad*operation*1234"),
-            JsonValue.Create(new string('x',129)), new JsonArray("abc")];
+            JsonValue.Create(new string('x',129)), new JsonArray("abc"),
+            JsonValue.Create(true), JsonValue.Create(1234567890)];
         for (int i=0;i<invalid.Length;i++)
         {
             var payload = new JsonObject();
