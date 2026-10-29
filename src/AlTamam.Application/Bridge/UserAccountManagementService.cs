@@ -50,6 +50,11 @@ public sealed class UserAccountManagementService
     private static BridgeResponse Error(string explanation, string code = BridgeErrorCodes.ValidationError)
         => BridgeHelpers.Error(code, explanation);
 
+    // Do not let ordinary administration discover the existence or role of accounts
+    // which its role does not permit it to manage (Section 03.17).
+    private static BridgeResponse RestrictedAccount()
+        => Error("لا تملك صلاحية الوصول إلى الحساب المطلوب.",BridgeErrorCodes.Unauthorized);
+
     private async Task Audit(SqliteConnection c, SqliteTransaction t, BridgePrincipal actor,
         string code, string title, string targetId, string targetName, string? before,
         string after, CancellationToken ct)
@@ -231,6 +236,8 @@ public sealed class UserAccountManagementService
     private async Task<BridgeResponse> ChangeAsync(JsonObject? payload,BridgePrincipal actor,
         bool deactivate,CancellationToken ct)
     {
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
+            return Error("لا تملك صلاحية إدارة حسابات المستخدمين.",BridgeErrorCodes.Unauthorized);
         string id=Read(payload,"userId");
         long expected=ReadLong(payload,"expectedRevision");
         string password=ReadSecret(payload);
@@ -259,12 +266,14 @@ public sealed class UserAccountManagementService
             string username;UserRole role;int active;long revision;
             using(var reader=await select.ExecuteReaderAsync(ct).ConfigureAwait(false))
             {
-                if(!await reader.ReadAsync(ct).ConfigureAwait(false))return Error("الحساب غير موجود.");
+                if(!await reader.ReadAsync(ct).ConfigureAwait(false))
+                    return actor.Role==UserRole.GeneralAdministration
+                        ? Error("الحساب غير موجود.") : RestrictedAccount();
                 username=reader.GetString(0);role=(UserRole)reader.GetInt32(1);
                 active=reader.GetInt32(2);revision=reader.GetInt64(3);
             }
             if(!RoleAuthorizationPolicy.CanModifyAccount(actor.Role,role))
-                return Error("صلاحية تعديل هذا النوع من الحسابات غير متاحة.",BridgeErrorCodes.Unauthorized);
+                return RestrictedAccount();
             // Authorization is revalidated on EVERY retry, while the receipt
             // precedes stale version checks. A lost successful response can be
             // replayed safely even though the first commit incremented RowVersion.
@@ -327,6 +336,8 @@ public sealed class UserAccountManagementService
     public async Task<BridgeResponse> ReactivateAsync(JsonObject? payload,
         BridgePrincipal actor,CancellationToken ct)
     {
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
+            return Error("لا تملك صلاحية إدارة حسابات المستخدمين.",BridgeErrorCodes.Unauthorized);
         string id=Read(payload,"userId"),reason=Read(payload,"reason");
         long expected=ReadLong(payload,"expectedRevision");
         if(id.Length==0 || expected<1 || reason.Length is <5 or >400)
@@ -350,9 +361,14 @@ public sealed class UserAccountManagementService
             using(var reader=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
             {
                 if(!await reader.ReadAsync(ct).ConfigureAwait(false))
-                    return Error("الحساب المطلوب غير موجود.");
+                    return actor.Role==UserRole.GeneralAdministration
+                        ? Error("الحساب المطلوب غير موجود.") : RestrictedAccount();
                 username=reader.GetString(0);
                 targetRole=(UserRole)reader.GetInt32(1);
+                // Authorize the account's role BEFORE revealing whether its
+                // linked roster person is active, archived or even present.
+                if(!RoleAuthorizationPolicy.CanModifyAccount(actor.Role,targetRole))
+                    return RestrictedAccount();
                 active=reader.GetInt32(2);
                 revision=reader.GetInt64(3);
                 personId=reader.IsDBNull(4)?"":reader.GetString(4);
@@ -362,9 +378,6 @@ public sealed class UserAccountManagementService
                     return Error("إعادة تفعيل الحساب تتطلب عودة صاحبه فعلياً إلى كشف القوة النشطة.",
                         BridgeErrorCodes.ConflictStale);
             }
-            if(!RoleAuthorizationPolicy.CanModifyAccount(actor.Role,targetRole))
-                return Error("لا تملك صلاحية إعادة تفعيل هذا النوع من الحسابات.",
-                    BridgeErrorCodes.Unauthorized);
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,t,"ReactivateUserAccount",actor.UserId,payload,ct)
                 .ConfigureAwait(false);
