@@ -60,6 +60,43 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         return buffer.ToArray();
     }
 
+    private static byte[] MultiSheetWorkbook()
+    {
+        using var memory=new MemoryStream();
+        var first=Workbook(("فرد ورقة أولى","00801"));
+        memory.Write(first);
+        memory.Position=0;
+        using(var zip=new ZipArchive(memory,ZipArchiveMode.Update,leaveOpen:true))
+        {
+            zip.GetEntry("xl/workbook.xml")!.Delete();
+            using(var stream=zip.CreateEntry("xl/workbook.xml").Open())
+            {
+                var xml=Encoding.UTF8.GetBytes("""
+                    <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                      <sheets><sheet name="ورقة أولى" sheetId="1"/><sheet name="ورقة ثانية" sheetId="2"/></sheets>
+                    </workbook>
+                    """);
+                stream.Write(xml);
+            }
+            using(var stream=zip.CreateEntry("xl/worksheets/sheet2.xml").Open())
+            {
+                var xml=Encoding.UTF8.GetBytes("""
+                    <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+                    <sheetData>
+                      <row r="1"><c r="A1" t="inlineStr"><is><t>الاسم الثلاثي</t></is></c>
+                      <c r="B1" t="inlineStr"><is><t>رقم الموظف</t></is></c></row>
+                      <row r="2"><c r="A2" t="inlineStr"><is><t>فرد ورقة ثانية</t></is></c>
+                      <c r="B2" t="inlineStr"><is><t>00802</t></is></c></row>
+                      <row r="3"><c r="A3" t="inlineStr"><is><t>صف مرفوض محفوظ</t></is></c>
+                      <c r="B3" t="inlineStr"><is><t>خطأ</t></is></c></row>
+                    </sheetData></worksheet>
+                    """);
+                stream.Write(xml);
+            }
+        }
+        return memory.ToArray();
+    }
+
     private static JsonObject FilePayload(byte[] workbook) => new()
     {
         ["fileName"]="كشف_القوة.xlsx", ["base64"]=Convert.ToBase64String(workbook)
@@ -173,6 +210,35 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
         var byOwner=await Service.CommitAsync(new JsonObject{["previewToken"]=token},Owner,"owner",CancellationToken.None);
         Assert.True(byOwner.Success,byOwner.UserMessage);
+    }
+
+    [Fact]
+    public async Task MultipleSheets_CustomHeaderMapping_RejectsOnlyInvalidRow_WithWorksheetEvidence()
+    {
+        var selected=await Service.SelectAsync(new JsonObject{
+            ["fileName"]="قائمة-متعددة.xlsx",["base64"]=Convert.ToBase64String(MultiSheetWorkbook()),
+            ["sheetIndexes"]=new JsonArray(1,2),["nameHeading"]="الاسم الثلاثي",
+            ["numberHeading"]="رقم الموظف"
+        },Owner,CancellationToken.None);
+        Assert.True(selected.Success,selected.UserMessage);
+        var staged=Assert.IsType<JsonObject>(selected.Data);
+        Assert.Equal(2,Assert.IsType<JsonArray>(staged["selectedWorksheets"]).Count);
+        string token=staged["workbookToken"]!.GetValue<string>();
+        var preview=await Service.PreviewAsync(new JsonObject{
+            ["workbookToken"]=token},Owner,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var plan=Assert.IsType<JsonObject>(preview.Data);
+        Assert.Equal(2,plan["newCount"]!.GetValue<int>());
+        Assert.Equal(1,plan["issueCount"]!.GetValue<int>());
+        var issues=Assert.IsType<JsonArray>(plan["issues"]);
+        Assert.Equal("ورقة ثانية",issues[0]!["worksheet"]!.GetValue<string>());
+        var saved=await Service.CommitAsync(new JsonObject{
+            ["previewToken"]=plan["previewToken"]!.GetValue<string>()
+        },Owner,"owner",CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        Assert.Equal("2",Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM ImportIssues"));
+        Assert.Equal("ورقة ثانية",Scalar("SELECT WorksheetName FROM ImportIssues LIMIT 1"));
     }
 
     [Fact]
