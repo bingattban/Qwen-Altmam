@@ -4,7 +4,7 @@
 (function () {
   const sections = new Set(["dashboard", "monthly", "admin", "settings"]);
   const STATE = { session: null, siteId: "", statusId: "", dayTerm: "", date: "", dayPage: 1,
-    monthPage: 1, monthTerm: "", chosenYear: null, chosenMonth: null, archivePeriods: [] };
+    monthPage: 1, monthPageSize: 100, monthTerm: "", chosenYear: null, chosenMonth: null, archivePeriods: [] };
   const ar = new Intl.DateTimeFormat("ar", { month: "long" });
   const weekday = new Intl.DateTimeFormat("ar", { weekday: "short" });
   const DAILY_PAGE_SIZE=100;
@@ -80,11 +80,28 @@
     wrap.appendChild(table);
     return { wrap, body: table.tBodies[0] };
   }
-  function pager(root, page, total, pageSize, onPage) {
+  function pager(root, page, total, pageSize, onPage, onPageSize) {
     const bar = el("div", "functional-pager");
-    append(bar, el("span", "", "عدد الأفراد: " + total + " — صفحة " + page));
+    const pageCount=Math.max(1,Math.ceil(total/pageSize));
+    append(bar, el("span", "", "عدد الأفراد: " + total + " — صفحة " + page + " من " + pageCount));
+    if(typeof onPageSize==="function"){
+      const label=el("label", "monthly-page-size");
+      label.appendChild(el("span", "", "حجم الصفحة"));
+      const sizeSelect=el("select", "form-select");
+      sizeSelect.setAttribute("aria-label", "عدد الأفراد في الصفحة");
+      for(const value of [25,50,100]){
+        const opt=el("option", "", String(value));opt.value=String(value);
+        sizeSelect.appendChild(opt);
+      }
+      sizeSelect.value=String(pageSize);
+      sizeSelect.addEventListener("change",()=>{
+        const size=Number(sizeSelect.value);
+        if([25,50,100].includes(size)&&size!==pageSize)onPageSize(size);
+      });
+      label.appendChild(sizeSelect);bar.appendChild(label);
+    }
     const prev = button("السابق", ()=>onPage(page-1)); prev.disabled=page<=1;
-    const next = button("التالي", ()=>onPage(page+1)); next.disabled=page*pageSize>=total;
+    const next = button("التالي", ()=>onPage(page+1)); next.disabled=page>=pageCount;
     append(bar, prev, next);
     root.classList.add("functional-paged-area");
     root.appendChild(bar);
@@ -832,7 +849,7 @@
       const [gridReply,forceReply]=await Promise.all([
         bridge().invoke("QueryMonthlyGrid",{
           year,month,siteId:STATE.siteId,term:STATE.monthTerm,
-          page:STATE.monthPage,pageSize:100,archiveMode:isArchive
+          page:STATE.monthPage,pageSize:STATE.monthPageSize,archiveMode:isArchive
         }),
         liveCurrent
           ? bridge().invoke("GetDashboardSummary",{
@@ -898,7 +915,7 @@
         window.requestAnimationFrame(revealCurrentDay);
       for(const [index,person] of (grid.items||[]).entries()){
         const tr=el("tr");
-        [(STATE.monthPage-1)*100+index+1,person.serviceNumberA,person.name,person.siteName]
+        [(STATE.monthPage-1)*STATE.monthPageSize+index+1,person.serviceNumberA,person.name,person.siteName]
           .forEach((v,j)=>{
             const td=el("td","pinned fixed-"+["one","two","three","four"][j],v);
             td.title=String(v??"");
@@ -935,7 +952,9 @@
       if(!(grid.items||[]).length)tableHost.replaceChildren(message(
         STATE.monthTerm?"لا يوجد فرد مطابق للبحث في هذا الشهر والموقع":
           period!==current?"لا يوجد أرشيف لهذا الشهر":"لا توجد سجلات لهذا الشهر"));
-      else pager(tableHost,STATE.monthPage,grid.total||0,100,p=>{STATE.monthPage=p;renderMonthly();});
+      else pager(tableHost,STATE.monthPage,grid.total||0,STATE.monthPageSize,
+        p=>{STATE.monthPage=p;renderMonthly();},
+        size=>{STATE.monthPageSize=size;STATE.monthPage=1;renderMonthly();});
     } catch(e) { if(STATE.monthEpoch===epoch)showError(feedback,e); }
   }
 
