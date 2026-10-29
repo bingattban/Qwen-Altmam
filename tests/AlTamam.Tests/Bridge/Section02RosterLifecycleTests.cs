@@ -110,6 +110,58 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
         Assert.Equal(2,Number("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_ARCHIVE';"));
     }
 
+
+    [Fact]
+    public async Task ArchivedBatch_LostResponseRetry_ReplaysSameResultWithoutFurtherChanges()
+    {
+        var service=new PersonRosterService(_db);
+        var preview=await service.PreviewArchivePersonsAsync(Selected(),Actor,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var intent=Commit((JsonObject)preview.Data!, (JsonArray)Selected()["personIds"]!);
+        intent["operationId"]="section02-archive-batch-replay-one";
+        var first=await service.ArchivePersonsAsync(Actor,"test-admin",intent,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var again=await service.ArchivePersonsAsync(Actor,"test-admin",
+            (JsonObject)intent.DeepClone(),CancellationToken.None);
+        Assert.True(again.Success,again.UserMessage);
+        Assert.Equal(((JsonObject)first.Data!).ToJsonString(),
+            ((JsonObject)again.Data!).ToJsonString());
+        Assert.Equal(2L,Number("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_ARCHIVE'"));
+        Assert.Equal(1L,Number("SELECT COUNT(*) FROM MutationReceipts"));
+        Assert.Equal(2L,Number("SELECT COUNT(*) FROM Persons WHERE OrganizationalStatus=4"));
+        var changed=(JsonObject)intent.DeepClone();
+        changed["reason"]="نص مختلف لا يجوز تكراره";
+        Assert.False((await service.ArchivePersonsAsync(Actor,"test-admin",
+            changed,CancellationToken.None)).Success);
+    }
+
+    [Fact]
+    public async Task RestoreArchived_LostResponseRetry_DoesNotMakeSecondAssignment()
+    {
+        Execute("""
+            UPDATE Persons SET OrganizationalStatus=4,ActiveFlag=0,RowVersion=2
+              WHERE PersonId='TST-LIFE-P1';
+            UPDATE PersonAssignments SET ValidToLocalDate='2026-02-01'
+              WHERE PersonId='TST-LIFE-P1';
+            """);
+        var service=new PersonRosterService(_db);
+        var intent=new JsonObject{
+            ["personId"]="TST-LIFE-P1",["effectiveLocalDate"]=Day,
+            ["expectedRevision"]=2L,["reason"]="عودة مثبتة",
+            ["operationId"]="section02-restore-roster-replay-one"
+        };
+        var first=await service.RestoreArchivedPersonAsync(Actor,"test-admin",intent,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var repeated=await service.RestoreArchivedPersonAsync(Actor,"test-admin",
+            (JsonObject)intent.DeepClone(),CancellationToken.None);
+        Assert.True(repeated.Success,repeated.UserMessage);
+        Assert.Equal(((JsonObject)first.Data!).ToJsonString(),
+            ((JsonObject)repeated.Data!).ToJsonString());
+        Assert.Equal(2L,Number("SELECT COUNT(*) FROM PersonAssignments WHERE PersonId='TST-LIFE-P1'"));
+        Assert.Equal(1L,Number("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_RESTORE'"));
+        Assert.Equal(1L,Number("SELECT COUNT(*) FROM MutationReceipts"));
+    }
+
     [Fact]
     public async Task ArchiveLinkedSupervisor_RevokesSessionsWithoutRestoringAccessWhenPersonReturns()
     {
