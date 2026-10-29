@@ -310,7 +310,7 @@ public sealed class PersonnelExcelExportService
                     sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
                         "siteName","reason","date","committedAtUtc","actorUserId")).ToArray());
                 else
-                    sheet.Add(Record(row,"serviceNumberA","name",
+                    sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
                         "type","sourceSite","destination","date","committedAtUtc")).ToArray());
             }
             if(!data["hasNext"]!.GetValue<bool>())break;
