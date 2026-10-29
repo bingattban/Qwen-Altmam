@@ -115,6 +115,67 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task AccountRoleDowngrade_ImmediatelyInvalidatesOldAdminSession_AndCannotExtendDeadline()
+    {
+        // A stale UserSessions.Role must never override the CURRENT stored role.
+        // The normal account editor cannot change roles, but SQLCipher writes and
+        // future migrations must not leave an old Admin nonce with Admin authority.
+        using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
+                    NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
+                    OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('TST-ROLE-PERSON','مسؤول صلاحيات','مسؤول صلاحيات','970099','970099',
+                    '2026-10-20','2026-10-20T00:00:00Z',1,1,1);
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        const string password="Abc123!secure";
+        var create=await new UserAccountManagementService(_db,_time).CreateAsync(new JsonObject
+        {
+            ["username"]="downgraded-admin",["password"]=password,
+            ["passwordConfirmation"]=password,["personId"]="TST-ROLE-PERSON",
+            ["role"]="OrdinaryAdministration"
+        },_actor,default);
+        Assert.True(create.Success,create.UserMessage);
+        await _services.RevokeSessionAsync(_actor.SessionNonce);
+        var (admin,error)=await _services.AuthenticateAsync("downgraded-admin",password,default);
+        Assert.Null(error);
+        Assert.NotNull(admin);
+        Assert.Equal(UserRole.OrdinaryAdministration,admin!.Role);
+
+        string expiryBefore;
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT ExpiresAtUtc FROM UserSessions WHERE SessionNonce=$nonce;";
+            q.Parameters.AddWithValue("$nonce",admin.SessionNonce);
+            expiryBefore=Assert.IsType<string>(await q.ExecuteScalarAsync());
+            q.CommandText="""
+                UPDATE Users SET Role=3,RowVersion=RowVersion+1
+                WHERE Username='downgraded-admin';
+                """;
+            await q.ExecuteNonQueryAsync();
+        }
+
+        Assert.Null(await _services.ResolveSessionAsync(admin.SessionNonce));
+        _time.Forward(TimeSpan.FromSeconds(299));
+        await _services.RefreshSessionIdleDeadlineAsync(admin.SessionNonce);
+        await _services.RefreshActiveSessionFromNativeInputAsync();
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT ExpiresAtUtc FROM UserSessions WHERE SessionNonce=$nonce;";
+            q.Parameters.AddWithValue("$nonce",admin.SessionNonce);
+            Assert.Equal(expiryBefore,Assert.IsType<string>(await q.ExecuteScalarAsync()));
+        }
+        _time.Forward(TimeSpan.FromSeconds(1));
+        Assert.Null(await _services.ResolveSessionAsync(admin.SessionNonce));
+    }
+
+    [Fact]
     public void SubsequentPasswordsAcceptExactEightCharacterMinimumWithArgon2id()
     {
         Assert.True(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc123!z").IsValid);
