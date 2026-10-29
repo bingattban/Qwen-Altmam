@@ -16,7 +16,7 @@
   const sections = [
     {key:"force",title:"إدارة القوة",children:[
       ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
-      ["separation","الفصل"],["personReport","التقرير"],
+      ["separation","الفصل"],["separatedArchive","الأرشيف"],["personReport","التقرير"],
       ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]]},
     {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
@@ -84,14 +84,13 @@
       ["archiveExternal","أرشيف النقل الخارجي"]
     ],
     separation: [
-      ["separatePerson","فصل فرد"],
-      ["separatedArchive","أرشيف الفصل"]
+      ["separatePerson","فصل فرد"]
     ]
   });
   const nestedParents = Object.freeze({
     transferInternal:"transfers",transferExternal:"transfers",
     archiveInternal:"transfers",archiveExternal:"transfers",
-    separatedArchive:"separation",separatePerson:"separation"
+    separatePerson:"separation"
   });
   function parentOf(screen) {
     return sections.find(section => section.children.some(child => child[0] === screen));
@@ -191,7 +190,9 @@
       return window.AltamamMovements.render(page,screen);
     }
     if(["separatePerson","separatedArchive"].includes(screen) && window.AltamamSeparation){
-      const page=start("الإدارة / إدارة القوة / الفصل");
+      const page=start(screen==="separatedArchive"
+        ?"الإدارة / إدارة القوة / الأرشيف"
+        :"الإدارة / إدارة القوة / الفصل");
       return window.AltamamSeparation.render(page,screen);
     }
     if(screen==="personReport" && window.AltamamReports)
