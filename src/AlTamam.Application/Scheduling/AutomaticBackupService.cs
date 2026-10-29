@@ -33,7 +33,7 @@ public sealed class AutomaticBackupService
             SELECT SettingKey,SettingValue FROM AppSettings
             WHERE SettingKey IN ('AutoBackupEnabled','AutoBackupTimeLocal');
             """;
-        bool enabled=false;
+        bool? enabled=null;
         string time="16:00";
         using var reader=await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while(await reader.ReadAsync(ct).ConfigureAwait(false))
@@ -43,7 +43,15 @@ public sealed class AutomaticBackupService
             else if(reader.GetString(0)=="AutoBackupTimeLocal")
                 time=reader.GetString(1);
         }
-        return (enabled,time);
+        // The owner approved automatic activation whenever the first-choice
+        // E: directory is already usable. An explicit saved pause remains honored
+        // until the operator selects a folder or explicitly re-enables the job.
+        if(enabled is null)
+        {
+            string folder=await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
+            enabled=OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath);
+        }
+        return (enabled.Value,time);
     }
 
     public async Task<string?> LastSuccessfulDateAsync(CancellationToken ct=default)

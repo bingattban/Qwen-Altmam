@@ -1352,7 +1352,7 @@
       op=field("نوع العملية (رمز)"),startDate=field("من تاريخ","","date"),
       endDate=field("إلى تاريخ","","date"),controls=node("div","functional-toolbar"),
       results=node("div","admin-note");
-    const canEditAudit=["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role);
+    const canEditAudit=state.session?.role==="GeneralAdministration";
     let openDetail=null;
     const search=btn("بحث",()=>{state.page=1;load();},"btn btn-primary");
     general.input.addEventListener("keydown",event=>{
@@ -1634,34 +1634,53 @@
           scheduledLabel.append(node("span","","وقت التحضير التلقائي"),scheduledTime);
           const lockLabel=node("label","admin-input");
           lockLabel.append(node("span","","وقت قفل التحضير اليومي"),lockTime);
-          // Retry a lost reply with the same operationId; new values are a new intent.
-          let attendanceIntent=null;
+          // Independent writes: a rejected setting never rolls back the other
+          // successful settings. Failed changes keep the same retry operation ID.
+          let approved={
+            defaultStatusId:policy.defaultStatusId||"",
+            dueTimeLocal:policy.dueTimeLocal||"08:00",
+            dailyLockTimeLocal:policy.dailyLockTimeLocal||"20:00"
+          };
+          const intentions=new Map();
           const saveTimes=btn("حفظ إعدادات التحضير التلقائي",async()=>{
-            if(!picker.value)return errors(feedback,new Error("اختر حالة افتراضية نشطة أولاً."));
-            if(!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(scheduledTime.value)||
-               !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(lockTime.value))
-              return errors(feedback,new Error("حدد وقتين صحيحين بصيغة HH:mm."));
-            if(!await dialogs.confirm("اعتماد الحالة الافتراضية وأوقات التحضير والقفل معاً؟"))return;
-            const requested={
-              defaultStatusId:picker.value,
-              dueTimeLocal:scheduledTime.value,
-              dailyLockTimeLocal:lockTime.value
-            };
-            const signature=JSON.stringify(requested);
-            if(attendanceIntent?.signature!==signature)
-              attendanceIntent={signature,operationId:makeOperationId()};
+            if(!await dialogs.confirm(
+              "سيُحفظ كل إعداد على حدة؛ لن يتوقف حفظ الخيارات الأخرى إذا تعذّر حفظ أحدها. متابعة؟"
+            ))return;
+            const entries=[
+              {key:"dueTimeLocal",label:"وقت التحضير التلقائي",action:"SetAttendanceSchedule",
+                value:scheduledTime.value},
+              {key:"dailyLockTimeLocal",label:"وقت القفل اليومي",action:"SetAttendanceSchedule",
+                value:lockTime.value},
+              {key:"defaultStatusId",label:"الحالة الافتراضية",action:"SetAutoAttendanceDefaultStatus",
+                value:picker.value}
+            ];
+            const failures=[];
             saveTimes.disabled=true;
             try{
-              const result=await api().invoke("SetAttendanceSchedule",{
-                ...requested,operationId:attendanceIntent.operationId
-              });
-              attendanceIntent=null;
+              for(const entry of entries){
+                if(entry.value===approved[entry.key])continue;
+                const signature=entry.key+":"+entry.value;
+                if(intentions.get(entry.key)?.signature!==signature)
+                  intentions.set(entry.key,{signature,operationId:makeOperationId()});
+                const intent=intentions.get(entry.key);
+                const payload=entry.key==="defaultStatusId"
+                  ?{statusId:entry.value,operationId:intent.operationId}
+                  :{[entry.key]:entry.value,operationId:intent.operationId};
+                try{
+                  const result=await api().invoke(entry.action,payload);
+                  if(token!==currentRequest)return;
+                  if(!result?.data)throw Error("لم يؤكد الخادم الحفظ.");
+                  approved[entry.key]=entry.value;
+                  intentions.delete(entry.key);
+                }catch(e){
+                  failures.push(entry.label+": "+(e?.message||"تعذر حفظ الإعداد."));
+                }
+              }
               if(token!==currentRequest)return;
-              feedback.replaceChildren(node("p","settings-success",
-                "تم حفظ الحالة الافتراضية وأوقات التحضير والقفل: "+
-                result.data.dueTimeLocal+" / "+result.data.dailyLockTimeLocal));
-            }catch(e){if(token===currentRequest)errors(feedback,e);}
-            finally{saveTimes.disabled=false;}
+              feedback.replaceChildren();
+              if(failures.length)
+                feedback.appendChild(warning("تعذر حفظ: "+failures.join("؛ ")));
+            }finally{saveTimes.disabled=false;}
           },"btn btn-primary settings-action");
           const timesRow=node("div","settings-attendance-fields");
           timesRow.append(scheduledLabel,lockLabel);

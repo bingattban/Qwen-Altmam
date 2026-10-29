@@ -130,6 +130,56 @@ public sealed class AutoAttendancePolicyService
             return BridgeHelpers.Ok(data);
         },ct).ConfigureAwait(false);
     }
+    // Each clock is a distinct idempotent, audited SQLCipher transaction.
+    // The settings screen deliberately calls these separately so one failed
+    // validation cannot roll back an unrelated successful setting change.
+    private async Task<BridgeResponse> SetSingleClockAsync(string key,string value,
+        JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
+    {
+        if(!IsValidClock(value))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "وقت التحضير أو القفل غير صالح؛ استخدم الصيغة HH:mm.");
+        return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
+        {
+            var (replay,receipt)=await MutationIdempotency.StartAsync(
+                c,t,"SetAttendanceSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
+            if(replay is not null)return replay;
+            using var prior=c.CreateCommand();
+            prior.Transaction=t;
+            prior.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
+            prior.Parameters.AddWithValue("$key",key);
+            string old=(await prior.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString()
+                ??(key==DueTimeKey?DefaultDueTime:DefaultLockTime);
+            if(old!=value)
+            {
+                using var change=c.CreateCommand();
+                change.Transaction=t;
+                change.CommandText="""
+                    INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                    VALUES($key,$value,$at)
+                    ON CONFLICT(SettingKey) DO UPDATE SET
+                      SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                    """;
+                change.Parameters.AddWithValue("$key",key);
+                change.Parameters.AddWithValue("$value",value);
+                change.Parameters.AddWithValue("$at",_time.GetUtcNow().ToString("O"));
+                await change.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                await BridgeAuditWriter.WriteAsync(c,t,_time,
+                    "ATTENDANCE_CLOCK_SET","تعديل وقت التحضير أو قفل اليوم",
+                    actor.UserId,actor.Username,null,"AppSetting",key,
+                    key==DueTimeKey?"وقت التحضير التلقائي":"وقت قفل التحضير",
+                    new JsonObject{["value"]=old}.ToJsonString(),
+                    new JsonObject{["value"]=value}.ToJsonString(),
+                    "تعديل مستقل لساعة إعدادات التحضير",null,
+                    _time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
+                    .ConfigureAwait(false);
+            }
+            var result=new JsonObject{["settingKey"]=key,["value"]=value};
+            await MutationIdempotency.StoreAsync(c,t,receipt,result,_time,ct).ConfigureAwait(false);
+            return BridgeHelpers.Ok(result);
+        },ct).ConfigureAwait(false);
+    }
+
     /// <summary>Persist both independently selected local times with audit and idempotency.</summary>
     public async Task<BridgeResponse> SetScheduleAsync(JsonObject? payload,
         BridgePrincipal actor, CancellationToken ct)
@@ -137,6 +187,18 @@ public sealed class AutoAttendancePolicyService
         if(actor.Role is not (UserRole.GeneralAdministration or UserRole.OrdinaryAdministration))
             return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
                 "تغيير أوقات التحضير متاح للإدارة فقط.");
+        bool hasDue=payload?.ContainsKey("dueTimeLocal")==true;
+        bool hasLock=payload?.ContainsKey("dailyLockTimeLocal")==true;
+        // Independent single-clock updates are the canonical settings UI.
+        // Legacy two-clock callers retain their established behavior.
+        if(hasDue!=hasLock && payload?.ContainsKey("defaultStatusId")!=true)
+        {
+            string? selected;
+            try {selected=payload?[hasDue?"dueTimeLocal":"dailyLockTimeLocal"]?.GetValue<string>()?.Trim();}
+            catch {selected=null;}
+            return await SetSingleClockAsync(hasDue?DueTimeKey:LockTimeKey,
+                selected??"",payload,actor,ct).ConfigureAwait(false);
+        }
         string due,locked;
         try
         {

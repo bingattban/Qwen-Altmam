@@ -210,6 +210,36 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
     }
 
     [Fact]
+    public async Task IndependentAttendanceControls_KeepTwoSuccessfulWrites_WhenDefaultSelectionFails()
+    {
+        var policy=new AutoAttendancePolicyService(_db);
+        var due=new JsonObject{["dueTimeLocal"]="06:40",
+            ["operationId"]="CLOCK-DUE-INDEPENDENT-001"};
+        var lockTime=new JsonObject{["dailyLockTimeLocal"]="21:15",
+            ["operationId"]="CLOCK-LOCK-INDEPENDENT-001"};
+        var first=await policy.SetScheduleAsync(due,Admin,default);
+        Assert.True(first.Success,first.UserMessage);
+        var rejected=await policy.SetAsync(new JsonObject{
+            ["statusId"]="STS-NOT-EXISTING",
+            ["operationId"]="CLOCK-DEFAULT-INVALID-001"
+        },Admin,default);
+        Assert.False(rejected.Success);
+        var second=await policy.SetScheduleAsync(lockTime,Admin,default);
+        Assert.True(second.Success,second.UserMessage);
+        Assert.True((await policy.SetScheduleAsync((JsonObject)due.DeepClone(),Admin,default)).Success);
+        var stored=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
+        Assert.Equal("06:40",stored["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("21:15",stored["dailyLockTimeLocal"]!.GetValue<string>());
+        Assert.False(stored["configured"]!.GetValue<bool>());
+        Assert.Equal(2L,Count("AuditEvents"));
+        Assert.Equal(2L,Count("MutationReceipts"));
+        var approved=await policy.SetAsync(Selection("STS-PERMISSION",
+            "CLOCK-DEFAULT-APPROVED-001"),Admin,default);
+        Assert.True(approved.Success,approved.UserMessage);
+        Assert.Equal(3L,Count("AuditEvents"));
+    }
+
+    [Fact]
     public async Task MissingYesterday_RequiresAdministratorSettingThenRunsOnceWithoutOverwritingManual()
     {
         using(var c=_db.CreateOpenConnection())

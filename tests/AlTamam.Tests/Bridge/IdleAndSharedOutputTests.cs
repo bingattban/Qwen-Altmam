@@ -298,6 +298,31 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
 
 
     [Fact]
+    public async Task ChosenWritableFolderAutoEnablesBackups_AndHonorsAnExplicitPauseUntilReselection()
+    {
+        var backups=new AutomaticBackupService(_db,_time);
+        var path=new OutputDirectorySettings(_db);
+        Assert.Equal(OutputDirectorySettings.IsUsableDirectory(
+            OutputDirectorySettings.DefaultDirectory,_dbPath),
+            (await backups.ReadSettingsAsync()).Enabled);
+        Assert.True((await path.SaveAsync(_output,_actor,default)).Success);
+        var enabled=await backups.ReadSettingsAsync();
+        Assert.True(enabled.Enabled);
+        Assert.Equal("16:00",enabled.Time);
+        var pause=await backups.ConfigureAsync(new JsonObject{
+            ["enabled"]=false,["backupTime"]="16:00"
+        },_actor,default);
+        Assert.True(pause.Success,pause.UserMessage);
+        Assert.False((await backups.ReadSettingsAsync()).Enabled);
+        Assert.True((await path.SaveAsync(_output,_actor,default)).Success);
+        Assert.True((await backups.ReadSettingsAsync()).Enabled);
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='AUTO_BACKUP_AUTO_ENABLED';";
+        Assert.Equal(2L,Convert.ToInt64(await q.ExecuteScalarAsync()));
+    }
+
+    [Fact]
     public async Task AutomaticBackup_OnlyAfterDue_ExactlyOncePerDate_EncryptedAndAudited()
     {
         var outputSettings=new OutputDirectorySettings(_db);

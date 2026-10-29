@@ -150,16 +150,20 @@ public sealed class Section02EvidenceAndReportsTests : IAsyncLifetime, IDisposab
         var collision=await svc.UpdateAuditPresentationAsync(altered,General,CancellationToken.None);
         Assert.False(collision.Success);
         Assert.False((await svc.UpdateAuditPresentationAsync(originalEdit,Supervisor,CancellationToken.None)).Success);
+        Assert.False((await svc.UpdateAuditPresentationAsync(new JsonObject{
+            ["auditEventId"]=id,["expectedOverlayVersion"]=1,
+            ["reason"]="غير مصرح",["correctedDescription"]="غير مصرح"
+        },Ordinary,CancellationToken.None)).Success);
 
         var hide=new JsonObject
         {
             ["auditEventId"]=id,["expectedOverlayVersion"]=1,
             ["reason"]="إخفاء ظاهر بعد المراجعة",["operationId"]="audit-hide-retry-20261025"
         };
-        var hideFirst=await svc.DeleteAuditPresentationAsync(hide,Ordinary,CancellationToken.None);
+        var hideFirst=await svc.DeleteAuditPresentationAsync(hide,General,CancellationToken.None);
         Assert.True(hideFirst.Success,hideFirst.UserMessage);
         Assert.True((await svc.DeleteAuditPresentationAsync(
-            (JsonObject)hide.DeepClone(),Ordinary,CancellationToken.None)).Success);
+            (JsonObject)hide.DeepClone(),General,CancellationToken.None)).Success);
         Assert.Equal("2",Scalar("SELECT COUNT(*) FROM AuditLogPresentationEdits;"));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='DeleteAuditPresentation';"));
         Assert.Equal("2",Scalar("SELECT COUNT(*) FROM MutationReceipts;"));
@@ -249,9 +253,13 @@ public sealed class Section02EvidenceAndReportsTests : IAsyncLifetime, IDisposab
             ["auditEventId"] = id, ["expectedOverlayVersion"] = 0, ["reason"] = "طلب إخفاء قديم"
         }, Ordinary, CancellationToken.None);
         Assert.False(stale.Success);
+        var forbiddenHide = await svc.DeleteAuditPresentationAsync(new JsonObject {
+            ["auditEventId"] = id, ["expectedOverlayVersion"] = 1, ["reason"] = "طلب الإدارة العادية"
+        }, Ordinary, CancellationToken.None);
+        Assert.False(forbiddenHide.Success);
         var hide = await svc.DeleteAuditPresentationAsync(new JsonObject {
             ["auditEventId"] = id, ["expectedOverlayVersion"] = 1, ["reason"] = "سبب الإخفاء"
-        }, Ordinary, CancellationToken.None);
+        }, General, CancellationToken.None);
         Assert.True(hide.Success, hide.UserMessage);
         Assert.Equal("الوصف الأصلي", Scalar("SELECT DefaultArabicDescription FROM AuditEvents WHERE OperationCode='TEST_EVIDENCE';"));
         Assert.Equal("2", Scalar("SELECT COUNT(*) FROM AuditLogPresentationEdits WHERE AuditEventId=(SELECT AuditEventId FROM AuditEvents WHERE OperationCode='TEST_EVIDENCE');"));
