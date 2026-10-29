@@ -45,65 +45,67 @@ public sealed class BridgeSharedServices
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) == 1;
     }
 
-    /// <summary>Creates the very first administrator account. Refuses to run once provisioning exists.</summary>
-    public async Task<BridgeResponse> ProvisionFirstAdministratorAsync(string username, string password, CancellationToken ct, string? founderFullName = null)
+    private static BridgeResponse? ValidateFoundingCredentials(
+        string username, string password, string? founderFullName)
     {
-        username = username.Trim();
-        if (username.Length is < 3 or > 64 || username.Any(char.IsWhiteSpace))
+        if (string.IsNullOrWhiteSpace(username) || username.Length is < 3 or > 64
+            || username.Any(char.IsWhiteSpace))
             return Error(BridgeErrorCodes.ValidationError, "اسم المستخدم من 3 إلى 64 حرفاً بلا مسافات.");
-        // Owner-approved founding-account bootstrap is intentionally stricter
-        // than 03.09's eight-character minimum for subsequent roster users.
-        if(password.Length<10)
+        if (password is null || password.Length < 10)
             return Error(BridgeErrorCodes.ValidationError,
                 "كلمة مرور حساب الإدارة العامة المؤسس لا تقل عن 10 خانات.");
         var strength = PasswordPolicyValidator.Validate(password);
         if (!strength.IsValid)
-            return Error(BridgeErrorCodes.ValidationError, strength.ArabicErrorMessage ?? "كلمة المرور غير قوية.");
+            return Error(BridgeErrorCodes.ValidationError,
+                strength.ArabicErrorMessage ?? "كلمة المرور غير قوية.");
         if (founderFullName is not null && founderFullName.Trim().Length > 200)
             return Error(BridgeErrorCodes.ValidationError, "الاسم الكامل لصاحب حساب التأسيس طويل للغاية.");
+        return null;
+    }
+
+    /// <summary>Creates the one user-chosen founding administrator, once per database.</summary>
+    public async Task<BridgeResponse> ProvisionFirstAdministratorAsync(
+        string username, string password, CancellationToken ct, string? founderFullName = null)
+    {
+        username = username?.Trim() ?? "";
+        var invalid = ValidateFoundingCredentials(username, password, founderFullName);
+        if (invalid is not null) return invalid;
         if (!await IsProvisionedAsync(ct).ConfigureAwait(false))
             return await CreateUserInternalAsync(username, password, UserRole.GeneralAdministration,
                 requiresSetup: false, ct, founderFullName).ConfigureAwait(false);
-        return Error(BridgeErrorCodes.ConflictStale, "تمت تهيئة البرنامج مسبقاً؛ لا يمكن إنشاء مدير أول آخر.");
+        return Error(BridgeErrorCodes.ConflictStale,
+            "تمت تهيئة البرنامج مسبقاً؛ لا يمكن إنشاء مدير أول آخر.");
     }
 
-    /// <summary>Inserts one local user with an Argon2id-hashed credential (never trusts a client-supplied role).</summary>
+    /// <summary>
+    /// Bootstrap ONLY: ordinary Admin/Supervisor accounts must be created through
+    /// UserAccountManagementService with a verified permanent active roster link.
+    /// Never expose a second way to create an unlinked or weak-credential user.
+    /// </summary>
     public async Task<BridgeResponse> CreateUserInternalAsync(
         string username, string password, UserRole role, bool requiresSetup, CancellationToken ct,
         string? founderFullName = null)
     {
-        // This helper belongs exclusively to the one-time founder ceremony.
-        // All subsequent Admin/Supervisor accounts MUST be created through
-        // UserAccountManagementService, which validates a REAL active PersonId,
-        // role permissions, expected versions and an immutable audit trail.
         if (role != UserRole.GeneralAdministration || requiresSetup)
             return Error(BridgeErrorCodes.Unauthorized,
-                "لا يمكن إنشاء حساب غير مؤسس دون ربطه بفرد نشط من كشف القوة.");
-        // Public C# callers must not bypass the founder password/username
-        // policy by skipping ProvisionFirstAdministratorAsync.
-        if (string.IsNullOrWhiteSpace(username) || username.Length is < 3 or > 64 ||
-            username.Any(char.IsWhiteSpace) || string.IsNullOrEmpty(password) ||
-            password.Length < 10 || !PasswordPolicyValidator.Validate(password).IsValid ||
-            founderFullName?.Trim().Length > 200)
-            return Error(BridgeErrorCodes.ValidationError,
-                "يجب إدخال بيانات تأسيس صالحة وكلمة مرور قوية؛ الاسم الكامل اختياري.");
+                "الحساب المؤسس فقط يُنشأ دون ارتباط بكشف القوة؛ استخدم إدارة المستخدمين للحسابات الأخرى.");
+        username = username?.Trim() ?? "";
+        var invalid = ValidateFoundingCredentials(username, password, founderFullName);
+        if (invalid is not null) return invalid;
         string normalized = NormalizeUsername(username);
         var (hash, salt) = PasswordSecurity.HashPassword(password);
         string userId = "USR-" + Guid.NewGuid().ToString("N");
         DateTimeOffset nowUtc = _time.GetUtcNow();
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
-            // The first administrator can only ever be created on a truly empty
-            // account table, checked inside the same serialized write transaction.
-            if (role == UserRole.GeneralAdministration)
-            {
-                using var initialized = connection.CreateCommand();
-                initialized.Transaction = tx;
-                initialized.CommandText = "SELECT EXISTS(SELECT 1 FROM Users);";
-                if (Convert.ToInt32(await initialized.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
-                    return Error(BridgeErrorCodes.ConflictStale,
-                        "تمت تهيئة البرنامج مسبقاً؛ لا يمكن إنشاء مدير عام آخر.");
-            }
+            // Verify one-time founding authority inside the SAME serialized write
+            // transaction. An existing disabled founder cannot be replaced.
+            using var initialized = connection.CreateCommand();
+            initialized.Transaction = tx;
+            initialized.CommandText = "SELECT EXISTS(SELECT 1 FROM Users);";
+            if (Convert.ToInt32(await initialized.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
+                return Error(BridgeErrorCodes.ConflictStale,
+                    "تمت تهيئة البرنامج مسبقاً؛ لا يمكن إنشاء مدير عام آخر.");
             using var dup = connection.CreateCommand();
             dup.Transaction = tx;
             dup.CommandText = "SELECT EXISTS(SELECT 1 FROM Users WHERE NormalizedUsername = $u);";
@@ -116,28 +118,26 @@ public sealed class BridgeSharedServices
                                 CredentialHash, PasswordSalt, RequiresFirstRunSetup, ActiveFlag, FailedLoginCount,
                                 CreatedByUserId, CreatedByDisplaySnapshot, CreatedAtUtc, RowVersion,
                                 FoundingFullName)
-                                VALUES ($id, NULL, $name, $norm, $role, $hash, $salt, $setup, 1, 0, 'USR-SYSTEM', 'النظام', $now, 1, $founder);";
+                                VALUES ($id, NULL, $name, $norm, $role, $hash, $salt, 0, 1, 0, 'USR-SYSTEM', 'النظام', $now, 1, $founder);";
             insert.Parameters.AddWithValue("$id", userId);
             insert.Parameters.AddWithValue("$name", username);
             insert.Parameters.AddWithValue("$norm", normalized);
             insert.Parameters.AddWithValue("$role", (int)role);
             insert.Parameters.AddWithValue("$hash", hash);
             insert.Parameters.AddWithValue("$salt", salt);
-            insert.Parameters.AddWithValue("$setup", requiresSetup ? 1 : 0);
             insert.Parameters.AddWithValue("$now", nowUtc.ToString("O"));
             insert.Parameters.AddWithValue("$founder",
-                role == UserRole.GeneralAdministration && !string.IsNullOrWhiteSpace(founderFullName)
-                    ? founderFullName.Trim() : DBNull.Value);
+                string.IsNullOrWhiteSpace(founderFullName) ? DBNull.Value : founderFullName.Trim());
             await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-            if (role == UserRole.GeneralAdministration && !requiresSetup)
-                await BridgeAuditWriter.WriteAsync(connection, tx, _time,
-                    "FOUNDING_ADMIN_CREATED", "إنشاء الإدارة العامة عند التهيئة الأولى",
-                    userId, username, null, "User", userId, username,
-                    null, new JsonObject { ["role"] = "GeneralAdministration" }.ToJsonString(),
-                    "تهيئة الحساب المؤسس محلياً دون بيانات دخول افتراضية أو رقم (ع) وهمي",
-                    null, _time.GetLocalNow().ToString("yyyy-MM-dd"),
-                    Guid.NewGuid().ToString("N"), ct).ConfigureAwait(false);
-            return Ok(new JsonObject { ["userId"] = userId, ["username"] = username, ["role"] = role.ToString() });
+            await BridgeAuditWriter.WriteAsync(connection, tx, _time,
+                "FOUNDING_ADMIN_CREATED", "إنشاء الإدارة العامة عند التهيئة الأولى",
+                userId, username, null, "User", userId, username,
+                null, new JsonObject { ["role"] = "GeneralAdministration" }.ToJsonString(),
+                "تهيئة الحساب المؤسس محلياً دون بيانات دخول افتراضية أو رقم (ع) وهمي",
+                null, _time.GetLocalNow().ToString("yyyy-MM-dd"),
+                Guid.NewGuid().ToString("N"), ct).ConfigureAwait(false);
+            return Ok(new JsonObject { ["userId"] = userId, ["username"] = username,
+                ["role"] = role.ToString() });
         }, ct).ConfigureAwait(false);
     }
 
