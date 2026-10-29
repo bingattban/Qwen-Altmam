@@ -99,11 +99,32 @@ public sealed class FullDataResetService
         long people=await Count(c,"Persons",ct).ConfigureAwait(false);
         long attendance=await Count(c,"AttendanceRecords",ct).ConfigureAwait(false);
         long backups=await Count(c,"BackupHistory",ct).ConfigureAwait(false);
+        long users=await Count(c,"Users",ct).ConfigureAwait(false);
+        long movements=await Count(c,"PersonnelMovements",ct).ConfigureAwait(false);
+        long assignments=await Count(c,"PersonAssignments",ct).ConfigureAwait(false);
+        long audit=await Count(c,"AuditEvents",ct).ConfigureAwait(false);
+        var listedBackups=new JsonArray();
+        using(var files=c.CreateCommand())
+        {
+            files.CommandText="SELECT BackupFilePath FROM BackupHistory WHERE VerificationPassed=1 ORDER BY CreatedAtUtc DESC LIMIT 30;";
+            using var reader=await files.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string file=Path.GetFileName(reader.GetString(0));
+                if(file.StartsWith("AlTamam-",StringComparison.Ordinal) &&
+                   file.EndsWith(".dbbackup",StringComparison.OrdinalIgnoreCase))
+                    listedBackups.Add(file);
+            }
+        }
         string token=BridgePreviewTokens.Issue(_db,_clock,Operation,actor.UserId,
             new {people,attendance,backups,revision},revision,ct);
         return BridgeHelpers.Ok(new JsonObject{
             ["previewToken"]=token,["expectedRevision"]=revision,
             ["people"]=people,["attendance"]=attendance,["backupEntries"]=backups,
+            ["users"]=users,["movements"]=movements,["assignments"]=assignments,
+            ["auditEvents"]=audit,["backupFileNames"]=listedBackups,
+            ["backupFileNamesTruncated"]=backups>30,
+            ["countdownSeconds"]=5,
             ["requiredConfirmation"]=Phrase,
             ["warning"]="سيُحذف جميع الأفراد والتحضير والحسابات والسجلات والعمليات نهائياً، وتعود شاشة التهيئة الأولى. العملية غير قابلة للتراجع."
         });
@@ -121,8 +142,17 @@ public sealed class FullDataResetService
         long expected;
         try {expected=payload?["expectedRevision"]?.GetValue<long>()??-1;}
         catch {return Refuse(BridgeErrorCodes.ValidationError,"إصدار المعاينة غير صحيح.");}
-        if(text!=Phrase || string.IsNullOrWhiteSpace(password) || token.Length!=64)
-            return Refuse(BridgeErrorCodes.ValidationError,"أدخل عبارة التأكيد الصحيحة وكلمة مرور الإدارة العامة.");
+        bool confirmRecords=false,confirmBackups=false;
+        try
+        {
+            confirmRecords=payload?["confirmDeleteLiveData"]?.GetValue<bool>()==true;
+            confirmBackups=payload?["confirmDeleteOwnedBackups"]?.GetValue<bool>()==true;
+        }
+        catch(InvalidOperationException){}
+        if(text!=Phrase || string.IsNullOrWhiteSpace(password) || token.Length!=64 ||
+           !confirmRecords || !confirmBackups)
+            return Refuse(BridgeErrorCodes.ValidationError,
+                "التصفير يتطلب كلمة المرور وعبارة التأكيد والموافقة الصريحة مرتين على حذف البيانات والنسخ المسجلة.");
 
         var backups=new List<BackupFile>();
         BridgeResponse result=await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
@@ -141,6 +171,23 @@ public sealed class FullDataResetService
             long actual=await Revision(c,t,ct).ConfigureAwait(false);
             if(actual!=expected)
                 return Refuse(BridgeErrorCodes.ConflictStale,"تغيرت البيانات بعد المعاينة؛ أعد المعاينة قبل التصفير.");
+            using(var issued=c.CreateCommand())
+            {
+                issued.Transaction=t;
+                issued.CommandText="""
+                    SELECT IssuedAtUtc FROM PreviewTokens
+                    WHERE Token=$token AND Operation=$operation AND ActorUserId=$actor
+                      AND ConsumedFlag=0;
+                    """;
+                issued.Parameters.AddWithValue("$token",token);
+                issued.Parameters.AddWithValue("$operation",Operation);
+                issued.Parameters.AddWithValue("$actor",actor.UserId);
+                string? issuedUtc=(await issued.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
+                if(!DateTimeOffset.TryParse(issuedUtc,out var start) ||
+                   _clock.GetUtcNow()-start<TimeSpan.FromSeconds(5))
+                    return Refuse(BridgeErrorCodes.ValidationError,
+                        "لم تنتهِ مهلة الخمس ثوانٍ اللازمة قبل تصفير البيانات.");
+            }
             long? consumption=await BridgePreviewTokens.ConsumeAsync(
                 _db,_clock,c,t,token,Operation,actor.UserId,expected,ct).ConfigureAwait(false);
             if(consumption!=expected)
