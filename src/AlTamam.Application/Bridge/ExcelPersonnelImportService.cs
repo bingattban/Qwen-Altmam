@@ -222,6 +222,9 @@ public sealed class ExcelPersonnelImportService
         string token = Read(payload, "previewToken");
         return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            var (replay, receipt) = await MutationIdempotency.StartAsync(
+                connection, tx, "CommitImport", actor, payload, ct).ConfigureAwait(false);
+            if (replay is not null) return replay;
             var plan = await ReadStagedAsync(token, PlanOperation, actor, connection, tx, ct).ConfigureAwait(false);
             if (plan is null) return Stale();
             var rows = Rows(plan);
@@ -366,10 +369,13 @@ public sealed class ExcelPersonnelImportService
                     ["rows"] = new JsonArray(rows.Select(r => (JsonNode?)JsonValue.Create(r.Number)).ToArray()) }.ToJsonString(),
                 $"إنشاء {rows.Count} سجل فرد جديد فقط دون تعديل أي تحضير أو هوية موجودة.",
                 "اعتماد كشف Excel بعد المعاينة", today, ct.CorrelationId(), ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(new JsonObject { ["createdCount"] = rows.Count,
+            var outcome = new JsonObject { ["createdCount"] = rows.Count,
                 ["committedAtUtc"] = now, ["importToken"] = token,
                 ["importBatchId"] = batchId, ["rejectedCount"] = plannedIssues.Count,
-                ["createdSitesCount"] = createdSites },
+                ["createdSitesCount"] = createdSites };
+            await MutationIdempotency.StoreAsync(connection, tx, receipt, outcome, _time, ct)
+                .ConfigureAwait(false);
+            return BridgeHelpers.Ok(outcome,
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonIdentityUpdated,
                     today, createdIds));
         }, ct).ConfigureAwait(false);
