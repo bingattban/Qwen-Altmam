@@ -7,6 +7,7 @@ class El{
  get tBodies(){return this.children.filter(x=>x.tag==="tbody");}
  append(...nodes){this.children.push(...nodes);}
  appendChild(node){this.children.push(node);return node;}
+ remove(){this.removed=true;}
  replaceChildren(...nodes){this.children=nodes;}
  addEventListener(name,fn){this.handlers[name]=fn;}
  setAttribute(key,value){this.attrs[key]=value;}
@@ -17,6 +18,7 @@ const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
  badge=new El("span"),events={},calls=[],nav={};
 for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]=new El("button");
 let transferCount=0,expandedRoster=false,approveReview=true;
+let discardApproved=false,discardPrompts=0;
 let autoPeople=[{personId:"P3",name:"P3",serviceNumberA:"12345",
   siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
   savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 08:00"}];
@@ -76,7 +78,8 @@ const document={createElement:tag=>new El(tag),
  addEventListener:(name,fn)=>{events[name]=fn;}};
 const reviews=[];
 const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
- AltamamDialog:{attendanceReview:async(data,opts)=>{reviews.push({data,opts});return approveReview;}}},
+ AltamamDialog:{attendanceReview:async(data,opts)=>{reviews.push({data,opts});return approveReview;},
+   confirm:async()=>{discardPrompts++;return discardApproved;}}},
  document,location:{hash:"#dashboard"},history:{replaceState:()=>{}},Date,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
  "../src/AlTamam.WebUI/assets/js/functional-screens.js"),"utf8"),context);
@@ -211,6 +214,33 @@ async function main(){
    "bulk approval issues exactly one atomic C# commit");
  assert.equal(counterAuto.textContent,"المحددون: 0 من 100",
    "selection resets only after successful confirmation");
+ // Pending selections on the automatic register require a separate, explicit
+ // discard confirmation; both refusal and approval must leave attendance saved
+ // only by the verified preview/commit path.
+ selectPage.handlers.click();await settle();
+ assert.equal(counterAuto.textContent,"المحددون: 2 من 100");
+ const clearPending=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="إلغاء التحديد");
+ const priorWrites=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await clearPending.handlers.click();await settle();
+ assert.equal(discardPrompts,1,"clearing a pending batch must ask for confirmation");
+ assert.equal(counterAuto.textContent,"المحددون: 2 من 100",
+   "declined discard must preserve both selected persons");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
+ discardApproved=true;
+ await clearPending.handlers.click();await settle();
+ assert.equal(counterAuto.textContent,"المحددون: 0 من 100",
+   "approved discard clears the selection without committing");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
+ selectPage.handlers.click();await settle();
+ const closeRegister=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق");
+ discardApproved=false;
+ await closeRegister.handlers.click();await settle();
+ assert.equal(readOnly.removed,undefined,"refusing close preserves the register");
+ assert.equal(counterAuto.textContent,"المحددون: 2 من 100");
+ discardApproved=true;
+ await closeRegister.handlers.click();await settle();
+ assert.equal(readOnly.removed,true,"approved close removes the register");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
  expandedRoster=true;
  counter("all").handlers.click();await settle();
  const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));
