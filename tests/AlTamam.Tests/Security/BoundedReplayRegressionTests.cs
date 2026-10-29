@@ -16,7 +16,7 @@ public sealed class BoundedReplayRegressionTests
     {
         ["requestId"] = id, ["protocolVersion"] = BridgeProtocol.ProtocolVersion,
         ["action"] = "SubmitAttendance", ["sessionNonce"] = nonce,
-        ["payload"] = new JsonObject()
+        ["payload"] = new JsonObject { ["operationId"]="section02-replay-" + id }
     }.ToJsonString();
 
     [Fact]
