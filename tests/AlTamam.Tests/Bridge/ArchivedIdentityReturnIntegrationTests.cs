@@ -112,6 +112,8 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         Assert.Equal("TST-RETURN-EXT",one["personId"]!.GetValue<string>());
         Assert.Equal("نقل خارجي",one["exitType"]!.GetValue<string>());
         Assert.Equal(ExitDay,one["exitDate"]!.GetValue<string>());
+        Assert.Equal("غير محدد",one["previousSiteName"]!.GetValue<string>());
+        Assert.NotEqual("موقع العودة",one["previousSiteName"]!.GetValue<string>());
         Assert.True(one["numberMatch"]!.GetValue<bool>());
         var payload=new JsonObject
         {
