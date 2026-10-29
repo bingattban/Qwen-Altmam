@@ -193,6 +193,10 @@ async function main(){
  assert.equal(dailyRows().length,100);
  assert.ok(viewport.className.includes("daily-dashboard"),"daily view activates flexible full-height layout");
  const css=fs.readFileSync(path.join(__dirname,"../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+ assert.match(css,/\.auto-revision-overlay\s*\{[^}]*position:fixed;inset:0;z-index:1300/s,
+   "the separate review must be a real overlay above the read-only register");
+ assert.match(css,/body:has\(\.auto-attendance-overlay\) #appModalBackdrop\.open\{z-index:1400\}/,
+   "the native verified confirmation remains above both local dialog layers");
  assert.match(css,/#appViewport\.daily-dashboard>\.daily-roster-panel\s*\{/,
    "daily roster must fill the available desktop viewport");
  assert.match(css,/#appViewport\.daily-dashboard>\.daily-roster-panel>\.functional-table-wrap\s*\{/,
