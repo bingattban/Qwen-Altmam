@@ -91,7 +91,7 @@ const bridge = {
       PreviewArchivedIdentity:body.serviceNumberA==="4141"
         ?{requiresResolution:true,previewToken:"T".repeat(64),
           candidates:[{personId:"TST-ARCHIVED-P1",name:"شخص تجريبي قديم",
-            serviceNumberA:"4141",exitDate:"2026-10-12",exitType:"نقل خارجي",numberMatch:true,nameMatch:false}]}
+            serviceNumberA:"4141",previousSiteName:"الموقع التاريخي",exitDate:"2026-10-12",exitType:"نقل خارجي",numberMatch:true,nameMatch:false}]}
         :{requiresResolution:true,previewToken:"U".repeat(64),
           candidates:[{personId:"TST-ARCHIVED-P2",name:"شخص جديد مكرر",
             serviceNumberA:"5151",exitDate:"2026-10-12",exitType:"فصل",numberMatch:false,nameMatch:true}]},
@@ -306,6 +306,8 @@ async function run() {
   assert.ok(buttonNamed("عاد نفس الفرد"),"archived identity list shows explicit return choice");
   assert.ok(visible().some(x=>x.textContent==="2026-10-12"),
     "candidate exit date is visible before identity decision");
+  assert.ok(visible().some(x=>x.textContent==="الموقع التاريخي"),
+    "identity decision must show the archived source-site snapshot");
   assert.equal(calls.filter(x=>x.name==="CreatePerson").length,0,
     "matching archived number must not silently create a new identity");
   await buttonNamed("عاد نفس الفرد").handlers.click();
