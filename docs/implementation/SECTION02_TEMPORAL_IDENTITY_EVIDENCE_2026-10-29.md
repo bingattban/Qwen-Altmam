@@ -1,3 +1,19 @@
+## Owner's explicit decision — mandatory operationId at the WebView2 mutation boundary
+
+**Decision dated 2026-10-29:** "نفذ القرار الاول بجعله الزام" — all 37 canonical business/state write actions must provide a well-formed caller-owned `payload.operationId`. Legacy/third-party JavaScript clients omitting the field are deliberately **REJECTED** with `ValidationError` before any handler or SQL transaction executes; no compatibility exemption for their data-writing requests remains at the native bridge entry point.
+
+**Enforcement:** The C# `WebView2BridgeDispatcher` evaluates the *server-defined* mutating metadata after authentication and role verification, ahead of its per-session `requestId` replay gate. The accepted operation ID is **16–128 ASCII letters/digits/underscore/hyphen**, and does not come from a forged role, request ID or JavaScript-only visibility flag. It is required for every data mutation including personnel identity/lifecycle, site/status changes, manual/automatic settings, daily attendance/corrections, transfers, import, user account changes, audit overlays, backup data writes, application reset and temporary draft changes.
+
+**Precisely classified exceptions:** `Logout`, `ExportPersonLifetimeExcel`, `ExportImportIssues`, `ExportMonthlyWorkbookSet`, and `CancelExport` are marked `isMutating` in the existing canonical action catalog, but do not mutate the personnel/business database; these retain independent request-ID replay protection and do not require a fabricated business `operationId`. Read-only preview and query actions are also excluded. The interactive initial founding administrator provisioning remains a separate unauthenticated authentication/setup lifecycle with independent one-use setup and account safety checks; it does not permit unauthorized access to an authenticated business mutation.
+
+**UI compatibility:** The offline `bridge-client.js` sends a unique cryptographically generated `operationId` for each new write payload and retains it **on the same payload object** for a lost-response retry. Existing UI screens that already specify stable IDs retain their own IDs. Requests with explicit malformed IDs are *not* silently repaired; C# rejects them. The CI `manifest-guard.py` verifies that the full C# manifest and the 37-action JS token set never drift, and a JavaScript execution test verifies that the same intent retains its identifier across transmissions. C# security tests exercise every one of the 37 actions through a real dispatcher, confirm malformed/missing IDs do not reach a handler, and retain separate replay and RowVersion tests.
+
+**Idempotence distinction:** A mandatory ID alone does not manufacture ACID receipt support in a service. Domain services previously hardened with `MutationReceipts` and one-use preview/version checks still enforce their own atomic/idempotent behavior. For services with only a request-level anti-replay guarantee, a lost-response retry must follow the service's existing recovery/preview or confirmation procedure; do not claim all commands have identical durable receipt replay semantics.
+
+**Scope:** No V001–V010 edits, no history rewrite, no personnel-number-to-PersonId merge, no changed role policy. This is an intentional compatibility BREAK for legacy clients that omitted IDs; if a custom integration exists it must add stable IDs before sending *new* writes. The release still needs green independent PR Core and Release suites on exact SHA, four x86/x64 packages and SHA-256, merged-main checks, and independent offline Windows acceptance. A CI PASS is not the final independent production certificate.
+
+---
+
 ## Finalization follow-up — October 29, 2026: mutation and clock hardening
 
 **Audited baseline:** `efd1af163d4da88a20f0c4861ed2d2903bd8d8b2`. This supplement is a code-and-test implementation record, **not a final production release certificate**.
