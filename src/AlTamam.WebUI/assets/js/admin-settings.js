@@ -1216,8 +1216,17 @@
         activeTotalNumber.textContent="("+activeTotal+")";
         const t=table(["الرقم (ع)","الاسم","الموقع","إجراء"]);
         for(const person of data.items||[]){
-          addRow(t.body,[person.serviceNumberA,person.displayName,person.siteName],
-            "تعديل الاسم والرقم",()=>editPerson(person));
+          const row=node("tr");
+          for(const value of [person.serviceNumberA,person.displayName,person.siteName])
+            row.appendChild(node("td","",value));
+          const actions=node("td","admin-row-buttons");
+          actions.appendChild(btn("تعديل الاسم والرقم",()=>editPerson(person)));
+          // The native manifest independently restricts ArchivePersons to
+          // GeneralAdministration / OrdinaryAdministration. Never show this
+          // destructive roster-membership operation to Supervisors.
+          if(["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))
+            actions.appendChild(btn("إزالة من القوة",()=>archivePerson(person)));
+          row.appendChild(actions);t.body.appendChild(row);
         }
         empty(t.body,4,"لا توجد أسماء مطابقة.");
         const pager=node("div","functional-pager");
@@ -1226,6 +1235,54 @@
         pager.append(node("span","","إجمالي "+(data.total||0)),prev,next);
         content.replaceChildren(t.wrap,pager);
       }catch(e){if(token===currentRequest)errors(content,e);}
+    }
+    async function archivePerson(person) {
+      if(!["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))
+        return;
+      const now=new Date();
+      const effectiveLocalDate=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
+        String(now.getDate()).padStart(2,"0")].join("-");
+      try {
+        const result=await api().invoke("PreviewArchivePersons",{
+          personIds:[person.personId],effectiveLocalDate
+        });
+        const preview=result.data||{};
+        if(!preview.previewToken||!Number.isSafeInteger(preview.baseRevision)||
+           !Array.isArray(preview.candidates)||preview.candidates.length!==1)
+          throw Error("لم تصل معاينة موثقة لإزالة الفرد من القوة.");
+        const candidate=preview.candidates[0];
+        if(candidate.personId!==person.personId || candidate.blocker)
+          throw Error(candidate.blocker||"تغيرت هوية الفرد؛ أعد البحث قبل الأرشفة.");
+        const review=window.AltamamDialog?.detailsReview;
+        if(typeof review!=="function")
+          throw Error("نافذة معاينة الإزالة غير متاحة؛ لم يحدث أي تعديل.");
+        const approved=await review({rows:[
+          ["الاسم",candidate.displayName],
+          ["الرقم (ع)",candidate.serviceNumberA],
+          ["الموقع الحالي",candidate.currentSiteName],
+          ["أيام التمام التاريخية",candidate.attendanceDays],
+          ["تاريخ سريان الإزالة",effectiveLocalDate],
+          ["الأثر","إخراج من القوة الفعالة فقط، مع حفظ التاريخ وتعطيل أي حساب مرتبط"]
+        ]},{title:"معاينة إزالة فرد من القوة",
+          message:"تحقق من الفرد المحدد؛ لن تُحذف تحضيراته أو هويته أو سجل عملياته.",
+          confirmLabel:"تأكيد الإزالة من القوة"});
+        if(!approved)return;
+        const prompted=await dialogs.prompt("اكتب سبب الإزالة من القوة",
+          "إخراج من القوة الفعالة بقرار إداري موثق");
+        if(prompted===null)return;
+        const reason=prompted.trim();
+        if(reason.length<5)throw Error("سبب الإزالة مطلوب بخمسة أحرف على الأقل.");
+        const committed=await api().invoke("ArchivePersons",{
+          personIds:[person.personId],effectiveLocalDate,
+          previewToken:preview.previewToken,
+          baseRevision:preview.baseRevision,
+          expectedRevision:preview.baseRevision,reason,operationId:makeOperationId()
+        });
+        if(!Array.isArray(committed.data?.archivedPersonIds)||
+           !committed.data.archivedPersonIds.includes(person.personId))
+          throw Error("لم يؤكد الخادم إزالة الفرد من القوة.");
+        await load();
+      }catch(error){await dialogs.alert(error.message||"تعذر أرشفة الفرد.");}
     }
     async function editPerson(person) {
       const visibleName=await dialogs.prompt("الاسم الكامل الجديد",person.displayName);
