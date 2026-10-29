@@ -76,6 +76,8 @@ public sealed class AuditOverlayService
                  OR altamam_normalize_search(e.OperationCode) LIKE $term ESCAPE '\'
                  OR altamam_normalize_search(e.OperationArabicName) LIKE $term ESCAPE '\'
                  OR altamam_normalize_search(e.DefaultArabicDescription) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.OldValueJson) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.NewValueJson) LIKE $term ESCAPE '\'
                  OR EXISTS(SELECT 1 FROM AuditLogPresentationEdits o
                            WHERE o.AuditEventId = e.AuditEventId
                              AND o.OverlayVersion =
@@ -87,12 +89,12 @@ public sealed class AuditOverlayService
         }
         if (!string.IsNullOrWhiteSpace(actor))
         {
-            where.Add("(e.ActorUsernameSnapshot LIKE $actor ESCAPE '\\' OR e.ActorRosterFullNameSnapshot LIKE $actor ESCAPE '\\')");
+            where.Add("(altamam_normalize_search(e.ActorUsernameSnapshot) LIKE $actor ESCAPE '\\' OR altamam_normalize_search(e.ActorRosterFullNameSnapshot) LIKE $actor ESCAPE '\\')");
             args.Add(("$actor", "%" + EscapeLike(NormalizeTerm(actor)) + "%"));
         }
         if (!string.IsNullOrWhiteSpace(target))
         {
-            where.Add("(e.TargetDisplaySnapshot LIKE $target ESCAPE '\\' OR e.TargetEntityId LIKE $target ESCAPE '\\')");
+            where.Add("(altamam_normalize_search(e.TargetDisplaySnapshot) LIKE $target ESCAPE '\\' OR altamam_normalize_search(e.TargetEntityId) LIKE $target ESCAPE '\\' OR altamam_normalize_search(e.OldValueJson) LIKE $target ESCAPE '\\' OR altamam_normalize_search(e.NewValueJson) LIKE $target ESCAPE '\\')");
             args.Add(("$target", "%" + EscapeLike(NormalizeTerm(target)) + "%"));
         }
         if (!string.IsNullOrWhiteSpace(operation))
@@ -139,7 +141,13 @@ public sealed class AuditOverlayService
                    COALESCE((SELECT o.IsTombstoned FROM AuditLogPresentationEdits o
                              WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), 0),
                    COALESCE((SELECT o.OverlayVersion FROM AuditLogPresentationEdits o
-                             WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), 0)
+                             WHERE o.AuditEventId = e.AuditEventId ORDER BY o.OverlayVersion DESC LIMIT 1), 0),
+                   e.ActorPersonId, e.OldValueJson, e.NewValueJson,
+                   CASE WHEN e.ActorPersonId IS NULL AND EXISTS(
+                     SELECT 1 FROM AuditEvents founder
+                     WHERE founder.ActorUserId=e.ActorUserId
+                       AND founder.OperationCode='FOUNDING_ADMIN_CREATED')
+                     THEN 1 ELSE 0 END
             FROM AuditEvents e
             {whereSql}
             ORDER BY e.ExecutedAtUtc DESC, e.AuditEventId DESC
@@ -155,8 +163,24 @@ public sealed class AuditOverlayService
         {
             string rawDescription = reader.GetString(8);
             string corrected = reader.IsDBNull(13) ? "" : reader.GetString(13);
+            string usernameSnapshot=reader.GetString(3);
+            string? rosterSnapshot=reader.IsDBNull(4)?null:reader.GetString(4);
+            bool founder=reader.GetInt32(19)==1;
+            string founderName=rosterSnapshot?.StartsWith("الإدارة العامة",StringComparison.Ordinal)==true
+                ? rosterSnapshot["الإدارة العامة".Length..].Trim(' ','-')
+                : rosterSnapshot??"";
+            string display=founder
+                ? "الإدارة العامة - "+usernameSnapshot+
+                    (founderName.Length>0?" ("+founderName+")":"")
+                : usernameSnapshot+(string.IsNullOrWhiteSpace(rosterSnapshot)?"":" - "+rosterSnapshot);
             items.Add(new JsonObject
             {
+                ["sequence"]=(long)(page-1)*pageSize+items.Count+1,
+                ["actorDisplay"]=display,
+                ["outcome"]=reader.GetString(1).EndsWith("FAILED",StringComparison.OrdinalIgnoreCase)
+                    ? "فشل" : "تم الاعتماد",
+                ["oldValue"]=reader.IsDBNull(17)?null:JsonNode.Parse(reader.GetString(17)),
+                ["newValue"]=reader.IsDBNull(18)?null:JsonNode.Parse(reader.GetString(18)),
                 ["auditEventId"] = reader.GetString(0),
                 ["operationCode"] = reader.GetString(1),
                 ["operationArabicName"] = reader.GetString(2),
@@ -205,7 +229,12 @@ public sealed class AuditOverlayService
             SELECT OperationCode, OperationArabicName, ActorUserId, ActorUsernameSnapshot,
                    ActorRosterFullNameSnapshot, TargetEntityType, TargetEntityId, TargetDisplaySnapshot,
                    OldValueJson, NewValueJson, DefaultArabicDescription, Reason, EffectiveLocalDate,
-                   ExecutedAtUtc, CorrelationId, EventHash, PriorEventHash
+                   ExecutedAtUtc, CorrelationId, EventHash, PriorEventHash,
+                   CASE WHEN ActorPersonId IS NULL AND EXISTS(
+                       SELECT 1 FROM AuditEvents founder
+                       WHERE founder.ActorUserId=AuditEvents.ActorUserId
+                         AND founder.OperationCode='FOUNDING_ADMIN_CREATED')
+                     THEN 1 ELSE 0 END
             FROM AuditEvents WHERE AuditEventId = $id;
             """;
         cmd.Parameters.AddWithValue("$id", auditEventId);
@@ -221,6 +250,14 @@ public sealed class AuditOverlayService
             ["actorUserId"] = reader.GetString(2),
             ["actorUsername"] = reader.GetString(3),
             ["actorRosterFullName"] = reader.IsDBNull(4) ? null : reader.GetString(4),
+            ["actorDisplay"] = reader.GetInt32(17)==1
+                ? "الإدارة العامة - "+reader.GetString(3)+
+                    (reader.IsDBNull(4) || reader.GetString(4).Length==0 ||
+                     reader.GetString(4)=="الإدارة العامة"?""
+                        :" ("+(reader.GetString(4).StartsWith("الإدارة العامة",StringComparison.Ordinal)
+                           ? reader.GetString(4)["الإدارة العامة".Length..].Trim(' ','-')
+                           : reader.GetString(4))+")")
+                : reader.GetString(3)+(reader.IsDBNull(4)?"":" - "+reader.GetString(4)),
             ["targetEntityType"] = reader.GetString(5),
             ["targetEntityId"] = reader.GetString(6),
             ["targetDisplay"] = reader.GetString(7),
@@ -342,6 +379,21 @@ public sealed class AuditOverlayService
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                     $"تم تعديل القيد من مستخدم آخر (الإصدار الحالي {currentVersion}). حدّث الشاشة وأعد المحاولة.");
 
+            // Meta-audit: the overlay action itself is immutable evidence (atomic in same tx).
+            await BridgeAuditWriter.WriteAsync(connection, transaction, _time,
+                tombstone ? "DeleteAuditPresentation" : "UpdateAuditPresentation",
+                tombstone ? "إخفاء قيد في سجل العمليات" : "تعديل الوصف الظاهر لقيد في سجل العمليات",
+                principal.UserId, principal.Username, actorDisplayName: null,
+                "AuditEvent", auditEventId, auditEventId,
+                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion }),
+                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion + 1,
+                                                        ["tombstoned"] = tombstone, ["correctedDescription"] = corrected }),
+                tombstone
+                    ? $"أُخفي القيد {auditEventId} ظاهرياً بواسطة {principal.Username}."
+                    : $"عُدّل الوصف الظاهر للقيد {auditEventId} بواسطة {principal.Username}.",
+                reason, DateOnly.FromDateTime(_time.GetUtcNow().DateTime).ToString("yyyy-MM-dd"),
+                ct.CorrelationId(), ct).ConfigureAwait(false);
+
             // Append-only overlay version; raw evidence is never mutated.
             using var ins = connection.CreateCommand();
             ins.Transaction = transaction;
@@ -357,24 +409,35 @@ public sealed class AuditOverlayService
             ins.Parameters.AddWithValue("$corrected", tombstone ? DBNull.Value : corrected);
             ins.Parameters.AddWithValue("$reason", reason);
             ins.Parameters.AddWithValue("$by", principal.UserId);
-            ins.Parameters.AddWithValue("$byDisplay", principal.Username);
+            // The actor's immutable event-time identity was just captured by
+            // BridgeAuditWriter in the same transaction. Never use a later roster lookup.
+            string byDisplay=principal.Username;
+            using(var identity=connection.CreateCommand())
+            {
+                identity.Transaction=transaction;
+                identity.CommandText="""
+                    SELECT ActorUsernameSnapshot,ActorRosterFullNameSnapshot
+                    FROM AuditEvents WHERE OperationCode=$code AND TargetEntityId=$id
+                    ORDER BY rowid DESC LIMIT 1;
+                    """;
+                identity.Parameters.AddWithValue("$code",
+                    tombstone?"DeleteAuditPresentation":"UpdateAuditPresentation");
+                identity.Parameters.AddWithValue("$id",auditEventId);
+                using var actor=await identity.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if(await actor.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    string name=actor.GetString(0);
+                    string? historical=actor.IsDBNull(1)?null:actor.GetString(1);
+                    byDisplay=historical?.StartsWith("الإدارة العامة",StringComparison.Ordinal)==true
+                        ? "الإدارة العامة - "+name+
+                            (historical.Length>"الإدارة العامة".Length
+                                ?" ("+historical["الإدارة العامة".Length..].Trim(' ','-')+")":"")
+                        : name+(string.IsNullOrWhiteSpace(historical)?"":" - "+historical);
+                }
+            }
+            ins.Parameters.AddWithValue("$byDisplay", byDisplay);
             ins.Parameters.AddWithValue("$at", editedAtUtc);
             await ins.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-
-            // Meta-audit: the overlay action itself is immutable evidence (atomic in same tx).
-            await BridgeAuditWriter.WriteAsync(connection, transaction, _time,
-                tombstone ? "DeleteAuditPresentation" : "UpdateAuditPresentation",
-                tombstone ? "إخفاء قيد في سجل العمليات" : "تعديل الوصف الظاهر لقيد في سجل العمليات",
-                principal.UserId, principal.Username, actorDisplayName: null,
-                "AuditEvent", auditEventId, auditEventId,
-                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion }),
-                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion + 1,
-                                                        ["tombstoned"] = tombstone, ["correctedDescription"] = corrected }),
-                tombstone
-                    ? $"أُخفي القيد {auditEventId} ظاهرياً بواسطة {principal.Username}."
-                    : $"عُدّل الوصف الظاهر للقيد {auditEventId} بواسطة {principal.Username}.",
-                reason, DateOnly.FromDateTime(_time.GetUtcNow().DateTime).ToString("yyyy-MM-dd"),
-                ct.CorrelationId(), ct).ConfigureAwait(false);
 
             var result = new JsonObject
             {

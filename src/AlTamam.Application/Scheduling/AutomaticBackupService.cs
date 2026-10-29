@@ -84,13 +84,29 @@ public sealed class AutomaticBackupService
             string folder=await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
             if(!OutputDirectorySettings.IsUsableDirectory(folder,_db.DatabasePath))
                 return BridgeHelpers.Error(BridgeErrorCodes.ScheduleUnavailable,
-                    "لا يمكن تفعيل النسخ التلقائي قبل اختيار مجلد محلي متاح وقابل للكتابة.");
+                    "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. لا يمكن تفعيل النسخ قبل اختيار مجلد محلي قابل للكتابة.");
         }
         return await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,tx,"UpdateBackupSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
             if(replay is not null)return replay;
+            string previousEnabled="false",previousTime="16:00";
+            using(var prior=c.CreateCommand())
+            {
+                prior.Transaction=tx;
+                prior.CommandText="""
+                    SELECT SettingKey,SettingValue FROM AppSettings
+                    WHERE SettingKey IN ('AutoBackupEnabled','AutoBackupTimeLocal');
+                    """;
+                using var reader=await prior.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while(await reader.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    if(reader.GetString(0)=="AutoBackupEnabled")
+                        previousEnabled=reader.GetString(1);
+                    else previousTime=reader.GetString(1);
+                }
+            }
             using var cmd=c.CreateCommand();
             cmd.Transaction=tx;
             cmd.CommandText="""
@@ -110,7 +126,8 @@ public sealed class AutomaticBackupService
             await BridgeAuditWriter.WriteAsync(c,tx,_time,
                 "AUTO_BACKUP_SCHEDULE_CHANGED","تعديل جدولة النسخ الاحتياطي",
                 actor.UserId,actor.Username,null,"AppSettings","AutoBackupTimeLocal",
-                "النسخ التلقائي",null,
+                "النسخ التلقائي",
+                new JsonObject{["enabled"]=previousEnabled=="true",["time"]=previousTime}.ToJsonString(),
                 new JsonObject{["enabled"]=enabled,["time"]=time}.ToJsonString(),
                 "حفظ وقت النسخ التلقائي وتفعيل الجدولة أو إيقافها",
                 null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
@@ -119,6 +136,43 @@ public sealed class AutomaticBackupService
             await MutationIdempotency.StoreAsync(c,tx,receipt,result,_time,ct)
                 .ConfigureAwait(false);
             return BridgeHelpers.Ok(result);
+        },ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Durable failure notification: a repeated scheduler tick with the same
+    /// failure on the same date does not flood the immutable audit ledger.
+    /// Do not include credentials or encryption keys in diagnostic messages.
+    /// </summary>
+    public async Task RecordFailureAsync(string message,CancellationToken ct=default)
+    {
+        string detail=message.Length>400?message[..400]:message;
+        string day=_time.GetLocalNow().ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
+        string value=day+" - "+detail;
+        await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>
+        {
+            using var prior=c.CreateCommand();prior.Transaction=tx;
+            prior.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='AutoBackupLastFailure';";
+            string old=(await prior.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString()??"";
+            if(old==value)return 0;
+            using var cmd=c.CreateCommand();cmd.Transaction=tx;
+            cmd.CommandText="""
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('AutoBackupLastFailure',$value,$now)
+                ON CONFLICT(SettingKey) DO UPDATE SET
+                    SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                """;
+            cmd.Parameters.AddWithValue("$value",value);
+            cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            await BridgeAuditWriter.WriteAsync(c,tx,_time,
+                "AUTO_BACKUP_FAILED","فشل النسخ الاحتياطي التلقائي",
+                "USR-SYSTEM","النظام",null,"Backup","AUTO-"+day,"النسخ اليومي",
+                new JsonObject{["lastFailure"]=old}.ToJsonString(),
+                new JsonObject{["lastFailure"]=value}.ToJsonString(),
+                "لم تنجح النسخة التلقائية ولم يُسجّل نجاح وهمي",detail,day,
+                Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
+            return 0;
         },ct).ConfigureAwait(false);
     }
 
@@ -177,6 +231,18 @@ public sealed class AutomaticBackupService
                     insert.Parameters.AddWithValue("$schema",AlTamamDbContext.CurrentSchemaVersion);
                     insert.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
                     await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    using(var clear=c.CreateCommand())
+                    {
+                        clear.Transaction=tx;
+                        clear.CommandText="""
+                            INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                            VALUES('AutoBackupLastFailure','',$now)
+                            ON CONFLICT(SettingKey) DO UPDATE SET
+                              SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                            """;
+                        clear.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
+                        await clear.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    }
                     await BridgeAuditWriter.WriteAsync(c,tx,_time,
                         "AUTO_BACKUP_CREATE","نسخ احتياطي تلقائي",
                         "USR-SYSTEM","النظام",null,"Backup",id,filename,

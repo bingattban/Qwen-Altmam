@@ -647,7 +647,7 @@ public static class BridgeHandlerCatalog
         "SetTheme" => async (req, principal, ct) =>
         {
             var service=new SettingsReadBackupService(services.Db,services.Time);
-            BridgeResponse result=await service.SetThemeAsync(req.Payload as JsonObject,ct)
+            BridgeResponse result=await service.SetThemeAsync(req.Payload as JsonObject,ct,principal)
                 .ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },

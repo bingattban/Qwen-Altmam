@@ -1367,7 +1367,48 @@
       showHidden.addEventListener("change",()=>{state.page=1;load();});
       controls.appendChild(toggle);
     }
-    box.append(controls,results);
+    const historyPanel=node("div","admin-note");
+    if(canEditAudit){
+      const historyButton=btn("القيود المعدلة والمحذوفة",()=>{
+        historyPanel.hidden=false;
+        void loadEdits(1);
+      },"btn btn-outline");
+      controls.append(historyButton);
+      const closeHistory=btn("العودة إلى سجل العمليات",()=>{
+        historyPanel.hidden=true;historyPanel.replaceChildren();
+      },"btn btn-outline");
+      historyPanel.append(closeHistory);
+      historyPanel.hidden=true;
+    }
+    box.append(controls,results,historyPanel);
+    async function loadEdits(pageNumber) {
+      try{
+        const reply=await api().invoke("QueryAuditPresentationChanges",
+          {page:pageNumber,pageSize:50});
+        const data=reply.data||{};
+        const revised=table(["رقم القيد","الإصدار","العملية","الوصف الأصلي",
+          "الوصف بعد التعديل","الحالة","السبب","المنفّذ وقت الحدث","التاريخ"]);
+        for(const item of data.items||[])
+          addRow(revised.body,[item.auditEventId,item.overlayVersion,
+            item.operationCode,item.rawDescription,
+            item.correctedDescription||item.rawDescription,
+            item.isTombstoned?"مخفي ظاهرياً":"معدل",
+            item.reason,item.editedByDisplay,item.editedAtUtc],
+            "عرض القيد الأصلي وكل التعديلات",
+            ()=>showAuditDetails(item.auditEventId));
+        empty(revised.body,9,"لا توجد قيود معدلة أو مخفية.");
+        const nav=node("div","functional-pager");
+        const prev=btn("السابق",()=>void loadEdits(pageNumber-1)),
+          next=btn("التالي",()=>void loadEdits(pageNumber+1));
+        prev.disabled=pageNumber<=1;
+        next.disabled=(data.items||[]).length<50;
+        nav.append(node("span","","صفحة "+pageNumber),prev,next);
+        historyPanel.replaceChildren(
+          btn("العودة إلى سجل العمليات",()=>{
+            historyPanel.hidden=true;historyPanel.replaceChildren();
+          },"btn btn-outline"),revised.wrap,nav);
+      }catch(e){errors(historyPanel,e);}
+    }
     async function load() {
       const token=++currentRequest;
       try {
@@ -1377,15 +1418,19 @@
           includeTombstoned:canEditAudit&&showHidden.checked,
           page:state.page,pageSize:100});
         if(token!==currentRequest)return;
-        const data=response.data||{},t=table(["العملية","الهدف","المنفذ","الوصف الظاهر","وقت التنفيذ"]);
+        const data=response.data||{},t=table(["م","العملية","الهدف",
+          "المنفذ وقت الحدث","التاريخ","القيمة السابقة","القيمة الجديدة",
+          "السبب","النتيجة","الوصف"]);
         (data.items||[]).forEach(item=>addRow(t.body,[
-          item.operationArabicName+(item.isTombstoned?" (مخفي)":""),
-          item.targetDisplay,
-          [item.actorUsername,item.actorRosterFullName].filter(Boolean).join(" - "),
-          item.description||item.rawDescription,
-          item.executedAtUtc
+          item.sequence,item.operationArabicName+(item.isTombstoned?" (مخفي)":""),
+          item.targetDisplay,item.actorDisplay||item.actorUsername,
+          item.executedAtUtc,
+          item.oldValue==null?"—":JSON.stringify(item.oldValue),
+          item.newValue==null?"—":JSON.stringify(item.newValue),
+          item.reason||"—",item.outcome||"تم الاعتماد",
+          item.description||item.rawDescription
         ],"عرض التفاصيل",()=>showAuditDetails(item.auditEventId)));
-        empty(t.body,5,"لا توجد عمليات مطابقة.");
+        empty(t.body,10,"لا توجد عمليات مطابقة.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
         prev.disabled=state.page<=1;next.disabled=!data.hasNext;
@@ -1415,7 +1460,11 @@
           ["العملية",item.operationArabicName],
           ["المستهدف",item.targetDisplay],
           ["اسم المستخدم",item.actorUsername],
-          ["الاسم الكامل",item.actorRosterFullName],
+          ["هوية المنفذ وقت الحدث",item.actorDisplay||item.actorUsername],
+          ["الاسم الكامل المحفوظ",item.actorRosterFullName],
+          ["القيمة السابقة",item.oldValue==null?"—":JSON.stringify(item.oldValue)],
+          ["القيمة الجديدة",item.newValue==null?"—":JSON.stringify(item.newValue)],
+          ["سبب العملية",item.reason||"—"],
           ["وقت التنفيذ",item.executedAtUtc],
           ["الوصف الأصلي",item.rawDescription],
           ["الوصف الظاهر الحالي",item.overlays?.length
@@ -1876,8 +1925,16 @@
               throw Error("نافذة معاينة التصفير غير متاحة؛ أُلغي الإجراء.");
             const approved=await detailsReview({rows:[
               ["الأفراد المعرّضون للحذف",data.people],
+              ["حسابات المستخدمين",data.users],
               ["سجلات التحضير",data.attendance],
-              ["النسخ المسجلة",data.backupEntries],
+              ["فترات الانتساب للمواقع",data.assignments],
+              ["سجلات التنقلات",data.movements],
+              ["سجل العمليات والتعديلات",data.auditEvents],
+              ["النسخ المسجلة المرشحة للحذف",data.backupEntries],
+              ["أسماء نسخ البرنامج المرشحة للحذف",Array.isArray(data.backupFileNames)&&
+                data.backupFileNames.length?data.backupFileNames.join("، "):"لا توجد"],
+              ["ملاحظة",data.backupFileNamesTruncated?
+                "تظهر أول 30 نسخة فقط؛ يُراجع السجل الكامل عند التنفيذ.":"لن تُحذف الملفات غير المسجلة أو التي تغيرت بصمتها."],
               ["تحذير",data.warning||"لا يمكن التراجع عن تصفير البرنامج."]
             ]},{title:"معاينة التصفير النهائي",
               message:"ستُمحى جميع البيانات. راجع الأعداد بعناية قبل الانتقال للتحقق النهائي.",
@@ -1898,7 +1955,8 @@
               try{
                 const result=await api().invoke("CommitFullReset",{
                   previewToken:data.previewToken,expectedRevision:data.expectedRevision,
-                  confirmation:phraseWrap.input.value,password:passwordWrap.input.value
+                  confirmation:phraseWrap.input.value,password:passwordWrap.input.value,
+                  confirmDeleteLiveData:true,confirmDeleteOwnedBackups:true
                 },{timeoutMs:180000});
                 passwordWrap.input.value="";
                 if(!result.data?.reset)throw Error("لم يؤكد الخادم إتمام التصفير.");
@@ -1908,10 +1966,23 @@
                 await logout();
               }catch(e){passwordWrap.input.value="";errors(resetStatus,e);approve.disabled=false;}
             },"btn btn-primary settings-action");
-            const cancel=btn("إلغاء",()=>{passwordWrap.input.value="";resetStatus.replaceChildren();previewButton.disabled=false;});
+            const countdown=node("p","section-description");
+            let remaining=Math.max(5,Number(data.countdownSeconds)||5);
+            approve.disabled=true;
+            const clock=setInterval(()=>{
+              if(remaining>0)remaining--;
+              countdown.textContent=remaining>0?
+                "يمكن اعتماد التصفير بعد "+remaining+" ثوانٍ.":"انتهت مهلة المراجعة؛ يتطلب التنفيذ التأكيد النهائي.";
+              if(remaining===0){approve.disabled=false;clearInterval(clock);}
+            },1000);
+            countdown.textContent="يمكن اعتماد التصفير بعد "+remaining+" ثوانٍ.";
+            const cancel=btn("إلغاء",()=>{
+              clearInterval(clock);passwordWrap.input.value="";
+              resetStatus.replaceChildren();previewButton.disabled=false;
+            });
             resetStatus.replaceChildren(node("p","settings-copy",
               "تمت مراجعة المعاينة. أدخل كلمة المرور وعبارة التأكيد لتنفيذ الإجراء النهائي."),
-              passwordWrap.wrap,phraseWrap.wrap,approve,cancel);
+              countdown,passwordWrap.wrap,phraseWrap.wrap,approve,cancel);
           }catch(e){errors(resetStatus,e);previewButton.disabled=false;}
         },"btn btn-outline settings-action");
         resetBox.append(notice,previewButton,resetStatus);

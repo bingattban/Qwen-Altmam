@@ -79,7 +79,9 @@ public static class BridgeAuditWriter
                 actorPersonId = row.IsDBNull(1) ? null : row.GetString(1);
                 actorRosterFullName = row.IsDBNull(2)
                     ? (row.GetInt32(3) == 1 && actorPersonId is null
-                        ? (row.IsDBNull(4) ? "الإدارة العامة" : row.GetString(4)) : null)
+                        ? ("الإدارة العامة" +
+                            (row.IsDBNull(4) || string.IsNullOrWhiteSpace(row.GetString(4))
+                                ? "" : " - " + row.GetString(4))) : null)
                     : row.GetString(2);
             }
             // An unlinked founding account retains the owner-entered name if present,

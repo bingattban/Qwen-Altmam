@@ -31,7 +31,13 @@ public sealed class AutomaticBackupSchedulerService : IAsyncDisposable
                 LastFailureMessage=null;
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested){break;}
-            catch(Exception ex){LastFailureMessage=ex.Message;}
+            catch(Exception ex)
+            {
+                LastFailureMessage=ex.Message;
+                try { await _service.RecordFailureAsync(ex.Message,ct).ConfigureAwait(false); }
+                catch(OperationCanceledException) when(ct.IsCancellationRequested){break;}
+                catch(Exception) { /* Keep original in-memory failure when storage is unavailable. */ }
+            }
             try{await Task.Delay(TimeSpan.FromMinutes(1),ct).ConfigureAwait(false);}
             catch(OperationCanceledException) when(ct.IsCancellationRequested){break;}
         }

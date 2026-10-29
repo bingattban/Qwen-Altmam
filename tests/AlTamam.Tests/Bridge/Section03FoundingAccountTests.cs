@@ -63,7 +63,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         Assert.Equal("", Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons;"));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;"));
-        Assert.Equal("صاحب البرنامج", Scalar(
+        Assert.Equal("الإدارة العامة - صاحب البرنامج", Scalar(
             "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
         var admin = new BridgePrincipal(Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>(),
             "chosenOwner",UserRole.GeneralAdministration,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -73,6 +73,24 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         var visible = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
         Assert.Equal("الإدارة العامة - chosenOwner (صاحب البرنامج)",
             visible[0]!["fullName"]!.GetValue<string>());
+        var audit=new AuditOverlayService(_db);
+        var query=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="FOUNDING_ADMIN_CREATED"
+        },CancellationToken.None,admin);
+        Assert.True(query.Success,query.UserMessage);
+        var entry=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(query.Data)["items"])));
+        Assert.Equal("الإدارة العامة - chosenOwner (صاحب البرنامج)",
+            entry["actorDisplay"]!.GetValue<string>());
+        // Later edits of the profile must not rewrite event-time audit snapshots.
+        Exec("UPDATE Users SET FoundingFullName='اسم جديد' WHERE Role=1;");
+        var after=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="FOUNDING_ADMIN_CREATED"
+        },CancellationToken.None,admin);
+        var immutable=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(after.Data)["items"])));
+        Assert.Equal(entry["actorDisplay"]!.GetValue<string>(),
+            immutable["actorDisplay"]!.GetValue<string>());
 
         var duplicate = await _service.ProvisionFirstAdministratorAsync(
             "anotherOwner", "test-password-123", CancellationToken.None);
@@ -265,7 +283,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
             listed["fullName"]!.GetValue<string>());
         Assert.DoesNotContain(ActionManifest.All,
             action=>action.Action=="LinkFoundingAdministrator");
-        Assert.Equal("صاحب الحساب المؤسس",Scalar(
+        Assert.Equal("الإدارة العامة - صاحب الحساب المؤسس",Scalar(
             "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
         Assert.Equal("0",Scalar(
             "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ACCOUNT_LINKED';"));

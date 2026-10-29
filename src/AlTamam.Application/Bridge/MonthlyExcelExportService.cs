@@ -117,9 +117,10 @@ public sealed class MonthlyExcelExportService
         if(!SafeOutputName(requestedName,out string chosenName))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "اسم الملف يجب أن يكون نصاً محلياً آمناً وينتهي بالامتداد xlsx.");
-        if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
+        if (!OutputDirectorySettings.IsUsableDirectory(selected,_db.DatabasePath) ||
+            !OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
             return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
-                "مجلد النسخ والتصدير غير متاح؛ غيّره من الإعدادات.");
+                "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. اختر مجلداً محلياً قابلاً للكتابة للتصدير.");
         string basename = requestedName is null ?
             $"التمام الشهري_{year:D4}-{month:D2}_تصدير-{DateTime.Now:yyyy-MM-dd}_{Guid.NewGuid():N}.xlsx" :
             chosenName;

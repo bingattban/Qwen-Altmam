@@ -43,7 +43,9 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         ["previewToken"]=preview["previewToken"]!.GetValue<string>(),
         ["expectedRevision"]=preview["expectedRevision"]!.GetValue<long>(),
         ["password"]=password,
-        ["confirmation"]="تصفير جميع البيانات"
+        ["confirmation"]="تصفير جميع البيانات",
+        ["confirmDeleteLiveData"]=true,
+        ["confirmDeleteOwnedBackups"]=true
     };
     [Fact]
     public async Task OnlyGeneralAdminMayPreviewOrCommit_AndPasswordIsRequired()
@@ -55,6 +57,9 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         var preview=Assert.IsType<JsonObject>((await svc.PreviewAsync(_admin,default)).Data);
         var wrong=await svc.CommitAsync(CommitArgs(preview,"wrong"),_admin,default);
         Assert.False(wrong.Success);
+        var missingConsent=CommitArgs(preview);
+        missingConsent.Remove("confirmDeleteOwnedBackups");
+        Assert.False((await svc.CommitAsync(missingConsent,_admin,default)).Success);
         Assert.Equal(1,Count("Users"));
         Assert.Equal(1,Count("AuditEvents"));
     }
@@ -64,6 +69,11 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         var svc=new FullDataResetService(_db);
         var preview=Assert.IsType<JsonObject>((await svc.PreviewAsync(_admin,default)).Data);
         var args=CommitArgs(preview);
+        Assert.Equal(5,preview["countdownSeconds"]!.GetValue<int>());
+        var early=await svc.CommitAsync(args,_admin,default);
+        Assert.False(early.Success);
+        Assert.Equal(1,Count("Users"));
+        await Task.Delay(TimeSpan.FromMilliseconds(5150));
         var response=await svc.CommitAsync(args,_admin,default);
         Assert.True(response.Success,response.UserMessage);
         Assert.Equal(0,Count("Users"));
@@ -123,6 +133,9 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         Assert.Equal(1,Count("PersonnelMovements"));
         var svc=new FullDataResetService(_db);
         var preview=Assert.IsType<JsonObject>((await svc.PreviewAsync(_admin,default)).Data);
+        Assert.Equal(1L,preview["assignments"]!.GetValue<long>());
+        Assert.Equal(1L,preview["movements"]!.GetValue<long>());
+        await Task.Delay(TimeSpan.FromMilliseconds(5150));
         var done=await svc.CommitAsync(CommitArgs(preview),_admin,default);
         Assert.True(done.Success,done.UserMessage);
         Assert.Equal(0,Count("Persons"));

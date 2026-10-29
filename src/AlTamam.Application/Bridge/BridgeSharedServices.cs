@@ -241,6 +241,14 @@ public sealed class BridgeSharedServices
                 fail.Parameters.AddWithValue("$failures",failures);
                 fail.Parameters.AddWithValue("$until",(object?)until ?? DBNull.Value);
                 await fail.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                await BridgeAuditWriter.WriteAsync(connection,tx,_time,
+                    "AUTH_LOGIN_FAILED","محاولة دخول بكلمة مرور غير صحيحة",
+                    userId,storedName,null,"User",userId,storedName,
+                    new JsonObject{["failedAttempts"]=failureCount}.ToJsonString(),
+                    new JsonObject{["failedAttempts"]=failures,["lockedUntilUtc"]=until}.ToJsonString(),
+                    "لم يتم تسجيل الدخول","bad-password",
+                    _time.GetLocalNow().ToString("yyyy-MM-dd"),
+                    Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
                 return (null, Error(BridgeErrorCodes.Unauthorized, "بيانات الدخول غير صحيحة."));
             }
 
@@ -271,6 +279,13 @@ public sealed class BridgeSharedServices
             session.Parameters.AddWithValue("$now", nowUtc.ToString("O"));
             session.Parameters.AddWithValue("$exp", expiry.ToString("O"));
             await session.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            await BridgeAuditWriter.WriteAsync(connection,tx,_time,
+                "AUTH_LOGIN_SUCCESS","تسجيل دخول ناجح",
+                userId,storedName,null,"User",userId,storedName,
+                null,new JsonObject{["role"]=role.ToString()}.ToJsonString(),
+                "بدأت جلسة محلية مصرح بها دون حفظ رمز الجلسة أو كلمة المرور",
+                null,_time.GetLocalNow().ToString("yyyy-MM-dd"),
+                Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
 
             return (new BridgePrincipal(userId, storedName, role, nonce), (BridgeResponse?)null);
         }, ct).ConfigureAwait(false);
@@ -380,11 +395,37 @@ public sealed class BridgeSharedServices
         }
         await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            string? userId=null,username=null;
+            using(var user=connection.CreateCommand())
+            {
+                user.Transaction=tx;
+                user.CommandText="""
+                    SELECT u.UserId,u.Username FROM UserSessions s
+                    JOIN Users u ON u.UserId=s.UserId
+                    WHERE s.SessionNonce=$n AND s.RevokedFlag=0;
+                    """;
+                user.Parameters.AddWithValue("$n",sessionNonce);
+                using var row=await user.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if(await row.ReadAsync(ct).ConfigureAwait(false))
+                {
+                    userId=row.GetString(0);
+                    username=row.GetString(1);
+                }
+            }
             using var cmd = connection.CreateCommand();
             cmd.Transaction = tx;
-            cmd.CommandText = "UPDATE UserSessions SET RevokedFlag = 1 WHERE SessionNonce = $n;";
+            cmd.CommandText = "UPDATE UserSessions SET RevokedFlag = 1 WHERE SessionNonce = $n AND RevokedFlag=0;";
             cmd.Parameters.AddWithValue("$n", sessionNonce);
-            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            int changed=await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            if(changed>0 && userId is not null && username is not null)
+                await BridgeAuditWriter.WriteAsync(connection,tx,_time,
+                    "AUTH_LOGOUT","تسجيل خروج وإلغاء صلاحية الجلسة",
+                    userId,username,null,"User",userId,username,
+                    new JsonObject{["sessionActive"]=true}.ToJsonString(),
+                    new JsonObject{["sessionActive"]=false}.ToJsonString(),
+                    "أُلغيت صلاحية الجلسة دون تسجيل رمز الجلسة",
+                    null,_time.GetLocalNow().ToString("yyyy-MM-dd"),
+                    Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
             return 0;
         }, ct).ConfigureAwait(false);
     }
