@@ -91,7 +91,20 @@ public sealed class FoundingAdminUpgradeRegressionTests : IDisposable
             "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
         Assert.Equal(eventHash, Scalar(db,
             "SELECT EventHash FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
-        Assert.Equal(auditCount, Scalar(db, "SELECT COUNT(*) FROM AuditEvents;"));
+        Assert.Equal((long.Parse(auditCount) + 1).ToString(),
+            Scalar(db, "SELECT COUNT(*) FROM AuditEvents;"));
+        Assert.Equal("1", Scalar(db,
+            "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_LEGACY_LINK_DETACHED';"));
+        Assert.Equal(userId, Scalar(db,
+            "SELECT TargetEntityId FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_LEGACY_LINK_DETACHED';"));
+        Assert.Equal("USR-SYSTEM", Scalar(db,
+            "SELECT ActorUserId FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_LEGACY_LINK_DETACHED';"));
+        Assert.Equal(eventHash, Scalar(db,
+            "SELECT PriorEventHash FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_LEGACY_LINK_DETACHED';"));
+        Assert.Contains("PER-V008-FOUND", Scalar(db,
+            "SELECT OldValueJson FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_LEGACY_LINK_DETACHED';"));
+        Assert.Equal("1", Scalar(db,
+            "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_LEGACY_LINK_DETACHED' AND ActorPersonId IS NULL;"));
         Assert.True(db.HasValidIntegrity());
 
         Assert.Throws<SqliteException>(() => Execute(db,
@@ -105,6 +118,8 @@ public sealed class FoundingAdminUpgradeRegressionTests : IDisposable
             Scalar(db, "SELECT RowVersion FROM Users WHERE Role=1;"));
         Assert.Equal(eventHash, Scalar(db,
             "SELECT EventHash FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
+        Assert.Equal("1", Scalar(db,
+            "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_LEGACY_LINK_DETACHED';"));
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.Sqlite;
+using AlTamam.Infrastructure.Persistence;
 
 namespace AlTamam.Infrastructure.Persistence.Migrations;
 
@@ -114,12 +115,38 @@ public sealed class SchemaMigrationRunner
                             $"Schema version {migration.Version} is already recorded but was not applied by this run.");
                 }
 
+                // V009 is hash-pinned and must not be edited. Capture a legacy
+                // founder's former PersonId INSIDE this migration transaction
+                // before V009 clears it; no later version can reconstruct it.
+                var legacyFounders = new List<(string UserId, string Username, string PersonId)>();
+                if (migration.Version == 9)
+                {
+                    using var select = connection.CreateCommand();
+                    select.Transaction = transaction;
+                    select.CommandText = """
+                        SELECT UserId, Username, LinkedPersonId FROM Users
+                        WHERE Role=1 AND LinkedPersonId IS NOT NULL;
+                        """;
+                    using var reader = await select.ExecuteReaderAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                        legacyFounders.Add((reader.GetString(0), reader.GetString(1),
+                            reader.GetString(2)));
+                }
+
                 using (var apply = connection.CreateCommand())
                 {
                     apply.Transaction = transaction;
                     apply.CommandText = sql;
                     await apply.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
                 }
+
+                // Append canonical hash-chained system evidence atomically with
+                // the detachment. Old audit rows, UserIds and passwords stay intact.
+                foreach (var founder in legacyFounders)
+                    await RecordLegacyFounderDetachmentAsync(
+                        connection, transaction, founder, cancellationToken)
+                        .ConfigureAwait(false);
 
                 using (var record = connection.CreateCommand())
                 {
@@ -183,6 +210,72 @@ public sealed class SchemaMigrationRunner
         }
 
         VerifyRecordedHashes(connection);
+    }
+
+    private static async Task RecordLegacyFounderDetachmentAsync(
+        SqliteConnection connection, SqliteTransaction tx,
+        (string UserId, string Username, string PersonId) founder,
+        CancellationToken ct)
+    {
+        const string code = "FOUNDING_ADMIN_LEGACY_LINK_DETACHED";
+        const string operation = "فصل ارتباط حساب الإدارة العامة القديم بكشف القوة";
+        const string actor = "USR-SYSTEM";
+        const string actorName = "النظام";
+        const string targetType = "User";
+        const string description = "فصل ارتباط قديم لحساب المؤسس مع الحفاظ على هويته وسجل التدقيق";
+        const string reason = "ترقية آمنة وفق المتطلب 03.16";
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        string localDate = DateTime.Now.ToString("yyyy-MM-dd");
+        string correlationId = Guid.NewGuid().ToString("N");
+        string auditId = "AUD-" + Guid.NewGuid().ToString("N");
+        string targetName = "الإدارة العامة - " + founder.Username;
+        string oldValue = System.Text.Json.JsonSerializer.Serialize(
+            new { linkedPersonId = founder.PersonId });
+        const string newValue = "{\"linkedPersonId\":null}";
+
+        using var previous = connection.CreateCommand();
+        previous.Transaction = tx;
+        previous.CommandText = "SELECT EventHash FROM AuditEvents ORDER BY rowid DESC LIMIT 1;";
+        string previousHash = await previous.ExecuteScalarAsync(ct).ConfigureAwait(false)
+            as string ?? "GENESIS";
+        string timestamp = now.ToString("O");
+        string eventHash = AuditCanonicalHash.Compute(
+            code, operation, actor, actorName, actorName,
+            targetType, founder.UserId, targetName, oldValue, newValue,
+            description, reason, localDate, timestamp, correlationId, previousHash);
+
+        using var insert = connection.CreateCommand();
+        insert.Transaction = tx;
+        insert.CommandText = """
+            INSERT INTO AuditEvents(
+                AuditEventId, OperationCode, OperationArabicName,
+                ActorUserId, ActorPersonId, ActorUsernameSnapshot,
+                ActorRosterFullNameSnapshot, TargetEntityType, TargetEntityId,
+                TargetDisplaySnapshot, OldValueJson, NewValueJson,
+                DefaultArabicDescription, Reason, EffectiveLocalDate,
+                ExecutedAtUtc, CorrelationId, EventHash, PriorEventHash)
+            VALUES($id,$code,$operation,$actor,NULL,$actorName,$actorName,
+                $type,$target,$targetName,$old,$new,$description,$reason,
+                $date,$at,$correlation,$hash,$previous);
+            """;
+        insert.Parameters.AddWithValue("$id", auditId);
+        insert.Parameters.AddWithValue("$code", code);
+        insert.Parameters.AddWithValue("$operation", operation);
+        insert.Parameters.AddWithValue("$actor", actor);
+        insert.Parameters.AddWithValue("$actorName", actorName);
+        insert.Parameters.AddWithValue("$type", targetType);
+        insert.Parameters.AddWithValue("$target", founder.UserId);
+        insert.Parameters.AddWithValue("$targetName", targetName);
+        insert.Parameters.AddWithValue("$old", oldValue);
+        insert.Parameters.AddWithValue("$new", newValue);
+        insert.Parameters.AddWithValue("$description", description);
+        insert.Parameters.AddWithValue("$reason", reason);
+        insert.Parameters.AddWithValue("$date", localDate);
+        insert.Parameters.AddWithValue("$at", timestamp);
+        insert.Parameters.AddWithValue("$correlation", correlationId);
+        insert.Parameters.AddWithValue("$hash", eventHash);
+        insert.Parameters.AddWithValue("$previous", previousHash);
+        await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Re-hashes every registered migration and compares it with the recorded SchemaVersions.Sha256 pin.</summary>
