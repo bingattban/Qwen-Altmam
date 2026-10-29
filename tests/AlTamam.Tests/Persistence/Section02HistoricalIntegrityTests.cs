@@ -280,7 +280,7 @@ public sealed class Section02HistoricalIntegrityTests : IAsyncLifetime, IDisposa
             }
             await db.InitializeAsync();
             using var upgraded = db.CreateOpenConnection();
-            Assert.Equal(10, SchemaMigrationRunner.GetCurrentVersion(upgraded));
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion, SchemaMigrationRunner.GetCurrentVersion(upgraded));
             Assert.Equal("تج-١", Scalar(upgraded,
                 "SELECT CurrentServiceNumberA FROM Persons WHERE PersonId='TST-LEGACY-IDENT';"));
             Assert.Equal("تج-١", Scalar(upgraded,
