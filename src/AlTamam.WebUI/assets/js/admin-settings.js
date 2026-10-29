@@ -1352,7 +1352,7 @@
       op=field("نوع العملية (رمز)"),startDate=field("من تاريخ","","date"),
       endDate=field("إلى تاريخ","","date"),controls=node("div","functional-toolbar"),
       results=node("div","admin-note");
-    const canEditAudit=["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role);
+    const canEditAudit=state.session?.role==="GeneralAdministration";
     let openDetail=null;
     const search=btn("بحث",()=>{state.page=1;load();},"btn btn-primary");
     general.input.addEventListener("keydown",event=>{
