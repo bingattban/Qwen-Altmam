@@ -45,3 +45,11 @@
 ## Section 03.17 — additional unauthorized-target non-enumeration
 
 `UserAccountManagementIntegrationTests.OrdinaryAdmin_CannotEnumerateInaccessibleAccountsThroughPasswordOrReactivation` covers denied password, deactivation and reactivation attempts by ordinary Admin against inaccessible Admin accounts versus nonexistent UserIds. Both must return the same Unauthorized code and public message without any account state write or audit event. GeneralAdmin retains an accurate not-found error for appropriately authorized full account management. This is enforced in C# services and does not rely on hidden UI routes.
+
+
+## Current-role session binding (03.08, 03.10, 03.17)
+
+- An authenticated session's original `UserSessions.Role` must match `Users.Role` on every native C# principal resolution. This prevents a session issued to an Admin from retaining privileged authority after a direct database or future application role downgrade; it also prevents reusing a lower-role nonce to inherit an unexpected elevation.
+- Both server-side native-input and foreground heartbeat idle-renewal SQL require the same role agreement. A stale-role nonce therefore cannot extend its five-minute expiry, even if physical input is observed.
+- `IdleAndSharedOutputTests.AccountRoleDowngrade_ImmediatelyInvalidatesOldAdminSession_AndCannotExtendDeadline` exercises a real SQLCipher account with a real roster PersonId and role downgrade, then checks session rejection and unchanged expiration across both renewal paths.
+- This does not turn ordinary password editing into role editing; no new role-edit command is exposed. Physical Windows sleep/resume, unexpected clock change and power-loss evidence remain open for the combined Section 02+03 acceptance.
