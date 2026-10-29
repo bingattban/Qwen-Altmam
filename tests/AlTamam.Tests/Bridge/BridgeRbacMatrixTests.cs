@@ -135,6 +135,63 @@ public sealed class BridgeRbacMatrixTests
             dispatcher.RegisteredActions.OrderBy(a => a, StringComparer.Ordinal));
     }
 
+    // Section 02.14 owner decision: every authenticated business-data mutation
+    // requires a caller-owned durable operation ID, not merely a requestId.
+    public static IEnumerable<object[]> DataMutationActions() =>
+        ActionManifest.All.Where(a => ActionManifest.RequiresOperationId(a.Action, a.IsMutating))
+            .Select(a => new object[] { a.Action });
+
+    [Fact]
+    public void Section02_MandatoryOperationId_CoversEveryDataMutationAndNotFileExports()
+    {
+        var required = DataMutationActions().Select(row => (string)row[0]).ToHashSet();
+        Assert.Equal(37, required.Count);
+        foreach (var name in new[] { "CreatePerson", "ArchivePersons", "CommitSeparation",
+                     "CommitInternalTransfer", "CommitExternalTransfer", "CommitImport",
+                     "UpdatePersonIdentity", "SubmitAttendance", "ReviseTodayAttendance",
+                     "SaveAttendanceDraft", "DeleteAttendanceDraft", "CommitFullReset",
+                     "CreateVerifiedBackup", "ChangeUserPassword", "SetTheme" })
+            Assert.Contains(name, required);
+        foreach (var name in new[] { "Logout", "ExportPersonLifetimeExcel",
+                     "ExportImportIssues", "ExportMonthlyWorkbookSet", "CancelExport",
+                     "SearchPersons", "PreviewPersonIdentityUpdate" })
+            Assert.DoesNotContain(name, required);
+    }
+
+    [Theory]
+    [MemberData(nameof(DataMutationActions))]
+    public async Task Section02_EveryDataMutation_RejectsMissingOrMalformedOperationIdBeforeHandler(string action)
+    {
+        var meta = ActionManifest.Find(action)!;
+        int executed = 0;
+        var registration = new BridgeActionRegistration(action, meta.OwningService,
+            meta.AllowedRoles, meta.IsMutating, false,
+            (req, actor, ct) => {
+                Interlocked.Increment(ref executed);
+                return Task.FromResult(new BridgeResponse(req.RequestId, true));
+            });
+        var dispatcher = new WebView2BridgeDispatcher(new[] { registration });
+        JsonNode?[] invalid = [null, JsonValue.Create(""), JsonValue.Create("short"),
+            JsonValue.Create("١٢٣٤٥٦٧٨٩٠١٢٣٤٥٦"), JsonValue.Create("bad*operation*1234"),
+            JsonValue.Create(new string('x',129)), new JsonArray("abc")];
+        for (int i=0;i<invalid.Length;i++)
+        {
+            var payload = new JsonObject();
+            if (i>0) payload["operationId"] = invalid[i]?.DeepClone();
+            var result = await dispatcher.DispatchAsync(
+                Envelope(action, NonceGa, "SECTION02-MISSING-"+i, payload),
+                ValidOrigin, true, Authenticate);
+            Assert.False(result.Response.Success);
+            Assert.Equal(BridgeErrorCodes.ValidationError, result.Response.ErrorCode);
+            Assert.Equal(0, executed);
+        }
+        var valid = await dispatcher.DispatchAsync(Envelope(action, NonceGa,
+            "SECTION02-VALID", new JsonObject { ["operationId"] = "section02-operation-0123456789" }),
+            ValidOrigin, true, Authenticate);
+        Assert.Equal(BridgeOutcomeKind.Success, valid.Kind);
+        Assert.Equal(1, executed);
+    }
+
     // ------------------------------------------------------------------ dangerous combinations
 
     [Theory]
