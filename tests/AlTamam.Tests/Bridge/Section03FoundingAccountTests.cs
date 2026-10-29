@@ -73,6 +73,24 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         var visible = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(accounts.Data)["items"]);
         Assert.Equal("الإدارة العامة - chosenOwner (صاحب البرنامج)",
             visible[0]!["fullName"]!.GetValue<string>());
+        var audit=new AuditOverlayService(_db);
+        var query=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="FOUNDING_ADMIN_CREATED"
+        },CancellationToken.None,admin);
+        Assert.True(query.Success,query.UserMessage);
+        var entry=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(query.Data)["items"])));
+        Assert.Equal("الإدارة العامة - chosenOwner (صاحب البرنامج)",
+            entry["actorDisplay"]!.GetValue<string>());
+        // Later edits of the profile must not rewrite event-time audit snapshots.
+        Exec("UPDATE Users SET FoundingFullName='اسم جديد' WHERE Role=1;");
+        var after=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="FOUNDING_ADMIN_CREATED"
+        },CancellationToken.None,admin);
+        var immutable=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(after.Data)["items"])));
+        Assert.Equal(entry["actorDisplay"]!.GetValue<string>(),
+            immutable["actorDisplay"]!.GetValue<string>());
 
         var duplicate = await _service.ProvisionFirstAdministratorAsync(
             "anotherOwner", "test-password-123", CancellationToken.None);
