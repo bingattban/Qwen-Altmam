@@ -17,6 +17,22 @@ internal static class MutationIdempotency
 {
     internal sealed record Context(string Actor,string OperationId,string Action,string Fingerprint);
 
+    // Exactly the same syntax is checked at the authenticated bridge boundary
+    // and by services storing SQLCipher ACID receipts.
+    internal static bool HasValidOperationId(JsonObject? payload)
+    {
+        try
+        {
+            string id = payload?["operationId"]?.GetValue<string>() ?? "";
+            return id.Length is >=16 and <=128
+                && id.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == '-' || ch == '_');
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FormatException)
+        {
+            return false;
+        }
+    }
+
     internal static async Task<(BridgeResponse? EarlyResponse,Context? Receipt)> StartAsync(
         SqliteConnection c,SqliteTransaction tx,string action,string actor,
         JsonObject? payload,CancellationToken ct)
