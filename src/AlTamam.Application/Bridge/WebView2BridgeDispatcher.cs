@@ -126,7 +126,9 @@ public sealed class WebView2BridgeDispatcher
         // AFTER server authentication/RBAC and BEFORE request replay tracking or
         // handler execution, so neither JS manipulation nor a stale client can
         // bypass the rule or consume a replay slot with an invalid request.
-        if (ActionManifest.RequiresOperationId(request.Action, registration.IsMutating)
+        if (registration.IsMutating
+            && ActionManifest.Find(request.Action) is { IsMutating: true }
+            && ActionManifest.RequiresOperationId(request.Action, true)
             && !MutationIdempotency.HasValidOperationId(request.Payload))
             return Fail(request.RequestId, BridgeErrorCodes.ValidationError,
                 "معرّف العملية operationId إلزامي وصيغته 16–128 حرفاً لاتينياً أو رقماً أو - أو _.",
