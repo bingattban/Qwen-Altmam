@@ -251,50 +251,121 @@
     const closeButton=button("إغلاق",close);
     append(heading,title,closeButton);
     const description=el("p","section-description",
-      "يمكن تصحيح حالة الفرد المعتمد تلقائياً من خلال معاينة واعتماد مسجلين في سجل العمليات. تخضع التعديلات لصلاحيات المستخدم ووقت قفل اليوم.");
+      "يمكن اختيار فرد واحد أو مجموعة وتغيير حالتهم بعد معاينة الأسماء والحالات السابقة والجديدة ثم التأكيد. لا يحدث أي تعديل بمجرد التحديد أو فتح السجل.");
     const search=field("search","بحث بالاسم أو الرقم (ع)");
     search.input.maxLength=100;
     const searchButton=button("بحث",()=>{term=search.input.value.trim();page=1;void load();});
     const actions=el("div","functional-toolbar");
-    append(actions,search.wrapper,searchButton);
+    const batchStatus=el("select","form-select auto-attendance-status-select");
+    batchStatus.setAttribute("aria-label","الحالة الجديدة للمحددين");
+    const batchPlaceholder=el("option","","الحالة الجديدة للمحددين");
+    batchPlaceholder.value="";batchStatus.appendChild(batchPlaceholder);
+    const selectPageButton=button("تحديد الصفحة",()=>selectVisiblePage());
+    const clearButton=button("إلغاء التحديد",()=>clearSelections());
+    const previewSelected=button("معاينة تغيير المحددين",()=>void previewSelectedChanges());
+    previewSelected.disabled=true;
+    const selectedInfo=el("span","auto-attendance-selection-info","المحددون: 0 من 100");
+    append(actions,search.wrapper,searchButton,batchStatus,
+      selectPageButton,clearButton,previewSelected,selectedInfo);
+    const notice=el("div","auto-attendance-feedback");
     const content=el("div","auto-attendance-results");
     const footer=el("div","functional-pager");
-    append(panel,heading,description,actions,content,footer);
+    append(panel,heading,description,actions,notice,content,footer);
     overlay.appendChild(panel);
     (document.body?.appendChild?document.body:view()).appendChild(overlay);
     autoPreparedOverlay=overlay;
     let disposed=false,page=1,term="",generation=0,choices=[];
-    async function editAutoStatus(person,statusId){
-      const chosen=choices.find(item=>item.statusId===statusId);
-      if(!chosen){showError(content,new Error("اختر الحالة الجديدة من القائمة المنسدلة."));return;}
-      if(chosen.statusId===person.statusId){
-        showError(content,new Error("اختر حالة مختلفة عن الحالة المعتمدة حالياً."));return;
+    let visiblePeople=[],busy=false,selectionVersion=0;
+    const selected=new Map();
+    function updateSelected(){
+      selectedInfo.textContent="المحددون: "+selected.size+" من 100";
+      previewSelected.disabled=busy||selected.size===0;
+      clearButton.disabled=busy||selected.size===0;
+      selectPageButton.disabled=busy||!visiblePeople.length;
+    }
+    function clearSelections(){
+      if(busy)return;
+      selected.clear();selectionVersion++;notice.replaceChildren();
+      updateSelected();void load();
+    }
+    function selectVisiblePage(){
+      if(busy)return;
+      const missing=visiblePeople.filter(p=>!selected.has(p.personId));
+      if(selected.size+missing.length>100){
+        showError(notice,new Error("الحد الأقصى 100 فرد لكل عملية؛ اختر عدداً أقل."));
+        return;
       }
+      for(const p of missing)selected.set(p.personId,p);
+      selectionVersion++;notice.replaceChildren();updateSelected();void load();
+    }
+    async function previewSelectedChanges(){
+      if(!batchStatus.value){
+        showError(notice,new Error("اختر الحالة الجديدة للمحددين قبل المعاينة."));return;
+      }
+      await editAutoStatuses(Array.from(selected.values()),batchStatus.value,true);
+    }
+    async function editAutoStatuses(persons,statusId,bulk=false){
+      if(busy||disposed)return;
+      const chosen=choices.find(item=>item.statusId===statusId);
+      if(!chosen){
+        showError(notice,new Error("اختر الحالة الجديدة من القائمة المنسدلة."));return;
+      }
+      if(!persons.length||persons.length>100){
+        showError(notice,new Error("حدد فرداً واحداً على الأقل، وبحد أقصى 100 فرد."));return;
+      }
+      const unchanged=persons.find(person=>person.statusId===statusId);
+      if(unchanged){
+        showError(notice,new Error("لا يمكن تغيير حالة "+unchanged.name+
+          " ("+unchanged.serviceNumberA+"): الحالة الجديدة هي نفسها الحالة المحفوظة."));return;
+      }
+      const expectedVersion=selectionVersion;
+      const ids=persons.map(person=>person.personId).sort();
+      busy=true;updateSelected();notice.replaceChildren();
       try{
-        const payload={businessDate:date,personIds:[person.personId],
-          statusId:chosen.statusId,mode:"revise"};
-        const response=await bridge().invoke("PreviewAttendanceChange",payload);
+        // ONE status and ONE C# transaction for the entire selection: never
+        // commit separate per-person changes with partial success.
+        const response=await bridge().invoke("PreviewAttendanceChange",{
+          businessDate:date,personIds:ids,statusId:chosen.statusId,
+          siteId:site,mode:"revise"
+        });
         const preview=parseData(response);
-        if(disposed||!preview?.previewToken||!Array.isArray(preview.persons))
-          throw Error("لم تصل معاينة موثّقة لتغيير الحالة.");
+        if(disposed||!preview?.previewToken||!Array.isArray(preview.persons)
+          ||preview.persons.length!==ids.length)
+          throw Error("لم تصل معاينة موثّقة تشمل جميع الأفراد المحددين.");
+        const verified=preview.persons.map(p=>p.personId).sort();
+        if(verified.some((id,i)=>id!==ids[i]))
+          throw Error("لا تتطابق المعاينة مع الأفراد المحددين؛ لم يُحفظ شيء.");
         const review=window.AltamamDialog?.attendanceReview;
-        if(typeof review!=="function")throw Error("نافذة المعاينة غير متاحة؛ لم يُحفظ أي تعديل.");
-        const accepted=await review(preview,{title:"معاينة تغيير حالة المحضّر تلقائياً",
-          message:"راجع الاسم والرقم (ع) والحالة السابقة والجديدة قبل الاعتماد.",
-          confirmLabel:"تأكيد تغيير الحالة"});
+        if(typeof review!=="function")
+          throw Error("نافذة المعاينة غير متاحة؛ لم يُحفظ أي تعديل.");
+        const accepted=await review(preview,{
+          title:bulk?"معاينة تغيير حالات المحضّرين تلقائياً":
+            "معاينة تغيير حالة المحضّر تلقائياً",
+          message:"راجع أسماء جميع الأفراد وأرقامهم ومواقعهم والحالة السابقة والجديدة؛ الإلغاء لا يحفظ شيئاً.",
+          confirmLabel:"تأكيد واعتماد التغييرات"
+        });
         if(!accepted||disposed)return;
+        if(expectedVersion!==selectionVersion){
+          showError(notice,new Error("تغيّر التحديد أثناء المعاينة؛ راجع الأسماء والحالات من جديد."));
+          return;
+        }
         const saved=parseData(await bridge().invoke("ReviseTodayAttendance",{
           previewToken:preview.previewToken,
           operationId:window.crypto?.randomUUID?.()||
             "AUTO-REV-"+Date.now()+"-"+Math.random().toString(36).slice(2)
         }));
-        if(!saved||!Number.isInteger(saved.count)||saved.count<1)
-          throw Error("لم يؤكد الخادم نجاح تعديل الحالة.");
-        if(!disposed)await load(); // Keep the auto-prepared dialog on screen.
-      }catch(error){if(!disposed)showError(content,error);}
+        if(!saved||saved.count!==ids.length)
+          throw Error("لم يؤكد الخادم اعتماد جميع الأفراد المحددين.");
+        for(const id of ids)selected.delete(id);
+        selectionVersion++;
+        notice.replaceChildren(message("تم اعتماد تغيير حالة "+saved.count+
+          " فرداً، مع حفظ التعديل في سجل العمليات."));
+        if(!disposed)await load(); // Keep register visible after confirmation.
+      }catch(error){if(!disposed)showError(notice,error);}
+      finally{busy=false;updateSelected();}
     }
     function close(){
-      disposed=true;generation++;
+      disposed=true;generation++;selected.clear();
       overlay.remove?.();
       if(!overlay.remove&&overlay.parentNode)overlay.parentNode.removeChild(overlay);
       if(autoPreparedOverlay===overlay)autoPreparedOverlay=null;
@@ -317,13 +388,30 @@
         if(disposed||current!==generation)return;
         if(!result||!Array.isArray(result.items))
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
-        const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
+        visiblePeople=result.items;
+        const tb=createTable([{label:"تحديد"},{label:"الرقم"},{label:"الرقم (ع)"},
           {label:"الاسم"},{label:"الموقع"},{label:"تاريخ التحضير"},
           {label:"مصدر التحضير"},{label:"الحالة المحفوظة"},
           {label:"الحالة الجديدة"},{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
+          const checkCell=el("td"),checkbox=el("input");
+          checkbox.type="checkbox";checkbox.checked=selected.has(person.personId);
+          checkbox.setAttribute("aria-label","تحديد "+person.name);
+          checkbox.addEventListener("change",()=>{
+            if(busy){checkbox.checked=selected.has(person.personId);return;}
+            if(checkbox.checked){
+              if(selected.size>=100){
+                checkbox.checked=false;
+                showError(notice,new Error("الحد الأقصى 100 فرد لكل عملية."));
+                return;
+              }
+              selected.set(person.personId,person);
+            }else selected.delete(person.personId);
+            selectionVersion++;notice.replaceChildren();updateSelected();
+          });
+          checkCell.appendChild(checkbox);row.appendChild(checkCell);
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
             person.name,person.siteName,person.savedBusinessDate||date,
             person.autoSource||"مصدر غير موثق",person.statusName].forEach(value=>
@@ -339,7 +427,7 @@
           }
           selectCell.appendChild(statusSelect);row.appendChild(selectCell);
           const action=el("td");action.appendChild(button("معاينة التعديل",
-            ()=>void editAutoStatus(person,statusSelect.value)));
+            ()=>void editAutoStatuses([person],statusSelect.value)));
           row.appendChild(action);
           tb.body.appendChild(row);
         });
@@ -351,17 +439,28 @@
         const next=button("التالي",()=>{page++;void load();});
         previous.disabled=page<=1;next.disabled=page*DAILY_PAGE_SIZE>=total;
         append(footer,previous,next);
+        updateSelected();
       }catch(error){
         if(!disposed&&current===generation)showError(content,error);
       }
     }
+    // Reading saved automatic attendance must work even when no new status
+    // choices can be loaded; only the edit controls then become unavailable.
+    void load();
     void bridge().invoke("GetActiveAttendanceStatuses",{}).then(reply=>{
       if(disposed)return;
       const data=parseData(reply);
       choices=Array.isArray(data)?data:(data?.items||[]);
-      if(!choices.length)throw Error("لا توجد حالات تحضير فعّالة للاختيار.");
+      for(const item of choices){
+        const option=el("option","",item.displayName);option.value=item.statusId;
+        batchStatus.appendChild(option);
+      }
+      if(!choices.length)
+        notice.replaceChildren(message("لا توجد حالات نشطة للتعديل؛ عرض السجل متاح."));
       void load();
-    }).catch(error=>{if(!disposed)showError(content,error);});
+    }).catch(error=>{
+      if(!disposed)showError(notice,error);
+    });
   }
 
   async function renderDashboard() {
