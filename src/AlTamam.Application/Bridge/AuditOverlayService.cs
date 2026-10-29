@@ -76,6 +76,8 @@ public sealed class AuditOverlayService
                  OR altamam_normalize_search(e.OperationCode) LIKE $term ESCAPE '\'
                  OR altamam_normalize_search(e.OperationArabicName) LIKE $term ESCAPE '\'
                  OR altamam_normalize_search(e.DefaultArabicDescription) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.OldValueJson) LIKE $term ESCAPE '\'
+                 OR altamam_normalize_search(e.NewValueJson) LIKE $term ESCAPE '\'
                  OR EXISTS(SELECT 1 FROM AuditLogPresentationEdits o
                            WHERE o.AuditEventId = e.AuditEventId
                              AND o.OverlayVersion =
@@ -87,12 +89,12 @@ public sealed class AuditOverlayService
         }
         if (!string.IsNullOrWhiteSpace(actor))
         {
-            where.Add("(e.ActorUsernameSnapshot LIKE $actor ESCAPE '\\' OR e.ActorRosterFullNameSnapshot LIKE $actor ESCAPE '\\')");
+            where.Add("(altamam_normalize_search(e.ActorUsernameSnapshot) LIKE $actor ESCAPE '\\' OR altamam_normalize_search(e.ActorRosterFullNameSnapshot) LIKE $actor ESCAPE '\\')");
             args.Add(("$actor", "%" + EscapeLike(NormalizeTerm(actor)) + "%"));
         }
         if (!string.IsNullOrWhiteSpace(target))
         {
-            where.Add("(e.TargetDisplaySnapshot LIKE $target ESCAPE '\\' OR e.TargetEntityId LIKE $target ESCAPE '\\')");
+            where.Add("(altamam_normalize_search(e.TargetDisplaySnapshot) LIKE $target ESCAPE '\\' OR altamam_normalize_search(e.TargetEntityId) LIKE $target ESCAPE '\\' OR altamam_normalize_search(e.OldValueJson) LIKE $target ESCAPE '\\' OR altamam_normalize_search(e.NewValueJson) LIKE $target ESCAPE '\\')");
             args.Add(("$target", "%" + EscapeLike(NormalizeTerm(target)) + "%"));
         }
         if (!string.IsNullOrWhiteSpace(operation))
