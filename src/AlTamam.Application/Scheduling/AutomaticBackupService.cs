@@ -139,6 +139,43 @@ public sealed class AutomaticBackupService
         },ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Durable failure notification: a repeated scheduler tick with the same
+    /// failure on the same date does not flood the immutable audit ledger.
+    /// Do not include credentials or encryption keys in diagnostic messages.
+    /// </summary>
+    public async Task RecordFailureAsync(string message,CancellationToken ct=default)
+    {
+        string detail=message.Length>400?message[..400]:message;
+        string day=_time.GetLocalNow().ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
+        string value=day+" - "+detail;
+        await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>
+        {
+            using var prior=c.CreateCommand();prior.Transaction=tx;
+            prior.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='AutoBackupLastFailure';";
+            string old=(await prior.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString()??"";
+            if(old==value)return 0;
+            using var cmd=c.CreateCommand();cmd.Transaction=tx;
+            cmd.CommandText="""
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('AutoBackupLastFailure',$value,$now)
+                ON CONFLICT(SettingKey) DO UPDATE SET
+                    SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                """;
+            cmd.Parameters.AddWithValue("$value",value);
+            cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            await BridgeAuditWriter.WriteAsync(c,tx,_time,
+                "AUTO_BACKUP_FAILED","فشل النسخ الاحتياطي التلقائي",
+                "USR-SYSTEM","النظام",null,"Backup","AUTO-"+day,"النسخ اليومي",
+                new JsonObject{["lastFailure"]=old}.ToJsonString(),
+                new JsonObject{["lastFailure"]=value}.ToJsonString(),
+                "لم تنجح النسخة التلقائية ولم يُسجّل نجاح وهمي",detail,day,
+                Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
+            return 0;
+        },ct).ConfigureAwait(false);
+    }
+
     /// <returns>True only after the encrypted file and durable database audit
     /// record both committed. Runs once per date, including a same-day startup
     /// catch-up after the scheduled time; never invents backups for past dates.</returns>
@@ -194,6 +231,18 @@ public sealed class AutomaticBackupService
                     insert.Parameters.AddWithValue("$schema",AlTamamDbContext.CurrentSchemaVersion);
                     insert.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
                     await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    using(var clear=c.CreateCommand())
+                    {
+                        clear.Transaction=tx;
+                        clear.CommandText="""
+                            INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                            VALUES('AutoBackupLastFailure','',$now)
+                            ON CONFLICT(SettingKey) DO UPDATE SET
+                              SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                            """;
+                        clear.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
+                        await clear.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    }
                     await BridgeAuditWriter.WriteAsync(c,tx,_time,
                         "AUTO_BACKUP_CREATE","نسخ احتياطي تلقائي",
                         "USR-SYSTEM","النظام",null,"Backup",id,filename,
