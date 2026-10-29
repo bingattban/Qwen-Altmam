@@ -107,7 +107,7 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
-    public async Task GroupWorkbook_AllSheetsPreservePersonIdAndHistory_ExportAudited()
+    public async Task GroupWorkbook_UsesIndependentDisplayOrdinalsWithoutExposingPersonId_ExportAudited()
     {
         var svc=new PersonnelExcelExportService(_db);
         string id=Guid.NewGuid().ToString("N");
@@ -134,23 +134,33 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
                 e.FullName.EndsWith(".xml")));
             var people=Rows(zip,1).Select(Text).ToArray();
             Assert.Equal(4,people.Length);
-            Assert.Equal("TST-XLSX-OLD",people[1][0]);
-            Assert.Equal("TST-XLSX-NEW",people[2][0]);
+            Assert.Equal("1",people[1][0]);
+            Assert.Equal("2",people[2][0]);
             Assert.Equal("3333",people[1][1]);
             Assert.Equal("3333",people[2][1]);
+            Assert.All(Enumerable.Range(1,7),index=>{
+                foreach(var cell in Rows(zip,index).SelectMany(Text))
+                {
+                    Assert.DoesNotContain("TST-XLSX-OLD",cell);
+                    Assert.DoesNotContain("TST-XLSX-NEW",cell);
+                    Assert.DoesNotContain("PersonId",cell);
+                    Assert.DoesNotContain("MovementId",cell);
+                    Assert.DoesNotContain("SiteId",cell);
+                }
+            });
             Assert.Equal("إجمالي المجموعة",people[3][0]);
             Assert.Equal("2",people[3][5]);
             Assert.Contains("غياب (1)",people[3][9]);
             Assert.Contains("موجود (1)",people[3][9]);
             var history=Rows(zip,2).Select(Text).ToArray();
             Assert.Equal(3,history.Length);
-            Assert.Equal("TST-XLSX-OLD",history[1][0]);
-            Assert.Equal("TST-XLSX-NEW",history[2][0]);
+            Assert.Equal("1",history[1][0]);
+            Assert.Equal("2",history[2][0]);
             Assert.Equal("غياب",history[1][4]);
             Assert.Equal("موجود",history[2][4]);
             var movements=Rows(zip,3).Select(Text).ToArray();
             Assert.Equal(4,movements.Length);
-            Assert.All(movements.Skip(1),x=>Assert.Equal("TST-XLSX-OLD",x[0]));
+            Assert.All(movements.Skip(1),x=>Assert.Equal("1",x[0]));
             var audits=Rows(zip,4).Select(Text).ToArray();
             Assert.Equal(2,audits.Length);
             Assert.Equal("""{"name":"الاسم السابق"}""",audits[1][7]);
@@ -181,10 +191,10 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
     }
 
     [Theory]
-    [InlineData("internal","نقل داخلي","TST-XLSX-INT")]
-    [InlineData("external","نقل خارجي","TST-XLSX-EXT")]
+    [InlineData("internal","نقل داخلي")]
+    [InlineData("external","نقل خارجي")]
     public async Task MovementArchives_ExportOnlyMatchingType_WithNamedFiles(
-        string type,string title,string movementId)
+        string type,string title)
     {
         var svc=new PersonnelExcelExportService(_db);
         var payload=new JsonObject{["mode"]="movementArchive",["type"]=type,
@@ -197,8 +207,8 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
         using var zip=ZipFile.OpenRead(file);
         var rows=Rows(zip,1).Select(Text).ToArray();
         Assert.Equal(2,rows.Length);
-        Assert.Equal(movementId,rows[1][0]);
-        Assert.Equal("TST-XLSX-OLD",rows[1][1]);
+        Assert.Equal("1",rows[1][0]);
+        Assert.Equal("3333",rows[1][1]);
     }
 
     [Fact]
@@ -212,7 +222,7 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
         var file=File(Assert.IsType<JsonObject>(r.Data));
         Assert.StartsWith("أرشيف الفصل_",Path.GetFileName(file));
         using var zip=ZipFile.OpenRead(file);
-        Assert.Equal("TST-XLSX-SEP",Text(Rows(zip,1).Last())[0]);
+        Assert.Equal("1",Text(Rows(zip,1).Last())[0]);
         Assert.False((await svc.PreviewReportAsync(new JsonObject{
             ["personId"]="TST-XLSX-NEW",["dateFrom"]="2026-12-01",["dateTo"]="2026-01-01"
         },CancellationToken.None)).Success);

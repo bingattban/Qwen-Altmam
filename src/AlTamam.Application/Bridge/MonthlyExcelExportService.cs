@@ -66,6 +66,11 @@ public sealed class MonthlyExcelExportService
     public async Task<BridgeResponse> ExportAsync(JsonObject? input, CancellationToken ct,
         Action<int,int>? progress=null)
     {
+        // All Sites produces one consolidated workbook plus a separate workbook
+        // for every historically represented site. Single-site exports are unchanged.
+        if(input is not null && (input["siteId"]?.ToString()??"").Length==0 &&
+           input["consolidatedOnly"]?.ToString()!="true")
+            return await ExportAllSitesAsync(input,ct,progress).ConfigureAwait(false);
         var preview = await PreviewAsync(input, ct).ConfigureAwait(false);
         if (!preview.Success) return preview;
         var previewData = (JsonObject)preview.Data!;
@@ -204,6 +209,98 @@ public sealed class MonthlyExcelExportService
         {
             try { if (File.Exists(partial)) File.Delete(partial); } catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+        }
+    }
+
+
+    private async Task<BridgeResponse> ExportAllSitesAsync(JsonObject input,
+        CancellationToken ct,Action<int,int>? progress)
+    {
+        var consolidated=await PreviewAsync(input,ct).ConfigureAwait(false);
+        if(!consolidated.Success)return consolidated;
+        var data=(JsonObject)consolidated.Data!;
+        long combined=data["personCount"]!.GetValue<long>();
+        if(combined==0)
+            return BridgeHelpers.Error(BridgeErrorCodes.MissingData,
+                "لا توجد أسماء لهذا الشهر لتصدير كشف موحد ومواقع منفصلة.");
+        var sitePlans=new List<(string SiteId,long Count)>();
+        using(var connection=_db.CreateOpenConnection())
+        using(var cmd=connection.CreateCommand())
+        {
+            // Include retired sites if they still have historical membership.
+            cmd.CommandText="SELECT SiteId FROM Sites ORDER BY IsSystemSite DESC,VisibleName,SiteId;";
+            var ids=new List<string>();
+            using(var reader=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+                while(await reader.ReadAsync(ct).ConfigureAwait(false))
+                    ids.Add(reader.GetString(0));
+            foreach(string siteId in ids)
+            {
+                ct.ThrowIfCancellationRequested();
+                var candidate=(JsonObject)input.DeepClone();
+                candidate["siteId"]=siteId;
+                var preview=await PreviewAsync(candidate,ct).ConfigureAwait(false);
+                if(!preview.Success)return preview;
+                long count=((JsonObject)preview.Data!)["personCount"]!.GetValue<long>();
+                if(count>0)sitePlans.Add((siteId,count));
+            }
+        }
+        long sum=combined+sitePlans.Sum(x=>x.Count);
+        if(sum>int.MaxValue)
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "تجاوز عدد صفوف التصدير الجماعي الحد الآمن.");
+        var created=new List<string>();
+        var files=new JsonArray();
+        int completed=0;
+        bool success=false;
+        try
+        {
+            async Task<BridgeResponse> OneAsync(string siteId)
+            {
+                var selected=(JsonObject)input.DeepClone();
+                selected["siteId"]=siteId;
+                selected["consolidatedOnly"]=true;
+                int before=completed;
+                return await ExportAsync(selected,ct,(done,total)=>
+                    progress?.Invoke(checked(before+done),checked((int)sum))).ConfigureAwait(false);
+            }
+            var all=await OneAsync("").ConfigureAwait(false);
+            if(!all.Success)return all;
+            var combinedData=(JsonObject)all.Data!;
+            string combinedPath=combinedData["filePath"]!.GetValue<string>();
+            created.Add(combinedPath);
+            files.Add(new JsonObject{["siteId"]="",
+                ["filePath"]=combinedPath,["personCount"]=combined});
+            completed=checked((int)combined);
+            foreach(var plan in sitePlans)
+            {
+                ct.ThrowIfCancellationRequested();
+                var individual=await OneAsync(plan.SiteId).ConfigureAwait(false);
+                if(!individual.Success)return individual;
+                var entry=(JsonObject)individual.Data!;
+                string file=entry["filePath"]!.GetValue<string>();
+                created.Add(file);
+                files.Add(new JsonObject{["siteId"]=plan.SiteId,
+                    ["filePath"]=file,["personCount"]=plan.Count});
+                completed=checked(completed+(int)plan.Count);
+            }
+            progress?.Invoke(completed,checked((int)sum));
+            success=true;
+            return BridgeHelpers.Ok(new JsonObject{
+                ["filePath"]=combinedPath,["format"]="xlsx",["personCount"]=combined,
+                ["files"]=files,["fileCount"]=files.Count,
+                ["year"]=data["year"]!.GetValue<int>(),["month"]=data["month"]!.GetValue<int>()
+            });
+        }
+        finally
+        {
+            // An incomplete set must never be presented as successfully exported.
+            // Only remove new files created by THIS attempt, never existing exports.
+            if(!success)foreach(var file in created)
+            {
+                try{if(File.Exists(file))File.Delete(file);}
+                catch(IOException){}
+                catch(UnauthorizedAccessException){}
+            }
         }
     }
 

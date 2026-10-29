@@ -57,8 +57,7 @@ public sealed class PersonnelSeparationService
         using var q=c.CreateCommand();q.Transaction=tx;
         q.CommandText="""
             SELECT
-              (SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId=$id AND AttendanceLocalDate=$date)
-              +(SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId=$id AND EffectiveLocalDate=$date)
+              (SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId=$id AND EffectiveLocalDate=$date)
               +(SELECT COUNT(*) FROM PeriodClosures WHERE IsClosed=1
                    AND ((PeriodType='DAY' AND PeriodKey=$date)
                         OR (PeriodType='MONTH' AND PeriodKey=$month)));
@@ -130,6 +129,8 @@ public sealed class PersonnelSeparationService
                 issued=DateTimeOffset.Parse(reader.GetString(2),CultureInfo.InvariantCulture);
             }
             // Server-side enforcement, not just a cosmetic JavaScript countdown.
+            // A saved attendance on the dismissal date stays immutable; the separation
+            // is a distinct movement and the monthly grid annotates both facts.
             if(_time.GetUtcNow()-issued<TimeSpan.FromSeconds(5))
                 return Fail(BridgeErrorCodes.ValidationError,"لا يمكن الفصل قبل انتهاء مهلة التأكيد (5 ثوانٍ).");
             if(JsonNode.Parse(original) is not JsonObject preview ||
@@ -246,7 +247,15 @@ public sealed class PersonnelSeparationService
         cmd.CommandText="""
             SELECT m.MovementId,m.PersonId,m.PersonNameSnapshot,m.ServiceNumberASnapshot,
                    m.SourceSiteNameSnapshot,m.SeparationReason,m.EffectiveLocalDate,
-                   m.CommittedAtUtc,m.ActorUserId
+                   m.CommittedAtUtc,m.ActorUserId,
+                   COALESCE((SELECT a.ActorUsernameSnapshot || ' - ' ||
+                             COALESCE(a.ActorRosterFullNameSnapshot,'')
+                         FROM AuditEvents a
+                         WHERE a.OperationCode='PERSON_SEPARATE'
+                           AND a.TargetEntityType='Person'
+                           AND a.TargetEntityId=m.PersonId
+                           AND a.EffectiveLocalDate=m.EffectiveLocalDate
+                         ORDER BY a.ExecutedAtUtc DESC LIMIT 1),'—')
             FROM PersonnelMovements m
             """+"\n"+filter+"\n"+"""
             ORDER BY m.EffectiveLocalDate DESC,m.CommittedAtUtc DESC,m.MovementId
@@ -264,7 +273,8 @@ public sealed class PersonnelSeparationService
                 ["name"]=reader.GetString(2),["serviceNumberA"]=reader.GetString(3),
                 ["siteName"]=reader.GetString(4),["reason"]=reader.GetString(5),
                 ["date"]=reader.GetString(6),["committedAtUtc"]=reader.GetString(7),
-                ["actorUserId"]=reader.GetString(8)
+                ["actorUserId"]=reader.GetString(8),
+                ["actorDisplay"]=reader.GetString(9)
             });
         return BridgeHelpers.Ok(new JsonObject
         {

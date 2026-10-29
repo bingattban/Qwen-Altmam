@@ -234,9 +234,13 @@
     shell.appendChild(node("p","section-description",
       "أعمدة الكشف: الاسم، الرقم (ع)، الموقع (اختياري)، والرقم العادي للتسلسل فقط. " +
       "الرقم (ع) لا يقل عن أربع خانات، ويختلف عن رقم ترتيب الصف. الحد 500 فرد و160 كيلوبايت. " +
-      "سيُنشئ البرنامج المواقع غير الموجودة تلقائياً عند التأكيد، ولن يغير هوية أو تحضير فرد موجود."));
+      "ستُعرض المواقع الجديدة في معاينة مستقلة قبل الموافقة الصريحة على إنشائها. لن تتغير هوية أو تحضير فرد موجود."));
     const choose=node("input","form-control");choose.type="file";
     choose.accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const sheetSelector=field("أرقام أوراق Excel (مثال 1,3 أو الكل)","1");
+    const mapName=field("عنوان عمود الاسم (اختياري إذا تعرف عليه البرنامج)");
+    const mapNumber=field("عنوان عمود الرقم (ع) (اختياري)");
+    const mapSite=field("عنوان عمود الموقع (اختياري)");
     const picker=node("label","admin-input");
     picker.append(node("span","","اختر الملف من الجهاز"),choose);
     const status=node("div","admin-note");
@@ -343,8 +347,19 @@
       const current=serial;examine.disabled=true;
       try{
         status.replaceChildren(warning("جارٍ فحص ملف Excel واكتشاف التعارضات..."));
+        const sheetsText=sheetSelector.input.value.trim();
+        const allSheets=sheetsText==="الكل";
+        const sheetIndexes=allSheets?null:sheetsText.split(/[,،]/).map(x=>Number(x.trim()));
+        if(!allSheets && (!sheetIndexes.length || sheetIndexes.length>50 ||
+           sheetIndexes.some(x=>!Number.isInteger(x)||x<1||x>50) ||
+           new Set(sheetIndexes).size!==sheetIndexes.length))
+          throw Error("أدخل أرقام أوراق صحيحة دون تكرار، مثل 1,3، أو اكتب الكل.");
         const selected=await api().invoke("SelectImportWorkbook",{
-          fileName:file.name,base64:await dataUrl(file)
+          fileName:file.name,base64:await dataUrl(file),
+          ...(allSheets?{allSheets:true}:{sheetIndexes}),
+          nameHeading:mapName.input.value.trim(),
+          numberHeading:mapNumber.input.value.trim(),
+          siteHeading:mapSite.input.value.trim()
         });
         if(current!==serial||!valid())return;
         workbookToken=selected.data?.workbookToken||"";
@@ -356,9 +371,9 @@
         for(const [key,value] of [["إجمالي الصفوف",report.totalRows],
           ["أفراد جدد",report.newCount],["صفوف متعارضة أو غير صالحة",report.issueCount]])
           summary.appendChild(settingsValue(key,value));
-        const issues=table(["الصف","الاسم","الرقم (ع)","سبب الاستبعاد"]);
+        const issues=table(["الورقة","الصف","الاسم","الرقم (ع)","سبب الاستبعاد"]);
         for(const item of (report.issues||[]).slice(0,500))
-          addRow(issues.body,[item.row,item.name,item.serviceNumberA,item.reason]);
+          addRow(issues.body,[item.worksheet||"—",item.row,item.name,item.serviceNumberA,item.reason]);
         if((report.issues||[]).length)
           summary.append(node("h3","section-title","الصفوف المستبعدة"),issues.wrap);
         const preview=btn("معاينة خطة الإضافة",async()=>{
@@ -373,6 +388,21 @@
             const detailsReview=window.AltamamDialog?.detailsReview;
             if(typeof detailsReview!=="function")
               throw Error("نافذة معاينة الاستيراد غير متاحة؛ لم يُحفظ أي تغيير.");
+            const newSites=Array.isArray(plan.newSites)?plan.newSites:[];
+            const approvedSiteNames=newSites.map(x=>x.name);
+            if(newSites.length){
+              const siteApproved=await detailsReview({
+                rows:[["عدد المواقع الجديدة",newSites.length],
+                  ["التحقق","لن تُنشأ أي مواقع قبل الموافقة على الأسماء التالية."]],
+                columns:["الموقع الجديد","الأفراد المقترحون"],
+                items:newSites.map(x=>[x.name,x.personCount])
+              },{
+                title:"معاينة إنشاء مواقع جديدة",
+                message:"تأكيد مستقل لإنشاء المواقع غير الموجودة؛ تُسجل كل إضافة في التدقيق.",
+                confirmLabel:"أوافق على إنشاء هذه المواقع"
+              });
+              if(!siteApproved){previewToken="";return;}
+            }
             const details={rows:[
               ["أفراد جدد",plan.newCount],["صفوف مستبعدة",plan.issueCount],
               ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
@@ -388,7 +418,8 @@
             const operationId=makeOperationId();
             const commit=async()=>{
               try{
-                const done=await api().invoke("CommitImport",{previewToken:token,operationId});
+                const done=await api().invoke("CommitImport",{previewToken:token,operationId,
+                  confirmNewSites:newSites.length>0,approvedSiteNames});
                 if(!valid())return;
                 if(!Number.isInteger(done.data?.createdCount))
                   throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
@@ -418,7 +449,8 @@
       }catch(e){errors(status,e);}
       finally{examine.disabled=false;}
     },"btn btn-primary");
-    shell.append(picker,examine,status,analysis,confirmBox);
+    shell.append(picker,sheetSelector.wrap,mapName.wrap,mapNumber.wrap,mapSite.wrap,
+      examine,status,analysis,confirmBox);
     page.append(shell,history);
     void loadHistory();
   }

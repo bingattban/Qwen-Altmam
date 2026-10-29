@@ -31,7 +31,12 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
       {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
        days:{[firstDay]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
     if(action==="PreviewMonthlyExport")return{data:{personCount:1,year,month,siteId:payload.siteId,format:"xlsx"}};
-    if(action==="ExportMonthlyWorkbookSet")return{data:{filePath:"C:\\Users\\Test\\Documents\\AlTamam\\Exports\\sample.xlsx",format:"xlsx",personCount:1}};
+    if(action==="ExportMonthlyWorkbookSet")return{data:{
+      filePath:"C:\\Users\\Test\\Documents\\AlTamam\\Exports\\sample.xlsx",
+      format:"xlsx",personCount:1,fileCount:2,files:[
+        {siteId:"",filePath:"C:\\Reports\\sample.xlsx",personCount:1},
+        {siteId:"SITE-UNSPECIFIED",filePath:"C:\\Reports\\site.xlsx",personCount:1}
+      ]}};
     if(action==="GetMonthlyCellDetails")return{data:{personId:payload.personId,businessDate:payload.businessDate,
       personName:"شخص اختباري",serviceNumberA:"X1",siteName:"غير محدد",
       attendance:{statusName:"غياب",symbol:"غ",committedAtUtc:"2026-10-19T07:00:00Z",

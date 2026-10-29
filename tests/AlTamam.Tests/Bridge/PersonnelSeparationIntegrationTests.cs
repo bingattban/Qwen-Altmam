@@ -227,7 +227,7 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
         Assert.Equal(0L,Count("AuditEvents"));
     }
     [Fact]
-    public async Task PreparedPersonCannotBeSeparatedOnSameDay()
+    public async Task PreparedPersonCanBeSeparatedOnSameDay_WithoutOverwritingAttendance()
     {
         using(var c=_db.CreateOpenConnection())
         {
@@ -246,8 +246,29 @@ public sealed class PersonnelSeparationIntegrationTests:IAsyncLifetime,IDisposab
         }
         var service=new PersonnelSeparationService(_db,_clock);
         var result=await service.PreviewAsync(Data(),Actor,CancellationToken.None);
-        Assert.False(result.Success);
-        Assert.Equal(0L,Count("PersonnelMovements"));
+        Assert.True(result.Success,result.UserMessage);
+        var token=Token(result);
+        _clock.Advance(TimeSpan.FromSeconds(6));
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=token,
+            ["operationId"]="same-day-saved-attendance-preserved"},Actor,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        Assert.Equal(1L,Count("PersonnelMovements"));
+        Assert.Equal(1L,Count("AttendanceRecords"));
+        using var c2=_db.CreateOpenConnection();
+        using var q2=c2.CreateCommand();
+        q2.CommandText="SELECT StatusNameSnapshot FROM AttendanceRecords WHERE PersonId='TEST-SEP-P1' AND AttendanceLocalDate=$date;";
+        q2.Parameters.AddWithValue("$date",Today());
+        Assert.Equal("موجود",(string?)await q2.ExecuteScalarAsync());
+        var day=DateOnly.Parse(Today());
+        var monthly=await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject{
+            ["year"]=day.Year,["month"]=day.Month,["siteId"]="SITE-UNSPECIFIED",
+            ["archiveMode"]=true,["page"]=1,["pageSize"]=20},CancellationToken.None);
+        Assert.True(monthly.Success,monthly.UserMessage);
+        var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(monthly.Data)["items"]);
+        var cell=Assert.IsType<JsonObject>(Assert.IsType<JsonObject>(items[0]!["days"])[Today()]);
+        Assert.Equal("موجود",cell["name"]!.GetValue<string>());
+        Assert.Equal("separation",cell["movementKind"]!.GetValue<string>());
+        Assert.Contains("مفصول",cell["movementNote"]!.GetValue<string>());
     }
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose(){_db?.Dispose();SyntheticFixtures.DeleteTempDatabase(_path);}
