@@ -285,10 +285,27 @@
       selectedInfo.textContent="المحددون: "+selected.size+" من 100";
       previewSelected.disabled=busy||selected.size===0;
       clearButton.disabled=busy||selected.size===0;
+      closeButton.disabled=busy;
       selectPageButton.disabled=busy||!visiblePeople.length;
     }
-    function clearSelections(){
-      if(busy)return;
+    // A pending human selection is never discarded silently. Keep this
+    // separate from the one-time server preview: refusing cancellation is read-only.
+    async function confirmDiscard(){
+      if(disposed||busy)return false;
+      if(selected.size===0)return true;
+      const expectedVersion=selectionVersion;
+      const confirm=window.AltamamDialog?.confirm;
+      if(typeof confirm!=="function"){
+        showError(notice,new Error("نافذة تأكيد الإلغاء غير متاحة؛ احتُفظ بالتحديد."));
+        return false;
+      }
+      const approved=await confirm("لديك "+selected.size+
+        " فرداً محدداً دون اعتماد. هل تريد إلغاء الاختيار دون تغيير حالاتهم؟",
+        {title:"تأكيد إلغاء التحديد"});
+      return approved===true&&!disposed&&!busy&&expectedVersion===selectionVersion;
+    }
+    async function clearSelections(){
+      if(!await confirmDiscard())return;
       selected.clear();selectionVersion++;notice.replaceChildren();
       updateSelected();void load();
     }
@@ -368,7 +385,8 @@
       }catch(error){if(!disposed)showError(notice,error);}
       finally{busy=false;updateSelected();}
     }
-    function close(){
+    async function close(){
+      if(!await confirmDiscard())return;
       disposed=true;generation++;selected.clear();
       overlay.remove?.();
       if(!overlay.remove&&overlay.parentNode)overlay.parentNode.removeChild(overlay);
