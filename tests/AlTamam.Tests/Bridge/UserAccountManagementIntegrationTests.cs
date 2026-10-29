@@ -74,6 +74,57 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
         Assert.Equal(1L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
     }
 
+    [Theory]
+    [InlineData(null, "الإدارة العامة - founder-creator")]
+    [InlineData("صاحب الحساب", "الإدارة العامة - founder-creator (صاحب الحساب)")]
+    public async Task FounderCreatorSnapshot_UsesSpecialLabelWithOptionalName_WithoutPersonLink(
+        string? optionalFullName,string expectedCreator)
+    {
+        var auth=new BridgeSharedServices(_db);
+        var setup=await auth.ProvisionFirstAdministratorAsync(
+            "founder-creator",SafePassword,default,optionalFullName);
+        Assert.True(setup.Success,setup.UserMessage);
+        string founderId=Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>();
+        var founder=new BridgePrincipal(founderId,"founder-creator",
+            UserRole.GeneralAdministration,"0123456789abcdef0123456789abcdef");
+        var accounts=new UserAccountManagementService(_db);
+        var created=await accounts.CreateAsync(new JsonObject
+        {
+            ["username"]="supervisor-by-founder",["password"]=SafePassword,
+            ["passwordConfirmation"]=SafePassword,["personId"]="TST-ACTIVE-1",
+            ["role"]="Supervisor",["operationId"]="OP-FOUNDER-CREATOR-00001"
+        },founder,default);
+        Assert.True(created.Success,created.UserMessage);
+
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="""
+            SELECT LinkedPersonId FROM Users WHERE UserId=$founder;
+            """;
+        q.Parameters.AddWithValue("$founder",founderId);
+        Assert.Equal(DBNull.Value,await q.ExecuteScalarAsync());
+        q.CommandText="""
+            SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='supervisor-by-founder';
+            """;
+        Assert.Equal(expectedCreator,Assert.IsType<string>(await q.ExecuteScalarAsync()));
+
+        var listed=await accounts.ListAsync(new JsonObject(),founder,default);
+        Assert.True(listed.Success,listed.UserMessage);
+        var items=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(listed.Data)["items"]);
+        var child=Assert.IsType<JsonObject>(items.Single(row=>
+            row!["username"]!.GetValue<string>()=="supervisor-by-founder"));
+        Assert.Equal(expectedCreator,child["createdBy"]!.GetValue<string>());
+
+        // A later correction of the optional founding name must NOT rewrite
+        // the historical creator display stored on the created account.
+        q.CommandText="UPDATE Users SET FoundingFullName='اسم مؤسس لاحق' WHERE UserId=$founder;";
+        await q.ExecuteNonQueryAsync();
+        q.CommandText="""
+            SELECT CreatedByDisplaySnapshot FROM Users WHERE Username='supervisor-by-founder';
+            """;
+        Assert.Equal(expectedCreator,Assert.IsType<string>(await q.ExecuteScalarAsync()));
+    }
+
     [Fact]
     public async Task GeneralAdministration_CreatesLinkedOrdinaryAccountWithAuditAndArgon2id()
     {
