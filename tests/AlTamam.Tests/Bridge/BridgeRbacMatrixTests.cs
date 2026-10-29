@@ -275,6 +275,41 @@ public sealed class BridgeRbacMatrixTests
         Assert.Empty(executed);
     }
 
+    public static IEnumerable<object[]> AllMutationsExceptLogout() =>
+        ActionManifest.All.Where(a => a.IsMutating && a.Action != "Logout")
+            .Select(a => new object[] { a.Action });
+
+    [Theory]
+    [MemberData(nameof(AllMutationsExceptLogout))]
+    public async Task EveryDomainMutation_MissingOrMalformedOperationId_FailsBeforeHandler(string action)
+    {
+        int executed=0;
+        var registration=new BridgeActionRegistration(action,"SyntheticHandler",
+            new[]{"GeneralAdministration"},true,false,
+            (req,p,ct)=>{
+                Interlocked.Increment(ref executed);
+                return Task.FromResult(new BridgeResponse(req.RequestId,true));
+            });
+        var dispatcher=new WebView2BridgeDispatcher(new[]{registration});
+        foreach(var value in new string?[]{null,"short","illegal space in identifier"})
+        {
+            var payload=new JsonObject();
+            if(value is not null)payload["operationId"]=value;
+            var result=await dispatcher.DispatchAsync(
+                Envelope(action,NonceGa,Guid.NewGuid().ToString("N"),payload),
+                ValidOrigin,true,Authenticate);
+            Assert.False(result.Response.Success);
+            Assert.Equal(BridgeErrorCodes.ValidationError,result.Response.ErrorCode);
+        }
+        Assert.Equal(0,executed);
+        var accepted=await dispatcher.DispatchAsync(
+            Envelope(action,NonceGa,Guid.NewGuid().ToString("N"),
+                new JsonObject{["operationId"]="section02-required-intent-20261029"}),
+            ValidOrigin,true,Authenticate);
+        Assert.Equal(BridgeOutcomeKind.Success,accepted.Kind);
+        Assert.Equal(1,executed);
+    }
+
     [Fact]
     public async Task MutatingReplay_SameRequestIdSecondAttempt_ConflictsWithNoSecondExecution()
     {
@@ -291,9 +326,11 @@ public sealed class BridgeRbacMatrixTests
         var dispatcher = new WebView2BridgeDispatcher(new[] { registration });
 
         BridgeDispatchResult first = await dispatcher.DispatchAsync(
-            Envelope("SubmitAttendance", NonceSv, "REPLAY-1"), ValidOrigin, true, Authenticate);
+            Envelope("SubmitAttendance", NonceSv, "REPLAY-1",
+                new JsonObject{["operationId"]="section02-replay-unique-intent"}), ValidOrigin, true, Authenticate);
         BridgeDispatchResult second = await dispatcher.DispatchAsync(
-            Envelope("SubmitAttendance", NonceSv, "REPLAY-1"), ValidOrigin, true, Authenticate);
+            Envelope("SubmitAttendance", NonceSv, "REPLAY-1",
+                new JsonObject{["operationId"]="section02-replay-unique-intent"}), ValidOrigin, true, Authenticate);
 
         Assert.Equal(BridgeOutcomeKind.Success, first.Kind);
         Assert.Equal(BridgeOutcomeKind.Conflict, second.Kind);
@@ -310,7 +347,8 @@ public sealed class BridgeRbacMatrixTests
             IsMutating: true, AllowUnauthenticated: false,
             Handler: (req, principal, ct) => Task.FromResult(new BridgeResponse(req.RequestId, true)));
         var dispatcher = new WebView2BridgeDispatcher(new[] { registration });
-        var payload = new JsonObject { ["expectedRevision"] = 7, ["baseRevision"] = 5 };
+        var payload = new JsonObject { ["expectedRevision"] = 7, ["baseRevision"] = 5,
+            ["operationId"]="section02-stale-write-intent" };
 
         BridgeDispatchResult result = await dispatcher.DispatchAsync(
             Envelope("ReviseTodayAttendance", NonceSv, "REV-1", payload), ValidOrigin, true, Authenticate);

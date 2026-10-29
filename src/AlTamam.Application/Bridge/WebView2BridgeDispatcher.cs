@@ -121,6 +121,23 @@ public sealed class WebView2BridgeDispatcher
                     $"صلاحية '{roleLabel}' لا تسمح بتنفيذ '{request.Action}'.", BridgeOutcomeKind.Forbidden);
         }
 
+        // Domain mutations must declare a durable caller intent.  Enforce this
+        // at the native boundary (not only in WebUI or individual services).
+        // Logout is a revocation/security action, not a domain mutation; never
+        // block session revocation on a missing operation ID.
+        if (registration.IsMutating && request.Action != "Logout")
+        {
+            string? operationId = null;
+            try { operationId = request.Payload?["operationId"]?.GetValue<string>(); }
+            catch { /* malformed JSON node fails closed */ }
+            if (string.IsNullOrWhiteSpace(operationId)
+                || operationId.Length is < 16 or > 128
+                || operationId.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch != '-' && ch != '_'))
+                return Fail(request.RequestId, BridgeErrorCodes.ValidationError,
+                    "معرف العملية operationId إلزامي من 16 إلى 128 حرفاً لاتينياً أو رقماً.",
+                    BridgeOutcomeKind.ProtocolError);
+        }
+
         // 6) Anti-replay: a requestId is accepted only once per authenticated
         // session, or once per unauthenticated login flow. Prune ONLY revoked
         // sessions; NEVER evict a still-valid request ID or use a short TTL.

@@ -94,7 +94,8 @@ public sealed class ThemeSettingsTests : IAsyncLifetime, IDisposable
         var denied=await Run("ffffffffffffffffffffffffffffffff",
             new JsonObject{["theme"]="dark",["role"]="GeneralAdministration"});
         Assert.Equal(BridgeOutcomeKind.Unauthorized,denied.Kind);
-        var allowed=await Run(Actor.SessionNonce,new JsonObject{["theme"]="dark"});
+        var allowed=await Run(Actor.SessionNonce,new JsonObject{["theme"]="dark",
+            ["operationId"]="section02-theme-mutation-intent"});
         Assert.Equal(BridgeOutcomeKind.Success,allowed.Kind);
         Assert.Equal("dark",((JsonObject)allowed.Response.Data!)["theme"]!.GetValue<string>());
     }

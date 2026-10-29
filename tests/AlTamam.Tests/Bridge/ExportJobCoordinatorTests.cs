@@ -155,7 +155,8 @@ public sealed class ExportJobBridgeAuthorizationTests : IAsyncLifetime, IDisposa
             ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
             ["action"]=action,
             ["sessionNonce"]=nonce,
-            ["payload"]=new JsonObject { ["role"]="GeneralAdministration" }
+            ["payload"]=new JsonObject { ["role"]="GeneralAdministration",
+                ["operationId"]="section02-export-job-intent-20261029" }
         };
         return _dispatcher.DispatchAsync(request.ToJsonString(),LocalWebUiOrigin.BaseUrl,true,
             n=>Task.FromResult<BridgePrincipal?>(n==Nonce?Supervisor:null));
