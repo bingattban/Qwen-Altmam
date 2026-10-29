@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
+using AlTamam.Application.Scheduling;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Tests.Fixtures;
@@ -195,6 +196,27 @@ public sealed class AdminSettingsIntegrationTests : IAsyncLifetime, IDisposable
         Assert.Equal(1L,Convert.ToInt64(cmd.ExecuteScalar()));
         cmd.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE TargetEntityId=$id;";
         Assert.Equal(2L,Convert.ToInt64(cmd.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task FailedScheduledBackup_IsPersistedDeduplicatedAndVisibleWithoutFalseSuccess()
+    {
+        var backup=new AutomaticBackupService(_db);
+        await backup.RecordFailureAsync("اختبار: القرص غير متاح");
+        await backup.RecordFailureAsync("اختبار: القرص غير متاح");
+        var overview=await new SettingsReadBackupService(_db)
+            .OverviewAsync(Actor,CancellationToken.None);
+        var data=Assert.IsType<JsonObject>(overview.Data);
+        Assert.Contains("القرص غير متاح",
+            data["lastAutoBackupFailure"]!.GetValue<string>());
+        Assert.Contains("فشل النسخ التلقائي",
+            data["automaticBackupNote"]!.GetValue<string>());
+        using var c=_db.CreateOpenConnection();
+        using var cmd=c.CreateCommand();
+        cmd.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='AUTO_BACKUP_FAILED';";
+        Assert.Equal(1L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        cmd.CommandText="SELECT COUNT(*) FROM BackupHistory WHERE VerificationPassed=1;";
+        Assert.Equal(0L,Convert.ToInt64(await cmd.ExecuteScalarAsync()));
     }
 
     [Fact]
