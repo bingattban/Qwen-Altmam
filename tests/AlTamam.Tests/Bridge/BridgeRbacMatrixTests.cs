@@ -329,7 +329,8 @@ public sealed class BridgeRbacMatrixTests
             Envelope("SubmitAttendance", NonceSv, "REPLAY-1",
                 new JsonObject{["operationId"]="section02-replay-unique-intent"}), ValidOrigin, true, Authenticate);
         BridgeDispatchResult second = await dispatcher.DispatchAsync(
-            Envelope("SubmitAttendance", NonceSv, "REPLAY-1"), ValidOrigin, true, Authenticate);
+            Envelope("SubmitAttendance", NonceSv, "REPLAY-1",
+                new JsonObject{["operationId"]="section02-replay-unique-intent"}), ValidOrigin, true, Authenticate);
 
         Assert.Equal(BridgeOutcomeKind.Success, first.Kind);
         Assert.Equal(BridgeOutcomeKind.Conflict, second.Kind);
