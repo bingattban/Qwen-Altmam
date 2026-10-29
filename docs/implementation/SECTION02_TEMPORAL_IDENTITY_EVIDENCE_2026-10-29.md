@@ -1,3 +1,19 @@
+## Owner-approved strict caller operation IDs — Section 02.14 (2026-10-29)
+
+**Explicit owner decision:** Reject prior/third-party client requests that omit `operationId` for **all data-mutating bridge actions**, with no compatibility exemption for legacy clients. This supersedes the earlier optional-client-ID accommodation described in the historical ledger below; do not erase the older evidence.
+
+**Authoritative enforcement boundary:** `WebView2BridgeDispatcher` validates authenticated/role-authorized mutation requests **before executing any handler**. Every `ActionManifest` mutation requires a nonblank 16–128-character ASCII letter/digit/hyphen/underscore `operationId`; **Logout alone is exempt** because session revocation must never be blocked. No JavaScript, forged role claim or old WebView2 client can bypass this C# ingress rule. `MutationIdempotency` continues to validate and compare caller-provided IDs and durable ACID receipts within services. Direct internal service tests deliberately remain able to exercise isolated business logic without a transport-layer envelope; this is **not an external legacy-client exception**.
+
+**WebUI coverage:** `bridge-client.js` provisions a fresh cryptographic 128-bit intent for each previously unlabelled mutation payload. It preserves an explicit existing identifier or the same payload's identifier for a real retry. CI `build/manifest-guard.py` compares this **41-action list** against all `isMutating` entries in the manifest other than Logout, and validates the C# mandatory gate. `build/test-bridge-operation-intents.js` executes all 41 mutation actions in a local WebView2 stub and checks the identifier's valid length/characters, same-object retry stability and nonmutating-action exclusion.
+
+**Regression:** `BridgeRbacMatrixTests` exercises every manifest mutator against missing, malformed and valid operation IDs, proving denied calls never reach a C# handler; unrelated security tests that call the dispatcher directly now furnish valid IDs when they mean to exercise later authorization/replay/revocation controls. Existing native server-authoritative role checks, optimistic concurrency and SQLCipher transaction rules are unchanged.
+
+**Test-first diagnostic retained:** The first policy draft caused 69 red direct-service/bridge regression tests because it made the lower-level `MutationIdempotency` helper require a caller ID even for private in-process unit tests, before requests ever reach the native boundary. The correction centralizes the **public** mandatory-ID rule at the native dispatcher and updates only transport-level synthetic tests. It does not let external callers omit identifiers.
+
+**Acceptance:** This entry describes implementation, not production approval. Exact-head Windows Core and Release tests, four x86/x64 Portable/Installer artifacts and SHA-256 evidence remain the merge gate. Independent disconnected clean-Windows UAT, clock/power-loss physical tests and final owner signoff remain separate open acceptance requirements. An OperationId by itself does not replace optimistic versions or guarantee repeatable responses for actions that lack durable result receipts; per-action guarantees retain their own service rules.
+
+---
+
 ## Finalization follow-up — October 29, 2026: mutation and clock hardening
 
 **Audited baseline:** `efd1af163d4da88a20f0c4861ed2d2903bd8d8b2`. This supplement is a code-and-test implementation record, **not a final production release certificate**.
