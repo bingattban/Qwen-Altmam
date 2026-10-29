@@ -10,8 +10,9 @@ namespace AlTamam.Application.Bridge;
 /// ACID replay receipts for mutating requests. The operation ID belongs to an
 /// explicit user intent, not to the generated personnel number/DB primary key.
 /// Only successful writes are receipted, in the SAME SQLCipher transaction.
-/// Legacy clients without an operationId keep their existing validation path;
-/// the WebView2 forms supply operationId for new creates.
+/// Authenticated WebView2 clients missing an operationId are rejected before
+/// reaching this helper. Internal synthetic/direct service calls may use the
+/// historical token validation path; they are NOT a public legacy-client escape.
 /// </summary>
 internal static class MutationIdempotency
 {
@@ -27,8 +28,10 @@ internal static class MutationIdempotency
             return id.Length is >=16 and <=128
                 && id.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == '-' || ch == '_');
         }
-        catch (Exception ex) when (ex is InvalidOperationException or FormatException)
+        catch
         {
+            // Hostile JSON payload types may throw different conversion exceptions.
+            // The public WebView2 guard must reject every invalid type, never throw.
             return false;
         }
     }
