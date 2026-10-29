@@ -91,7 +91,7 @@ def main() -> int:
     try:
         from pathlib import Path
         ui_bridge = Path("src/AlTamam.WebUI/assets/js/bridge-client.js").read_text(encoding="utf-8")
-        match = re.search(r"const MUTATING_ACTIONS = new Set\\(\\[([\\s\\S]*?)\\]\\);", ui_bridge)
+        match = re.search(r"const MUTATING_ACTIONS = new Set\(\[(.*?)\]\);", ui_bridge, re.S)
         if not match:
             errors.append("bridge-client.js does not define MUTATING_ACTIONS")
         else:
