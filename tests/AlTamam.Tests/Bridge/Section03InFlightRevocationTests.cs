@@ -19,7 +19,7 @@ public sealed class Section03InFlightRevocationTests
         ["protocolVersion"] = BridgeProtocol.ProtocolVersion,
         ["action"] = action,
         ["sessionNonce"] = Nonce,
-        ["payload"] = new JsonObject()
+        ["payload"] = new JsonObject { ["operationId"]="section02-inflight-session-revocation-intent" }
     }.ToJsonString();
 
     private static WebView2BridgeDispatcher Dispatcher(BridgeActionHandler handler, bool mutating = false)
