@@ -1925,8 +1925,16 @@
               throw Error("نافذة معاينة التصفير غير متاحة؛ أُلغي الإجراء.");
             const approved=await detailsReview({rows:[
               ["الأفراد المعرّضون للحذف",data.people],
+              ["حسابات المستخدمين",data.users],
               ["سجلات التحضير",data.attendance],
-              ["النسخ المسجلة",data.backupEntries],
+              ["فترات الانتساب للمواقع",data.assignments],
+              ["سجلات التنقلات",data.movements],
+              ["سجل العمليات والتعديلات",data.auditEvents],
+              ["النسخ المسجلة المرشحة للحذف",data.backupEntries],
+              ["أسماء نسخ البرنامج المرشحة للحذف",Array.isArray(data.backupFileNames)&&
+                data.backupFileNames.length?data.backupFileNames.join("، "):"لا توجد"],
+              ["ملاحظة",data.backupFileNamesTruncated?
+                "تظهر أول 30 نسخة فقط؛ يُراجع السجل الكامل عند التنفيذ.":"لن تُحذف الملفات غير المسجلة أو التي تغيرت بصمتها."],
               ["تحذير",data.warning||"لا يمكن التراجع عن تصفير البرنامج."]
             ]},{title:"معاينة التصفير النهائي",
               message:"ستُمحى جميع البيانات. راجع الأعداد بعناية قبل الانتقال للتحقق النهائي.",
@@ -1947,7 +1955,8 @@
               try{
                 const result=await api().invoke("CommitFullReset",{
                   previewToken:data.previewToken,expectedRevision:data.expectedRevision,
-                  confirmation:phraseWrap.input.value,password:passwordWrap.input.value
+                  confirmation:phraseWrap.input.value,password:passwordWrap.input.value,
+                  confirmDeleteLiveData:true,confirmDeleteOwnedBackups:true
                 },{timeoutMs:180000});
                 passwordWrap.input.value="";
                 if(!result.data?.reset)throw Error("لم يؤكد الخادم إتمام التصفير.");
@@ -1957,10 +1966,23 @@
                 await logout();
               }catch(e){passwordWrap.input.value="";errors(resetStatus,e);approve.disabled=false;}
             },"btn btn-primary settings-action");
-            const cancel=btn("إلغاء",()=>{passwordWrap.input.value="";resetStatus.replaceChildren();previewButton.disabled=false;});
+            const countdown=node("p","section-description");
+            let remaining=Math.max(5,Number(data.countdownSeconds)||5);
+            approve.disabled=true;
+            const clock=setInterval(()=>{
+              if(remaining>0)remaining--;
+              countdown.textContent=remaining>0?
+                "يمكن اعتماد التصفير بعد "+remaining+" ثوانٍ.":"انتهت مهلة المراجعة؛ يتطلب التنفيذ التأكيد النهائي.";
+              if(remaining===0){approve.disabled=false;clearInterval(clock);}
+            },1000);
+            countdown.textContent="يمكن اعتماد التصفير بعد "+remaining+" ثوانٍ.";
+            const cancel=btn("إلغاء",()=>{
+              clearInterval(clock);passwordWrap.input.value="";
+              resetStatus.replaceChildren();previewButton.disabled=false;
+            });
             resetStatus.replaceChildren(node("p","settings-copy",
               "تمت مراجعة المعاينة. أدخل كلمة المرور وعبارة التأكيد لتنفيذ الإجراء النهائي."),
-              passwordWrap.wrap,phraseWrap.wrap,approve,cancel);
+              countdown,passwordWrap.wrap,phraseWrap.wrap,approve,cancel);
           }catch(e){errors(resetStatus,e);previewButton.disabled=false;}
         },"btn btn-outline settings-action");
         resetBox.append(notice,previewButton,resetStatus);
