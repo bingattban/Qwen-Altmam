@@ -141,6 +141,63 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task InternalBootstrapCannotCreateAnUnlinkedSupervisorOrConsumeFirstRun()
+    {
+        // Only the owner-chosen founding GeneralAdmin can be bootstrapped
+        // without a roster record. Later accounts use the roster-checked service.
+        var rejected = await _service.CreateUserInternalAsync(
+            "orphan-supervisor", "test-password-123", UserRole.Supervisor,
+            requiresSetup: false, CancellationToken.None);
+        Assert.False(rejected.Success);
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+        Assert.False(await _service.IsProvisionedAsync());
+
+        var founder = await _service.ProvisionFirstAdministratorAsync(
+            "actual-founder", "test-password-123", CancellationToken.None);
+        Assert.True(founder.Success, founder.UserMessage);
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM Users WHERE Role=1 AND LinkedPersonId IS NULL;"));
+    }
+
+    [Fact]
+    public async Task FoundingRoleCanNeverBeDemotedToBypassPermanentRosterIndependence()
+    {
+        var founder = await _service.ProvisionFirstAdministratorAsync(
+            "immutable-founder", "test-password-123", CancellationToken.None);
+        Assert.True(founder.Success, founder.UserMessage);
+        Exec("""
+            INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                CurrentServiceNumberA,NormalizedServiceNumberA,
+                FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                ActiveFlag,RowVersion)
+            VALUES('PER-ROLE-BYPASS','فرد تجريبي','فرد تجريبي','8080','8080',
+                '2026-01-01','2026-01-01T00:00:00Z',1,1,1);
+            """);
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Users SET Role=3 WHERE Role=1;"));
+        Assert.Throws<SqliteException>(() => Exec(
+            "UPDATE Users SET Role=3,LinkedPersonId='PER-ROLE-BYPASS' WHERE Role=1;"));
+        Assert.Equal("1", Scalar("SELECT Role FROM Users WHERE Username='immutable-founder';"));
+        Assert.Equal("", Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
+    }
+
+    [Fact]
+    public async Task NewNonFounderAccountsMustBeLinkedToAnActiveRosterPersonAtSqlCipherBoundary()
+    {
+        var founder = await _service.ProvisionFirstAdministratorAsync(
+            "owner-roster", "test-password-123", CancellationToken.None);
+        Assert.True(founder.Success, founder.UserMessage);
+        Assert.Throws<SqliteException>(() => Exec("""
+            INSERT INTO Users(UserId,LinkedPersonId,Username,NormalizedUsername,Role,
+                CredentialHash,PasswordSalt,RequiresFirstRunSetup,ActiveFlag,
+                FailedLoginCount,CreatedByUserId,CreatedByDisplaySnapshot,
+                CreatedAtUtc,RowVersion)
+            VALUES('TST-ORPHAN',NULL,'orphan','orphan',3,'testhash','testsalt',0,1,
+                0,'USR-SYSTEM','النظام','2026-01-01T00:00:00Z',1);
+            """));
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users WHERE Role=3;"));
+    }
+
+    [Fact]
     public async Task FounderCannotBeLinkedToAnyRosterPerson_EvenWhenRealAndActive()
     {
         var setup=await _service.ProvisionFirstAdministratorAsync(
