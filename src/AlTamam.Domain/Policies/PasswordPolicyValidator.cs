@@ -9,8 +9,8 @@ public static class PasswordPolicyValidator
             return (false, "كلمة المرور مطلوبة ولا يمكن تركها فارغة.");
         if (password.Length < 8)
             return (false, "يجب أن تتكون كلمة المرور من 8 خانات على الأقل.");
-        if (password.Any(char.IsWhiteSpace))
-            return (false, "لا يُسمح بوجود مسافات داخل كلمة المرور.");
+        if (password.Any(char.IsWhiteSpace) || password.Any(char.IsControl))
+            return (false, "لا يُسمح بوجود مسافات أو محارف تحكم مخفية داخل كلمة المرور.");
 
         var letters = password.Count(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z');
         var digits = password.Count(c => c is >= '0' and <= '9');

@@ -72,6 +72,21 @@ public sealed class BridgeSharedServices
         string username, string password, UserRole role, bool requiresSetup, CancellationToken ct,
         string? founderFullName = null)
     {
+        // This helper belongs exclusively to the one-time founder ceremony.
+        // All subsequent Admin/Supervisor accounts MUST be created through
+        // UserAccountManagementService, which validates a REAL active PersonId,
+        // role permissions, expected versions and an immutable audit trail.
+        if (role != UserRole.GeneralAdministration || requiresSetup)
+            return Error(BridgeErrorCodes.Unauthorized,
+                "لا يمكن إنشاء حساب غير مؤسس دون ربطه بفرد نشط من كشف القوة.");
+        // Public C# callers must not bypass the founder password/username
+        // policy by skipping ProvisionFirstAdministratorAsync.
+        if (string.IsNullOrWhiteSpace(username) || username.Length is < 3 or > 64 ||
+            username.Any(char.IsWhiteSpace) || string.IsNullOrEmpty(password) ||
+            password.Length < 10 || !PasswordPolicyValidator.Validate(password).IsValid ||
+            founderFullName?.Trim().Length > 200)
+            return Error(BridgeErrorCodes.ValidationError,
+                "يجب إدخال بيانات تأسيس صالحة وكلمة مرور قوية؛ الاسم الكامل اختياري.");
         string normalized = NormalizeUsername(username);
         var (hash, salt) = PasswordSecurity.HashPassword(password);
         string userId = "USR-" + Guid.NewGuid().ToString("N");
