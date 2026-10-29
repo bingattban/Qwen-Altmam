@@ -34,6 +34,7 @@ public sealed class SettingsReadBackupService
         var (enabled,schedule)=await backup.ReadSettingsAsync(ct).ConfigureAwait(false);
         string? lastDate=await backup.LastSuccessfulDateAsync(ct).ConfigureAwait(false);
         string theme=await Setting("Theme","light",ct);
+        string lastBackupFailure=await Setting("AutoBackupLastFailure","",ct);
         return BridgeHelpers.Ok(new JsonObject
         {
             ["username"]=person.Username,["role"]=person.Role.ToString(),
@@ -43,9 +44,13 @@ public sealed class SettingsReadBackupService
             ["automaticBackupOperational"]=enabled,
             ["automaticBackupEnabled"]=enabled,
             ["lastAutoBackupDate"]=lastDate,
-            ["automaticBackupNote"]=enabled
-                ? "النسخ اليومي مفعل أثناء تشغيل البرنامج. آخر نسخة ناجحة: "+(lastDate??"لم يتم إنشاء نسخة بعد")
-                : "النسخ التلقائي متوقف؛ فعّله من الإعدادات بعد اختيار مجلد صالح.",
+            ["lastAutoBackupFailure"]=lastBackupFailure,
+            ["automaticBackupNote"]=lastBackupFailure.Length>0
+                ? "فشل النسخ التلقائي: "+lastBackupFailure+
+                    ". تحقق من القرص والمجلد، ثم اختر مساراً سليماً عند الحاجة."
+                : enabled
+                    ? "النسخ اليومي مفعل أثناء تشغيل البرنامج. آخر نسخة ناجحة: "+(lastDate??"لم يتم إنشاء نسخة بعد")
+                    : "النسخ التلقائي متوقف؛ فعّله من الإعدادات بعد اختيار مجلد صالح.",
             ["theme"]=theme
         });
     }
