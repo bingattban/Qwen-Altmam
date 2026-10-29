@@ -302,9 +302,9 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     {
         var backups=new AutomaticBackupService(_db,_time);
         var path=new OutputDirectorySettings(_db);
-        Assert.False((await backups.ReadSettingsAsync()).Enabled ||
-            OutputDirectorySettings.IsUsableDirectory(
-                OutputDirectorySettings.DefaultDirectory,_dbPath)==false);
+        Assert.Equal(OutputDirectorySettings.IsUsableDirectory(
+            OutputDirectorySettings.DefaultDirectory,_dbPath),
+            (await backups.ReadSettingsAsync()).Enabled);
         Assert.True((await path.SaveAsync(_output,_actor,default)).Success);
         var enabled=await backups.ReadSettingsAsync();
         Assert.True(enabled.Enabled);
