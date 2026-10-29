@@ -10,6 +10,48 @@
   const PROTOCOL_VERSION = 1;
   const DEFAULT_TIMEOUT_MS = 15000;
   const SESSION_NONCE_STORAGE_KEY = 'altamam.sessionNonce.v1';
+  // Keep this list in exact parity with ActionManifest.RequiresOperationId.
+  // CI's manifest guard rejects any new/renamed mutation missing from this set.
+  const OPERATION_ID_ACTIONS = new Set([
+    "SubmitAttendance",
+    "ReviseTodayAttendance",
+    "SaveAttendanceDraft",
+    "DeleteAttendanceDraft",
+    "SetClosedDayCorrectionPolicy",
+    "CommitClosedDayCorrection",
+    "CommitArchivedReturn",
+    "CreatePerson",
+    "UpdatePersonIdentity",
+    "ArchivePersons",
+    "CommitInternalTransfer",
+    "CommitExternalTransfer",
+    "CommitSeparation",
+    "CreateAttendanceStatus",
+    "UpdateAttendanceStatus",
+    "DeactivateOrDeleteStatus",
+    "CreateSite",
+    "RenameSite",
+    "RemoveSiteAndReassignCurrentPersons",
+    "CreateCustomFieldDefinition",
+    "UpdateCustomFieldMetadata",
+    "DeactivateCustomField",
+    "CommitImport",
+    "CreateUserAccount",
+    "ChangeUserPassword",
+    "DeactivateUserAccount",
+    "ReactivateUserAccount",
+    "UpdateAuditPresentation",
+    "DeleteAuditPresentation",
+    "SetAutoAttendanceDefaultStatus",
+    "SetAttendanceSchedule",
+    "SetOutputDirectory",
+    "CreateVerifiedBackup",
+    "RestoreDatabaseAtomically",
+    "UpdateBackupSchedule",
+    "CommitFullReset",
+    "SetTheme"
+  ]);
+
   const CANONICAL_ERROR_CODES = ["Unauthorized", "SessionExpired", "MissingData", "ValidationError", "DuplicateServiceNumber", "DuplicateUsername", "ConflictStale", "AlreadyPrepared", "TransferDayAttendanceForbidden", "InvalidTransferSites", "OverlappingAssignments", "HistoricDayLocked", "CustomStatusInactive", "ImportPlanStale", "InvalidWorkbook", "ExcelExportFailed", "BackupIntegrityFailed", "WrongRecoveryKey", "MissingEVolume", "InsufficientDiskSpace", "ScheduleUnavailable", "ResetBackupGateFailed", "StorageBusy", "ClockRollbackSuspected"];
   const UI_INVALIDATION_EVENTS = ["AttendanceCommitted", "AttendanceRevised", "PersonnelMoved", "PersonnelArchived", "SiteCreated", "SiteRenamed", "StatusDefinitionCreated", "StatusDefinitionChanged", "PersonIdentityUpdated", "VisibleAuditOverlayChanged", "UserAccountChanged", "BackupRestored", "SessionEnded"];
 
@@ -92,12 +134,18 @@
         return;
       }
       const requestId = newRequestId();
+      // Reuse the same ID when the caller retries the SAME payload object after
+      // a lost reply; a different user intent must construct a fresh payload.
+      // Preserve explicit IDs (including malformed ones) for C# to reject.
+      const body = payload || {};
+      if (OPERATION_ID_ACTIONS.has(action) && body.operationId == null)
+        body.operationId = newRequestId();
       const envelope = {
         requestId: requestId,
         protocolVersion: PROTOCOL_VERSION,
         action: action,
         sessionNonce: opts.sessionNonce || getSessionNonce(),
-        payload: payload || {}
+        payload: body
       };
       const settleLoading = function (busy) {
         document.dispatchEvent(new CustomEvent('altamam:bridge-loading', { detail: { action: action, requestId: requestId, busy: busy } }));
