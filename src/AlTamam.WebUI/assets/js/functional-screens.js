@@ -788,7 +788,7 @@
           }
           const confirmSave=button("حفظ ملف Excel",async()=>{
             const fileName=fileInput.value.trim();
-            if(!/^[\\p{L}\\p{N} _()\\-]+\\.xlsx$/iu.test(fileName) ||
+            if(!/^[\p{L}\p{N} _()\-]+\.xlsx$/iu.test(fileName) ||
                fileName.length>124 || fileName.length<6 || !directory){
               destination.textContent="حدد مجلداً محلياً واسم ملف آمن بصيغة xlsx.";
               return;
