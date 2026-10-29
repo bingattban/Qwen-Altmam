@@ -16,7 +16,7 @@ class El{
 const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
  badge=new El("span"),events={},calls=[],nav={};
 for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]=new El("button");
-let transferCount=0,expandedRoster=false;
+let transferCount=0,expandedRoster=false,activeStatusesAvailable=false;
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
  invoke:async(action,payload)=>{
    calls.push({action,payload});
@@ -25,8 +25,10 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
    if(action==="QuerySites")
      return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
    if(action==="GetActiveAttendanceStatuses")
-     return{data:[{statusId:"STS-PRESENT",displayName:"موجود"},
-       {statusId:"STS-ABSENT",displayName:"غياب"}]};
+     return{data:activeStatusesAvailable
+       ?[{statusId:"STS-PRESENT",displayName:"موجود"},
+         {statusId:"STS-ABSENT",displayName:"غياب"}]
+       :[]};
    if(action==="GetDashboardSummary")
      return{data:{totalForce:3,unprepared:1,automaticallyPrepared:1,internalTransferDay:transferCount,completionPercentage:67,statusCounts:[
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
@@ -148,7 +150,15 @@ async function main(){
    "automatic register allows targeted changes without selecting bulk checkboxes");
  assert.equal(readOnly.all().filter(x=>x.tag==="select").length,0,
    "the automatic attendance register must be a read-only table, not an editable grid");
- const entry=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="فتح مراجعة الحالة");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0);
+ // No active status choices must NOT block reading already committed automatic records.
+ activeStatusesAvailable=true;
+ counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const refreshedRegister=viewport.all().filter(x=>
+   x.className.includes("auto-attendance-overlay")).at(-1);
+ assert.ok(refreshedRegister?.all().some(x=>x.textContent==="P3"));
+ const entry=refreshedRegister.all().find(x=>
+   x.tag==="button"&&x.textContent==="فتح مراجعة الحالة");
  assert.ok(entry,"a row can open a separate controlled revision dialog");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
    "opening the register must never commit attendance");
