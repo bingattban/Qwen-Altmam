@@ -1367,7 +1367,48 @@
       showHidden.addEventListener("change",()=>{state.page=1;load();});
       controls.appendChild(toggle);
     }
-    box.append(controls,results);
+    const historyPanel=node("div","admin-note");
+    if(canEditAudit){
+      const historyButton=btn("القيود المعدلة والمحذوفة",()=>{
+        historyPanel.hidden=false;
+        void loadEdits(1);
+      },"btn btn-outline");
+      controls.append(historyButton);
+      const closeHistory=btn("العودة إلى سجل العمليات",()=>{
+        historyPanel.hidden=true;historyPanel.replaceChildren();
+      },"btn btn-outline");
+      historyPanel.append(closeHistory);
+      historyPanel.hidden=true;
+    }
+    box.append(controls,results,historyPanel);
+    async function loadEdits(pageNumber) {
+      try{
+        const reply=await api().invoke("QueryAuditPresentationChanges",
+          {page:pageNumber,pageSize:50});
+        const data=reply.data||{};
+        const revised=table(["رقم القيد","الإصدار","العملية","الوصف الأصلي",
+          "الوصف بعد التعديل","الحالة","السبب","المنفّذ وقت الحدث","التاريخ"]);
+        for(const item of data.items||[])
+          addRow(revised.body,[item.auditEventId,item.overlayVersion,
+            item.operationCode,item.rawDescription,
+            item.correctedDescription||item.rawDescription,
+            item.isTombstoned?"مخفي ظاهرياً":"معدل",
+            item.reason,item.editedByDisplay,item.editedAtUtc],
+            "عرض القيد الأصلي وكل التعديلات",
+            ()=>showAuditDetails(item.auditEventId));
+        empty(revised.body,9,"لا توجد قيود معدلة أو مخفية.");
+        const nav=node("div","functional-pager");
+        const prev=btn("السابق",()=>void loadEdits(pageNumber-1)),
+          next=btn("التالي",()=>void loadEdits(pageNumber+1));
+        prev.disabled=pageNumber<=1;
+        next.disabled=(data.items||[]).length<50;
+        nav.append(node("span","","صفحة "+pageNumber),prev,next);
+        historyPanel.replaceChildren(
+          btn("العودة إلى سجل العمليات",()=>{
+            historyPanel.hidden=true;historyPanel.replaceChildren();
+          },"btn btn-outline"),revised.wrap,nav);
+      }catch(e){errors(historyPanel,e);}
+    }
     async function load() {
       const token=++currentRequest;
       try {
@@ -1377,15 +1418,19 @@
           includeTombstoned:canEditAudit&&showHidden.checked,
           page:state.page,pageSize:100});
         if(token!==currentRequest)return;
-        const data=response.data||{},t=table(["العملية","الهدف","المنفذ","الوصف الظاهر","وقت التنفيذ"]);
+        const data=response.data||{},t=table(["م","العملية","الهدف",
+          "المنفذ وقت الحدث","التاريخ","القيمة السابقة","القيمة الجديدة",
+          "السبب","النتيجة","الوصف"]);
         (data.items||[]).forEach(item=>addRow(t.body,[
-          item.operationArabicName+(item.isTombstoned?" (مخفي)":""),
-          item.targetDisplay,
-          [item.actorUsername,item.actorRosterFullName].filter(Boolean).join(" - "),
-          item.description||item.rawDescription,
-          item.executedAtUtc
+          item.sequence,item.operationArabicName+(item.isTombstoned?" (مخفي)":""),
+          item.targetDisplay,item.actorDisplay||item.actorUsername,
+          item.executedAtUtc,
+          item.oldValue==null?"—":JSON.stringify(item.oldValue),
+          item.newValue==null?"—":JSON.stringify(item.newValue),
+          item.reason||"—",item.outcome||"تم الاعتماد",
+          item.description||item.rawDescription
         ],"عرض التفاصيل",()=>showAuditDetails(item.auditEventId)));
-        empty(t.body,5,"لا توجد عمليات مطابقة.");
+        empty(t.body,10,"لا توجد عمليات مطابقة.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
         prev.disabled=state.page<=1;next.disabled=!data.hasNext;
@@ -1415,7 +1460,11 @@
           ["العملية",item.operationArabicName],
           ["المستهدف",item.targetDisplay],
           ["اسم المستخدم",item.actorUsername],
-          ["الاسم الكامل",item.actorRosterFullName],
+          ["هوية المنفذ وقت الحدث",item.actorDisplay||item.actorUsername],
+          ["الاسم الكامل المحفوظ",item.actorRosterFullName],
+          ["القيمة السابقة",item.oldValue==null?"—":JSON.stringify(item.oldValue)],
+          ["القيمة الجديدة",item.newValue==null?"—":JSON.stringify(item.newValue)],
+          ["سبب العملية",item.reason||"—"],
           ["وقت التنفيذ",item.executedAtUtc],
           ["الوصف الأصلي",item.rawDescription],
           ["الوصف الظاهر الحالي",item.overlays?.length
