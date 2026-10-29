@@ -487,7 +487,15 @@ public sealed class ExcelPersonnelImportService
                 .Select(x=>(string?)x.Attribute("name")??"").ToArray();
             var picked=options?["sheetIndexes"] as JsonArray;
             var indices=new List<int>();
-            if(picked is null)indices.Add(1);
+            bool allSheets=false;
+            try{allSheets=options?["allSheets"]?.GetValue<bool>()==true;}
+            catch(InvalidOperationException){}
+            if(allSheets)
+            {
+                if(picked is not null)throw new InvalidDataException("اختر الكل أو أوراقاً محددة فقط.");
+                for(int i=1;i<=sheets.Count;i++)indices.Add(i);
+            }
+            else if(picked is null)indices.Add(1);
             else
             {
                 if(picked.Count is <1 or >50)
