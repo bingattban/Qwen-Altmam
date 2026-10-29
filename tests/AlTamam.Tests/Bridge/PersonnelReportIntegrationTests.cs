@@ -275,6 +275,44 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task ReportListsEveryAttendanceCorrectionFromImmutableRevisionLedger()
+    {
+        using(var connection=_db.CreateOpenConnection())
+        using(var command=connection.CreateCommand())
+        {
+            command.CommandText="""
+                INSERT INTO AttendanceRevisions(PersonId,TargetLocalDate,BeforeStatusId,
+                    BeforeStatusNameSnapshot,AfterStatusId,AfterStatusNameSnapshot,Reason,
+                    ActorUserId,ExecutedAtUtc,AuthorizationMethod)
+                VALUES('TST-REPORT-1','2026-01-15','STS-ABSENT','غياب',
+                    'STS-PRESENT','موجود','تصحيح أول','TEST',
+                    '2026-01-15T10:00:00Z','authenticated-session-preview'),
+                      ('TST-REPORT-1','2026-01-16','STS-PRESENT','موجود',
+                    'STS-ABSENT','غياب','تصحيح ثان','TEST',
+                    '2026-01-16T11:00:00Z','general-admin-enabled-one-time-preview');
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+        var service=new PersonnelReportService(_db);
+        var result=await service.ReportAsync(new JsonObject{["personId"]="TST-REPORT-1",
+            ["siteId"]="SITE-UNSPECIFIED"},CancellationToken.None);
+        Assert.True(result.Success,result.UserMessage);
+        var data=Assert.IsType<JsonObject>(result.Data);
+        Assert.Equal(2L,data["revisionTotal"]!.GetValue<long>());
+        var revisions=Assert.IsType<JsonArray>(data["revisions"]);
+        Assert.Equal(2,revisions.Count);
+        Assert.Equal("تصحيح ثان",revisions[0]!["reason"]!.GetValue<string>());
+        Assert.Equal("موجود",revisions[0]!["before"]!.GetValue<string>());
+        Assert.Equal("غياب",revisions[0]!["after"]!.GetValue<string>());
+        var filtered=await service.ReportAsync(new JsonObject{["personId"]="TST-REPORT-1",
+            ["dateFrom"]="2026-01-16",["dateTo"]="2026-01-16",
+            ["statusId"]="STS-PRESENT"},CancellationToken.None);
+        Assert.True(filtered.Success,filtered.UserMessage);
+        Assert.Equal(1L,Assert.IsType<JsonObject>(filtered.Data)["revisionTotal"]!.GetValue<long>());
+        Assert.Equal(2L,data["attendanceTotal"]!.GetValue<long>());
+    }
+
+    [Fact]
     public async Task InvalidPersonIsNeverReplacedWithAnUnrelatedIdentity()
     {
         var result=await new PersonnelReportService(_db).ReportAsync(

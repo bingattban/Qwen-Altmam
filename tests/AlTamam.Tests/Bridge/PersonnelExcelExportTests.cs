@@ -81,6 +81,15 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             """;
         cmd.Parameters.AddWithValue("$folder",_folder);
         await cmd.ExecuteNonQueryAsync();
+        cmd.CommandText="""
+            INSERT INTO AttendanceRevisions(PersonId,TargetLocalDate,BeforeStatusId,
+                BeforeStatusNameSnapshot,AfterStatusId,AfterStatusNameSnapshot,Reason,
+                ActorUserId,ExecutedAtUtc,AuthorizationMethod)
+            VALUES('TST-XLSX-OLD','2026-10-04','STS-PRESENT','موجود',
+                'STS-ABSENT','غياب','تصحيح موثق','TEST',
+                '2026-10-04T08:10:00Z','authenticated-session-preview');
+            """;
+        await cmd.ExecuteNonQueryAsync();
         await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{
             await BridgeAuditWriter.WriteAsync(c,t,TimeProvider.System,
                 "PERSON_IDENTITY_CHANGE","تغيير هوية","TEST","test-executor",null,
@@ -130,7 +139,7 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
         Assert.True(System.IO.File.Exists(file));
         using(var zip=ZipFile.OpenRead(file))
         {
-            Assert.Equal(7,zip.Entries.Count(e=>e.FullName.StartsWith("xl/worksheets/sheet")&&
+            Assert.Equal(8,zip.Entries.Count(e=>e.FullName.StartsWith("xl/worksheets/sheet")&&
                 e.FullName.EndsWith(".xml")));
             var people=Rows(zip,1).Select(Text).ToArray();
             Assert.Equal(4,people.Length);
@@ -138,7 +147,7 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             Assert.Equal("2",people[2][0]);
             Assert.Equal("3333",people[1][1]);
             Assert.Equal("3333",people[2][1]);
-            Assert.All(Enumerable.Range(1,7),index=>{
+            Assert.All(Enumerable.Range(1,8),index=>{
                 foreach(var cell in Rows(zip,index).SelectMany(Text))
                 {
                     Assert.DoesNotContain("TST-XLSX-OLD",cell);
@@ -165,6 +174,12 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             Assert.Equal(2,audits.Length);
             Assert.Equal("""{"name":"الاسم السابق"}""",audits[1][7]);
             Assert.Equal("""{"name":"الاسم الجديد"}""",audits[1][8]);
+            var revisionRows=Rows(zip,6).Select(Text).ToArray();
+            Assert.Equal(2,revisionRows.Length);
+            Assert.Equal("1",revisionRows[1][0]);
+            Assert.Equal("تصحيح موثق",revisionRows[1][4]);
+            Assert.Equal("موجود",revisionRows[1][2]);
+            Assert.Equal("غياب",revisionRows[1][3]);
             var names=Rows(zip,5).Select(Text).ToArray();
             Assert.Contains(names,x=>x.Contains("=HYPERLINK(\"http://evil.example\")"));
             foreach(var entry in zip.Entries.Where(e=>e.FullName.StartsWith("xl/worksheets/")))

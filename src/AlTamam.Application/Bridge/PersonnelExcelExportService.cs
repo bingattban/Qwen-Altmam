@@ -148,7 +148,10 @@ public sealed class PersonnelExcelExportService
             "القيمة الجديدة","السبب");
         var membership=Start("الهوية والمواقع","رقم الفرد في التقرير","نوع الفترة",
             "الاسم / الموقع","الرقم (ع)","من","إلى","السبب / المنفذ");
-        var sheets=new List<Sheet>{summary,daily,movements,audit,membership};
+        var revisions=Start("تصحيحات التحضير","رقم الفرد في التقرير",
+            "تاريخ التحضير","الحالة السابقة","الحالة الجديدة","السبب",
+            "المنفذ (المستخدم - الاسم المحفوظ)","توقيت التصحيح","نوع الصلاحية");
+        var sheets=new List<Sheet>{summary,daily,movements,audit,membership,revisions};
         int exportedEvents=0;
         for(int i=0;i<ids.Length;i++)
         {
@@ -166,6 +169,7 @@ public sealed class PersonnelExcelExportService
                 request["attendancePage"]=page;request["identityPage"]=page;
                 request["sitePage"]=page;request["movementPage"]=page;
                 request["auditPage"]=page;
+                request["revisionPage"]=page;
                 var response=await service.ReportAsync(request,ct).ConfigureAwait(false);
                 if(!response.Success)throw new InvalidDataException(response.UserMessage ?? "تعذر قراءة التقرير.");
                 var data=(JsonObject)response.Data!;
@@ -210,6 +214,16 @@ public sealed class PersonnelExcelExportService
                         Val(record,"description"));
                     exportedEvents++;
                 }
+                foreach(var record in Array(data,"revisions")??new JsonArray())
+                {
+                    revisions.Add(sectionNumber,Val(record,"date"),Val(record,"before"),
+                        Val(record,"after"),Val(record,"reason"),Val(record,"executor"),
+                        Val(record,"executedAtUtc"),Val(record,"authorizationMethod"));
+                    per?.Add(sectionNumber,number,name,"تصحيح تحضير",
+                        Val(record,"date"),Val(record,"before")+" ← "+Val(record,"after"),
+                        "",Val(record,"reason"));
+                    exportedEvents++;
+                }
                 foreach(var record in Array(data,"identityHistory")??new JsonArray())
                 {
                     membership.Add(sectionNumber,"هوية",Val(record,"name"),
@@ -228,6 +242,7 @@ public sealed class PersonnelExcelExportService
                 if(!data["attendanceHasNext"]!.GetValue<bool>() &&
                    !data["movementHasNext"]!.GetValue<bool>() &&
                    !data["auditHasNext"]!.GetValue<bool>() &&
+                   !data["revisionHasNext"]!.GetValue<bool>() &&
                    !data["identityHasNext"]!.GetValue<bool>() &&
                    !data["siteHasNext"]!.GetValue<bool>())
                     break;

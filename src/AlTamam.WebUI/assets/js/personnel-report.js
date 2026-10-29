@@ -178,7 +178,7 @@
    root.append(searchCard,popup);
    void loadHistoricalFilters();
    let chosen=null,serial=0,attendancePage=1,auditPage=1,identityPage=1,
-     movementPage=1,sitePage=1;
+     movementPage=1,sitePage=1,revisionPage=1;
    function renderSelected(){
      const box=card("الأفراد المحددون للمجموعة: "+selected.size);
      if(!selected.size)box.appendChild(el("p","لم تحدد أفراداً بعد."));
@@ -230,7 +230,7 @@
          const action=el("td");
          action.appendChild(btn("عرض سجل الفرد",()=>{
            chosen=person.personId;
-           attendancePage=auditPage=identityPage=movementPage=sitePage=1;
+           attendancePage=auditPage=identityPage=movementPage=sitePage=revisionPage=1;
            void loadReport();
          }));
          tr.appendChild(action);t.body.appendChild(tr);
@@ -272,7 +272,7 @@
            .forEach(v=>tr.appendChild(el("td",v)));
          const cell=el("td");
          cell.appendChild(btn("عرض التقرير",()=>{
-           chosen=person.personId;attendancePage=1;auditPage=1;identityPage=1;movementPage=1;sitePage=1;
+           chosen=person.personId;attendancePage=1;auditPage=1;identityPage=1;movementPage=1;sitePage=1;revisionPage=1;
            void loadReport();
          }));
          tr.appendChild(cell);t.body.appendChild(tr);
@@ -301,6 +301,7 @@
      try{
        const reply=await api().invoke("BuildPersonLifetimeReport",{
          personId:chosen,attendancePage,auditPage,identityPage,movementPage,sitePage,
+         revisionPage,
          ...filters()
        });
        if(ticket!==serial||!root.isConnected)return;
@@ -347,6 +348,13 @@
        pageBar(moves,"التنقلات والفصل",d.movementPage,d.movementTotal,d.movementHasNext,
          p=>{movementPage=p;void loadReport();});
        report.appendChild(moves);
+       const revisions=card("جميع تصحيحات التحضير المحفوظة تاريخياً");
+       rows(revisions,["تاريخ التحضير","الحالة السابقة","الحالة الجديدة",
+         "السبب","المنفّذ (المستخدم - الاسم المحفوظ)","وقت التصحيح"],
+         d.revisions,x=>[x.date,x.before,x.after,x.reason,x.executor,x.executedAtUtc]);
+       pageBar(revisions,"تصحيحات التحضير",d.revisionPage||1,d.revisionTotal||0,
+         d.revisionHasNext,p=>{revisionPage=p;void loadReport();});
+       report.appendChild(revisions);
        const audit=card("سجل العمليات المرتبطة بالفرد");
        rows(audit,["العملية","المنفّذ (المستخدم - الاسم المحفوظ)","التاريخ",
           "الوصف","القيمة السابقة","القيمة الجديدة","السبب"],
@@ -357,7 +365,7 @@
        report.appendChild(audit);
        const note=el("p","التقرير للقراءة فقط؛ المرشحات تعتمد على تاريخ التحضير "+
          "وموقعه المؤرخ، وتبقى فترات الهوية والمواقع كاملة. "+
-         "تصدير Excel التفصيلي بحاجة إلى ربط الخدمة المعتمدة.","section-description");
+         "وتتوفر تصحيحات التحضير في التقرير والتصدير من الخدمة نفسها.","section-description");
        report.appendChild(note);
      }catch(e){if(ticket===serial&&root.isConnected)alert(report,e);}
    }

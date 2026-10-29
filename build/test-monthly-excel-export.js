@@ -31,6 +31,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
       {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
        days:{[firstDay]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
     if(action==="PreviewMonthlyExport")return{data:{personCount:1,year,month,siteId:payload.siteId,format:"xlsx"}};
+    if(action==="SetOutputDirectory")return{data:{directory:"E:\\\\MonthlyExports"}};
     if(action==="ExportMonthlyWorkbookSet")return{data:{
       filePath:"C:\\Users\\Test\\Documents\\AlTamam\\Exports\\sample.xlsx",
       format:"xlsx",personCount:1,fileCount:2,files:[
@@ -120,13 +121,23 @@ async function main(){
     "preview never writes file");
   const save=viewport.all().find(x=>x.tag==="button"&&x.textContent==="حفظ ملف Excel");
   assert.ok(save,"save is shown only after approved preview");
-  await save.handlers.click();await tick();
+  const pathPicker=viewport.all().find(x=>x.tag==="button"&&
+    x.textContent==="اختيار مجلد الحفظ من Windows");
+  assert.ok(pathPicker,"monthly export has a native Windows directory picker");
+  await pathPicker.handlers.click();await tick();
+  const chosenName=viewport.all().find(x=>x.tag==="input"&&
+    x.attrs["aria-label"]==="اسم ملف التصدير الشهري");
+  assert.ok(chosenName,"operator can propose the XLSX filename");
+  chosenName.value="كشف مختار.xlsx";
+    await save.handlers.click();await tick();
   const exported=calls.filter(x=>x.action==="ExportMonthlyWorkbookSet");
   assert.equal(exported.length,1,"save invokes real native Excel export exactly once");
   assert.equal(exported[0].payload.year,year);
   assert.equal(exported[0].payload.month,month);
   assert.equal(exported[0].payload.term,"EX٠٠١");
   assert.equal(exported[0].payload.siteId,lastFilteredGrid.payload.siteId);
+  assert.equal(exported[0].payload.fileName,"كشف مختار.xlsx");
+  assert.equal(exported[0].payload.directory,"E:\\\\MonthlyExports");
   const confirmation=viewport.all().map(x=>String(x.textContent)).join(" | ");
   assert.ok(confirmation.includes("sample.xlsx"),"completed export path is rendered");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
@@ -154,9 +165,11 @@ async function main(){
   assert.ok(clear);
   clear.handlers.click();await tick();await tick();
   assert.equal(calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1).payload.term,"");
+  assert.equal(calls.filter(x=>x.action==="SetOutputDirectory").length,1,
+    "folder selection occurs only on the explicit Windows-picker action");
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
     "QueryMonthlyGrid","GetMonthlyCellDetails","PreviewMonthlyExport","ExportMonthlyWorkbookSet",
-    "GetSettingsOverview","GetDashboardSummary"].includes(x.action)).length,0,
+    "GetSettingsOverview","GetDashboardSummary","SetOutputDirectory"].includes(x.action)).length,0,
     "read-only click must never commit attendance or modify history");
   console.log("MONTHLY EXCEL + MONTHLY CELL UI PASS: guarded preview, native export response, date-bound read-only details");
 }
