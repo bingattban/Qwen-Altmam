@@ -158,7 +158,8 @@
             throw new Error("تأكيد كلمة المرور غير مطابق لكلمة المرور.");
           payload.setupIntent="firstTimeSetup";
           payload.passwordConfirmation=confirmation.input.value;
-          payload.fullName=foundingName.input.value.trim();
+          const optionalFullName=foundingName.input.value.trim();
+          if(optionalFullName) payload.fullName=optionalFullName;
         }
         const result=parseData(await bridge().invoke("AuthenticateLocalUser",payload));
         if (!result || !result.sessionNonce)
