@@ -193,7 +193,7 @@ public sealed class PersonnelExcelExportService
                 {
                     movements.Add(sectionNumber,Val(record,"serviceNumberA"),Val(record,"name"),
                         Val(record,"type"),Val(record,"source"),Val(record,"destination"),
-                        Val(record,"date"),Val(record,"reason"),Val(record,"actorUserId"),
+                        Val(record,"date"),Val(record,"reason"),Val(record,"executor"),
                         Val(record,"committedAtUtc"));
                     per?.Add(sectionNumber,number,name,"حركة",Val(record,"date"),
                         Val(record,"type"),Val(record,"source"),Val(record,"destination"));
