@@ -41,7 +41,11 @@ public sealed class AdminSettingsIntegrationTests : IAsyncLifetime, IDisposable
         var firstData=Assert.IsType<JsonObject>(first.Data);
         Assert.Equal(2L,firstData["total"]!.GetValue<long>());
         Assert.True(firstData["hasNext"]!.GetValue<bool>());
-        Assert.Single(Assert.IsType<JsonArray>(firstData["items"]));
+        var firstRow=Assert.IsType<JsonObject>(Assert.Single(Assert.IsType<JsonArray>(firstData["items"])));
+        Assert.Equal(1L,firstRow["sequence"]!.GetValue<long>());
+        Assert.Equal("تم الاعتماد",firstRow["outcome"]!.GetValue<string>());
+        Assert.Contains("synthetic-admin",firstRow["actorDisplay"]!.GetValue<string>());
+        Assert.NotNull(firstRow["newValue"]);
         var next=await audit.QueryAuditLogAsync(
             new JsonObject{["term"]="المحطة الجديدة",["page"]=2,["pageSize"]=1},
             CancellationToken.None,Actor);
