@@ -16,7 +16,10 @@ class El{
 const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
  badge=new El("span"),events={},calls=[],nav={};
 for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]=new El("button");
-let transferCount=0,expandedRoster=false;
+let transferCount=0,expandedRoster=false,approveReview=true;
+let autoPeople=[{personId:"P3",name:"P3",serviceNumberA:"12345",
+  siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
+  savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 08:00"}];
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
  invoke:async(action,payload)=>{
    calls.push({action,payload});
@@ -31,10 +34,13 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
      return{data:{totalForce:3,unprepared:1,automaticallyPrepared:1,internalTransferDay:transferCount,completionPercentage:67,statusCounts:[
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
-   if(action==="QueryDailyRoster"&&payload.statusId==="__AUTO_PREPARED__")
-     return{data:{items:[{personId:"P3",name:"P3",serviceNumberA:"12345",
-       siteName:"غير محدد",statusName:"غياب",savedBusinessDate:"2026-10-29",
-       autoSource:"تحضير تلقائي 08:00"}],total:1,hasNext:false}};
+   if(action==="QueryDailyRoster"&&payload.statusId==="__AUTO_PREPARED__"){
+     const matching=autoPeople.filter(p=>!payload.term||
+       p.name.toLowerCase().includes(payload.term.toLowerCase())||
+       p.serviceNumberA.includes(payload.term));
+     return{data:{items:matching.slice((payload.page-1)*payload.pageSize,
+       payload.page*payload.pageSize),total:matching.length,hasNext:false}};
+   }
    if(action==="QueryDailyRoster"){
      const all=expandedRoster?Array.from({length:235},(_,i)=>({personId:"R"+(i+1),statusId:null,statusName:"غير محضر"})):[{personId:"P1",statusId:null,statusName:"غير محضر"},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
@@ -49,10 +55,13 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
    }
    if(action==="PreviewAttendanceChange" && payload.mode==="revise")
      return{data:{businessDate:payload.businessDate,previewToken:"R".repeat(64),
-       mode:"revise",statusName:"موجود",persons:[{personId:"P3",name:"P3",
-         serviceNumberA:"12345",siteName:"غير محدد",previousStatusName:"غياب",
-         proposedStatusName:"موجود"}]}};
-   if(action==="ReviseTodayAttendance")return{data:{count:1}};
+       mode:"revise",statusName:"موجود",persons:payload.personIds.map(id=>{
+         const person=autoPeople.find(p=>p.personId===id);
+         return{...person,previousStatusName:person.statusName,
+           proposedStatusName:"موجود"};
+       })}};
+   if(action==="ReviseTodayAttendance")
+     return{data:{count:calls.filter(x=>x.action==="PreviewAttendanceChange").at(-1).payload.personIds.length}};
    if(action==="PreviewAttendanceChange" && payload.mode==="carry")
      return {data:{mode:"carry",businessDate:payload.businessDate,previewToken:"a".repeat(64),
        persons:[{personId:"P1",name:"P1",serviceNumberA:"12345",siteName:"غير محدد",
@@ -67,7 +76,7 @@ const document={createElement:tag=>new El(tag),
  addEventListener:(name,fn)=>{events[name]=fn;}};
 const reviews=[];
 const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
- AltamamDialog:{attendanceReview:async(data,opts)=>{reviews.push({data,opts});return true;}}},
+ AltamamDialog:{attendanceReview:async(data,opts)=>{reviews.push({data,opts});return approveReview;}}},
  document,location:{hash:"#dashboard"},history:{replaceState:()=>{}},Date,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
  "../src/AlTamam.WebUI/assets/js/functional-screens.js"),"utf8"),context);
@@ -144,18 +153,64 @@ async function main(){
    "the automatic register must show the persisted source of preparation");
  assert.ok(readOnly.all().some(x=>x.textContent==="2026-10-29"),
    "the automatic register must display the date of the saved attendance");
- assert.ok(!readOnly.all().some(x=>x.tag==="input"&&x.type==="checkbox"),
-   "automatic register allows targeted changes without selecting bulk checkboxes");
- const dropdown=readOnly.all().find(x=>x.tag==="select");
- assert.ok(dropdown,"each automatically prepared person needs a status dropdown");
+ const selectedCheck=readOnly.all().find(x=>x.tag==="input"&&x.type==="checkbox");
+ assert.ok(selectedCheck,"each automatic record allows individual selection");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
+   "opening register and selecting entries must not save attendance");
+ const dropdown=readOnly.all().find(x=>x.tag==="select"&&
+   x.attrs["aria-label"]==="الحالة الجديدة لـ P3");
+ assert.ok(dropdown,"restore per-person inline status selector");
  dropdown.value="STS-PRESENT";
  const edit=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="معاينة التعديل");
+ approveReview=false;
  await edit.handlers.click();await settle();
- assert.equal(reviews.length,1,"changes require a server-verified modal review");
+ assert.equal(reviews.length,1,"single-person change opens native verified preview");
+ assert.equal(reviews[0].data.persons[0].previousStatusName,"غياب");
+ assert.equal(reviews[0].data.persons[0].proposedStatusName,"موجود");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
+   "cancelling the preview must never write a change");
+ approveReview=true;
+ await edit.handlers.click();await settle();
+ assert.equal(reviews.length,2);
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,1,
-   "server-side revision is committed only following modal approval");
+   "single change commits only after modal confirmation");
  assert.ok(readOnly.all().some(x=>x.textContent==="P3"),
    "auto-prepared register remains displayed following a successful revision");
+ // Multi-selection with one common new state must use ONE server transaction.
+ autoPeople.push({personId:"P5",name:"P5",serviceNumberA:"12346",
+   siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
+   savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 20:00"});
+ const searchAuto=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="بحث");
+ searchAuto.handlers.click();await settle();
+ const selectPage=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="تحديد الصفحة");
+ assert.ok(selectPage,"bulk-selection control exists");
+ selectPage.handlers.click();await settle();
+ const counterAuto=readOnly.all().find(x=>x.className==="auto-attendance-selection-info");
+ assert.ok(counterAuto.textContent.includes("2"),"both visible records are selected");
+ const commonState=readOnly.all().find(x=>x.tag==="select"&&
+   x.attrs["aria-label"]==="الحالة الجديدة للمحددين");
+ assert.ok(commonState,"bulk common-status selector exists");
+ commonState.value="STS-PRESENT";
+ const bulk=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="معاينة تغيير المحددين");
+ approveReview=false;
+ const priorCommits=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await bulk.handlers.click();await settle();
+ assert.equal(reviews.at(-1).data.persons.length,2,
+   "review must list every selected person");
+ assert.deepEqual(Array.from(reviews.at(-1).data.persons.map(p=>p.personId)).sort(),
+   ["P3","P5"]);
+ assert.ok(reviews.at(-1).data.persons.every(p=>
+   p.previousStatusName==="غياب"&&p.proposedStatusName==="موجود"),
+   "preview identifies each former and proposed attendance status");
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorCommits,
+   "declining two-person preview does not commit");
+ approveReview=true;
+ await bulk.handlers.click();await settle();
+ const commits=calls.filter(x=>x.action==="ReviseTodayAttendance");
+ assert.equal(commits.length,priorCommits+1,
+   "bulk approval issues exactly one atomic C# commit");
+ assert.equal(counterAuto.textContent,"المحددون: 0 من 100",
+   "selection resets only after successful confirmation");
  expandedRoster=true;
  counter("all").handlers.click();await settle();
  const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));
