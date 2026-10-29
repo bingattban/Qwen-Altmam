@@ -63,7 +63,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         Assert.Equal("", Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons;"));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;"));
-        Assert.Equal("صاحب البرنامج", Scalar(
+        Assert.Equal("الإدارة العامة - صاحب البرنامج", Scalar(
             "SELECT ActorRosterFullNameSnapshot FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
         var admin = new BridgePrincipal(Assert.IsType<JsonObject>(setup.Data)["userId"]!.GetValue<string>(),
             "chosenOwner",UserRole.GeneralAdministration,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -250,7 +250,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
             "UPDATE Users SET Role=1,LinkedPersonId='PER-FOUNDER-TEST' WHERE Role=1;"));
         Assert.Equal("",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
         Assert.Equal(userId,Scalar("SELECT UserId FROM Users WHERE Role=1;"));
-        Assert.Equal("صاحب الحساب المؤسس",Scalar(
+        Assert.Equal("الإدارة العامة - صاحب الحساب المؤسس",Scalar(
             "SELECT FoundingFullName FROM Users WHERE Role=1;"));
 
         var accounts=await new UserAccountManagementService(_db).ListAsync(
