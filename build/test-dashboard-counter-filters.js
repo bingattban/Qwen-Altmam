@@ -33,7 +33,8 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
    if(action==="QueryDailyRoster"&&payload.statusId==="__AUTO_PREPARED__")
      return{data:{items:[{personId:"P3",name:"P3",serviceNumberA:"12345",
-       siteName:"غير محدد",statusName:"غياب"}],total:1,hasNext:false}};
+       siteName:"غير محدد",statusName:"غياب",savedBusinessDate:"2026-10-29",
+       autoSource:"تحضير تلقائي 08:00"}],total:1,hasNext:false}};
    if(action==="QueryDailyRoster"){
      const all=expandedRoster?Array.from({length:235},(_,i)=>({personId:"R"+(i+1),statusId:null,statusName:"غير محضر"})):[{personId:"P1",statusId:null,statusName:"غير محضر"},
        {personId:"P2",statusId:"STS-PRESENT",statusName:"موجود"},
@@ -139,6 +140,10 @@ async function main(){
  assert.ok(readOnly,"automatic attendance opens an independent read-only register");
  assert.ok(readOnly.all().some(x=>x.textContent==="P3"));
  assert.ok(readOnly.all().some(x=>x.textContent==="غياب"));
+ assert.ok(readOnly.all().some(x=>x.textContent==="تحضير تلقائي 08:00"),
+   "the automatic register must show the persisted source of preparation");
+ assert.ok(readOnly.all().some(x=>x.textContent==="2026-10-29"),
+   "the automatic register must display the date of the saved attendance");
  assert.ok(!readOnly.all().some(x=>x.tag==="input"&&x.type==="checkbox"),
    "automatic register allows targeted changes without selecting bulk checkboxes");
  const dropdown=readOnly.all().find(x=>x.tag==="select");

@@ -127,6 +127,85 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task SameDayInternalTransfer_PreservesSavedStatusCard_AutomaticRegisterAndMovement()
+    {
+        // Attendance belongs to the original assignment. An authorized later
+        // internal transfer must NOT erase that persisted fact, substitute
+        // the movement for the status count, or count a second person.
+        using (var connection = _db.CreateOpenConnection())
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,ActiveFlag,
+                    CreatedAtUtc,RowVersion)
+                VALUES('SITE-NEW-READ','الوجهة الجديدة','الوجهة الجديدة',0,1,
+                    '2026-10-01T00:00:00Z',1);
+                UPDATE AttendanceRecords
+                SET IdempotencyKey='AUTO08H-2026-10-19-TST-P-1',Source='auto'
+                WHERE PersonId='TST-P-1' AND AttendanceLocalDate='2026-10-19';
+                UPDATE PersonAssignments SET ValidToLocalDate='2026-10-19'
+                WHERE AssignmentId='TST-A-1';
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                    ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-A-MOVED','TST-P-1','SITE-NEW-READ','2026-10-19',
+                    NULL,'TST-M-MOVED','2026-10-19T09:00:00Z');
+                INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
+                    ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                    DestinationSiteId,DestinationSiteNameSnapshot,EffectiveLocalDate,
+                    CommittedAtUtc,ActorUserId,IdempotencyKey)
+                VALUES('TST-M-MOVED','TST-P-1','شخص اختباري','930001',1,
+                    'SITE-UNSPECIFIED','غير محدد','SITE-NEW-READ','الوجهة الجديدة',
+                    '2026-10-19','2026-10-19T09:00:00Z','TST-U','TST-M-IDEM-MOVED');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var svc = new DailyMonthlyReadService(_db);
+        var summary = await svc.DashboardSummaryAsync(new JsonObject
+        {
+            ["businessDate"] = "2026-10-19", ["siteId"] = "SITE-NEW-READ"
+        }, CancellationToken.None);
+        Assert.True(summary.Success, summary.UserMessage);
+        var totals = Assert.IsType<JsonObject>(summary.Data);
+        Assert.Equal(1L, totals["totalForce"]!.GetValue<long>());
+        Assert.Equal(1L, totals["internalTransferDay"]!.GetValue<long>());
+        Assert.Equal(0L, totals["unprepared"]!.GetValue<long>());
+        Assert.Equal(1L, totals["automaticallyPrepared"]!.GetValue<long>());
+        var statuses = Assert.IsType<JsonArray>(totals["statusCounts"]);
+        Assert.Equal(1L, statuses.OfType<JsonObject>()
+            .Single(x => x["statusId"]!.GetValue<string>() == "STS-ABSENT")
+            ["count"]!.GetValue<long>());
+
+        var savedStatus = await svc.DailyRosterAsync(new JsonObject
+        {
+            ["businessDate"] = "2026-10-19", ["siteId"] = "SITE-NEW-READ",
+            ["statusId"] = "STS-ABSENT"
+        }, CancellationToken.None);
+        Assert.True(savedStatus.Success);
+        var savedRow = Assert.Single(Assert.IsType<JsonArray>(
+            Assert.IsType<JsonObject>(savedStatus.Data)["items"]));
+        Assert.Equal("غياب", savedRow!["savedStatusName"]!.GetValue<string>());
+        Assert.Contains("تم نقله", savedRow["statusName"]!.GetValue<string>());
+
+        var autoRegister = await svc.DailyRosterAsync(new JsonObject
+        {
+            ["businessDate"] = "2026-10-19", ["siteId"] = "SITE-NEW-READ",
+            ["statusId"] = "__AUTO_PREPARED__"
+        }, CancellationToken.None);
+        Assert.Equal(1L, Assert.IsType<JsonObject>(autoRegister.Data)["total"]!.GetValue<long>());
+        var autoRow = Assert.Single(Assert.IsType<JsonArray>(
+            Assert.IsType<JsonObject>(autoRegister.Data)["items"]));
+        Assert.Equal("تحضير تلقائي 08:00", autoRow!["autoSource"]!.GetValue<string>());
+        Assert.Equal("2026-10-19", autoRow["savedBusinessDate"]!.GetValue<string>());
+
+        var source = await svc.DashboardSummaryAsync(new JsonObject
+        {
+            ["businessDate"] = "2026-10-19", ["siteId"] = "SITE-UNSPECIFIED"
+        }, CancellationToken.None);
+        Assert.Equal(0L, Assert.IsType<JsonObject>(source.Data)["totalForce"]!.GetValue<long>());
+    }
+
+    [Fact]
     public async Task UnpreparedCounter_ReturnsOnlyPeopleWithoutSavedAttendance()
     {
         using (var connection=_db.CreateOpenConnection())
