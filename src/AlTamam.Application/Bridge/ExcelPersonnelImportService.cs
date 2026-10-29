@@ -166,6 +166,38 @@ public sealed class ExcelPersonnelImportService
         return (accepted, issues);
     }
 
+
+    private static async Task<JsonArray> NewSitesAsync(SqliteConnection connection,
+        SqliteTransaction? tx, JsonArray rows, CancellationToken ct)
+    {
+        var known=new HashSet<string>(StringComparer.Ordinal);
+        using(var cmd=connection.CreateCommand())
+        {
+            cmd.Transaction=tx;
+            cmd.CommandText="SELECT NormalizedName FROM Sites WHERE ActiveFlag=1;";
+            using var reader=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+                known.Add(reader.GetString(0));
+        }
+        var pending=new SortedDictionary<string,(string Name,int Count)>(StringComparer.Ordinal);
+        foreach(var row in rows)
+        {
+            ct.ThrowIfCancellationRequested();
+            string name=Read((JsonObject)row!,"siteName");
+            if(name=="غير محدد" || name.Length==0)continue;
+            string normalized=ArabicTextNormalizer.NormalizeForSearch(name);
+            if(known.Contains(normalized))continue;
+            if(pending.TryGetValue(normalized,out var prior))
+                pending[normalized]=(prior.Name,prior.Count+1);
+            else pending[normalized]=(name,1);
+        }
+        var result=new JsonArray();
+        foreach(var item in pending)
+            result.Add(new JsonObject{["name"]=item.Value.Name,
+                ["normalizedName"]=item.Key,["personCount"]=item.Value.Count});
+        return result;
+    }
+
     public async Task<BridgeResponse> AnalyzeAsync(JsonObject? payload, string actor, CancellationToken ct)
     {
         string ticket = Read(payload, "workbookToken");
