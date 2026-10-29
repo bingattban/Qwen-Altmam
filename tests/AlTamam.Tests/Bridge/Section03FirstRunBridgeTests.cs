@@ -81,8 +81,8 @@ public sealed class Section03FirstRunBridgeTests : IAsyncLifetime, IDisposable
         Assert.Equal(0L, Convert.ToInt64(Scalar("SELECT COUNT(*) FROM Persons;")));
         Assert.Equal(1L, Convert.ToInt64(Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;")));
         Assert.Equal(DBNull.Value, Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
-        Assert.Equal(includeFullName ? "صاحب البرنامج" : DBNull.Value,
-            Scalar("SELECT FoundingFullName FROM Users WHERE Role=1;"));
+        object expectedFounderName = includeFullName ? "صاحب البرنامج" : DBNull.Value;
+        Assert.Equal(expectedFounderName, Scalar("SELECT FoundingFullName FROM Users WHERE Role=1;"));
 
         var users = await SendAsync("ListUserAccounts", new JsonObject(), nonce);
         Assert.True(users.Response.Success, users.Response.UserMessage);
