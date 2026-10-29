@@ -13,6 +13,7 @@ class Element {
 }
 const root=new Element("div"),invoked=[],committed=[],archiveRequests=[];
 let allow=false;
+let deferredArchive=null;
 const modalReviews=[],detailReviews=[];
 const responses={
  QuerySites:[{siteId:"SITE-SOURCE",name:"الموقع الأول",active:true},
@@ -35,6 +36,8 @@ const bridge={invoke:async(name,payload)=>{
  invoked.push(name);if(name==="CommitInternalTransfer")committed.push(payload);
  if(name==="QueryMovementArchive"||name==="ExportPersonLifetimeExcel")
     archiveRequests.push({name,payload});
+ if(name==="QueryMovementArchive"&&deferredArchive)
+   return new Promise((resolve,reject)=>deferredArchive.push({resolve,reject,payload}));
  if(!(name in responses))throw Error("Unexpected action "+name);
  return {data:responses[name]};
 }};
@@ -96,6 +99,34 @@ async function run(){
  assert.equal(archiveRequests.at(-1).payload.type,"external",
    "external archive MUST bind SQL type=external");
  assert.ok(externalRoot.all().some(x=>x.textContent==="أرشيف النقل الخارجي"));
- console.log("MOVEMENTS UI PASS: source/target, review, cancel gate, token-only commit, archive");
+ // A slow first archive query must not overwrite a newer site/date-filtered result.
+ const raceRoot=new Element("div");
+ deferredArchive=[];
+ const firstRender=ctx.window.AltamamMovements.render(raceRoot,"archiveInternal");
+ await flush();
+ assert.equal(deferredArchive.length,1);
+ const siteFilter=raceRoot.all().find(x=>x.tag==="select");
+ siteFilter.value="SITE-DEST";
+ siteFilter.handlers.change();
+ await flush();
+ assert.equal(deferredArchive.length,2);
+ deferredArchive[1].resolve({data:{total:1,hasNext:false,items:[{
+   movementId:"MOV-NEW",serviceNumberA:"002",name:"النتيجة الجديدة",
+   type:"داخلي",sourceSite:"الموقع الأول",destination:"الموقع الثاني",
+   date:"2026-10-29"
+ }]}});
+ await flush();
+ deferredArchive[0].resolve({data:{total:1,hasNext:false,items:[{
+   movementId:"MOV-OLD",serviceNumberA:"001",name:"نتيجة قديمة",
+   type:"داخلي",sourceSite:"الموقع الأول",destination:"الموقع الثاني",
+   date:"2026-10-28"
+ }]}});
+ await firstRender;await flush();
+ assert.ok(raceRoot.all().some(x=>x.textContent==="النتيجة الجديدة"),
+   "latest site-filtered archive response is displayed");
+ assert.ok(!raceRoot.all().some(x=>x.textContent==="نتيجة قديمة"),
+   "stale unfiltered archive response must never replace newer results");
+ deferredArchive=null;
+ console.log("MOVEMENTS UI PASS: source/target, review, cancel gate, token-only commit, archive, stale-filter race");
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});

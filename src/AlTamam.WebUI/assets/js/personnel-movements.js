@@ -121,7 +121,7 @@ async function archive(host,external){
  card.appendChild(el("p",external?
    "يعرض النقل الخارجي فقط ويحتفظ بتاريخ كل فرد مستقلاً.":
    "يعرض النقل الداخلي فقط مع الموقع السابق والوجهة والتاريخ.","section-description"));
- let page=1;
+ let page=1,archiveRequest=0;
  bar.append(site,dateFrom,dateTo,search,btn("بحث",()=>{page=1;load();}));
  bar.appendChild(btn("تصدير "+title+" إلى Excel",async()=>{
    const payload={mode:"movementArchive",type:archiveType,
@@ -144,11 +144,12 @@ async function archive(host,external){
     selector.addEventListener("change",()=>{page=1;load();});
  card.append(bar,notice,result);host.appendChild(card);
  async function load(){
+   const request=++archiveRequest;
    try{
      const data=(await api().invoke("QueryMovementArchive",{page,pageSize:100,
        type:archiveType,term:search.value.trim(),siteId:site.value,
         dateFrom:dateFrom.value,dateTo:dateTo.value})).data||{};
-     if(!card.isConnected)return;
+     if(request!==archiveRequest||!card.isConnected)return;
      const t=table(["الرقم (ع)","الاسم","النوع","الموقع السابق","الجهة الجديدة","التاريخ","التفاصيل"]);
      for(const m of data.items||[]){
        const tr=row(t.body,[m.serviceNumberA,m.name,m.type,m.sourceSite,m.destination,m.date]);
@@ -184,7 +185,7 @@ async function archive(host,external){
      prev.disabled=page<=1;next.disabled=!data.hasNext;
      pager.append(el("span","إجمالي الحركات: "+(data.total||0)),prev,next);
      result.replaceChildren(t.wrap,pager);
-   }catch(e){err(result,e);}
+   }catch(e){if(request===archiveRequest&&card.isConnected)err(result,e);}
  }await load();
 }
 window.AltamamMovements=Object.freeze({render:(host,screen)=>
