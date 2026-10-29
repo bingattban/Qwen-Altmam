@@ -108,6 +108,32 @@ public sealed class Section03FirstRunBridgeTests : IAsyncLifetime, IDisposable
         Assert.Equal(1L, Convert.ToInt64(Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;")));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task EmptyFounderFullName_IsOptionalAndNeverCreatesRosterIdentity(string fullName)
+    {
+        var setup = new JsonObject
+        {
+            ["username"] = "first-owner",
+            ["password"] = StrongPassword,
+            ["passwordConfirmation"] = StrongPassword,
+            ["setupIntent"] = "firstTimeSetup",
+            ["fullName"] = fullName
+        };
+        var response = await SendAsync("AuthenticateLocalUser", setup);
+        Assert.True(response.Response.Success, response.Response.UserMessage);
+        Assert.Equal(0L, Convert.ToInt64(Scalar("SELECT COUNT(*) FROM Persons;")));
+        Assert.Equal(DBNull.Value, Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
+        Assert.Equal(DBNull.Value, Scalar("SELECT FoundingFullName FROM Users WHERE Role=1;"));
+        var nonce = Assert.IsType<JsonObject>(response.Response.Data)["sessionNonce"]!.GetValue<string>();
+        var listed = await SendAsync("ListUserAccounts", new JsonObject(), nonce);
+        Assert.True(listed.Response.Success);
+        var items = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(listed.Response.Data)["items"]);
+        Assert.Equal("الإدارة العامة - first-owner",
+            items[0]!["fullName"]!.GetValue<string>());
+    }
+
     [Fact]
     public async Task FirstSetup_RejectsMissingConfirmation_WithoutCreatingAccount()
     {
