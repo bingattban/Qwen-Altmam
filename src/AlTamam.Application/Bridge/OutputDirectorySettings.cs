@@ -79,7 +79,7 @@ public sealed class OutputDirectorySettings
     {
         if(!IsSafeDirectory(requested,_db.DatabasePath,out string folder))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "اختر مجلداً محلياً موجوداً خارج مجلد قاعدة البيانات، وليس مسار شبكة.");
+                "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. يجب اختيار مجلد محلي موجود خارج مجلد قاعدة البيانات، وليس مسار شبكة.");
         try
         {
             // A real create-and-delete probe detects a disconnected, read-only or full drive.
@@ -92,9 +92,14 @@ public sealed class OutputDirectorySettings
         catch(Exception ex) when(ex is IOException or UnauthorizedAccessException)
         {
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "المجلد غير قابل للكتابة؛ اختر مجلداً آخر أو تحقق من صلاحيات القرص.");
+                "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. المجلد غير قابل للكتابة؛ تحقق من أذونات القرص والمساحة.");
         }
         await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{
+            using var previous=c.CreateCommand();
+            previous.Transaction=t;
+            previous.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='PreferredBackupDirectory';";
+            string? oldFolder=(await previous.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
+            if(string.Equals(oldFolder,folder,StringComparison.OrdinalIgnoreCase))return 0;
             using var cmd=c.CreateCommand();cmd.Transaction=t;
             cmd.CommandText="""
                 INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
@@ -108,7 +113,8 @@ public sealed class OutputDirectorySettings
             await BridgeAuditWriter.WriteAsync(c,t,TimeProvider.System,
                 "OUTPUT_FOLDER_CHANGE","تغيير مجلد النسخ والتصدير",
                 actor.UserId,actor.Username,actor.Username,"AppSettings",
-                "PreferredBackupDirectory",folder,null,
+                "PreferredBackupDirectory",folder,
+                new JsonObject{["directory"]=oldFolder??DefaultDirectory}.ToJsonString(),
                 new JsonObject{["directory"]=folder}.ToJsonString(),
                 "تغيير المجلد الموحد للنسخ الاحتياطي وتقارير Excel",
                 null,DateTime.Now.ToString("yyyy-MM-dd"),ct.CorrelationId(),ct)
