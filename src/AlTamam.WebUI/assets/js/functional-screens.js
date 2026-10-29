@@ -756,7 +756,8 @@
             "سيتم حفظ "+preview.personCount+" فرد في ملف Excel لشهر "+
             year+"-"+String(month).padStart(2,"0")+
             (STATE.monthTerm?" وفق البحث «"+STATE.monthTerm+"»":"")+
-            ". يتم حفظ نفس كشف الموقع والبحث الظاهر في الصفحة في مجلد الإعدادات، دون تعديل التحضير.");
+            (STATE.siteId?" في ملف واحد.":". لجميع المواقع: ملف موحد وملف منفصل لكل موقع لديه أفراد في هذا الشهر.")+
+            " يتم الحفظ في المجلد المختار من الإعدادات دون تغيير التحضير.");
           const confirmSave=button("حفظ ملف Excel",async()=>{
             confirmSave.disabled=true;
             const progressText=message("جارٍ إنشاء ملف Excel...");
@@ -794,7 +795,14 @@
               if(STATE.monthEpoch!==epoch)return;
               if(!result||result.format!=="xlsx"||!result.filePath)
                 throw new Error("لم يؤكد الخادم إنشاء ملف Excel.");
-              exportPanel.replaceChildren(message("تم حفظ الكشف بنجاح: "+result.filePath));
+              const files=Array.isArray(result.files)?result.files:[];
+              if(!STATE.siteId && (!files.length || files.length!==result.fileCount))
+                throw new Error("لم يرجع الخادم قائمة ملفات جميع المواقع مكتملة.");
+              const lines=files.length?
+                "تم حفظ "+files.length+" ملفات Excel: "+files.map((f,i)=>
+                  (i===0?"الكشف الموحد":("الموقع "+i))+" — "+f.filePath).join(" | "):
+                "تم حفظ الكشف بنجاح: "+result.filePath;
+              exportPanel.replaceChildren(message(lines));
             }catch(error){
               if(STATE.monthEpoch===epoch){
                 if(error?.errorCode==="StorageBusy")
