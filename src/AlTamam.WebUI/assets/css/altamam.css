@@ -1309,20 +1309,23 @@ body{min-width:0}
 .auto-attendance-dialog>.section-description{margin:0;line-height:1.65}
 .auto-attendance-dialog>.functional-toolbar{gap:8px;padding:0;flex:0 0 auto}
 .auto-attendance-dialog>.functional-toolbar .form-field{flex:1 1 200px}
+.auto-attendance-dialog>.functional-toolbar .auto-attendance-status-select{flex:1 1 190px;min-width:170px}
+.auto-attendance-dialog .auto-attendance-selection-info{font-weight:800;white-space:nowrap}
 .auto-attendance-dialog .auto-attendance-results{
   flex:1 1 auto;min-height:130px;overflow:hidden
 }
 .auto-attendance-dialog .auto-attendance-results>.functional-table-wrap{
   height:100%;max-height:none;overflow:auto;scrollbar-gutter:stable
 }
-.auto-attendance-dialog .functional-table{width:100%;min-width:690px;table-layout:fixed}
+.auto-attendance-dialog .functional-table{width:100%;min-width:1120px;table-layout:fixed}
 .auto-attendance-dialog .functional-table :is(th,td){
   padding:6px 9px;min-height:36px;font-size:14px;line-height:1.4;
   overflow:hidden;text-overflow:ellipsis
 }
-.auto-attendance-dialog .functional-table :is(th,td):first-child{width:62px;text-align:center}
-.auto-attendance-dialog .functional-table :is(th,td):nth-child(2){width:125px}
-.auto-attendance-dialog .functional-table :is(th,td):nth-child(3){width:35%}
+.auto-attendance-dialog .functional-table :is(th,td):first-child{width:58px;text-align:center}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(2){width:65px}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(3){width:125px}
+.auto-attendance-dialog .functional-table :is(th,td):nth-child(4){width:19%}
 .auto-attendance-dialog .functional-table :is(th,td):last-child{width:160px}
 .auto-attendance-dialog>.functional-pager{flex:0 0 auto;margin:0;padding:8px 0 0;border-top:1px solid var(--border-color)}
 @media(max-width:670px){
