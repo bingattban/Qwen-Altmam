@@ -318,13 +318,15 @@
         if(!result||!Array.isArray(result.items))
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
         const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},
-          {label:"الاسم"},{label:"الموقع"},{label:"الحالة المعتمدة"},
+          {label:"الاسم"},{label:"الموقع"},{label:"تاريخ التحضير"},
+          {label:"مصدر التحضير"},{label:"الحالة المحفوظة"},
           {label:"الحالة الجديدة"},{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
-            person.name,person.siteName,person.statusName].forEach(value=>
+            person.name,person.siteName,person.savedBusinessDate||date,
+            person.autoSource||"مصدر غير موثق",person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
           const selectCell=el("td"),statusSelect=el("select","form-select auto-attendance-status-select");
           statusSelect.setAttribute("aria-label","الحالة الجديدة لـ "+person.name);
