@@ -71,7 +71,9 @@ public sealed class AutoAttendanceService
 
         // The configured 24-hour local schedule is read from persisted settings.
         // The 08:00 default remains only when no administrator value exists.
-        int catchUpDays = await GetSettingIntAsync("AutoAttendanceCatchUpDays", DefaultCatchUpDays, ct).ConfigureAwait(false);
+        // Legacy AutoAttendanceCatchUpDays must not truncate history: the operator
+        // explicitly chose all earlier dates. No artificial retroactive baseline.
+        int catchUpDays = int.MaxValue;
         bool dayDue = localNow.TimeOfDay >= await GetDueTimeAsync(ct).ConfigureAwait(false);
 
         List<DateOnly> pending = EnumeratePendingDates(today, dayDue, catchUpDays,
@@ -410,11 +412,12 @@ public sealed class AutoAttendanceService
         DateOnly firstPending = lastCompleted.Value.AddDays(1);
         if (end < firstPending) return [];
         int span = end.DayNumber - firstPending.DayNumber + 1;
-        if (span > catchUpDays)
-        {
-            unrecoverable = span - catchUpDays;
-            firstPending = end.AddDays(-(catchUpDays - 1));
-        }
+        // Owner decision: recover EVERY eligible date after the latest completed
+        // ledger entry, not just the former seven-day window. The caller still
+        // processes in date order, preserving historical locks and idempotency.
+        // catchUpDays is retained for API compatibility but is no longer a cap.
+        _ = span;
+        _ = catchUpDays;
         var list = new List<DateOnly>();
         for (DateOnly d = firstPending; d <= end; d = d.AddDays(1)) list.Add(d);
         return list;
