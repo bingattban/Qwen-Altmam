@@ -54,7 +54,9 @@ public sealed class ExcelPersonnelImportService
         {
             if (bytes.Length > MaxWorkbookBytes) return Invalid("ملف Excel كبير جداً (الحد 160 كيلوبايت).");
             var rows = ParseWorkbook(bytes, payload);
-            if (rows.Count == 0) return Invalid("الكشف لا يحتوي على صفوف أفراد صالحة للمعالجة.");
+            if (rows.Count == 0 || rows.All(row=>row.Issue is not null ||
+                !ServiceNumberPolicy.TryCanonicalize(row.Number,out _)))
+                return Invalid("الكشف لا يحتوي على أرقام (ع) صالحة للاستيراد؛ لم تُقبل أي صفوف.");
             var data = new JsonArray();
             foreach (var row in rows)
                 data.Add(new JsonObject
