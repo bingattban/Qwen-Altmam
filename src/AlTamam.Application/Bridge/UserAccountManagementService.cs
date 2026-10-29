@@ -231,6 +231,8 @@ public sealed class UserAccountManagementService
     private async Task<BridgeResponse> ChangeAsync(JsonObject? payload,BridgePrincipal actor,
         bool deactivate,CancellationToken ct)
     {
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
+            return Error("لا تملك صلاحية إدارة حسابات المستخدمين.",BridgeErrorCodes.Unauthorized);
         string id=Read(payload,"userId");
         long expected=ReadLong(payload,"expectedRevision");
         string password=ReadSecret(payload);
@@ -327,6 +329,8 @@ public sealed class UserAccountManagementService
     public async Task<BridgeResponse> ReactivateAsync(JsonObject? payload,
         BridgePrincipal actor,CancellationToken ct)
     {
+        if(!RoleAuthorizationPolicy.CanAccessUsersManagement(actor.Role))
+            return Error("لا تملك صلاحية إدارة حسابات المستخدمين.",BridgeErrorCodes.Unauthorized);
         string id=Read(payload,"userId"),reason=Read(payload,"reason");
         long expected=ReadLong(payload,"expectedRevision");
         if(id.Length==0 || expected<1 || reason.Length is <5 or >400)
@@ -353,6 +357,11 @@ public sealed class UserAccountManagementService
                     return Error("الحساب المطلوب غير موجود.");
                 username=reader.GetString(0);
                 targetRole=(UserRole)reader.GetInt32(1);
+                // Authorize the account's role BEFORE revealing whether its
+                // linked roster person is active, archived or even present.
+                if(!RoleAuthorizationPolicy.CanModifyAccount(actor.Role,targetRole))
+                    return Error("لا تملك صلاحية إعادة تفعيل هذا النوع من الحسابات.",
+                        BridgeErrorCodes.Unauthorized);
                 active=reader.GetInt32(2);
                 revision=reader.GetInt64(3);
                 personId=reader.IsDBNull(4)?"":reader.GetString(4);
@@ -362,9 +371,6 @@ public sealed class UserAccountManagementService
                     return Error("إعادة تفعيل الحساب تتطلب عودة صاحبه فعلياً إلى كشف القوة النشطة.",
                         BridgeErrorCodes.ConflictStale);
             }
-            if(!RoleAuthorizationPolicy.CanModifyAccount(actor.Role,targetRole))
-                return Error("لا تملك صلاحية إعادة تفعيل هذا النوع من الحسابات.",
-                    BridgeErrorCodes.Unauthorized);
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,t,"ReactivateUserAccount",actor.UserId,payload,ct)
                 .ConfigureAwait(false);
