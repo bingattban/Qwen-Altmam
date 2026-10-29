@@ -268,6 +268,20 @@ public sealed class ExcelPersonnelImportService
             var (accepted, issues) = await InspectAsync(connection, tx, rows, ct).ConfigureAwait(false);
             if (issues.Count > 0 || accepted.Count != rows.Count)
                 return Stale();
+            var proposedSites=plan["newSites"] as JsonArray ?? new JsonArray();
+            var missingSites=await NewSitesAsync(connection,tx,accepted,ct).ConfigureAwait(false);
+            if(proposedSites.ToJsonString()!=missingSites.ToJsonString())return Stale();
+            if(proposedSites.Count>0)
+            {
+                bool approved=false;
+                try{approved=payload?["confirmNewSites"]?.GetValue<bool>()==true;}
+                catch(InvalidOperationException){}
+                var names=payload?["approvedSiteNames"] as JsonArray;
+                if(!approved || names is null || names.Count!=proposedSites.Count ||
+                   !names.Select(x=>x?.ToString()??"").SequenceEqual(
+                       proposedSites.Select(x=>Read((JsonObject)x!,"name")),StringComparer.Ordinal))
+                    return Invalid("إنشاء المواقع يتطلب معاينة منفصلة وتأكيد أسمائها وعدد أفرادها.");
+            }
             long? consumed = await BridgePreviewTokens.ConsumeAsync(_db, _time, connection,
                 tx, token, PlanOperation, actor, rows.Count, ct).ConfigureAwait(false);
             if (consumed != rows.Count) return Stale();
