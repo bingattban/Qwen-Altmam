@@ -234,7 +234,7 @@
     shell.appendChild(node("p","section-description",
       "أعمدة الكشف: الاسم، الرقم (ع)، الموقع (اختياري)، والرقم العادي للتسلسل فقط. " +
       "الرقم (ع) لا يقل عن أربع خانات، ويختلف عن رقم ترتيب الصف. الحد 500 فرد و160 كيلوبايت. " +
-      "سيُنشئ البرنامج المواقع غير الموجودة تلقائياً عند التأكيد، ولن يغير هوية أو تحضير فرد موجود."));
+      "ستُعرض المواقع الجديدة في معاينة مستقلة قبل الموافقة الصريحة على إنشائها. لن تتغير هوية أو تحضير فرد موجود."));
     const choose=node("input","form-control");choose.type="file";
     choose.accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     const picker=node("label","admin-input");
@@ -373,6 +373,21 @@
             const detailsReview=window.AltamamDialog?.detailsReview;
             if(typeof detailsReview!=="function")
               throw Error("نافذة معاينة الاستيراد غير متاحة؛ لم يُحفظ أي تغيير.");
+            const newSites=Array.isArray(plan.newSites)?plan.newSites:[];
+            const approvedSiteNames=newSites.map(x=>x.name);
+            if(newSites.length){
+              const siteApproved=await detailsReview({
+                rows:[["عدد المواقع الجديدة",newSites.length],
+                  ["التحقق","لن تُنشأ أي مواقع قبل الموافقة على الأسماء التالية."]],
+                columns:["الموقع الجديد","الأفراد المقترحون"],
+                items:newSites.map(x=>[x.name,x.personCount])
+              },{
+                title:"معاينة إنشاء مواقع جديدة",
+                message:"تأكيد مستقل لإنشاء المواقع غير الموجودة؛ تُسجل كل إضافة في التدقيق.",
+                confirmLabel:"أوافق على إنشاء هذه المواقع"
+              });
+              if(!siteApproved){previewToken="";return;}
+            }
             const details={rows:[
               ["أفراد جدد",plan.newCount],["صفوف مستبعدة",plan.issueCount],
               ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
@@ -388,7 +403,8 @@
             const operationId=makeOperationId();
             const commit=async()=>{
               try{
-                const done=await api().invoke("CommitImport",{previewToken:token,operationId});
+                const done=await api().invoke("CommitImport",{previewToken:token,operationId,
+                  confirmNewSites:newSites.length>0,approvedSiteNames});
                 if(!valid())return;
                 if(!Number.isInteger(done.data?.createdCount))
                   throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
