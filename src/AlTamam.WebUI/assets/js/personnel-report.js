@@ -52,8 +52,13 @@
    const modalHeading=el("div",undefined,"person-report-actions");
    const modalTitle=el("h2","معاينة تقرير التمام","section-title");
    const exportFeedback=el("div",undefined,"functional-feedback");
-   let reportMode="person";
-   const closePopup=()=>{popup.hidden=true;report.replaceChildren();};
+   let reportMode="person",exportBusy=false;
+   const closePopup=()=>{
+     // Closing while an export writes can strand the only cancellation action.
+     // The modal remains open until the native export completes or is cancelled.
+     if(exportBusy)return;
+     popup.hidden=true;report.replaceChildren();
+   };
    const closeButton=btn("إغلاق التقرير",closePopup);
    function reportPayload(){
      return reportMode==="group"?
@@ -61,9 +66,11 @@
        {mode:"report",personId:chosen,...filters()};
    }
    async function exportExcel(){
+     if(exportBusy)return; // One preview/export handshake per user intent.
      const payload=reportPayload();
      if(reportMode==="group"&&!payload.personIds.length)
        return alert(exportFeedback,new Error("اختر أفراد المجموعة أولًا."));
+     exportBusy=true;exportButton.disabled=true;closeButton.disabled=true;
      exportFeedback.replaceChildren(el("p","جارٍ إعداد معاينة ملف Excel..."));
      try{
        const preview=(await api().invoke("BuildPersonLifetimeReport",
@@ -79,6 +86,9 @@
          await Promise.resolve(window.confirm?.(description)||false);
        if(!confirm)return exportFeedback.replaceChildren();
        const progressText=el("p","جارٍ إنشاء ملف Excel والتأكد من اكتمال الصفوف...");
+       const progress=el("progress",undefined,"app-export-progress");
+       progress.max=100;
+       progress.setAttribute("aria-label","تقدم تصدير تقرير الفرد");
        let monitoring=true,pollBusy=false;
        const cancelExport=btn("إيقاف التصدير الجاري",async()=>{
          cancelExport.disabled=true;
@@ -87,7 +97,7 @@
            progressText.textContent="طُلب إلغاء التصدير؛ جارٍ إيقاف الكتابة...";
          }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
        });
-       exportFeedback.replaceChildren(progressText,cancelExport);
+       exportFeedback.replaceChildren(progressText,progress,cancelExport);
        const poll=(typeof setInterval === "function")?setInterval(async()=>{
          if(!monitoring||pollBusy||popup.hidden)return;
          pollBusy=true;
@@ -95,7 +105,10 @@
            const info=(await api().invoke("GetExportProgress",{},
              {timeoutMs:10000})).data||{};
            if(!monitoring||popup.hidden)return;
-           const ratio=Number.isInteger(info.percentage)?" — "+info.percentage+"%":"";
+           const percentage=Number(info.percentage);
+           const ratio=Number.isInteger(percentage)?" — "+percentage+"%":"";
+           if(Number.isInteger(percentage)&&percentage>=0&&percentage<=100)
+             progress.value=percentage;
            const rows=info.total?" ("+info.processed+" من "+info.total+" صف)":"";
            progressText.textContent=info.cancelRequested?
              "جارٍ إيقاف التصدير والتحقق من حذف الملف المؤقت...":
@@ -112,6 +125,10 @@
            "تم حفظ Excel: "+reply.data.filePath,"settings-success"));
        }finally{monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);}
      }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
+     finally{
+       exportBusy=false;
+       exportButton.disabled=false;closeButton.disabled=false;
+     }
    }
    const exportButton=btn("تصدير التقرير إلى Excel",()=>{void exportExcel();});
    modalHeading.append(modalTitle,exportButton,closeButton);
