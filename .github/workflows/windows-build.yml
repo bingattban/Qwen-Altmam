@@ -29,6 +29,8 @@ jobs:
         run: |
           python build/validate-ui-shell.py
           if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
+          python build/test-ci-exit-guards.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
           foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
@@ -37,7 +39,9 @@ jobs:
         shell: pwsh
         run: |
           node build/test-bridge-operation-intents.js
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge mutation intent regression' }
           node build/test-audit-route-visibility.js
+          if ($LASTEXITCODE -ne 0) { throw 'Audit route RBAC regression' }
           node build/test-readonly-route-states.js
           if ($LASTEXITCODE -ne 0) { throw 'Phase 04 authenticated route/state regression' }
           node build/test-admin-settings-navigation.js
