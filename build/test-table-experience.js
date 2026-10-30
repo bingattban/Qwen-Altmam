@@ -116,9 +116,10 @@ const css=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
 assert.match(css,/\.table-expanded-paged>\.table-expanded-scroll/);
 assert.match(css,/\.table-local-search/);
-assert.match(css,/height:35px!important;min-height:35px!important;max-height:35px!important/);
-assert.match(css,/width:min\(170px,100%\)!important/);
-assert.match(css,/label\.app-unified-search-wrap\{\s*width:170px!important/);
+assert.match(css,/height:38px;min-height:38px/,"search height must accommodate Arabic text");
+assert.match(css,/width:100%;min-width:200px;max-width:360px/,"search is flexible, not fixed");
+assert.match(css,/label\.app-unified-search-wrap\{\s*display:flex;flex:1 1 240px;min-width:200px;max-width:360px/);
+assert.doesNotMatch(css,/170px!important/,"old narrow search footprint must not regress");
 const html=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/index.html"),"utf8");
 assert.match(html,/assets\/js\/table-experience\.js/);
