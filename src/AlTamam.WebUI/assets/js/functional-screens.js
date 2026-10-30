@@ -749,7 +749,38 @@
     const bottom=el("form","card functional-archive monthly-archive-controls");
     append(container,tool,bottom,monthlyTotals,feedback,exportPanel,tableHost,detailOverlay);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
-    let detailsRequest=0;
+    let detailsRequest=0,detailsReturnFocus=null;
+    const closeCellDetails=()=>{
+      detailsRequest++;
+      detailOverlay.hidden=true;
+      detailsBox.replaceChildren();
+      const previous=detailsReturnFocus;detailsReturnFocus=null;
+      previous?.focus?.();
+    };
+    // History is read-only, but its dialog must be keyboard-dismissible
+    // even while its native GetMonthlyCellDetails request is still pending.
+    const detailsClose=button("إغلاق التفاصيل",closeCellDetails,
+      "btn btn-outline app-modal-close");
+    detailOverlay.addEventListener("keydown",event=>{
+      if(detailOverlay.hidden)return;
+      if(event.key==="Escape"){
+        event.preventDefault?.();closeCellDetails();return;
+      }
+      if(event.key!=="Tab")return;
+      const controls=Array.from(detailOverlay.querySelectorAll?.(
+        'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')||[])
+        .filter(control=>!control.hidden&&control.getAttribute?.("aria-hidden")!=="true");
+      if(!controls.length){event.preventDefault?.();return;}
+      const first=controls[0],last=controls[controls.length-1];
+      const active=document.activeElement;
+      if(!controls.includes(active)){
+        event.preventDefault?.();(event.shiftKey?last:first).focus?.();
+      }else if(event.shiftKey&&active===first){
+        event.preventDefault?.();last.focus?.();
+      }else if(!event.shiftKey&&active===last){
+        event.preventDefault?.();first.focus?.();
+      }
+    });
     const item=(label,value)=>{
       const row=el("div","monthly-detail-row");
       append(row,el("strong","",label+"："),el("span","",value==null||value===""?"—":value));
@@ -757,20 +788,20 @@
     };
     async function showCellDetails(personId,date){
       const request=++detailsRequest;
+      detailsReturnFocus=document.activeElement||null;
       detailOverlay.hidden=false;
-      detailsBox.replaceChildren(message("جارٍ قراءة الواقعة المحفوظة..."));
+      detailsBox.replaceChildren(detailsClose,message("جارٍ قراءة الواقعة المحفوظة..."));
+      detailsClose.focus?.();
       try{
         const response=await bridge().invoke("GetMonthlyCellDetails",{
           personId,businessDate:date,siteId:STATE.siteId
         });
-        if(STATE.monthEpoch!==epoch||request!==detailsRequest)return;
+        if(STATE.monthEpoch!==epoch||request!==detailsRequest||detailOverlay.hidden)return;
         const data=parseData(response);
         if(!data||data.personId!==personId||data.businessDate!==date)
           throw new Error("لم تتطابق البيانات التاريخية مع اليوم المختار.");
         const top=el("div","monthly-detail-heading");
-        const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailOverlay.hidden=true;
-          detailsBox.replaceChildren();});
-        append(top,el("h3","section-title","تفاصيل التمام — "+date),close);
+        append(top,el("h3","section-title","تفاصيل التمام — "+date),detailsClose);
         const content=el("div","monthly-detail-content app-preview-properties");
         append(content,item("الاسم",data.personName),item("الرقم (ع)",data.serviceNumberA),
           item("الموقع في هذا اليوم",data.attendance?.siteName||data.siteName));
@@ -814,12 +845,9 @@
         }
         detailsBox.replaceChildren(top,content);
       }catch(e){
-        if(STATE.monthEpoch===epoch&&request===detailsRequest){
-          showError(detailsBox,e);
-          detailsBox.appendChild(button("إغلاق التفاصيل",()=>{
-            detailsRequest++;detailOverlay.hidden=true;detailsBox.replaceChildren();
-          }));
-        }
+        if(STATE.monthEpoch===epoch&&request===detailsRequest&&!detailOverlay.hidden)
+          detailsBox.replaceChildren(detailsClose,
+            message(e?.message||"تعذر قراءة تفاصيل اليوم المحفوظة.",true));
       }
     }
     const showMonth=async()=>{
