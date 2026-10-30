@@ -40,13 +40,14 @@
     c.appendChild(node("h2","section-title",title));return c;
   }
   // Keep modal nodes under their active screen for existing virtual DOM tests.
-  function operationalModal(panel,size,hideOnClose=false,initiallyHidden=false){
+  function operationalModal(panel,size,hideOnClose=false,initiallyHidden=false,onDismiss=null){
     panel.classList.add("app-operational-modal",size||"modal-md");
     panel.setAttribute("role","dialog");
     panel.setAttribute("aria-modal","true");
     if(initiallyHidden)panel.hidden=true;
     let returnFocus=null;
     const dismiss=()=>{
+      onDismiss?.();
       if(hideOnClose)panel.hidden=true;else panel.remove?.();
       const previous=returnFocus;returnFocus=null;
       previous?.focus?.();
@@ -1472,27 +1473,32 @@
       showHidden.addEventListener("change",()=>{state.page=1;load();});
       controls.appendChild(toggle);
     }
-    const historyPanel=node("div","admin-note app-operational-modal modal-xl");
-    historyPanel.setAttribute("role","dialog");
-    historyPanel.setAttribute("aria-modal","true");
+    const historyPanel=node("div","admin-note");
     historyPanel.setAttribute("aria-label","القيود المعدلة والمحذوفة");
+    const historyContent=node("div","admin-note");
+    let historySerial=0;
+    // Keep the close control mounted; only the content is replaced on paging.
+    // Every dismissal invalidates in-flight history requests before they resolve.
+    const historyModal=operationalModal(historyPanel,"modal-xl",true,true,()=>{
+      historySerial++;
+      historyContent.replaceChildren();
+    });
+    historyPanel.appendChild(historyContent);
     if(canEditAudit){
       const historyButton=btn("القيود المعدلة والمحذوفة",()=>{
-        historyPanel.hidden=false;
+        historyModal.open();
         void loadEdits(1);
       },"btn btn-outline");
       controls.append(historyButton);
-      const closeHistory=btn("العودة إلى سجل العمليات",()=>{
-        historyPanel.hidden=true;historyPanel.replaceChildren();
-      },"btn btn-outline");
-      historyPanel.append(closeHistory);
-      historyPanel.hidden=true;
     }
     box.append(controls,results,historyPanel);
     async function loadEdits(pageNumber) {
+      const request=++historySerial;
+      historyContent.replaceChildren(warning("جارٍ قراءة القيود المعدلة والمحذوفة..."));
       try{
         const reply=await api().invoke("QueryAuditPresentationChanges",
           {page:pageNumber,pageSize:50});
+        if(request!==historySerial||historyPanel.hidden||state.active!=="log")return;
         const data=reply.data||{};
         const revised=table(["رقم القيد","الإصدار","العملية","الوصف الأصلي",
           "الوصف بعد التعديل","الحالة","السبب","المنفّذ وقت الحدث","التاريخ"]);
@@ -1511,11 +1517,11 @@
         prev.disabled=pageNumber<=1;
         next.disabled=(data.items||[]).length<50;
         nav.append(node("span","","صفحة "+pageNumber),prev,next);
-        historyPanel.replaceChildren(
-          btn("العودة إلى سجل العمليات",()=>{
-            historyPanel.hidden=true;historyPanel.replaceChildren();
-          },"btn btn-outline"),revised.wrap,nav);
-      }catch(e){errors(historyPanel,e);}
+        historyContent.replaceChildren(revised.wrap,nav);
+      }catch(e){
+        if(request===historySerial&&!historyPanel.hidden&&state.active==="log")
+          errors(historyContent,e);
+      }
     }
     async function load() {
       const token=++currentRequest;

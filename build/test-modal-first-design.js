@@ -74,6 +74,13 @@ check(/transfer-review-summary/,css,"movement preview is a detailed modal");
 check(/closed-correction-fields/,admin,"exceptional correction has a balanced form");
 check(/closed-policy-banner/,admin,"exceptional correction exposes real policy feedback");
 check(/audit-detail-overlay/,admin,"audit details do not render below the history");
+check(/historyModal=operationalModal\(historyPanel,"modal-xl",true,true/,admin,
+  "audit history is a true action-triggered overlay with a stable close control");
+check(/request!==historySerial\|\|historyPanel\.hidden/,admin,
+  "dismissed audit history ignores stale asynchronous server responses");
+check(/historyContent\.replaceChildren\(revised\.wrap,nav\)/,admin,
+  "audit paging retains the modal close control and keyboard focus");
+
 check(/audit-diff-grid/,admin,"audit before and after values are read-only structured diff blocks");
 check(/closeAuditDetail\(\)/,admin,"audit overlay can be dismissed after commitment");
 check(/monthly-movement-banner/,functional,"monthly movements are highlighted in details");
