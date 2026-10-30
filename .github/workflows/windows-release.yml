@@ -4,7 +4,7 @@ name: Windows Release Packages (Phase 15)
 # artifacts for EACH architecture (Portable ZIP + Inno Setup installer), verifies runtime
 # dependencies and emits SHA-256 checksums + build metadata.
 # Publishing a GitHub Release is intentionally NOT done here: 15.08 requires the
-# Phase 16 gate plus explicit owner approval; this workflow only uploads CI
+# explicit owner approval under Phase 15.08; this workflow only uploads CI
 # artifacts for review. No code signing occurs unless the owner provisions the
 # approved certificate secrets (see "Optional signing" step); unsigned builds
 # are never labeled 'secure'.
@@ -55,6 +55,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
           python build/test-ci-exit-guards.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
+          python build/test-ci-performance-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
           foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
@@ -101,6 +103,8 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: Directory.Packages.props
       - name: Restore with package integrity + advisory audit
         shell: pwsh
         run: |
@@ -298,6 +302,7 @@ jobs:
           path: artifacts/AlTamam-Portable-${{ matrix.arch }}.zip
           if-no-files-found: error
           retention-days: 90
+          compression-level: 0
       - name: Upload standalone Installer package for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
@@ -305,6 +310,7 @@ jobs:
           path: artifacts/AlTamam-Installer-${{ matrix.arch }}.exe
           if-no-files-found: error
           retention-days: 90
+          compression-level: 0
       - name: Upload checksums and build metadata for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
@@ -320,6 +326,7 @@ jobs:
           name: AlTamam-publish-dir-${{ matrix.arch }}
           path: ${{ env.PUBLISH_DIR }}
           retention-days: 30
+          compression-level: 1
 
   clean-windows-acceptance:
     # The main branch automatically packages TESTED CANDIDATES. It is not a claim
@@ -351,7 +358,7 @@ jobs:
         # §22 audit 2026-10-23: Category=Acceptance tests DO NOT EXIST in the repo yet.
         # Running `dotnet test --filter Category=Acceptance` would execute 0 tests and
         # exit 0 — a false green this contract forbids. Until Windows-UI acceptance
-        # tests are authored (Phase 15/16 scope), this step hard-FAILS with an explicit
+        # tests are authored (Phase 15 scope), this step hard-FAILS with an explicit
         # BLOCKED message instead of pretending to pass. Restore the dotnet-test form
         # only after at least one [Trait("Category","Acceptance")] test exists.
         shell: pwsh
