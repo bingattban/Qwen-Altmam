@@ -275,9 +275,10 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
     [Fact]
     public async Task ConcurrentReadersAndWriter_PreserveConstraints_AndProduceIdenticalFinalState()
     {
-        // 8 concurrent readers (production search path) + 2 concurrent writers inserting distinct
-        // attendance days through separate connections. The UNIQUE constraints must hold and the
-        // final aggregate must equal the exactly-predicted value (output parity under concurrency).
+        // 8 concurrent readers (production search path) + 2 concurrent writer tasks
+        // inserting distinct rows through the real serialized, transaction-atomic write gate.
+        // Every writer transaction uses its own connection; all 100 inserts and constraints
+        // must survive concurrent reads with exact final-state parity.
         const int readers = 8;
         const int writerThreads = 2;
         const string newDay = "2025-07-01";
@@ -298,27 +299,33 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
             int offset = w;
             tasks.Add(Task.Run(async () =>
             {
-                using SqliteConnection connection = _db.CreateOpenConnection(); // busy_timeout=15000 set inside
-                for (int i = 1; i <= 50; i++)
+                // Use the SAME serialized, atomic write boundary as production;
+                // concurrent logical writers still run as separate tasks.
+                await _db.ExecuteInWriteTransactionAsync(async (connection, transaction) =>
                 {
-                    int personIdx = offset * 50 + i;
-                    using var cmd = connection.CreateCommand();
-                    cmd.CommandText = @"INSERT INTO AttendanceRecords (PersonId, AttendanceLocalDate, StatusId,
-                        StatusNameSnapshot, StatusSymbolSnapshot, StatusColorSnapshot, AssignmentIdAtEffectiveDate,
-                        SiteIdAtEffectiveDate, SiteNameSnapshot, Source, CreatedByUserId, CommittedAtUtc,
-                        RevisionNumber, IdempotencyKey)
-                        VALUES ($pid,$d,'STS-PRESENT','موجود','م','#38BDF8',$aid,$site,'موقع','manual','TST-USER-GA',$utc,1,$key);";
-                    cmd.Parameters.AddWithValue("$pid", $"TST-P-{personIdx:D6}");
-                    cmd.Parameters.AddWithValue("$d", newDay);
-                    cmd.Parameters.AddWithValue("$aid", $"TST-A-{personIdx:D6}");
-                    // Historical assignment/site must match: even synthetic concurrency
-                    // writes are subject to the same production database invariant.
-                    cmd.Parameters.AddWithValue("$site", personIdx % 2 == 0
-                        ? "SITE-TST-B" : SyntheticFixtures.SiteId);
-                    cmd.Parameters.AddWithValue("$utc", DateTime.UtcNow.ToString("O"));
-                    cmd.Parameters.AddWithValue("$key", $"CONC-{personIdx}");
-                    await cmd.ExecuteNonQueryAsync();
-                }
+                    for (int i = 1; i <= 50; i++)
+                    {
+                        int personIdx = offset * 50 + i;
+                        using var cmd = connection.CreateCommand();
+                        cmd.Transaction = transaction;
+                        cmd.CommandText = @"INSERT INTO AttendanceRecords (PersonId, AttendanceLocalDate, StatusId,
+                            StatusNameSnapshot, StatusSymbolSnapshot, StatusColorSnapshot, AssignmentIdAtEffectiveDate,
+                            SiteIdAtEffectiveDate, SiteNameSnapshot, Source, CreatedByUserId, CommittedAtUtc,
+                            RevisionNumber, IdempotencyKey)
+                            VALUES ($pid,$d,'STS-PRESENT','موجود','م','#38BDF8',$aid,$site,'موقع','manual','TST-USER-GA',$utc,1,$key);";
+                        cmd.Parameters.AddWithValue("$pid", $"TST-P-{personIdx:D6}");
+                        cmd.Parameters.AddWithValue("$d", newDay);
+                        cmd.Parameters.AddWithValue("$aid", $"TST-A-{personIdx:D6}");
+                        // Historical assignment/site must match: even synthetic concurrency
+                        // writes are subject to the same production database invariant.
+                        cmd.Parameters.AddWithValue("$site", personIdx % 2 == 0
+                            ? "SITE-TST-B" : SyntheticFixtures.SiteId);
+                        cmd.Parameters.AddWithValue("$utc", DateTime.UtcNow.ToString("O"));
+                        cmd.Parameters.AddWithValue("$key", $"CONC-{personIdx}");
+                        await cmd.ExecuteNonQueryAsync();
+                    }
+                    return 0;
+                });
             }));
         }
 
