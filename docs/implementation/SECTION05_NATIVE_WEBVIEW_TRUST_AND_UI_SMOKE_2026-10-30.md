@@ -19,6 +19,10 @@ The same probe is exercised by \`build/test-webview-runtime-probe.js\`: nine VM 
 
 **Scope and contracts:** No business DTO, SQLCipher migration, scheduler, domain permission, historical identity, attendance, audit operation or restore activation changed. The only runtime error surfaced is a nonzero selfcheck exit when an asset or trust boundary is invalid; test mode never invokes the business bridge or writes records. On failure nothing is promoted or merged; database transaction and rollback semantics remain unchanged.
 
+## Actual encrypted database failure tests (05.06)
+
+`tests/AlTamam.Tests/Persistence/InterruptedWriteAtomicityTests.cs` adds two native SQLCipher xUnit regressions to the EXISTING full Core and Release Windows suites: a synthetic I/O interruption thrown after an INSERT but before COMMIT, followed by a valid retry that commits exactly one row; and a duplicate-key constraint exception after a partial insert, proving the whole transaction rolls back. Both independently inspect the live database and require successful `PRAGMA integrity_check` through `HasValidIntegrity()`. This executes the production `AlTamamDbContext.ExecuteInWriteTransactionAsync` boundary, not mocked SQL. It is not a simulated power cut to physical hardware, and does not change migrations or enable restore.
+
 ## Mandatory outstanding gates
 
 - **05.06:** Native end-to-end interactive flows (user input, unauthorized roles, conflicting concurrent edits, storage failures and interrupted writes) still require a real Windows UI driver and physical acceptance where applicable; prior unit/integration tests cannot be substituted for these.
