@@ -9,14 +9,26 @@
     <!-- The WebView2 control is created in code-behind and fills the window. -->
     <Grid x:Name="webViewHost" Background="#F5F7FA">
         <!-- Native startup feedback is visible immediately while WebView2 and the encrypted DB initialize. -->
-        <Border x:Name="startupPanel" Visibility="{Binding PanelVisibility}" Panel.ZIndex="10" Background="#F5F7FA">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock Text="التمام اليومي" FontSize="30" FontWeight="Bold"
-                           HorizontalAlignment="Center" Foreground="#15314D" />
-                <TextBlock x:Name="startupMessage" Text="{Binding Message}"
-                           FontSize="16" Margin="0,18,0,0" HorizontalAlignment="Center"
-                           Foreground="#52677A" />
-            </StackPanel>
+        <Border x:Name="startupPanel" Visibility="{Binding PanelVisibility}" Panel.ZIndex="10"
+                Background="#F1F5F9" FlowDirection="RightToLeft">
+            <Border Width="470" MaxWidth="470" Padding="32" HorizontalAlignment="Center"
+                    VerticalAlignment="Center" Background="#FFFFFF"
+                    BorderBrush="#0D9488" BorderThickness="0,0,0,4" CornerRadius="16">
+                <Border.Effect>
+                    <DropShadowEffect Color="#102B45" BlurRadius="24" Opacity="0.14" ShadowDepth="4" />
+                </Border.Effect>
+                <StackPanel HorizontalAlignment="Stretch" VerticalAlignment="Center">
+                    <TextBlock Text="التمام اليومي" FontSize="30" FontWeight="Bold"
+                               FontFamily="Segoe UI" HorizontalAlignment="Center"
+                               Foreground="#0F2942" />
+                    <Border Width="68" Height="3" Margin="0,13,0,3" CornerRadius="2"
+                            HorizontalAlignment="Center" Background="#0D9488" />
+                    <TextBlock x:Name="startupMessage" Text="{Binding Message}"
+                               FontFamily="Segoe UI" FontSize="16" Margin="0,18,0,0"
+                               TextAlignment="Center" TextWrapping="Wrap"
+                               HorizontalAlignment="Center" Foreground="#475569" />
+                </StackPanel>
+            </Border>
         </Border>
     </Grid>
 </Window>

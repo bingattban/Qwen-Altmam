@@ -4,8 +4,11 @@ const assert=require("node:assert/strict"),fs=require("node:fs"),
 class Element{
  constructor(tag){this.tag=tag;this.children=[];this.textContent="";this.value="";
  this.handlers={};this.className="";this.attrs={};this.type="";this.disabled=false;
- this.style={};this.classList={open:false,add:x=>{if(x==="open")this.classList.open=true},
- remove:x=>{if(x==="open")this.classList.open=false}};}
+ this.style={};this.classList={open:false,sizes:new Set(),
+ add:x=>{if(x==="open")this.classList.open=true;
+   else if(x.startsWith("dialog-"))this.classList.sizes.add(x)},
+ remove:x=>{if(x==="open")this.classList.open=false;
+   else if(x.startsWith("dialog-"))this.classList.sizes.delete(x)}};}
  append(...items){this.children.push(...items);}
  appendChild(item){this.children.push(item);return item;}
  replaceChildren(...items){this.children=[...items];}
@@ -41,6 +44,13 @@ async function run(){
  const no=dialog.confirm("إلغاء عملية");
  button("إلغاء").click();
  assert.equal(await no,false);
+ const headerClose=dialog.confirm("إلغاء من زر إغلاق النافذة");
+ assert.equal(overlay.classList.open,true);
+ assert.equal(dialog.dismiss(),true,"header close uses dialog engine, not CSS hide");
+ assert.equal(await headerClose,false,"header close resolves the pending confirmation as rejected");
+ assert.equal(overlay.classList.open,false,"dismiss resets the shared backdrop");
+ assert.equal(document.activeElement,previous,"header close restores the previous focused control");
+ assert.equal(dialog.dismiss(),false,"repeat dismissal is safe when already closed");
  const reason=dialog.reason("سبب الفصل",{minLength:5,danger:true});
  const box=body.all().find(x=>x.tag==="textarea");
  assert.ok(box,"reason entered in centered app modal");
@@ -64,6 +74,8 @@ async function run(){
  assert.equal(overlay.classList.open,true,"review is shown inside app modal");
  assert.equal(body.all().filter(x=>x.tag==="table").length,1,
    "modal contains the entire server-verified attendance list");
+ assert.equal(body.all().filter(x=>x.className==="app-preview-property").length,4,
+   "review summary must show date, mode, target status and selected count in four cards");
  assert.ok(body.all().some(x=>x.textContent==="محمد صالح الحضرمي"));
  assert.ok(body.all().some(x=>x.textContent==="12345"));
  assert.ok(body.all().some(x=>x.textContent==="أحمد سالم باصالح"));
@@ -121,6 +133,28 @@ async function run(){
  assert.equal(await confirmedTransfer,true,"only explicit approval completes modal");
  assert.equal(await dialog.transferReview({...transferPlan,persons:[]}),false,
    "empty transfer selection cannot bypass the modal");
+ const crowdedReview=dialog.detailsReview({
+   rows:[["المواقع الجديدة",31]],columns:["الموقع","الأفراد"],
+   items:Array.from({length:31},(_,i)=>["موقع "+(i+1),i+1])
+ });
+ assert.ok(overlay.classList.sizes.has("dialog-xl"),
+   "large imported-row review uses the extra-wide modal instead of truncating the table");
+ button("إلغاء").click();
+ assert.equal(await crowdedReview,false);
+ assert.equal(overlay.classList.sizes.size,0,"dialog sizes are cleared after close");
+ const shortReview=dialog.detailsReview({rows:[["رقم (ع)","12345"]]});
+ assert.ok(overlay.classList.sizes.has("dialog-md"),
+   "single record details use the standard modal width");
+ button("إلغاء").click();
+ assert.equal(await shortReview,false);
+ const formDialog=dialog.form([{name:"reason",label:"سبب الإجراء",type:"text",
+   required:true,minLength:3}],{title:"بيانات العملية"});
+ assert.equal(overlay.classList.open,true,"shared multi-field dialog opens");
+ const formField=body.all().find(x=>x.tag==="input");
+ formField.value="تفاصيل معتمدة";
+ button("تأكيد العملية").click();
+ assert.equal((await formDialog).reason,"تفاصيل معتمدة",
+   "multi-field forms collect typed user data without changing legacy dialogs");
  const css=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
  assert.ok(css.includes(".modal-backdrop{z-index:1000;align-items:center;justify-content:center}"),

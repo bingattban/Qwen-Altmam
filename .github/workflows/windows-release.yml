@@ -100,6 +100,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw '5-minute session inactivity regression' }
           node build/test-operation-dialogs.js
           if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
+          node build/test-modal-first-design.js
+          if ($LASTEXITCODE -ne 0) { throw "Modal-first UI contract regression" }
           node build/test-personnel-separation.js
           if ($LASTEXITCODE -ne 0) { throw 'Personnel separation UI regression' }
           node build/test-personnel-report-ui.js

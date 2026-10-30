@@ -52,8 +52,13 @@
    const modalHeading=el("div",undefined,"person-report-actions");
    const modalTitle=el("h2","معاينة تقرير التمام","section-title");
    const exportFeedback=el("div",undefined,"functional-feedback");
-   let reportMode="person";
-   const closePopup=()=>{popup.hidden=true;report.replaceChildren();};
+   let reportMode="person",exportBusy=false;
+   const closePopup=()=>{
+     // Closing while an export writes can strand the only cancellation action.
+     // The modal remains open until the native export completes or is cancelled.
+     if(exportBusy)return;
+     popup.hidden=true;report.replaceChildren();
+   };
    const closeButton=btn("إغلاق التقرير",closePopup);
    function reportPayload(){
      return reportMode==="group"?
@@ -61,9 +66,11 @@
        {mode:"report",personId:chosen,...filters()};
    }
    async function exportExcel(){
+     if(exportBusy)return; // One preview/export handshake per user intent.
      const payload=reportPayload();
      if(reportMode==="group"&&!payload.personIds.length)
        return alert(exportFeedback,new Error("اختر أفراد المجموعة أولًا."));
+     exportBusy=true;exportButton.disabled=true;closeButton.disabled=true;
      exportFeedback.replaceChildren(el("p","جارٍ إعداد معاينة ملف Excel..."));
      try{
        const preview=(await api().invoke("BuildPersonLifetimeReport",
@@ -79,6 +86,9 @@
          await Promise.resolve(window.confirm?.(description)||false);
        if(!confirm)return exportFeedback.replaceChildren();
        const progressText=el("p","جارٍ إنشاء ملف Excel والتأكد من اكتمال الصفوف...");
+       const progress=el("progress",undefined,"app-export-progress");
+       progress.max=100;
+       progress.setAttribute("aria-label","تقدم تصدير تقرير الفرد");
        let monitoring=true,pollBusy=false;
        const cancelExport=btn("إيقاف التصدير الجاري",async()=>{
          cancelExport.disabled=true;
@@ -87,7 +97,7 @@
            progressText.textContent="طُلب إلغاء التصدير؛ جارٍ إيقاف الكتابة...";
          }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
        });
-       exportFeedback.replaceChildren(progressText,cancelExport);
+       exportFeedback.replaceChildren(progressText,progress,cancelExport);
        const poll=(typeof setInterval === "function")?setInterval(async()=>{
          if(!monitoring||pollBusy||popup.hidden)return;
          pollBusy=true;
@@ -95,7 +105,10 @@
            const info=(await api().invoke("GetExportProgress",{},
              {timeoutMs:10000})).data||{};
            if(!monitoring||popup.hidden)return;
-           const ratio=Number.isInteger(info.percentage)?" — "+info.percentage+"%":"";
+           const percentage=Number(info.percentage);
+           const ratio=Number.isInteger(percentage)?" — "+percentage+"%":"";
+           if(Number.isInteger(percentage)&&percentage>=0&&percentage<=100)
+             progress.value=percentage;
            const rows=info.total?" ("+info.processed+" من "+info.total+" صف)":"";
            progressText.textContent=info.cancelRequested?
              "جارٍ إيقاف التصدير والتحقق من حذف الملف المؤقت...":
@@ -112,6 +125,10 @@
            "تم حفظ Excel: "+reply.data.filePath,"settings-success"));
        }finally{monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);}
      }catch(e){if(!popup.hidden)alert(exportFeedback,e);}
+     finally{
+       exportBusy=false;
+       exportButton.disabled=false;closeButton.disabled=false;
+     }
    }
    const exportButton=btn("تصدير التقرير إلى Excel",()=>{void exportExcel();});
    modalHeading.append(modalTitle,exportButton,closeButton);
@@ -180,15 +197,17 @@
    let chosen=null,serial=0,attendancePage=1,auditPage=1,identityPage=1,
      movementPage=1,sitePage=1,revisionPage=1;
    function renderSelected(){
-     const box=card("الأفراد المحددون للمجموعة: "+selected.size);
-     if(!selected.size)box.appendChild(el("p","لم تحدد أفراداً بعد."));
+     const box=card("الأفراد المحددون للمجموعة: "+selected.size+" من 100");
+     const chips=el("div",undefined,"person-report-chip-list");
+     if(!selected.size)chips.appendChild(el("p","لم تحدد أفراداً بعد."));
      for(const person of selected.values()){
-       const line=el("div",undefined,"functional-toolbar");
+       const line=el("div",undefined,"person-report-chip");
        line.append(el("span",person.displayName+" — الرقم (ع): "+person.serviceNumberA+
          (person.active?" — نشط":" — سجل مؤرشف")),
          btn("إزالة",()=>{selected.delete(person.personId);renderSelected();}));
-       box.appendChild(line);
+       chips.appendChild(line);
      }
+     box.appendChild(chips);
      selectedPanel.replaceChildren(box);
    }
    renderSelected();
@@ -367,6 +386,33 @@
          "وموقعه المؤرخ، وتبقى فترات الهوية والمواقع كاملة. "+
          "وتتوفر تصحيحات التحضير في التقرير والتصدير من الخدمة نفسها.","section-description");
        report.appendChild(note);
+       // Keep every report table mounted. Tab clicks only change visibility.
+       const cards=Array.from(report.children).filter(x=>x.className?.includes("card"));
+       const tabs=el("nav",undefined,"person-report-tabs");
+       tabs.setAttribute("aria-label","أقسام تقرير الفرد");
+       const groups=[
+         ["الكل / الملخص والإحصائيات",()=>true],
+         ["التحضير",x=>/إجمالي|الشهر|التحضير اليومي/.test(x.children[0]?.textContent||"")],
+         ["الهوية والمواقع",x=>/بيانات الفرد|المواقع|الاسم والرقم/.test(x.children[0]?.textContent||"")],
+         ["التنقلات",x=>/التنقلات/.test(x.children[0]?.textContent||"")],
+         ["التعديلات وسجل العمليات",x=>/تصحيحات|سجل العمليات/.test(x.children[0]?.textContent||"")]
+       ];
+       const buttons=[];
+       groups.forEach(([label,filter],index)=>{
+         const tab=btn(label,()=>{
+           cards.forEach(card=>{card.hidden=!filter(card);});
+           buttons.forEach((button,i)=>{
+             button.className="btn "+(i===index?"btn-primary active":"btn-outline");
+             button.setAttribute("aria-selected",String(i===index));
+           });
+         },"btn btn-outline");
+         tab.setAttribute("role","tab");
+         buttons.push(tab);tabs.appendChild(tab);
+       });
+       // Default 'All' tab: no report data or regression-visible element hidden.
+       buttons[0].className="btn btn-primary active";
+       buttons[0].setAttribute("aria-selected","true");
+       report.replaceChildren(tabs,...Array.from(report.children));
      }catch(e){if(ticket===serial&&root.isConnected)alert(report,e);}
    }
  }

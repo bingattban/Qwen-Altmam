@@ -16,7 +16,9 @@ async function transfer(host,external){
   from.setAttribute("aria-label","الموقع الحالي");to.setAttribute("aria-label","الموقع المنقول إليه");
   outside.setAttribute("aria-label","الجهة الخارجية");outside.placeholder="اسم الجهة الخارجية (إجباري)";
   search.placeholder="بحث بالاسم أو الرقم (ع)";
-  const note=el("div"),list=el("div"),confirmation=el("div"),counter=el("p","الأفراد المحددون: 0");
+  const note=el("div"),list=el("div"),
+      confirmation=el("div",undefined,"movement-retry-panel"),
+      counter=el("p","الأفراد المحددون: 0","movement-selection-counter");
   const selected=new Set();let sites=[],page=1,serial=0;
   function reset(){selected.clear();counter.textContent="الأفراد المحددون: 0";confirmation.replaceChildren();}
   function destinations(){if(external)return;to.replaceChildren(opt("","اختر الموقع المنقول إليه"));sites.filter(s=>s.siteId!==from.value).forEach(s=>to.appendChild(opt(s.siteId,s.name)));}
@@ -94,7 +96,11 @@ async function transfer(host,external){
           err(note,error);
           // The commit may have succeeded before the response was lost.
           // Retrying with the exact same operation identity is safe and idempotent.
-          confirmation.replaceChildren(btn("إعادة مراجعة ومحاولة التأكيد",async()=>{
+          const dismiss=btn("إغلاق نافذة إعادة المحاولة",()=>confirmation.replaceChildren());
+          dismiss.className="btn btn-outline app-modal-close";
+          confirmation.replaceChildren(dismiss,
+            el("p","تعذّر تأكيد نتيجة النقل. لا تتكرر العملية إلا بعد معاينة الخطة نفسها.","section-description"),
+            btn("إعادة مراجعة ومحاولة التأكيد",async()=>{
             if(await transferReview(data))await commitSamePlan();
           }));
         }

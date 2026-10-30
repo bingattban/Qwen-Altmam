@@ -44,9 +44,28 @@
    mode.append(option("initial","تحضير جديد"),option("revise","تغيير حالة التحضير"));
    const list=make("div",undefined,"daily-roster-panel"),info=make("div");
    const choice=make("span","لم يتم تحديد أسماء");
-   const draftPanel=make("section",undefined,"card attendance-drafts");
+   const draftPanel=make("section",undefined,"card attendance-drafts attendance-drafts-modal");
+   draftPanel.hidden=true;
+   draftPanel.setAttribute("role","dialog");
+   draftPanel.setAttribute("aria-modal","true");
+   draftPanel.setAttribute("aria-label","مسودات التمام المحفوظة");
    const draftResults=make("div");
-   draftPanel.append(make("h3","مسودات التمام المحفوظة","section-title"),draftResults);
+   const showDrafts=button("مسودات التمام المحفوظة",()=>{
+     draftPanel.hidden=false;
+     closeDrafts.focus?.();
+     void refreshDrafts();
+   });
+   const closeDrafts=button("إغلاق المسودات",()=>{
+     draftPanel.hidden=true;
+     showDrafts.focus?.();
+   },"btn btn-outline");
+   draftPanel.addEventListener("keydown",event=>{
+     if(event.key==="Escape"){
+       event.preventDefault();draftPanel.hidden=true;showDrafts.focus?.();
+     }
+   });
+   draftPanel.append(make("h3","مسودات التمام المحفوظة","section-title"),
+     closeDrafts,draftResults);
    const selected=new Set();
    let activeDraftId=null;
    const DAILY_PAGE_SIZE=100;
@@ -127,6 +146,7 @@
        if(!host.isConnected)return;
        if(!Array.isArray(result.data))throw Error("صيغة المسودات غير صالحة.");
        const records=result.data;
+       showDrafts.textContent="مسودات التمام المحفوظة ("+records.length+")";
        const content=make("div",undefined,"attendance-draft-list");
        if(!records.length)content.appendChild(make("p","لا توجد مسودات محفوظة."));
        for(const draft of records){
@@ -189,6 +209,7 @@
    draftPanel.insertBefore(button("تحديث المسودات",refreshDrafts),draftResults);
    header.insertBefore(saveDraftButton,choice);
    header.insertBefore(cancelSelections,choice);
+   header.insertBefore(showDrafts,choice);
    async function preview(){
      if(!status.value||selected.size===0)
        return showError(info,new Error("اختر الحالة والأفراد."));

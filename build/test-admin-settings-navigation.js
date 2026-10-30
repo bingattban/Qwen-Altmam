@@ -30,6 +30,9 @@ class Element {
   prepend(item) { this.children.unshift(item); }
   replaceChildren(...items) { this.children = [...items]; }
   setAttribute(key, val) { this.attrs[key] = val; }
+  getAttribute(key) {return this.attrs[key]||null;}
+  focus() {document.activeElement=this;}
+  querySelectorAll() {return this.all().filter(x=>["button","input","select","textarea"].includes(x.tag)&&!x.disabled);}
   addEventListener(name, fn) { this.handlers[name] = fn; }
   querySelector(selector) {
     const cls = selector.slice(1);
@@ -41,6 +44,7 @@ const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
 const document = {
+  activeElement:null,
   getElementById: key => key === "appViewport" ? viewport : null,
   createElement: tag => new Element(tag)
 };
@@ -216,6 +220,10 @@ async function run() {
   correction.handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
   assert.ok(buttonNamed("معاينة التصحيح"));
+  assert.ok(visible().some(x=>x.className==="closed-correction-fields"),
+    "closed-day correction uses a compact two-column form");
+  assert.ok(visible().some(x=>x.className==="closed-policy-banner"),
+    "permission banner never assumes the policy is enabled");
   assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,0,
     "opening emergency screen must not mutate attendance");
   const controls=visible().filter(x=>x.className==="form-control");
@@ -382,6 +390,30 @@ async function run() {
     "active non-system site is removable only by explicit operation");
   assert.equal(visible().filter(x=>x.textContent==="موقع محمي").length,1,
     "the Unspecified site can never display a remove action");
+  // Modal-first site editor: no data changes from open/close, Escape restores
+  // focus, and Tab wraps rather than going back to the underlying table.
+  const openSite=buttonNamed("+ إنشاء موقع جديد");
+  assert.ok(openSite,"site creation is action-triggered, not inline");
+  openSite.focus();openSite.handlers.click();
+  const siteForm=visible().find(x=>x.className.includes("app-operational-modal")&&
+    x.all().some(y=>y.textContent==="إنشاء موقع جديد"));
+  assert.ok(siteForm&&!siteForm.hidden,"site form opens as a real dialog");
+  assert.equal(siteForm.attrs["aria-modal"],"true");
+  const closeSite=siteForm.all().find(x=>x.tag==="button"&&x.textContent==="✕ إغلاق");
+  assert.equal(document.activeElement,closeSite,"opening a modal moves focus inside it");
+  let prevented=false;
+  siteForm.handlers.keydown({key:"Tab",shiftKey:true,
+    preventDefault(){prevented=true}});
+  assert.equal(prevented,true,"Shift-Tab at first control wraps to the last");
+  assert.equal(document.activeElement,siteForm.querySelectorAll().at(-1));
+  siteForm.handlers.keydown({key:"Tab",shiftKey:false,preventDefault(){}});
+  assert.equal(document.activeElement,closeSite,"Tab at last wraps to first");
+  siteForm.handlers.keydown({key:"Escape",preventDefault(){}});
+  assert.equal(siteForm.hidden,true,"Escape hides site modal without a mutation");
+  assert.equal(document.activeElement,openSite,
+    "the keyboard returns to the original Create Site control");
+  assert.equal(calls.filter(x=>x.name==="CreateSite").length,0,
+    "opening and closing a site form cannot create a site");
   context.window.AltamamDialog={...context.window.AltamamDialog,confirm:async()=>true,alert:async()=>true};
   const selectedRow=visible().find(x=>x.tag==="tr"&&
     x.children[0]?.textContent==="موقع تجريبي قابل للإزالة");
@@ -396,6 +428,38 @@ async function run() {
   assert.equal(mutation.body.expectedActiveCount,2);
   assert.equal(mutation.body.confirmed,true);
   assert.ok(mutation.body.operationId.length>=16);
+  // Status creation uses the same reusable modal and previews the actual
+  // configured badge color while keeping all native action payloads intact.
+  controller.renderAdmin(admin);
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="config").handlers.click();
+  byDataset("adminScreen").find(x=>x.dataset.adminScreen==="statuses").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const statusTrigger=buttonNamed("+ إضافة حالة جديدة");
+  assert.ok(statusTrigger);
+  statusTrigger.focus();statusTrigger.handlers.click();
+  const statusForm=visible().find(x=>x.className.includes("app-operational-modal")&&
+    x.all().some(y=>y.textContent==="إضافة حالة جديدة"));
+  assert.ok(statusForm&&!statusForm.hidden);
+  const statusName=statusForm.all().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="اسم الحالة").children[1];
+  const statusSymbol=statusForm.all().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="الرمز").children[1];
+  const statusColor=statusForm.all().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="اللون").children[1];
+  statusName.value="إجازة";statusName.handlers.input();
+  statusSymbol.value="إ";statusSymbol.handlers.input();
+  statusColor.value="#15803D";statusColor.handlers.input();
+  const badge=statusForm.all().find(x=>x.className.includes("status-live-preview"));
+  assert.equal(badge.textContent,"إجازة — إ");
+  assert.equal(badge.style.borderColor,"#15803D");
+  assert.equal(badge.style.backgroundColor,"rgba(21,128,61,0.12)");
+  const statusClose=statusForm.all().find(x=>x.tag==="button"&&x.textContent==="✕ إغلاق");
+  statusClose.handlers.click();
+  assert.equal(statusForm.hidden,true);
+  assert.equal(document.activeElement,statusTrigger,
+    "closing status editor restores focus to its originating action");
+  assert.equal(calls.filter(x=>x.name==="CreateAttendanceStatus").length,0,
+    "preview and close cannot save an unconfirmed status");
   await controller.renderSettings(admin,()=>{});
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
     .map(x=>x.textContent);

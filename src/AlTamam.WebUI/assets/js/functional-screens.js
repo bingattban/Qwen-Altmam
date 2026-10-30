@@ -128,6 +128,7 @@
   }
 
   async function loginGate() {
+    dismissAutoPrepared();
     const container=view(); if(!container)return;
     container.classList.toggle("daily-dashboard",false);
     container.classList.toggle("monthly-dashboard",false);
@@ -136,9 +137,22 @@
     document.getElementById("logoutAction").hidden=true;
     container.replaceChildren(header("تسجيل الدخول إلى التمام اليومي"));
     const form=el("form","card auth-form");
+    const brand=el("div","auth-brand");
+    append(brand,el("div","auth-brand-mark","ت"),
+      el("h2","section-title","التمام اليومي"),
+      el("p","section-description","نظام إدارة القوة والتحضير — تسجيل محلي آمن"));
     const name=field("text","اسم المستخدم",true);
     name.input.autocomplete="username";
     const pass=field("password","كلمة المرور",true);
+    const reveal=button("إظهار كلمة المرور",()=>{
+      const visible=pass.input.type==="password";
+      pass.input.type=visible?"text":"password";
+      reveal.textContent=visible?"إخفاء كلمة المرور":"إظهار كلمة المرور";
+      reveal.setAttribute("aria-pressed",String(visible));
+    },"btn btn-outline auth-password-toggle");
+    reveal.setAttribute("aria-pressed","false");
+    pass.wrapper.classList.add("auth-password-field");
+    pass.wrapper.appendChild(reveal);
     // Existing users may have historical credentials; only NEW founders must
     // satisfy the current strong-password policy during initialization.
     const confirmation=field("password","تأكيد كلمة المرور",true);
@@ -147,7 +161,7 @@
     const note=el("p","section-description","يعمل البرنامج على هذا الجهاز دون اتصال بالإنترنت.");
     const status=el("div","auth-status");
     const submit=el("button","btn btn-primary","دخول"); submit.type="submit";
-    append(form,name.wrapper,pass.wrapper,note,status,submit);
+    append(form,brand,name.wrapper,pass.wrapper,note,status,submit);
     container.appendChild(form);
     try {
       const provisioning=parseData(await bridge().invoke("GetProvisioningState",{}));
@@ -161,8 +175,34 @@
         confirmation.input.minLength=10;
         confirmation.input.autocomplete="new-password";
         foundingName.input.maxLength=200;
-        form.replaceChildren(name.wrapper,foundingName.wrapper,pass.wrapper,
-          confirmation.wrapper,note,status,submit);
+        form.classList.add("auth-first-run");
+        const policy=el("div","auth-password-policy");
+        policy.setAttribute("aria-label","متطلبات كلمة المرور");
+        const checks=[
+          ["10 أحرف فأكثر",v=>v.length>=10],
+          ["3 أحرف إنجليزية",v=>(v.match(/[A-Za-z]/g)||[]).length>=3],
+          ["3 أرقام",v=>(v.match(/[0-9]/g)||[]).length>=3],
+          ["رمز خاص",v=>/[^A-Za-z0-9\s]/.test(v)],
+          ["دون مسافات",v=>!/\s/.test(v)],
+          ["تطابق كلمتي المرور",v=>v.length>0&&v===confirmation.input.value]
+        ];
+        const chips=checks.map(([label])=>{
+          const chip=el("span","auth-policy-chip",label);
+          policy.appendChild(chip);return chip;
+        });
+        const refreshPolicy=()=>{
+          const value=pass.input.value;
+          checks.forEach((check,i)=>{
+            const valid=check[1](value);
+            chips[i].classList.toggle("valid",valid);
+            chips[i].setAttribute("aria-label",check[0]+(valid?" — مستوفى":" — غير مستوفى"));
+          });
+        };
+        pass.input.addEventListener("input",refreshPolicy);
+        confirmation.input.addEventListener("input",refreshPolicy);
+        refreshPolicy();
+        form.replaceChildren(brand,name.wrapper,foundingName.wrapper,pass.wrapper,
+          confirmation.wrapper,policy,note,status,submit);
       }
     } catch(e) { showError(status,e); }
     form.addEventListener("submit",async event=>{
@@ -257,6 +297,7 @@
   // Automatic register supports the same audited preview/commit pipeline as daily attendance.
   function openAutoPreparedList(){
     dismissAutoPrepared();
+    const returnFocus=document.activeElement;
     const date=STATE.date,site=STATE.siteId;
     const overlay=el("div","auto-attendance-overlay");
     overlay.setAttribute("role","dialog");
@@ -289,8 +330,11 @@
     const footer=el("div","functional-pager");
     append(panel,heading,description,actions,notice,content,footer);
     overlay.appendChild(panel);
-    (document.body?.appendChild?document.body:view()).appendChild(overlay);
+    // Keep the dialog in #appViewport for both WebView2 accessibility
+    // and the same DOM ownership model used by the Windows UI smoke tests.
+    view().appendChild(overlay);
     autoPreparedOverlay=overlay;
+    closeButton.focus?.();
     let disposed=false,page=1,term="",generation=0,choices=[];
     let visiblePeople=[],busy=false,selectionVersion=0;
     const selected=new Map();
@@ -408,13 +452,18 @@
       overlay.remove?.();
       if(!overlay.remove&&overlay.parentNode)overlay.parentNode.removeChild(overlay);
       if(autoPreparedOverlay===overlay)autoPreparedOverlay=null;
+      returnFocus?.focus?.();
     }
-    overlay.addEventListener("click",event=>{if(event.target===overlay)close();});
+    overlay.addEventListener("click",event=>{if(event.target===overlay)void close();});
+    overlay.addEventListener("keydown",event=>{
+      if(event.key==="Escape"){
+        event.preventDefault?.();
+        void close(); // pending selections still require explicit discard consent
+      }
+    });
     search.input.addEventListener("keydown",event=>{
       if(event.key==="Enter"){event.preventDefault();term=search.input.value.trim();page=1;void load();}
-      if(event.key==="Escape"){event.preventDefault();close();}
     });
-    closeButton.addEventListener("keydown",event=>{if(event.key==="Escape")close();});
     async function load(){
       const current=++generation;
       content.replaceChildren(message("جارٍ قراءة سجل التحضير التلقائي..."));
@@ -508,6 +557,9 @@
     const container=view();
     container.classList.toggle("daily-dashboard",true);
     container.replaceChildren(header("التمام اليومي"));
+    // Refreshing the background counters must not silently discard an open
+    // auto-prepared register or the user's pending multi-selection.
+    if(autoPreparedOverlay)container.appendChild(autoPreparedOverlay);
     const controls=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
     const counters=el("div","functional-counters");
@@ -580,6 +632,13 @@
         card.setAttribute("aria-pressed",String(isActive));
         card.appendChild(el("span","counter-label",item.name));
         card.appendChild(el("span","counter-value",item.count));
+        if(item.statusId && !["__AUTO_PREPARED__","__TRANSFER_DAY__"].includes(item.statusId)
+          && Number(counts.totalForce)>0){
+          const ratio=Math.round(100*Number(item.count||0)/Number(counts.totalForce));
+          const percentage=el("span","counter-percentage",ratio+"%");
+          percentage.setAttribute("aria-label","النسبة من إجمالي القوة");
+          card.appendChild(percentage);
+        }
         if(/^#[0-9a-fA-F]{6}$/.test(item.color||""))
           card.style.borderRight="4px solid "+item.color;
         counters.appendChild(card);
@@ -592,9 +651,18 @@
         const data=[(STATE.dayPage-1)*DAILY_PAGE_SIZE+i+1, person.serviceNumberA,
           person.name,person.siteName,person.statusName];
         data.forEach((v,j)=> {
-          const td=el("td","",v);
-          if(j===4 && /^#[0-9a-fA-F]{6}$/.test(person.statusColor||""))
-            td.style.borderRight="4px solid "+person.statusColor;
+          const td=el("td","",j===4?"":v);
+          if(j===4){
+            const status=el("span","status-pill",v||"—");
+            const color=String(person.statusColor||"");
+            if(/^#[0-9a-fA-F]{6}$/.test(color)){
+              const channels=[1,3,5].map(pos=>parseInt(color.slice(pos,pos+2),16));
+              status.style.borderColor=color;
+              status.style.backgroundColor="rgba("+channels.join(",")+",0.13)";
+              status.style.setProperty?.("--status-dot",color);
+            }
+            td.appendChild(status);
+          }
           tr.appendChild(td);
         });
         tb.body.appendChild(tr);
@@ -628,6 +696,12 @@
     monthlyTotals.setAttribute("aria-live","polite");
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
+    exportPanel.setAttribute("role","dialog");
+    exportPanel.setAttribute("aria-modal","true");
+    exportPanel.setAttribute("aria-label","معاينة تصدير Excel الشهري");
+    const dismissExport=button("إغلاق المعاينة",()=>{
+      exportPanel.replaceChildren();exportPanel.hidden=true;
+    },"btn btn-outline");
     const tableHost=el("section","card monthly-grid-panel");
     const detailsBox=el("section","card monthly-cell-details auto-attendance-dialog");
     const detailOverlay=el("div","auto-attendance-overlay");
@@ -638,7 +712,7 @@
     detailOverlay.appendChild(detailsBox);
     detailsBox.hidden=false;
     const bottom=el("form","card functional-archive monthly-archive-controls");
-    append(container,tool,monthlyTotals,feedback,exportPanel,tableHost,bottom,detailOverlay);
+    append(container,tool,bottom,monthlyTotals,feedback,exportPanel,tableHost,detailOverlay);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
     const item=(label,value)=>{
@@ -662,7 +736,7 @@
         const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailOverlay.hidden=true;
           detailsBox.replaceChildren();});
         append(top,el("h3","section-title","تفاصيل التمام — "+date),close);
-        const content=el("div","monthly-detail-content");
+        const content=el("div","monthly-detail-content app-preview-properties");
         append(content,item("الاسم",data.personName),item("الرقم (ع)",data.serviceNumberA),
           item("الموقع في هذا اليوم",data.attendance?.siteName||data.siteName));
         if(data.attendance){
@@ -675,6 +749,10 @@
         if(data.movement){
           const m=data.movement;
           const kind=m.type===4?"عودة للخدمة":m.type===3?"فصل":m.type===2?"نقل خارجي":"نقل داخلي";
+          const banner=el("p","monthly-movement-banner",
+            "واقعة إدارية مسجلة في هذا اليوم: "+kind);
+          banner.setAttribute("role","status");
+          content.appendChild(banner);
           append(content,item("الواقعة الإدارية",kind),
             item("من الموقع",m.sourceSiteName),
             item("إلى",m.destinationSiteName||m.destinationExternalName),
@@ -684,18 +762,29 @@
         if(Array.isArray(data.revisions)&&data.revisions.length){
           const list=el("div","monthly-detail-revisions");
           list.appendChild(el("h4","section-title","تاريخ تعديل التحضير"));
+          const history=createTable([
+            {label:"الحالة السابقة"},{label:"الحالة الجديدة"},
+            {label:"السبب"},{label:"المنفذ"},{label:"وقت التعديل UTC"}
+          ]);
+          history.wrap.classList.add("monthly-revision-table");
           for(const revision of data.revisions){
-            const entry=el("div","monthly-detail-revision");
-            append(entry,item("التغيير",revision.beforeStatus+" ← "+revision.afterStatus),
-              item("السبب",revision.reason),item("المنفذ",revision.actorUserId),
-              item("الوقت UTC",revision.executedAtUtc));
-            list.appendChild(entry);
+            const tr=el("tr");
+            for(const value of [revision.beforeStatus,revision.afterStatus,
+              revision.reason,revision.actorUserId,revision.executedAtUtc])
+              tr.appendChild(el("td","",value==null?"—":value));
+            history.body.appendChild(tr);
           }
+          list.appendChild(history.wrap);
           content.appendChild(list);
         }
         detailsBox.replaceChildren(top,content);
       }catch(e){
-        if(STATE.monthEpoch===epoch&&request===detailsRequest)showError(detailsBox,e);
+        if(STATE.monthEpoch===epoch&&request===detailsRequest){
+          showError(detailsBox,e);
+          detailsBox.appendChild(button("إغلاق التفاصيل",()=>{
+            detailsRequest++;detailOverlay.hidden=true;detailsBox.replaceChildren();
+          }));
+        }
       }
     }
     const showMonth=async()=>{
@@ -749,9 +838,22 @@
           if(!preview||!Number.isSafeInteger(preview.personCount)||preview.personCount<0)
             throw new Error("لم يرجع الخادم معاينة تصدير صالحة.");
           if(!preview.personCount){
-            exportPanel.replaceChildren(message("لا توجد أسماء في هذا الشهر والموقع للتصدير."));
+            exportPanel.replaceChildren(message("لا توجد أسماء في هذا الشهر والموقع للتصدير."),
+              dismissExport);
             return;
           }
+          const properties=el("dl","app-preview-properties");
+          [
+            ["الشهر",year+"-"+String(month).padStart(2,"0")],
+            ["النطاق",STATE.siteId?"الموقع المحدد":"جميع المواقع"],
+            ["عدد الأفراد",String(preview.personCount)],
+            ["عدد ملفات Excel",Number.isSafeInteger(preview.fileCount)&&preview.fileCount>0?
+              String(preview.fileCount):"يُحدد عند إنشاء الملفات"]
+          ].forEach(([label,value])=>{
+            const property=el("div","app-preview-property");
+            append(property,el("dt","",label),el("dd","",value));
+            properties.appendChild(property);
+          });
           const description=el("p","section-description",
             "سيتم حفظ "+preview.personCount+" فرد في ملف Excel لشهر "+
             year+"-"+String(month).padStart(2,"0")+
@@ -804,7 +906,10 @@
                 progressText.textContent="طُلب إلغاء التصدير؛ جارٍ التأكد من توقف الكتابة...";
               }catch(error){showError(exportPanel,error);}
             });
-            exportPanel.replaceChildren(description,progressText,stopExport);
+            const progressBar=el("progress","app-export-progress");
+            progressBar.max=100;progressBar.removeAttribute("value");
+            progressBar.setAttribute("aria-label","تقدم إنشاء ملف Excel");
+            exportPanel.replaceChildren(properties,description,progressText,progressBar,stopExport);
             const poll=(typeof setInterval === "function")?setInterval(async()=>{
               if(!monitoring||pollBusy||STATE.monthEpoch!==epoch)return;
               pollBusy=true;
@@ -814,6 +919,8 @@
                 if(!monitoring||STATE.monthEpoch!==epoch||!info)return;
                 const ratio=Number.isInteger(info.percentage)?
                   " — "+info.percentage+"%":"";
+                if(Number.isInteger(info.percentage))
+                  progressBar.value=Math.max(0,Math.min(100,info.percentage));
                 const written=info.total?
                   " ("+info.processed+" من "+info.total+" صف)":"";
                 progressText.textContent=info.cancelRequested?
@@ -837,12 +944,16 @@
                 "تم حفظ "+files.length+" ملفات Excel: "+files.map((f,i)=>
                   (i===0?"الكشف الموحد":("الموقع "+i))+" — "+f.filePath).join(" | "):
                 "تم حفظ الكشف بنجاح: "+result.filePath;
-              exportPanel.replaceChildren(message(lines));
+              exportPanel.replaceChildren(message(lines),dismissExport);
             }catch(error){
               if(STATE.monthEpoch===epoch){
                 if(error?.errorCode==="StorageBusy")
-                  exportPanel.replaceChildren(message("أُلغيت عملية التصدير قبل حفظ ملف Excel."));
-                else showError(exportPanel,error);
+                  exportPanel.replaceChildren(message("أُلغيت عملية التصدير قبل حفظ ملف Excel."),
+                    dismissExport);
+                else{
+                  showError(exportPanel,error);
+                  exportPanel.appendChild(dismissExport);
+                }
               }
             }finally{
               monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);confirmSave.disabled=false;
@@ -851,10 +962,13 @@
           const cancel=button("إلغاء التصدير",()=>{
             exportPanel.replaceChildren();exportPanel.hidden=true;
           });
-          exportPanel.replaceChildren(description,fileLabel,fileInput,destination,
+          exportPanel.replaceChildren(properties,description,fileLabel,fileInput,destination,
             chooseFolder,confirmSave,cancel);
         }catch(error){
-          if(STATE.monthEpoch===epoch)showError(exportPanel,error);
+          if(STATE.monthEpoch===epoch){
+            showError(exportPanel,error);
+            exportPanel.appendChild(dismissExport);
+          }
         }finally{previewExport.disabled=false;}
       });
       tool.appendChild(previewExport);

@@ -14,6 +14,7 @@ class El{
   all(){return [this,...this.children.flatMap(c=>c instanceof El?c.all():[])];}
 }
 const viewport=new El("main"),calls=[];
+let delayExport=false,releaseDelayedExport=null;
 const records=[
   {personId:"OLD-ID",serviceNumberA:"5151",displayName:"مفصول سابق",active:false,
     organizationalStatus:3,siteName:"موقع سابق"},
@@ -35,8 +36,10 @@ const bridge={
       return {data:{fileName:"تقرير فرد_2026-10-26_aabbcc.xlsx",
        exportId:"feca3d1a-0123-4567-89ab-cdef98765432",directory:"C:\\Reports",personCount:1,
        worksheets:["ملخص التقرير","سجل التنقلات","تغييرات العمليات"]}};
-    if(action==="ExportPersonLifetimeExcel")
+    if(action==="ExportPersonLifetimeExcel"){
+      if(delayExport)return await new Promise(resolve=>{releaseDelayedExport=resolve;});
       return {data:{filePath:"C:\\Reports\\تقرير فرد_2026-10-26_aabbcc.xlsx",format:"xlsx"}};
+    }
     if(action==="BuildPersonLifetimeReport"&&Array.isArray(payload.personIds))
       return {data:{
         mode:"group",personCount:2,dateFrom:payload.dateFrom,dateTo:payload.dateTo,
@@ -131,6 +134,27 @@ async function main(){
   assert.equal(exported.payload.mode,"report");
   assert.equal(exported.payload.exportId,"feca3d1a-0123-4567-89ab-cdef98765432",
     "save must use the SAME server-proposed filename identifier");
+  // A pending export must not be duplicated or stranded by dismissing
+  // the containing report modal before the server finishes the write.
+  delayExport=true;
+  exportButton.handlers.click();await settle();await settle();
+  assert.equal(exportButton.disabled,true,"export action is locked during native write");
+  assert.equal(buttons("إغلاق التقرير")[0].disabled,true,
+    "report close is unavailable while CancelExport must remain reachable");
+  const pendingCount=calls.filter(x=>x.action==="ExportPersonLifetimeExcel").length;
+  exportButton.handlers.click();await settle();
+  assert.equal(calls.filter(x=>x.action==="ExportPersonLifetimeExcel").length,pendingCount,
+    "second click cannot start a duplicate person report export");
+  buttons("إغلاق التقرير")[0].handlers.click();
+  assert.equal(popup.hidden,false,"close cannot silently abandon an active Excel write");
+  assert.ok(popup.all().some(x=>x.className==="app-export-progress"),
+    "report export has a visible progress bar inside the modal");
+  releaseDelayedExport({data:{filePath:"C:\\Reports\\safe.xlsx",format:"xlsx"}});
+  await settle();await settle();
+  assert.equal(exportButton.disabled,false,"export control recovers after write completes");
+  assert.equal(buttons("إغلاق التقرير")[0].disabled,false,
+    "report can be dismissed after the exported file is confirmed");
+  delayExport=false;
   buttons("إغلاق التقرير")[0].handlers.click();
   assert.equal(popup.hidden,true,"close returns to existing multi-selection");
   console.log("UNIFIED REPORT UI PASS: person/group, historical vs new identity, exact PersonIds, date filter, drilldown");

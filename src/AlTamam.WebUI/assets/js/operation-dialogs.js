@@ -15,6 +15,8 @@
   };
   function close(result){
     if(!current)return;
+    for(const size of ["sm","md","lg","xl"])
+      backdrop.classList.remove("dialog-"+size);
     const previous=current;current=null;
     backdrop.classList.remove("open");
     if(previous.timer && typeof window.clearInterval==="function")window.clearInterval(previous.timer);
@@ -27,6 +29,10 @@
     if(current)return Promise.resolve(null);
     return new Promise(resolve=>{
       const previous=document.activeElement;
+      const size=["sm","md","lg","xl"].includes(options.size)?options.size:
+        (options.unprepared||options.transferReview?"lg":
+          (options.review?.persons?.length>10?"xl":"md"));
+      backdrop.classList.add("dialog-"+size);
       title.textContent=options.title||"تأكيد العملية";
       body.replaceChildren();
       const text=make("p","app-dialog-copy",options.message||"");
@@ -100,9 +106,17 @@
       }
       if(options.review){
         const detail=make("section","attendance-review");
-        const overview=make("p","attendance-review-summary",
-          "التاريخ: "+options.review.date+" — الحالة الجديدة: "+options.review.status+
-          " — إجمالي الأفراد: "+options.review.persons.length);
+        const overview=make("dl","app-preview-properties attendance-review-stats");
+        [
+          ["تاريخ التحضير",options.review.date],
+          ["نوع العملية",options.review.mode==="revise"?"تغيير الحالة":"تحضير أو اعتماد"],
+          ["الحالة المستهدفة",options.review.status||"بحسب الفرد"],
+          ["عدد المحددين",options.review.persons.length]
+        ].forEach(([label,value])=>{
+          const property=make("div","app-preview-property");
+          property.append(make("dt","",label),make("dd","",value));
+          overview.appendChild(property);
+        });
         detail.appendChild(overview);
         const scrolling=make("div","attendance-review-scroll");
         const grid=make("table","data-table attendance-review-table");
@@ -127,9 +141,18 @@
       if(options.transferReview){
         const review=options.transferReview;
         const detail=make("section","attendance-review");
-        detail.appendChild(make("p","attendance-review-summary",
-          "تاريخ الحركة: "+review.businessDate+" — نوع النقل: "+
-          (review.external?"خارجي":"داخلي")+" — إجمالي الأفراد: "+review.persons.length));
+        const facts=make("dl","app-preview-properties transfer-review-summary");
+        for(const [label,value] of [
+          ["تاريخ الحركة",review.businessDate],
+          ["نوع الحركة",review.external?"نقل خارجي":"نقل داخلي"],
+          ["الجهة الجديدة",review.destinationName],
+          ["عدد الأفراد",review.persons.length]
+        ]){
+          const property=make("div","app-preview-property");
+          property.append(make("dt","",label),make("dd","",value));
+          facts.appendChild(property);
+        }
+        detail.appendChild(facts);
         const scrolling=make("div","attendance-review-scroll");
         const grid=make("table","data-table attendance-review-table");
         const head=make("thead"),header=make("tr");
@@ -179,7 +202,43 @@
         }
         body.appendChild(detail);
       }
+      // Multi-field dialog API for a single accessible, structured form.
+      // Existing confirm / prompt / reason / preview contracts remain unchanged.
+      const multiFields=[];
       let field=null,feedback=null;
+      if(Array.isArray(options.fields)&&options.fields.length){
+        const form=make("div","app-dialog-form");
+        for(const spec of options.fields){
+          if(!spec||typeof spec.name!=="string"||!spec.name)continue;
+          const label=make("label","app-dialog-field");
+          label.appendChild(make("span","",spec.label||spec.name));
+          let control;
+          if(spec.type==="select"){
+            control=make("select","form-control");
+            for(const item of spec.options||[]){
+              const option=make("option","",item.label||item.value);
+              option.value=String(item.value??"");control.appendChild(option);
+            }
+          }else if(spec.type==="textarea"){
+            control=make("textarea","form-control");control.rows=4;
+          }else{
+            control=make("input","form-control");
+            control.type=["text","password","number","date","color"].includes(spec.type)?
+              spec.type:"text";
+          }
+          control.value=String(spec.value??"");
+          control.setAttribute("name",spec.name);
+          if(spec.required)control.required=true;
+          if(spec.minLength)control.minLength=spec.minLength;
+          if(spec.maxLength)control.maxLength=spec.maxLength;
+          label.appendChild(control);form.appendChild(label);
+          multiFields.push({spec,control});
+        }
+        body.appendChild(form);
+        feedback=make("p","app-dialog-error");
+        feedback.setAttribute("role","alert");
+        body.appendChild(feedback);
+      }
       if(options.input){
         const wrapper=make("label","app-dialog-field");
         wrapper.appendChild(make("span","",options.input.label||"القيمة المطلوبة"));
@@ -210,6 +269,18 @@
             field.focus();return;
           }
           close(value);
+        }else if(multiFields.length){
+          const values={};
+          for(const {spec,control} of multiFields){
+            const value=String(control.value||"").trim();
+            const min=Number(spec.minLength)||0;
+            if((spec.required&&!value)||(min&&value.length<min)){
+              feedback.textContent="أكمل الحقل المطلوب: "+(spec.label||spec.name);
+              control.focus();return;
+            }
+            values[spec.name]=value;
+          }
+          close(values);
         }else if(selectedPeople){
           if(selectedPeople.size===0){
             const notice=make("p","app-dialog-error","اختر فرداً واحداً على الأقل قبل المتابعة.");
@@ -223,7 +294,7 @@
       let timer=null;
       if(Number(options.delaySeconds)>0 && typeof window.setInterval==="function"){
         let remaining=Math.max(1,Math.ceil(options.delaySeconds));
-        const countdown=make("p","app-dialog-copy","مهلة التأكيد: "+remaining+" ثوانٍ");
+        const countdown=make("p","app-dialog-countdown","مهلة التأكيد: "+remaining+" ثوانٍ");
         body.insertBefore(countdown,actions);
         accept.disabled=true;
         timer=window.setInterval(()=>{
@@ -235,7 +306,12 @@
       }
       const key=ev=>{
         if(ev.key==="Escape"){ev.preventDefault();close(null);}
-        if(ev.key==="Enter" && (!field || !options.input.multiline)){
+        // Native buttons own Enter/Space. Do not turn Enter on Cancel or
+        // inside a multi-field textarea into an unintended confirmation.
+        if(ev.key==="Enter" && ev.target?.tagName!=="BUTTON" &&
+           ev.target?.tag!=="button" && !ev.target?.isContentEditable &&
+           !(ev.target?.tagName==="TEXTAREA"||ev.target?.tag==="textarea") &&
+           (!field||!options.input.multiline)){
           ev.preventDefault();accept.click();
         }
         if(ev.key==="Tab"){
@@ -259,7 +335,10 @@
     }
   },true);
   window.AltamamDialog=Object.freeze({
+    dismiss:()=>{if(!current)return false;close(null);return true;},
     confirm:(message,opts={})=>show({...opts,message}).then(v=>v===true),
+    form:(fields,opts={})=>show({...opts,title:opts.title||"بيانات العملية",
+      fields:Array.isArray(fields)?fields:[]}),
     prompt:(message,value="",opts={})=>show({
       title:opts.title||"إدخال البيانات",message,
       confirmLabel:opts.confirmLabel||"اعتماد",input:{
@@ -275,9 +354,11 @@
       if(!details||!Array.isArray(details.rows)||!details.rows.length||
          !details.rows.every(pair=>Array.isArray(pair)&&pair.length===2))
         return Promise.resolve(false);
+      const size=opts.size||(
+        (details.items?.length||0)>30?"xl":details.items?.length?"lg":"md");
       return show({title:opts.title||"معاينة العملية",message:opts.message||"",
         confirmLabel:opts.confirmLabel||"تأكيد",danger:opts.danger===true,
-        delaySeconds:opts.delaySeconds||0,details
+        delaySeconds:opts.delaySeconds||0,details,size
       }).then(result=>result===true);
     },
     transferReview:(review,opts={})=>{
@@ -289,13 +370,14 @@
         return Promise.resolve(false);
       return show({title:opts.title||"معاينة النقل النهائي",
         message:"راجع أسماء الأفراد وأرقامهم والمواقع وتاريخ الحركة قبل الحفظ.",
-        confirmLabel:"تأكيد النقل النهائي",transferReview:review
+        confirmLabel:"تأكيد النقل النهائي",transferReview:review,
+        size:review.persons.length>25?"xl":"lg"
       }).then(result=>result===true);
     },
     unpreparedSelection:loadPage=>show({
       title:"اعتماد حالة أمس لغير المحضرين",
       message:"اختر فردياً أو جماعياً، ثم راجع الحالة التي ستُعتمد. من لم تحضره يدوياً سيعالجه النظام الساعة 8 صباحاً.",
-      confirmLabel:"معاينة حالة الأمس",
+      confirmLabel:"معاينة حالة الأمس",size:"xl",
       unprepared:{loadPage}
     }),
     attendanceReview:(review,opts={})=>{
@@ -307,7 +389,7 @@
         message:opts.message||"راجع الأفراد وحالاتهم قبل الاعتماد.",
         confirmLabel:opts.confirmLabel||"تأكيد وحفظ التحضير",
         review:{date:review.businessDate||"",status:review.statusName||"",
-          persons:review.persons}}).then(result=>result===true);
+          mode:review.mode||"",persons:review.persons}}).then(result=>result===true);
     },
     alert:(message,opts={})=>show({title:opts.title||"تنبيه",message,confirmLabel:"حسناً"})
   });

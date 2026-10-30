@@ -140,6 +140,12 @@ async function main(){
   assert.equal(exported[0].payload.directory,"E:\\\\MonthlyExports");
   const confirmation=viewport.all().map(x=>String(x.textContent)).join(" | ");
   assert.ok(confirmation.includes("sample.xlsx"),"completed export path is rendered");
+  const exportDialog=viewport.all().find(x=>x.className.includes("functional-export-preview"));
+  assert.equal(exportDialog.attrs["aria-modal"],"true","Excel preview is an actual modal");
+  const dismiss=exportDialog.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق المعاينة");
+  assert.ok(dismiss,"successful export must always offer a close action");
+  dismiss.handlers.click();
+  assert.equal(exportDialog.hidden,true,"dismiss keeps the monthly grid in place");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
   assert.ok(open,"one committed cell has a detail button");
   assert.ok(open.attrs["aria-label"]?.includes(firstDay),"accessible date label");
