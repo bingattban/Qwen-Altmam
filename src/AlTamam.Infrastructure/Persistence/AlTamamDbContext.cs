@@ -27,11 +27,18 @@ public sealed class AlTamamDbContext : IDisposable
     ];
     private readonly string _databasePath;
     private readonly string _databaseKey;
+    private readonly bool _useConnectionPooling;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
 
     static AlTamamDbContext() => SQLitePCL.Batteries_V2.Init();
 
     public AlTamamDbContext(string databasePath, string databaseKeyHex)
+        : this(databasePath, databaseKeyHex, useConnectionPooling: true) { }
+
+    // Test-only opt-out for synthetic databases when another test must clear all
+    // process-wide SQLite pools. The existing production constructor is unchanged.
+    public AlTamamDbContext(string databasePath, string databaseKeyHex,
+        bool useConnectionPooling)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(databaseKeyHex);
@@ -41,6 +48,7 @@ public sealed class AlTamamDbContext : IDisposable
         if (key.Length != 32) throw new ArgumentException("The database key must contain 32 bytes.", nameof(databaseKeyHex));
         _databasePath = Path.GetFullPath(databasePath);
         _databaseKey = databaseKeyHex;
+        _useConnectionPooling = useConnectionPooling;
     }
 
     public string DatabasePath => _databasePath;
@@ -53,6 +61,7 @@ public sealed class AlTamamDbContext : IDisposable
             DataSource = _databasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Password = _databaseKey,
+            Pooling = _useConnectionPooling,
             ForeignKeys = true,
             DefaultTimeout = 15
         };
