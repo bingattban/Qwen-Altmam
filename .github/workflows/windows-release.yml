@@ -90,6 +90,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Dashboard counter filter UI regression' }
           node build/test-dashboard-route-navigation.js
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 Dashboard route navigation regression' }
+          node build/test-webview-runtime-probe.js
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 WebView2 origin/offline assets/restore regression' }
           node build/test-attendance-ui.js
           if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
           node build/test-table-experience.js
