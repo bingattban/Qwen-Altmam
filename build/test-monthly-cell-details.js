@@ -19,6 +19,8 @@ class El{
   querySelectorAll(selector){
     if(selector==="thead .pinned")return this.all().filter(x=>x.tag==="th"&&
       x.className.split(/\s+/).includes("pinned"));
+    if(selector.includes("button:not([disabled])"))
+      return this.all().filter(x=>["button","input","select","textarea"].includes(x.tag)&&!x.disabled);
     return [];
   }
   scrollBy(options){this.lastScroll=options;}
@@ -27,11 +29,14 @@ class El{
   replaceChildren(...nodes){this.children=nodes;}
   addEventListener(name,fn){this.handlers[name]=fn;}
   setAttribute(key,value){this.attrs[key]=value;}
+  getAttribute(key){return this.attrs[key]||null;}
+  focus(){document.activeElement=this;}
   removeAttribute(key){delete this.attrs[key];}
   all(){return [this,...this.children.flatMap(x=>x instanceof El?x.all():[])];}
 }
 const viewport=new El("main"),logoutAction=new El("button"),sidebar=new El("aside"),
   badge=new El("span"),events={},calls=[];
+let deferCellDetails=false,resolveCellDetails=null;
 const today=new Date(),year=today.getFullYear(),month=today.getMonth()+1;
 const firstDay=year+"-"+String(month).padStart(2,"0")+"-01";
 const older=new Date(year,month-2,1),oldYear=older.getFullYear(),
@@ -50,16 +55,20 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
         {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
          days:{[chosen]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
     }
-    if(action==="GetMonthlyCellDetails")return{data:{personId:payload.personId,businessDate:payload.businessDate,
+    if(action==="GetMonthlyCellDetails"){
+      const response={data:{personId:payload.personId,businessDate:payload.businessDate,
       personName:"شخص اختباري",serviceNumberA:"X1",siteName:"غير محدد",
       attendance:{statusName:"غياب",symbol:"غ",committedAtUtc:"2026-10-19T07:00:00Z",
         actorUserId:"TST-U",revisionNumber:2,siteName:"غير محدد"},movement:null,
       revisions:[{beforeStatus:"موجود",afterStatus:"غياب",reason:"سبب اختبار",
         actorUserId:"TST-U",executedAtUtc:"2026-10-19T07:30:00Z"}]}};
+      if(deferCellDetails)return new Promise(resolve=>{resolveCellDetails=()=>resolve(response);});
+      return response;
+    }
     throw Error("Unexpected bridge action "+action);
   }
 };
-const document={createElement:tag=>new El(tag),
+const document={activeElement:null,createElement:tag=>new El(tag),
   getElementById:id=>({appViewport:viewport,headerRoleBadge:badge,logoutAction,
     "navBtn-dashboard":new El("button"),"navBtn-monthly":new El("button"),
     "navBtn-admin":new El("button"),"navBtn-settings":new El("button")})[id]||null,
@@ -137,6 +146,43 @@ async function main(){
   const close=viewport.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
   close.handlers.click();
   assert.equal(overlay.hidden,true,"close hides detail modal without touching attendance");
+
+  // An actual slow native read must expose the close button immediately,
+  // restore focus, and refuse to repaint after the dialog was dismissed.
+  deferCellDetails=true;
+  open.focus();open.handlers.click();await tick();
+  assert.equal(overlay.hidden,false,"slow monthly details request opens the modal");
+  assert.equal(typeof resolveCellDetails,"function","monthly read is deferred");
+  const closeWhileLoading=details.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
+  assert.ok(closeWhileLoading,"close must be available BEFORE the native response");
+  assert.equal(document.activeElement,closeWhileLoading,
+    "monthly detail loading modal focuses its close control");
+  closeWhileLoading.handlers.click();
+  assert.equal(overlay.hidden,true,"close dismisses still-loading month details");
+  assert.equal(document.activeElement,open,"closing monthly details returns focus to the exact cell");
+  resolveCellDetails();await tick();
+  assert.equal(overlay.hidden,true,"late monthly response cannot reopen dismissed modal");
+  assert.equal(details.children.length,0,"late month details cannot repaint dismissed content");
+
+  // Escape and Tab keyboard contracts apply to the populated detail modal,
+  // including read-only historical revisions, and never write attendance.
+  deferCellDetails=false;
+  open.focus();open.handlers.click();await tick();
+  const liveClose=details.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
+  assert.ok(liveClose,"read-only monthly modal retains a close control after loading");
+  liveClose.focus();
+  let shiftPrevented=false;
+  overlay.handlers.keydown({key:"Tab",shiftKey:true,
+    preventDefault(){shiftPrevented=true;}});
+  assert.equal(shiftPrevented,true,"Shift+Tab cannot leave monthly modal");
+  assert.equal(document.activeElement,liveClose,"single close action wraps focus onto itself");
+  let escapePrevented=false;
+  overlay.handlers.keydown({key:"Escape",preventDefault(){escapePrevented=true;}});
+  assert.equal(escapePrevented,true,"Escape is handled by month details");
+  assert.equal(overlay.hidden,true,"Escape dismisses month details");
+  assert.equal(document.activeElement,open,"Escape returns focus to original calendar cell");
+  assert.equal(calls.filter(x=>/Commit|Submit|Revise|Update/.test(x.action)).length,0,
+    "read-only details and keyboard dismissal must never commit attendance");
   // Browse the previous month without losing the fixed columns, footer, or
   // chronological day order. The archive may have a roster but no preparations.
   const previousMonth=viewport.all().find(x=>x.tag==="button"&&x.textContent==="الشهر السابق");
