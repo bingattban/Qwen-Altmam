@@ -24,19 +24,25 @@ No new business, history, security, authorization, or retention policy is chosen
 
 | Topic | Contract |
 | --- | --- |
-| Owning layer | `.github/workflows/windows-build.yml`, `windows-release.yml` (Phase 01 CI and Phases 13–15 gates); `build/test-ci-exit-guards.py` (regression verification); `src/AlTamam.WebUI/assets/js/screen-module.js` (shared route presentation) |
+| Owning layer | `.github/workflows/windows-build.yml`, `windows-release.yml` (Phase 01 CI and Phases 13–15 gates); `build/test-ci-exit-guards.py` (regression verification); `src/AlTamam.WebUI/assets/js/screen-module.js` (shared route presentation); `tests/AlTamam.Tests/Performance/SqliteIndexPerformanceTests.cs` (existing owning Phase 14 performance/concurrency regression) |
 | DTO / bridge action | **None added or altered.** Existing `action-manifest.json`, bridge payloads, `screen-manifest.json`, server handlers and transport are unchanged |
 | Input validation | CI validator compares all checked-in `build/test-*.js` with both workflows, demands an immediate PowerShell failure guard after every JS test and after the validator itself, and self-tests a masked-exit example |
 | RBAC / security | **No permission widening.** All mutation authorization remains in C#; CI explicitly verifies existing bridge-intent and audit-RBAC tests without permitting masked failures |
 | Error handling | A failing Node test or Python validator aborts its Windows preflight job. The route script corrects misleading return-link labels and lets Escape navigate from both hash and hashless links to the unchanged main entrypoint; no application error codes are changed |
-| Transaction boundary / rollback | No data mutation, SQL transaction, migration, history or archive change. Windows Release still blocks both packages until full test success. UI changes are presentation-only and revertible by reverting the feature commit |
-| Tests | New `build/test-ci-exit-guards.py` includes failing and passing fixtures; `build/test-route-return-link-honesty.js` verifies all canonical HTML routes retain the shared module and tests label, href, Escape for hash/hashless destinations, and unrelated links. Both run in the Core and Release preflight |
+| Transaction boundary / rollback | No production data mutation, SQL migration, history or archive change. The existing synthetic C# concurrency test now calls the real `AlTamamDbContext.ExecuteInWriteTransactionAsync` atomic gate (which rolls back failed transactions on disposal) rather than issuing unsynchronized raw inserts; two writer tasks, eight reader tasks, 100 expected rows, integrity and duplicate assertions remain. Windows Release still blocks both packages until full test success |
+| Tests | New `build/test-ci-exit-guards.py` includes failing and passing fixtures; `build/test-route-return-link-honesty.js` verifies all canonical HTML routes retain the shared module and tests label, href, Escape for hash/hashless destinations, and unrelated links. Both run in the Core and Release preflight; the existing SQLite concurrency C# test exercises the production write-transaction gate while retaining the same 8-reader/2-writer and final-parity assertions |
 
 ## 05.05 — Honest UI states / unresolved functional work
 
 - Existing `bridge-client.js` distinguishes Loading, Empty, Validation Error, Conflict, Forbidden, Success for supported read-only WebView2 routes; unsupported routes disable their fake REFRESH action and display an explicit development state.
 - This patch replaces **only misleading navigation labels**, such as "تشغيل التفاعل الكامل" on links actually returning to the main UI. The original target `href`, working functional screens and server behavior are preserved; the shared Escape handler now supports both hash and hashless main-entry links.
 - The standalone route skeletons are **not automatically complete** because a directory link or disabled REFRESH exists. Current static inventory still contains many placeholders beyond the four integrated standalone read-only routes. Functional completion must be measured against each screen's actual owning-phase contract, without inventing a new phase or claiming all 69 screens finished.
+
+## Real Windows CI failure discovered during this review (tests-first remediation)
+
+- **Before fixing the C# test**, PR head `56b0df7797c19af3f1d742e80618a937640206a9`, Windows Core run `41076096795`: 921 passed, 1 failed, 0 skipped. `SqliteIndexPerformanceTests.ConcurrentReadersAndWriter_PreserveConstraints_AndProduceIdenticalFinalState` threw `SQLite Error 5: database is locked` at a direct SQL `ExecuteNonQueryAsync` (test line 320). **This is a genuine failure; do not merge that SHA.**
+- Same SHA's Release run `41076096806`: 922 passed and all four actual architecture packages plus checksums were uploaded. This does **not** override the Core failure.
+- **Compatible test correction only:** the two concurrently scheduled synthetic writer tasks now execute via the already-approved `ExecuteInWriteTransactionAsync` production write gate, using separate atomic transactions. This tests actual app-level concurrency behavior rather than bypassing the production write coordination. It retains SQL INSERT validation, eight readers, two writers, row-count parity, duplicate detection and `PRAGMA integrity_check`. No retry/ignore and no relaxation of assertions; no production or DB schema modifications. **Its effectiveness must be confirmed by both Windows workflows on the new exact SHA.**
 
 ## Acceptance still required
 
