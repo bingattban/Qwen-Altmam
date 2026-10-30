@@ -26,6 +26,23 @@ public partial class MainWindow : Window
     private Scheduling.EightPmSchedulerService? _scheduler;
     private Scheduling.AutomaticBackupSchedulerService? _backupScheduler;
 
+    // Diagnostics are written only for the explicit CI smoke-test flag; production
+    // startup never creates a trace file or changes its persistent browser profile.
+    internal static void TraceWebViewSelfCheck(string phase)
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--webview-selfcheck",
+                StringComparer.Ordinal)) return;
+        string? tracePath = Environment.GetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE");
+        if (string.IsNullOrWhiteSpace(tracePath)) return;
+        try
+        {
+            File.AppendAllText(tracePath,
+                DateTimeOffset.UtcNow.ToString("O") + " " + phase + Environment.NewLine);
+        }
+        catch (IOException) { /* diagnostics must not break the navigation smoke test */ }
+        catch (UnauthorizedAccessException) { /* same: fail from the real WebView2 result */ }
+    }
+
     public MainWindow()
     {
         Title = "التمام اليومي";
@@ -120,12 +137,14 @@ public partial class MainWindow : Window
     {
         try
         {
+            TraceWebViewSelfCheck("WPF window loaded");
             await InitializeAsync().ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             if (Environment.GetCommandLineArgs().Contains("--webview-selfcheck", StringComparer.Ordinal))
             {
+                TraceWebViewSelfCheck("FAIL " + ex.GetType().Name + ": " + ex.Message);
                 Console.Error.WriteLine("WEBVIEW-SELFCHECK FAIL: " + ex.Message);
                 System.Windows.Application.Current.Shutdown(1);
                 return;
@@ -239,13 +258,22 @@ public partial class MainWindow : Window
             // Do not touch the network from installed production code.
             if(!webViewSelfCheck)await EnsureBundledWebView2Async().ConfigureAwait(true);
             // WebView2 profile creation and SQLCipher initialization overlap.
-            string userDataFolder = Path.Combine(AppDataLayout.DataRoot, "WebView2");
+            // A smoke test must not lock, migrate, or reuse the operator's
+            // persistent WebView2 profile. Retry gets a new temporary profile.
+            string userDataFolder = webViewSelfCheck
+                ? Path.Combine(Path.GetTempPath(),
+                    "AlTamam-WebView2-SelfCheck-" + Guid.NewGuid().ToString("N"))
+                : Path.Combine(AppDataLayout.DataRoot, "WebView2");
+            TraceWebViewSelfCheck("Creating isolated WebView2 profile");
             Directory.CreateDirectory(userDataFolder);
             var options = new CoreWebView2EnvironmentOptions();
+            TraceWebViewSelfCheck("Creating CoreWebView2Environment");
             CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null, userDataFolder: userDataFolder,
                 options: options).ConfigureAwait(true);
+            TraceWebViewSelfCheck("Ensuring CoreWebView2 control");
             await _webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+            TraceWebViewSelfCheck("CoreWebView2 ready");
 
             if (preparing is not null)
             {
@@ -366,6 +394,7 @@ public partial class MainWindow : Window
 
         if (webViewSelfCheck)
         {
+            TraceWebViewSelfCheck("Navigating to bundled offline WebUI");
             await CheckActualWebViewNavigationAsync(core).ConfigureAwait(true);
             return;
         }
@@ -401,6 +430,7 @@ public partial class MainWindow : Window
             string title = await core.ExecuteScriptAsync("document.title").ConfigureAwait(true);
             if (!title.Contains("التمام اليومي", StringComparison.Ordinal))
                 throw new InvalidOperationException("Local UI did not load the expected document.");
+            TraceWebViewSelfCheck("PASS bundled offline WebUI title verified");
             Console.WriteLine("WEBVIEW-SELFCHECK PASS");
             System.Windows.Application.Current.Shutdown(0);
         }

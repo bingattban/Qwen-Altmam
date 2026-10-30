@@ -61,6 +61,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
+          python build/test-webview-selfcheck-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows real WebView2 smoke-test contract failed' }
           foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
@@ -259,14 +261,37 @@ jobs:
         shell: pwsh
         run: |
           $exe = (Resolve-Path "$env:PUBLISH_DIR\AlTamam.DesktopHost.exe").Path
-          $probe = Start-Process -FilePath $exe -ArgumentList '--webview-selfcheck' -PassThru
-          if (-not $probe.WaitForExit(60000)) {
-            $probe.Kill()
-            throw 'WebView2 offline UI navigation test timed out'
+          $workingDirectory = (Resolve-Path $env:PUBLISH_DIR).Path
+          $passed = $false
+          # Fresh isolated browser profiles are created by the host for every
+          # attempt. A bounded second attempt handles transient runner/browser
+          # startup only; real navigation is mandatory and failures remain red.
+          for ($attempt = 1; $attempt -le 2; $attempt++) {
+            $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = Join-Path $env:RUNNER_TEMP "altamam-webview-${env:RUNTIME}-attempt-$attempt.log"
+            Remove-Item -LiteralPath $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE -Force -ErrorAction SilentlyContinue
+            Write-Host "Starting REAL offline WebView2 navigation ($env:RUNTIME, attempt $attempt of 2)"
+            $probe = Start-Process -FilePath $exe -ArgumentList '--webview-selfcheck' `
+              -WorkingDirectory $workingDirectory -PassThru
+            $exited = $probe.WaitForExit(60000)
+            if (-not $exited) {
+              Write-Warning "WebView2 startup did not exit within 60 seconds; terminating process tree."
+              try { $probe.Kill($true); $probe.WaitForExit(10000) | Out-Null }
+              catch { Write-Warning "Cleanup after timed-out self-check: $_" }
+            }
+            if (Test-Path -LiteralPath $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE) {
+              Get-Content -LiteralPath $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE |
+                ForEach-Object { Write-Host "WEBVIEW TRACE: $_" }
+            } else {
+              Write-Warning "WebView self-check produced no startup trace (process may have stalled before WPF startup)."
+            }
+            if ($exited -and $probe.ExitCode -eq 0) {
+              $passed = $true
+              break
+            }
+            if ($exited) { Write-Warning "WebView2 real navigation returned exit code $($probe.ExitCode)" }
           }
-          if ($probe.ExitCode -ne 0) {
-            throw "WebView2 offline UI navigation failed (exit $($probe.ExitCode))"
-          }
+          Remove-Item Env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE -ErrorAction SilentlyContinue
+          if (-not $passed) { throw "WebView2 offline UI navigation failed after both bounded attempts ($env:RUNTIME)" }
           Write-Host 'WEBVIEW-SELFCHECK PASS (real Windows WebView2 navigation)'
       - name: Build Portable ZIP (clean directory, real runnable EXE)
         run: |

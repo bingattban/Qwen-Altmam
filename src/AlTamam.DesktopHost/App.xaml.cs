@@ -24,6 +24,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        AlTamam.DesktopHost.MainWindow.TraceWebViewSelfCheck("WPF application startup");
+
         // Prevent two interactive instances on the same Windows session from
         // editing the same SQLCipher database concurrently. The headless CI
         // self-check above deliberately bypasses this lock.
