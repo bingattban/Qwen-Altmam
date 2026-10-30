@@ -141,9 +141,18 @@
       if(options.transferReview){
         const review=options.transferReview;
         const detail=make("section","attendance-review");
-        detail.appendChild(make("p","attendance-review-summary",
-          "تاريخ الحركة: "+review.businessDate+" — نوع النقل: "+
-          (review.external?"خارجي":"داخلي")+" — إجمالي الأفراد: "+review.persons.length));
+        const facts=make("dl","app-preview-properties transfer-review-summary");
+        for(const [label,value] of [
+          ["تاريخ الحركة",review.businessDate],
+          ["نوع الحركة",review.external?"نقل خارجي":"نقل داخلي"],
+          ["الجهة الجديدة",review.destinationName],
+          ["عدد الأفراد",review.persons.length]
+        ]){
+          const property=make("div","app-preview-property");
+          property.append(make("dt","",label),make("dd","",value));
+          facts.appendChild(property);
+        }
+        detail.appendChild(facts);
         const scrolling=make("div","attendance-review-scroll");
         const grid=make("table","data-table attendance-review-table");
         const head=make("thead"),header=make("tr");

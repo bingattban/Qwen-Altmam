@@ -132,6 +132,8 @@ async function main(){
   assert.ok(overlay&&overlay.attrs["aria-modal"]==="true","details open in an accessible modal");
   assert.equal(overlay.hidden,false);
   assert.equal(details.hidden,false);
+  assert.ok(details.all().some(x=>x.className.includes("monthly-revision-table")),
+    "historical revisions render inside a real bounded table in the modal");
   const close=viewport.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل");
   close.handlers.click();
   assert.equal(overlay.hidden,true,"close hides detail modal without touching attendance");

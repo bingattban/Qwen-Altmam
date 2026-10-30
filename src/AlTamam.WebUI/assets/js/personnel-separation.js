@@ -47,6 +47,10 @@
     bar.append(input,find);
     const results=el("div"),selected=el("div",undefined,"separation-selected"),
       feedback=el("div"),preview=el("div",undefined,"separation-retry");
+    selected.setAttribute("role","dialog");
+    selected.setAttribute("aria-label","الفرد المحدد وسبب الفصل");
+    preview.setAttribute("role","dialog");
+    preview.setAttribute("aria-label","إعادة مراجعة الفصل");
     root.append(bar,results,selected,feedback,preview);
     let person=null,page=1,seq=0,previewCounter=0;
     const clear=()=>{previewCounter++;preview.replaceChildren();};

@@ -216,6 +216,10 @@ async function run() {
   correction.handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
   assert.ok(buttonNamed("معاينة التصحيح"));
+  assert.ok(visible().some(x=>x.className==="closed-correction-fields"),
+    "closed-day correction uses a compact two-column form");
+  assert.ok(visible().some(x=>x.className==="closed-policy-banner"),
+    "permission banner never assumes the policy is enabled");
   assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,0,
     "opening emergency screen must not mutate attendance");
   const controls=visible().filter(x=>x.className==="form-control");

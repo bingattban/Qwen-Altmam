@@ -45,6 +45,28 @@ check(/form:\(fields,opts=/,dialogs,"multi-field dialog API available");
 check(/person-report-chip-list/,report,"selected people use compact chips");
 check(/person-report-tabs/,report,"report modal offers tab navigation");
 check(/separation-selected/,separation,"selected person moves into modal");
+const movement=read(base+"assets/js/personnel-movements.js");
+check(/movement-retry-panel/,movement,"transfer retry stays over the source screen");
+check(/transfer-review-summary/,css,"movement preview is a detailed modal");
+check(/closed-correction-fields/,admin,"exceptional correction has a balanced form");
+check(/closed-policy-banner/,admin,"exceptional correction exposes real policy feedback");
+check(/audit-detail-overlay/,admin,"audit details do not render below the history");
+check(/audit-diff-grid/,admin,"audit before and after values are read-only structured diff blocks");
+check(/closeAuditDetail\(\)/,admin,"audit overlay can be dismissed after commitment");
+check(/monthly-movement-banner/,functional,"monthly movements are highlighted in details");
+check(/monthly-revision-table/,functional,"monthly revisions render as a real modal table");
+check(/setAttribute\("aria-modal","true"\)/,functional,"action overlays declare modal semantics");
+check(/dismissExport/,functional,"monthly XLSX export can close in success, empty and error states");
+check(/admin-tile-subtitle/,admin,"administrative navigation has concise tile captions");
+check(/PreviewPersonIdentityUpdate/,admin,"person edits retain the native preview");
+check(/معاينة تعديل هوية الفرد/,admin,"old versus new identity opens the shared review");
+check(/\.audit-detail-overlay\{z-index:1350\}/,css,"audit details appear above audit history");
+check(/\.closed-correction-fields\{/,css,"exceptional correction grid is responsive");
+check(/\.monthly-revision-table\{/,css,"historical revision table scrolls inside modal");
+check(/\.transfer-review-summary\{/,css,"transfer summary is structured in the modal");
+check(/app-popup-on-content modal-lg/,admin,"import results are never appended below the table");
+check(/app-reset-verification-modal/,admin,"full reset final challenge is overlaid");
+
 for(const x of ['x:Name="webViewHost"','x:Name="startupPanel"',
   'x:Name="startupMessage"','Visibility="{Binding PanelVisibility}"',
   'Text="{Binding Message}"','WindowStyle="SingleBorderWindow"',
@@ -59,7 +81,7 @@ function walk(dir){
 }
 const htmls=walk(path.join(root,base,"screens"))
   .filter(p=>p.endsWith(path.sep+"index.html"));
-assert.ok(htmls.length>=65,"full standalone route set must remain present");
+assert.equal(htmls.length,68,"all 68 standalone route modules remain present");
 for(const file of htmls){
   const html=fs.readFileSync(file,"utf8");
   assert.match(html,/assets\/css\/altamam\.css/,"route uses offline design system: "+file);

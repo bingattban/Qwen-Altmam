@@ -49,6 +49,11 @@
       if(hideOnClose)panel.hidden=true;else panel.remove();
     },"btn btn-outline app-modal-close");
     panel.appendChild(close);
+    panel.addEventListener("keydown",event=>{
+      if(event.key!=="Escape")return;
+      event.preventDefault?.();
+      if(hideOnClose)panel.hidden=true;else panel.remove();
+    });
     return {open:()=>{panel.hidden=false;close.focus?.();},
       close:()=>{if(hideOnClose)panel.hidden=true;else panel.remove();}};
   }
@@ -138,6 +143,13 @@
     const grid=node("div","admin-home-grid");
     grid.setAttribute("aria-label","أقسام الإدارة");
     const icons={force:"♙",config:"◈",sheets:"▤",users:"♧",audit:"◷"};
+    const subtitles={
+      force:"الحضور والأسماء والتنقلات والتقارير",
+      config:"الحالات المعتمدة والمواقع",
+      sheets:"استيراد الكشوف والتصدير والأعمدة",
+      users:"الحسابات والصلاحيات وكلمات المرور",
+      audit:"العمليات التاريخية والتدقيق"
+    };
     for(const section of sections) {
       if(section.key==="users" && session.role==="Supervisor")continue;
       const tile=btn(section.title,()=>{
@@ -151,6 +163,7 @@
       tile.append(
         node("span","admin-primary-icon",icons[section.key]),
         node("span","admin-primary-title",section.title),
+        node("span","admin-tile-subtitle",subtitles[section.key]),
         node("span","admin-primary-chevron","فتح القسم ←")
       );
       grid.appendChild(tile);
@@ -177,6 +190,7 @@
     for(const [key,title] of section.children) {
       if(key==="closedCorrection" && !["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))continue;
       const item=btn(title,()=>navigate(key),"admin-subsection-tile");
+      item.appendChild(node("span","admin-tile-subtitle","عرض الشاشة وتنفيذ عملياتها المتاحة"));
       item.dataset.adminScreen=key;
       item.setAttribute("aria-label","فتح شاشة "+title);
       grid.appendChild(item);
@@ -258,10 +272,14 @@
     picker.append(node("span","","اختر الملف من الجهاز"),choose);
     const status=node("div","admin-note");
     const analysis=node("div","admin-note app-popup-on-content modal-lg");
+    analysis.setAttribute("role","dialog");
+    analysis.setAttribute("aria-label","نتيجة تحليل الاستيراد");
     const confirmBox=node("div","admin-note");
     const history=card("سجل دفعات الاستيراد المعتمدة");
     const historyContent=node("div","admin-note");
     const historyDetails=node("div","admin-note app-popup-on-content modal-lg");
+    historyDetails.setAttribute("role","dialog");
+    historyDetails.setAttribute("aria-label","تفاصيل الدفعة المستوردة");
     let detailsSerial=0;
     const refreshHistory=btn("تحديث سجل الاستيراد",loadHistory,"btn btn-outline");
     history.append(refreshHistory,historyContent,historyDetails);
@@ -437,6 +455,7 @@
                 if(!Number.isInteger(done.data?.createdCount))
                   throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
                 previewToken="";
+                analysis.replaceChildren();
                 confirmBox.replaceChildren(node("p","settings-success",
                   "تم إنشاء "+done.data.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق."+
                   " معرف الدفعة: "+(done.data.importBatchId||"—")));
@@ -489,6 +508,10 @@
     statuses.append(node("span","","الحالة المصححة"),statusList);
     const reason=field("السبب التفصيلي (10 إلى 400 حرف)");
     const controls=node("div","functional-toolbar");
+    const correctionFields=node("div","closed-correction-fields");
+    const policyBanner=node("p","closed-policy-banner",
+      "إذن التصحيح الاستثنائي: لم تُقرأ حالته بعد؛ الخادم يتحقق من الإذن عند المعاينة.");
+    policyBanner.setAttribute("role","status");
     const previewPanel=node("div","admin-note");
     let previewToken=null;
     function clearPreview(){previewToken=null;previewPanel.replaceChildren();}
@@ -524,6 +547,10 @@
           enabled,reason:reason.input.value,operationId:policyIntent.operationId});
         if(result.data?.enabled!==enabled)throw Error("لم يؤكد الخادم تعديل السياسة.");
         policyIntent=null;
+        policyBanner.textContent=enabled?
+          "إذن التصحيح الاستثنائي: مفعّل وفق آخر عملية أكدها الخادم.":
+          "إذن التصحيح الاستثنائي: متوقف وفق آخر عملية أكدها الخادم.";
+        policyBanner.className="closed-policy-banner"+(enabled?" is-enabled":"");
         notice.replaceChildren(node("p","", "تم "+verb+" التصحيح الاستثنائي وتسجيل العملية."));
       }catch(e){errors(notice,e);}
     };
@@ -577,7 +604,8 @@
     },"btn btn-primary");
     controls.append(search,btn("تفعيل الإذن الاستثنائي",setPolicy(true)),
       btn("إيقاف الإذن الاستثنائي",setPolicy(false)),preview);
-    box.append(date.wrap,personSearch.wrap,searchResults,statuses,reason.wrap,controls,notice,previewPanel);
+    correctionFields.append(date.wrap,personSearch.wrap,searchResults,statuses,reason.wrap);
+    box.append(policyBanner,correctionFields,controls,notice,previewPanel);
     page.appendChild(box);
     try{
       const response=await api().invoke("GetActiveAttendanceStatuses",{});
@@ -1086,6 +1114,11 @@
     page.querySelector(".section-title")?.appendChild(activeTotalNumber);
     const creation=node("details","admin-create-person card");
     creation.setAttribute("aria-label","إضافة فرد جديد ومراجعة المطابقة مع الأرشيف");
+    creation.addEventListener("keydown",event=>{
+      if(event.key==="Escape"&&creation.open){
+        event.preventDefault?.();creation.open=false;
+      }
+    });
     const toggle=node("summary","btn btn-primary","إضافة فرد واحد للكشف");
     const creationFields=node("div","admin-site-form");
     const nameField=field("الاسم الكامل"),
@@ -1362,8 +1395,22 @@
         baseRevision:person.revision,effectiveLocalDate:businessDate};
       try {
         const preview=(await api().invoke("PreviewPersonIdentityUpdate",payload)).data;
-        if(!await dialogs.confirm("اعتماد تعديل «"+preview.oldName+"» (ع: "+preview.oldServiceNumberA+
-          ") إلى «"+preview.newName+"» (ع: "+preview.newServiceNumberA+")؟"))return;
+        const review=window.AltamamDialog?.detailsReview;
+        const approved=typeof review==="function"
+          ?await review({rows:[
+            ["الاسم السابق",preview.oldName],
+            ["الاسم الجديد",preview.newName],
+            ["الرقم (ع) السابق",preview.oldServiceNumberA],
+            ["الرقم (ع) الجديد",preview.newServiceNumberA],
+            ["تاريخ النفاذ",businessDate],
+            ["حفظ السجل التاريخي","لا يتغير معرّف الفرد أو تحضيراته السابقة."]
+          ]},{title:"معاينة تعديل هوية الفرد",
+            message:"راجع البيانات القديمة والجديدة قبل اعتماد التغيير.",
+            confirmLabel:"تأكيد تعديل الاسم والرقم"})
+          :await dialogs.confirm("اعتماد تعديل «"+preview.oldName+
+            "» (ع: "+preview.oldServiceNumberA+") إلى «"+preview.newName+
+            "» (ع: "+preview.newServiceNumberA+")؟");
+        if(!approved)return;
         await api().invoke("UpdatePersonIdentity",{...payload,
           expectedRevision:person.revision,reason:"تعديل من شاشة إدارة القوة",
           operationId:makeOperationId()});
@@ -1384,6 +1431,11 @@
       results=node("div","admin-note");
     const canEditAudit=state.session?.role==="GeneralAdministration";
     let openDetail=null;
+    let openOverlay=null;
+    const closeAuditDetail=()=>{
+      openOverlay?.remove?.();
+      openOverlay=null;openDetail=null;
+    };
     const search=btn("بحث",()=>{state.page=1;load();},"btn btn-primary");
     general.input.addEventListener("keydown",event=>{
       if(event.key==="Enter"){event.preventDefault();state.page=1;void load();}
@@ -1398,6 +1450,9 @@
       controls.appendChild(toggle);
     }
     const historyPanel=node("div","admin-note app-operational-modal modal-xl");
+    historyPanel.setAttribute("role","dialog");
+    historyPanel.setAttribute("aria-modal","true");
+    historyPanel.setAttribute("aria-label","القيود المعدلة والمحذوفة");
     if(canEditAudit){
       const historyButton=btn("القيود المعدلة والمحذوفة",()=>{
         historyPanel.hidden=false;
@@ -1469,23 +1524,24 @@
       }catch(e){if(token===currentRequest)errors(results,e);}
     }
     async function showAuditDetails(auditEventId) {
-      openDetail?.parentElement?.remove();
+      closeAuditDetail();
       const detail=card("تفاصيل القيد وسلامة السجل");
       openDetail=detail;
       detail.classList.add("auto-attendance-dialog");
-      const overlay=node("div","auto-attendance-overlay");
+      const overlay=node("div","auto-attendance-overlay audit-detail-overlay");
+      openOverlay=overlay;
       overlay.setAttribute("role","dialog");overlay.setAttribute("aria-modal","true");
       overlay.setAttribute("aria-label","تفاصيل القيد");
       overlay.appendChild(detail);
       results.after(overlay);
       const content=node("div","admin-note");
-      detail.append(content,btn("إغلاق التفاصيل",()=>overlay.remove()));
+      detail.append(content,btn("إغلاق التفاصيل",closeAuditDetail));
       content.replaceChildren(warning("جارٍ التحقق من تفاصيل القيد..."));
       try {
         const reply=await api().invoke("GetAuditEntryDetails",{auditEventId});
-        if(state.active!=="log"){detail.remove();return;}
+        if(state.active!=="log"){closeAuditDetail();return;}
         const item=reply.data||{};
-        const facts=node("div","settings-properties");
+        const facts=node("div","settings-properties audit-preview-facts");
         for(const [label,value] of [
           ["العملية",item.operationArabicName],
           ["المستهدف",item.targetDisplay],
@@ -1509,6 +1565,21 @@
           facts.appendChild(line);
         }
         content.replaceChildren(facts);
+        const trust=node("p","status-pill audit-chain-badge",
+          item.chainValid?"موثوق ✓ — سلسلة السجل سليمة":
+          "تنبيه: تعذر إثبات سلامة سلسلة السجل");
+        trust.classList.add(item.chainValid?"audit-chain-ok":"audit-chain-warning");
+        content.appendChild(trust);
+        const differences=node("div","audit-diff-grid");
+        for(const [label,value] of [["القيمة السابقة",item.oldValue],
+          ["القيمة الجديدة",item.newValue]]){
+          const section=node("section","audit-diff-card");
+          section.appendChild(node("h3","section-title",label));
+          const body=node("pre","audit-json");
+          body.textContent=value==null?"—":JSON.stringify(value,null,2);
+          section.appendChild(body);differences.appendChild(section);
+        }
+        content.appendChild(differences);
         const history=node("div","settings-properties");
         const overlays=Array.isArray(item.overlays)?item.overlays:[];
         const latest=overlays.at(-1);
@@ -1550,7 +1621,7 @@
               if(!reply.data?.rawEvidenceUntouched)
                 throw Error("لم يؤكد الخادم الاحتفاظ بالقيد الأصلي.");
               retry=null;
-              detail.remove();openDetail=null;
+              closeAuditDetail();
               await load();
             }catch(e){errors(editBox,e);}
             finally{edit.disabled=false;hide.disabled=false;}
@@ -1878,6 +1949,8 @@
       ]) forthcoming.appendChild(settingsValue(name,detail));
       planned.appendChild(forthcoming);
       const inspectFeedback=node("div","settings-feedback app-popup-when-properties");
+      inspectFeedback.setAttribute("role","dialog");
+      inspectFeedback.setAttribute("aria-label","فحص سلامة النسخة الاحتياطية");
       inspectFeedback.setAttribute("aria-live","polite");
       const previewFeedback=node("div","settings-feedback");
       previewFeedback.setAttribute("aria-live","polite");
@@ -1961,6 +2034,8 @@
         const notice=node("p","settings-copy",
           "التصفير النهائي يمسح الحسابات والأفراد والتحضير والتاريخ وسجل العمليات. لا يمكن التراجع عنه.");
         const resetStatus=node("div","settings-feedback app-reset-verification-modal");
+        resetStatus.setAttribute("role","dialog");
+        resetStatus.setAttribute("aria-label","التحقق النهائي من التصفير");
         const previewButton=btn("معاينة التصفير الكامل",async()=>{
           previewButton.disabled=true;
           resetStatus.replaceChildren(warning("جارٍ إعداد معاينة البيانات التي سيتم حذفها..."));

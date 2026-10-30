@@ -674,6 +674,12 @@
     monthlyTotals.setAttribute("aria-live","polite");
     const exportPanel=el("section","card functional-export-preview");
     exportPanel.hidden=true;
+    exportPanel.setAttribute("role","dialog");
+    exportPanel.setAttribute("aria-modal","true");
+    exportPanel.setAttribute("aria-label","معاينة تصدير Excel الشهري");
+    const dismissExport=button("إغلاق المعاينة",()=>{
+      exportPanel.replaceChildren();exportPanel.hidden=true;
+    },"btn btn-outline");
     const tableHost=el("section","card monthly-grid-panel");
     const detailsBox=el("section","card monthly-cell-details auto-attendance-dialog");
     const detailOverlay=el("div","auto-attendance-overlay");
@@ -721,6 +727,10 @@
         if(data.movement){
           const m=data.movement;
           const kind=m.type===4?"عودة للخدمة":m.type===3?"فصل":m.type===2?"نقل خارجي":"نقل داخلي";
+          const banner=el("p","monthly-movement-banner",
+            "واقعة إدارية مسجلة في هذا اليوم: "+kind);
+          banner.setAttribute("role","status");
+          content.appendChild(banner);
           append(content,item("الواقعة الإدارية",kind),
             item("من الموقع",m.sourceSiteName),
             item("إلى",m.destinationSiteName||m.destinationExternalName),
@@ -730,18 +740,29 @@
         if(Array.isArray(data.revisions)&&data.revisions.length){
           const list=el("div","monthly-detail-revisions");
           list.appendChild(el("h4","section-title","تاريخ تعديل التحضير"));
+          const history=createTable([
+            {label:"الحالة السابقة"},{label:"الحالة الجديدة"},
+            {label:"السبب"},{label:"المنفذ"},{label:"وقت التعديل UTC"}
+          ]);
+          history.wrap.classList.add("monthly-revision-table");
           for(const revision of data.revisions){
-            const entry=el("div","monthly-detail-revision");
-            append(entry,item("التغيير",revision.beforeStatus+" ← "+revision.afterStatus),
-              item("السبب",revision.reason),item("المنفذ",revision.actorUserId),
-              item("الوقت UTC",revision.executedAtUtc));
-            list.appendChild(entry);
+            const tr=el("tr");
+            for(const value of [revision.beforeStatus,revision.afterStatus,
+              revision.reason,revision.actorUserId,revision.executedAtUtc])
+              tr.appendChild(el("td","",value==null?"—":value));
+            history.body.appendChild(tr);
           }
+          list.appendChild(history.wrap);
           content.appendChild(list);
         }
         detailsBox.replaceChildren(top,content);
       }catch(e){
-        if(STATE.monthEpoch===epoch&&request===detailsRequest)showError(detailsBox,e);
+        if(STATE.monthEpoch===epoch&&request===detailsRequest){
+          showError(detailsBox,e);
+          detailsBox.appendChild(button("إغلاق التفاصيل",()=>{
+            detailsRequest++;detailOverlay.hidden=true;detailsBox.replaceChildren();
+          }));
+        }
       }
     }
     const showMonth=async()=>{
@@ -795,7 +816,8 @@
           if(!preview||!Number.isSafeInteger(preview.personCount)||preview.personCount<0)
             throw new Error("لم يرجع الخادم معاينة تصدير صالحة.");
           if(!preview.personCount){
-            exportPanel.replaceChildren(message("لا توجد أسماء في هذا الشهر والموقع للتصدير."));
+            exportPanel.replaceChildren(message("لا توجد أسماء في هذا الشهر والموقع للتصدير."),
+              dismissExport);
             return;
           }
           const properties=el("dl","app-preview-properties");
@@ -899,12 +921,16 @@
                 "تم حفظ "+files.length+" ملفات Excel: "+files.map((f,i)=>
                   (i===0?"الكشف الموحد":("الموقع "+i))+" — "+f.filePath).join(" | "):
                 "تم حفظ الكشف بنجاح: "+result.filePath;
-              exportPanel.replaceChildren(message(lines));
+              exportPanel.replaceChildren(message(lines),dismissExport);
             }catch(error){
               if(STATE.monthEpoch===epoch){
                 if(error?.errorCode==="StorageBusy")
-                  exportPanel.replaceChildren(message("أُلغيت عملية التصدير قبل حفظ ملف Excel."));
-                else showError(exportPanel,error);
+                  exportPanel.replaceChildren(message("أُلغيت عملية التصدير قبل حفظ ملف Excel."),
+                    dismissExport);
+                else{
+                  showError(exportPanel,error);
+                  exportPanel.appendChild(dismissExport);
+                }
               }
             }finally{
               monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);confirmSave.disabled=false;
@@ -916,7 +942,10 @@
           exportPanel.replaceChildren(properties,description,fileLabel,fileInput,destination,
             chooseFolder,confirmSave,cancel);
         }catch(error){
-          if(STATE.monthEpoch===epoch)showError(exportPanel,error);
+          if(STATE.monthEpoch===epoch){
+            showError(exportPanel,error);
+            exportPanel.appendChild(dismissExport);
+          }
         }finally{previewExport.disabled=false;}
       });
       tool.appendChild(previewExport);
