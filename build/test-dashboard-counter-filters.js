@@ -12,6 +12,17 @@ class El{
  addEventListener(name,fn){this.handlers[name]=fn;}
  setAttribute(key,value){this.attrs[key]=value;}
  removeAttribute(key){delete this.attrs[key];}
+ getAttribute(key){return this.attrs[key]??null;}
+ focus(){document.activeElement=this;}
+ contains(other){return this.all().includes(other);}
+ querySelector(selector){
+   if(selector==='[data-status-filter="__AUTO_PREPARED__"]')
+     return this.all().find(x=>x.dataset.statusFilter==="__AUTO_PREPARED__")||null;
+   return null;
+ }
+ querySelectorAll(){return this.all().filter(x=>
+   ["button","input","select","textarea"].includes(x.tag) &&
+   !x.disabled && !x.hidden && x.type!=="hidden");}
  all(){return [this,...this.children.flatMap(x=>x instanceof El?x.all():[])];}
 }
 const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
@@ -73,7 +84,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
      return {data:{count:1,carriedForward:true}};
    throw Error("Unexpected action "+action);
  }};
-const document={createElement:tag=>new El(tag),
+const document={activeElement:null,createElement:tag=>new El(tag),
  getElementById:id=>({appViewport:viewport,headerRoleBadge:badge,logoutAction:logout,...nav})[id]||null,
  querySelector:s=>s===".app-sidebar"?sidebar:null,
  addEventListener:(name,fn)=>{events[name]=fn;}};
@@ -150,7 +161,9 @@ async function main(){
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance",
    "PreviewAttendanceChange"].includes(x.action)).length,0);
  assert.ok(counter("__AUTO_PREPARED__"),"automatic-attendance counter is always visible");
- counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const originalAutoTrigger=counter("__AUTO_PREPARED__");
+ originalAutoTrigger.focus();
+ originalAutoTrigger.handlers.click();await settle();
  assert.equal(calls.filter(x=>x.action==="QueryDailyRoster").at(-1).payload.statusId,
    "__AUTO_PREPARED__");
  const readOnly=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
@@ -159,6 +172,26 @@ async function main(){
    "automatic attendance modal is mounted exactly once inside the dashboard viewport");
  assert.equal(readOnly.attrs["aria-modal"],"true",
    "independent register must announce that it is a real modal");
+ const autoClose=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق");
+ assert.equal(document.activeElement,autoClose,
+   "register opening must move keyboard focus inside the modal");
+ const tabbables=()=>readOnly.querySelectorAll();
+ assert.ok(tabbables().length>2,"register contains several keyboard focusable controls");
+ let trapped=0;
+ readOnly.handlers.keydown({key:"Tab",shiftKey:true,
+   preventDefault(){trapped++;}});
+ assert.equal(trapped,1,"Shift-Tab at first control must wrap inside modal");
+ assert.equal(document.activeElement,tabbables().at(-1),
+   "Shift-Tab wraps focus to last available control");
+ readOnly.handlers.keydown({key:"Tab",shiftKey:false,
+   preventDefault(){trapped++;}});
+ assert.equal(trapped,2,"Tab at last control must wrap inside modal");
+ assert.equal(document.activeElement,autoClose,"Tab wraps back to the dialog close control");
+ const disabledAutoAction=readOnly.all().find(x=>x.tag==="button"&&
+   x.textContent==="معاينة تغيير المحددين");
+ assert.ok(disabledAutoAction.disabled,"bulk action starts disabled");
+ assert.ok(!tabbables().includes(disabledAutoAction),
+   "disabled controls must be excluded from the focus trap");
  assert.ok(readOnly.all().some(x=>x.textContent==="P3"));
  assert.ok(readOnly.all().some(x=>x.textContent==="غياب"));
  assert.ok(readOnly.all().some(x=>x.textContent==="تحضير تلقائي 08:00"),
@@ -260,6 +293,8 @@ async function main(){
  readOnly.handlers.keydown({key:"Escape",preventDefault(){}});
  await settle();
  assert.equal(readOnly.removed,true,"approved Escape closes the register through the same safe confirmation");
+ assert.equal(document.activeElement,counter("__AUTO_PREPARED__"),
+   "closing restores focus to the current auto-prepared counter after dashboard refresh");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
 
  // A queued approval must never write attendance after the operator leaves
