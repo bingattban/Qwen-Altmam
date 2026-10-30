@@ -29,6 +29,14 @@ class Element {
   appendChild(item) { this.children.push(item); return item; }
   prepend(item) { this.children.unshift(item); }
   replaceChildren(...items) { this.children = [...items]; }
+  after(item) {
+    const parent=viewport.all().find(x=>x.children.includes(this));
+    if(parent)parent.children.splice(parent.children.indexOf(this)+1,0,item);
+  }
+  remove(){
+    const parent=viewport.all().find(x=>x.children.includes(this));
+    if(parent)parent.children.splice(parent.children.indexOf(this),1);
+  }
   setAttribute(key, val) { this.attrs[key] = val; }
   getAttribute(key) {return this.attrs[key]||null;}
   focus() {document.activeElement=this;}
@@ -44,6 +52,15 @@ const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
 let deferAuditHistory = false, completeDeferredAuditHistory = null;
+let showAuditEntry = false, deferAuditDetail = false, completeDeferredAuditDetail = null;
+const auditTestEntry = {
+  auditEventId:"AUDIT-TEST-1",sequence:1,operationArabicName:"تعديل",
+  targetDisplay:"فرد تجريبي",actorUsername:"admin",actorDisplay:"مسؤول",
+  executedAtUtc:"2026-10-30T18:00:00Z",rawDescription:"قيد أصلي",
+  description:"قيد أصلي",reason:"تجربة",outcome:"تم الاعتماد",
+  oldValue:{status:"قديم"},newValue:{status:"جديد"},
+  overlays:[],chainValid:true
+};
 const document = {
   activeElement:null,
   getElementById: key => key === "appViewport" ? viewport : null,
@@ -52,6 +69,13 @@ const document = {
 const bridge = {
   invoke: async (name, body) => {
     calls.push({ name, body });
+    if(name==="GetAuditEntryDetails"){
+      const reply={data:auditTestEntry};
+      if(deferAuditDetail)return new Promise(resolve=>{
+        completeDeferredAuditDetail=()=>resolve(reply);
+      });
+      return reply;
+    }
     if(name==="QueryAuditPresentationChanges" && deferAuditHistory){
       return new Promise(resolve=>{
         completeDeferredAuditHistory=()=>resolve({data:{items:[],total:0,hasNext:false}});
@@ -78,7 +102,8 @@ const bridge = {
         current:{people:7,attendance:12,auditEvents:13,users:2}},
       GetAllowedRoles: [{ role:"Supervisor",name:"مشرف" }],
       ListUserAccounts: { items:[],total:0,hasNext:false },
-      QueryAuditLog: { items:[],total:0,hasNext:false },
+      QueryAuditLog: { items:showAuditEntry?[auditTestEntry]:[],
+        total:showAuditEntry?1:0,hasNext:false },
       QueryAuditPresentationChanges: { items:[],total:0,hasNext:false },
       GetActiveAttendanceStatuses: [{statusId:"STS-ABSENT",displayName:"غياب"}],
       GetCustomFieldDefinitions:{items:[
@@ -326,6 +351,76 @@ async function run() {
   assert.equal(calls.filter(x=>x.name==="UpdateAuditPresentation"||
     x.name==="DeleteAuditPresentation").length,0,
     "opening and dismissing audit history does not mutate audit data");
+
+  // An entry details dialog remains independently dismissible while the C#
+  // read is still pending. Late replies and pending confirmations cannot
+  // repaint a closed dialog or submit an audit overlay write.
+  showAuditEntry=true;
+  await buttonNamed("بحث").handlers.click();
+  const detailTrigger=buttonNamed("عرض التفاصيل");
+  assert.ok(detailTrigger,"individual audit entry can be reviewed");
+  deferAuditDetail=true;
+  detailTrigger.focus();detailTrigger.handlers.click();
+  const detailsOverlay=visible().find(x=>x.attrs["aria-label"]==="تفاصيل القيد");
+  assert.ok(detailsOverlay,"audit entry details is a real overlay");
+  assert.equal(detailsOverlay.attrs["aria-modal"],"true");
+  const detailsClose=detailsOverlay.all().find(x=>x.tag==="button"&&
+    x.textContent==="إغلاق التفاصيل");
+  assert.equal(document.activeElement,detailsClose,
+    "details close control receives initial keyboard focus");
+  const detailContent=detailsOverlay.all().find(x=>x.className==="admin-note");
+  assert.ok(detailContent,"details content is mounted below a stable close control");
+  detailsOverlay.handlers.keydown({key:"Escape",preventDefault(){}});
+  assert.ok(!visible().includes(detailsOverlay),"Escape removes the details popup");
+  assert.equal(document.activeElement,detailTrigger,"Escape restores focus to the row action");
+  completeDeferredAuditDetail();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(!detailContent.all().some(x=>x.textContent==="موثوق ✓ — سلسلة السجل سليمة"),
+    "late details response must not paint a dismissed modal");
+
+  deferAuditDetail=false;
+  detailTrigger.focus();detailTrigger.handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const activeOverlay=visible().find(x=>x.attrs["aria-label"]==="تفاصيل القيد");
+  assert.ok(activeOverlay,"details may be reopened after dismissal");
+  assert.ok(activeOverlay.all().some(x=>x.textContent==="موثوق ✓ — سلسلة السجل سليمة"));
+  assert.ok(activeOverlay.all().some(x=>x.className==="audit-diff-grid"),
+    "audited before/after differences remain visible");
+  const detailTabStops=activeOverlay.all().filter(x=>
+    ["button","input","select","textarea"].includes(x.tag)&&!x.disabled);
+  assert.ok(detailTabStops.length>=3);
+  detailTabStops.at(-1).focus();
+  let trappedDetailTab=false;
+  activeOverlay.handlers.keydown({key:"Tab",shiftKey:false,
+    preventDefault(){trappedDetailTab=true;}});
+  assert.ok(trappedDetailTab,"Tab at the last control stays inside audit details");
+  assert.equal(document.activeElement,detailTabStops[0]);
+  activeOverlay.handlers.keydown({key:"Tab",shiftKey:true,preventDefault(){}});
+  assert.equal(document.activeElement,detailTabStops.at(-1),
+    "Shift+Tab at first control wraps to the last control");
+
+  const reasonInput=activeOverlay.all().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="سبب التعديل أو الإخفاء (إلزامي)").children[1];
+  const editedInput=activeOverlay.all().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="الوصف الظاهر الجديد").children[1];
+  reasonInput.value="مراجعة سبب موثق";editedInput.value="وصف مصحح";
+  let settleApproval=null;
+  context.window.AltamamDialog.confirm=()=>new Promise(resolve=>{settleApproval=resolve;});
+  const editAudit=activeOverlay.all().find(x=>x.tag==="button"&&
+    x.textContent==="تعديل الوصف الظاهر");
+  const pendingEdit=editAudit.handlers.click();
+  assert.ok(settleApproval,"edit confirmation is pending");
+  activeOverlay.all().find(x=>x.tag==="button"&&
+    x.textContent==="إغلاق التفاصيل").handlers.click();
+  settleApproval(true);
+  await pendingEdit;
+  assert.equal(calls.filter(x=>x.name==="UpdateAuditPresentation"||
+    x.name==="DeleteAuditPresentation").length,0,
+    "dismissed audit dialog must not dispatch a write after late approval");
+  assert.equal(document.activeElement,detailTrigger,
+    "dismissal during confirmation returns to the originating action");
+  context.window.AltamamDialog.confirm=async()=>true;
+  showAuditEntry=false;
   buttonNamed("العودة إلى الإدارة").handlers.click();
   byDataset("adminSection").find(x=>x.dataset.adminSection==="users").handlers.click();
   await new Promise(resolve=>setImmediate(resolve));

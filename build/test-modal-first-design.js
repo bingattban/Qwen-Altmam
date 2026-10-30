@@ -74,6 +74,15 @@ check(/transfer-review-summary/,css,"movement preview is a detailed modal");
 check(/closed-correction-fields/,admin,"exceptional correction has a balanced form");
 check(/closed-policy-banner/,admin,"exceptional correction exposes real policy feedback");
 check(/audit-detail-overlay/,admin,"audit details do not render below the history");
+check(/detailOpener=document\.activeElement\|\|null/,admin,
+  "individual audit details remember the original row action for focus restoration");
+check(/request===detailRequest&&openOverlay===overlay/,admin,
+  "late audit detail results are ignored after dismissal or a later selection");
+check(/overlay\.addEventListener\("keydown",event=>/,admin,
+  "individual audit details keep Escape and keyboard focus inside the modal");
+check(/!isCurrent\(\)\)return;/,admin,
+  "late user confirmations cannot commit a dismissed audit edit");
+
 check(/historyModal=operationalModal\(historyPanel,"modal-xl",true,true/,admin,
   "audit history is a true action-triggered overlay with a stable close control");
 check(/request!==historySerial\|\|historyPanel\.hidden/,admin,
