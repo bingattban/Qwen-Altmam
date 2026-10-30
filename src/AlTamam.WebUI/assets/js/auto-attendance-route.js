@@ -1,11 +1,13 @@
 "use strict";
-/* Preserve legacy dashboard links, routing them to the new authenticated,
-   read-only automatic-attendance register. No mutations and no external URLs. */
+/* Legacy standalone links open their real authenticated main-window owners.
+   No duplicate UI, synthetic refresh, mutations, or external navigation. */
 (function(){
   const route=document.body?.dataset?.routeKey;
-  const target=route==="UnpreparedPersonnel"
-    ?"../../../index.html#auto-prepared"
-    :route==="SelectStatusAndConfirm"
-      ?"../../../../index.html#auto-prepared":null;
+  const target=route==="Dashboard"
+    ?"../../index.html#dashboard"
+    :route==="UnpreparedPersonnel"
+      ?"../../../index.html#auto-prepared"
+      :route==="SelectStatusAndConfirm"
+        ?"../../../../index.html#auto-prepared":null;
   if(target)window.location.replace(target);
 })();
