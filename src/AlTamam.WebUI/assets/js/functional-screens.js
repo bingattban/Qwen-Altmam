@@ -734,9 +734,36 @@
     exportPanel.setAttribute("role","dialog");
     exportPanel.setAttribute("aria-modal","true");
     exportPanel.setAttribute("aria-label","معاينة تصدير Excel الشهري");
-    const dismissExport=button("إغلاق المعاينة",()=>{
+    let exportPreviewSerial=0,exportReturnFocus=null,exportInProgress=false,activePreviewTrigger=null;
+    const closeExportPreview=()=>{
+      // Closing a view never cancels a submitted native export operation.
+      if(exportInProgress)return;
+      exportPreviewSerial++;
       exportPanel.replaceChildren();exportPanel.hidden=true;
-    },"btn btn-outline");
+      if(activePreviewTrigger)activePreviewTrigger.disabled=false;
+      const opener=exportReturnFocus;exportReturnFocus=null;
+      opener?.focus?.();
+    };
+    const dismissExport=button("إغلاق المعاينة",closeExportPreview,"btn btn-outline");
+    exportPanel.addEventListener("keydown",event=>{
+      if(exportPanel.hidden)return;
+      if(event.key==="Escape"){
+        event.preventDefault?.();closeExportPreview();return;
+      }
+      if(event.key!=="Tab")return;
+      const controls=Array.from(exportPanel.querySelectorAll?.(
+        'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')||[])
+        .filter(control=>!control.hidden&&control.getAttribute?.("aria-hidden")!=="true");
+      if(!controls.length){event.preventDefault?.();return;}
+      const first=controls[0],last=controls[controls.length-1],active=document.activeElement;
+      if(!controls.includes(active)){
+        event.preventDefault?.();(event.shiftKey?last:first).focus?.();
+      }else if(event.shiftKey&&active===first){
+        event.preventDefault?.();last.focus?.();
+      }else if(!event.shiftKey&&active===last){
+        event.preventDefault?.();first.focus?.();
+      }
+    });
     const tableHost=el("section","card monthly-grid-panel");
     const detailsBox=el("section","card monthly-cell-details auto-attendance-dialog");
     const detailOverlay=el("div","auto-attendance-overlay");
@@ -893,11 +920,18 @@
       const previewExport=button("معاينة تصدير Excel",async()=>{
         const chosen={year,month,siteId:STATE.siteId,term:STATE.monthTerm};
         previewExport.disabled=true;
+        activePreviewTrigger=previewExport;
+        exportReturnFocus=document.activeElement||null;
+        const request=++exportPreviewSerial;
+        const activePreview=()=>STATE.monthEpoch===epoch&&request===exportPreviewSerial
+          &&!exportPanel.hidden&&exportPanel.isConnected!==false;
         exportPanel.hidden=false;
-        exportPanel.replaceChildren(message("جارٍ التحقق من سجلات الشهر قبل التصدير..."));
+        exportPanel.replaceChildren(dismissExport,
+          message("جارٍ التحقق من سجلات الشهر قبل التصدير..."));
+        dismissExport.focus?.();
         try{
           const preview=parseData(await bridge().invoke("PreviewMonthlyExport",chosen));
-          if(STATE.monthEpoch!==epoch)return;
+          if(!activePreview())return;
           if(!preview||!Number.isSafeInteger(preview.personCount)||preview.personCount<0)
             throw new Error("لم يرجع الخادم معاينة تصدير صالحة.");
           if(!preview.personCount){
@@ -934,24 +968,28 @@
             chooseFolder.disabled=true;
             try{
               const answer=parseData(await bridge().invoke("SetOutputDirectory",{choose:true}));
-              if(STATE.monthEpoch!==epoch)return;
+              if(!activePreview())return;
               if(!answer?.directory)throw new Error("لم يتم تحديد مجلد صالح.");
               directory=answer.directory;
               destination.textContent="مجلد الحفظ: "+directory+
                 " — سيُستخدم أيضاً في عمليات النسخ والتصدير التالية.";
-            }catch(error){showError(exportPanel,error);}
-            finally{chooseFolder.disabled=false;}
+            }catch(error){
+               if(activePreview())
+                 destination.textContent=error?.message||"تعذر اختيار مجلد الحفظ.";
+             }finally{chooseFolder.disabled=false;}
           },"btn btn-outline");
           try{
             const info=parseData(await bridge().invoke("GetSettingsOverview",{}));
-            if(STATE.monthEpoch!==epoch)return;
+            if(!activePreview())return;
             directory=info?.backupDirectory||"";
             destination.textContent=directory?"مجلد الحفظ الحالي: "+directory:
               "يجب اختيار مجلد حفظ محلي من Windows قبل التصدير.";
           }catch(error){
-            destination.textContent="تعذر قراءة مجلد الحفظ؛ اختر مجلداً من Windows.";
-          }
+             if(!activePreview())return;
+             destination.textContent="تعذر قراءة مجلد الحفظ؛ اختر مجلداً من Windows.";
+           }
           const confirmSave=button("حفظ ملف Excel",async()=>{
+             if(!activePreview()||exportInProgress)return;
             const fileName=fileInput.value.trim();
             if(!/^[\p{L}\p{N} _()\-]+\.xlsx$/iu.test(fileName) ||
                fileName.length>124 || fileName.length<6 || !directory){
@@ -960,6 +998,7 @@
             }
             chosen.fileName=fileName;chosen.directory=directory;
             confirmSave.disabled=true;
+             exportInProgress=true;
             const progressText=message("جارٍ إنشاء ملف Excel...");
             let monitoring=true, pollBusy=false;
             const stopExport=button("إيقاف التصدير الجاري",async()=>{
@@ -974,12 +1013,12 @@
             progressBar.setAttribute("aria-label","تقدم إنشاء ملف Excel");
             exportPanel.replaceChildren(properties,description,progressText,progressBar,stopExport);
             const poll=(typeof setInterval === "function")?setInterval(async()=>{
-              if(!monitoring||pollBusy||STATE.monthEpoch!==epoch)return;
+              if(!monitoring||pollBusy||!activePreview())return;
               pollBusy=true;
               try{
                 const info=parseData(await bridge().invoke("GetExportProgress",{},
                   {timeoutMs:10000}));
-                if(!monitoring||STATE.monthEpoch!==epoch||!info)return;
+                if(!monitoring||!activePreview()||!info)return;
                 const ratio=Number.isInteger(info.percentage)?
                   " — "+info.percentage+"%":"";
                 if(Number.isInteger(info.percentage))
@@ -997,7 +1036,7 @@
             try{
               const result=parseData(await bridge().invoke("ExportMonthlyWorkbookSet",chosen,
                 {timeoutMs:600000}));
-              if(STATE.monthEpoch!==epoch)return;
+              if(!activePreview())return;
               if(!result||result.format!=="xlsx"||!result.filePath)
                 throw new Error("لم يؤكد الخادم إنشاء ملف Excel.");
               const files=Array.isArray(result.files)?result.files:[];
@@ -1009,7 +1048,7 @@
                 "تم حفظ الكشف بنجاح: "+result.filePath;
               exportPanel.replaceChildren(message(lines),dismissExport);
             }catch(error){
-              if(STATE.monthEpoch===epoch){
+              if(activePreview()){
                 if(error?.errorCode==="StorageBusy")
                   exportPanel.replaceChildren(message("أُلغيت عملية التصدير قبل حفظ ملف Excel."),
                     dismissExport);
@@ -1019,20 +1058,24 @@
                 }
               }
             }finally{
-              monitoring=false;if(poll!==null && typeof clearInterval === "function")clearInterval(poll);confirmSave.disabled=false;
+              monitoring=false;
+               if(poll!==null&&typeof clearInterval==="function")clearInterval(poll);
+               confirmSave.disabled=false;exportInProgress=false;
             }
           },"btn btn-primary");
-          const cancel=button("إلغاء التصدير",()=>{
-            exportPanel.replaceChildren();exportPanel.hidden=true;
-          });
+          const cancel=button("إلغاء التصدير",closeExportPreview);
+          if(!activePreview())return;
           exportPanel.replaceChildren(properties,description,fileLabel,fileInput,destination,
             chooseFolder,confirmSave,cancel);
+          fileInput.focus?.();
         }catch(error){
-          if(STATE.monthEpoch===epoch){
+          if(activePreview()){
             showError(exportPanel,error);
             exportPanel.appendChild(dismissExport);
           }
-        }finally{previewExport.disabled=false;}
+         }finally{
+          if(request===exportPreviewSerial&&!exportInProgress)previewExport.disabled=false;
+        }
       });
       tool.appendChild(previewExport);
       const yearPick=el("select","form-select"),monthPick=el("select","form-select");
