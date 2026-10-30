@@ -38,6 +38,8 @@ jobs:
         run: |
           node build/test-bridge-operation-intents.js
           node build/test-audit-route-visibility.js
+          node build/test-readonly-route-states.js
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 04 authenticated route/state regression' }
           node build/test-admin-settings-navigation.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings UI regression' }
           node build/test-excel-import-ui.js

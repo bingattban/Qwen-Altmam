@@ -20,7 +20,7 @@
     <div class="topbar-controls">
       <span class="badge-pill">المرحلة: Phase 04</span>
       <span class="badge-pill">النوع: shared component</span>
-      <a class="btn btn-outline present70aa3b108" href="../../../index.html#PersonPickerAndSearch">↗ فتح في المنظومة الكاملة</a>
+      <a class="btn btn-outline present70aa3b108" href="../../../index.html">↗ الانتقال إلى التطبيق الرئيسي</a>
     </div>
   </header>
 
@@ -39,28 +39,25 @@
           </div>
         </div>
         <div class="presentb9bbe540d">
-          <button class="btn btn-primary" data-bridge-action="REFRESH" data-bridge-route="PersonPickerAndSearch">↻ تحديث البيانات</button>
-          <a class="btn btn-teal present4edeb9e71" href="../../../index.html#PersonPickerAndSearch">تشغيل التفاعل الكامل</a>
+          <span class="badge-pill">بحث قراءة فقط</span>
+          <a class="btn btn-teal present4edeb9e71" href="../../../index.html">الانتقال إلى التطبيق الرئيسي</a>
         </div>
       </div>
 
-      <div class="presentc67077d00">
-        <div class="present0d6e2345d">
-          <strong>حالة التحميل والبيانات (Loading / Ready State):</strong>
-          <p class="present65c9a6077">يجري ربط الشاشة خلال مراحل تنفيذ المشروع مع <code>WebView2BridgeDispatcher</code> واستقبال أحداث التحديث <code>UiInvalidationEvents</code>.</p>
+      <section class="card" aria-label="البيانات الحقيقية للشاشة">
+        <p class="section-description">بحث قراءة فقط في السجل الحالي. لا ينشئ هذا المسار اختياراً أو معاملة نيابة عن شاشة مستدعية؛ استخدم سير العمل الأصلي لإتمام أي إجراء.</p>
+        <form class="functional-toolbar" data-bridge-search>
+          <label for="routeSearch">بحث بالاسم أو الرقم (ع)</label>
+          <input id="routeSearch" name="term" class="form-control" type="search" maxlength="100" autocomplete="off" placeholder="اكتب الاسم أو الرقم (ع)" aria-label="بحث عن فرد" />
+          <button id="routeSubmit" class="btn btn-primary" type="submit">بحث</button>
+        </form>
+        <div id="routeResults" role="region" aria-label="نتائج القراءة" aria-live="polite">
+          <p>أدخل اسماً أو رقماً (ع) ثم اضغط بحث.</p>
         </div>
-        <div class="present0d6e2345d">
-          <strong>حالة الصلاحيات والتحقق (RBAC &amp; Validation):</strong>
-          <p class="present65c9a6077">يجب فحص الصلاحية (<code>All roles under calling screen permissions</code>) في طبقة C# قبل تنفيذ أي أمر تعديل.</p>
-        </div>
-        <div class="present0d6e2345d">
-          <strong>حالة الحفظ التاريخي (Historical Immutability):</strong>
-          <p class="present65c9a6077">يجب أن تستخدم العمليات المعرفات الدائمة (<code>PersonId</code>, <code>SiteId</code>, <code>StatusId</code>) واللقطات التاريخية المؤرخة.</p>
-        </div>
-      </div>
+      </section>
 
       <div id="bridgeStatusBox" class="presente11051c0b">
-        <strong>حالة جسر WebView2:</strong> <span id="bridgeStatusText">ربط هذه الشاشة بخدمات البرنامج لم يكتمل بعد.</span>
+        <strong>حالة جسر WebView2:</strong> <span id="bridgeStatusText">أدخل اسماً أو رقماً (ع) ثم اضغط بحث.</span>
       </div>
     </article>
   </main>

@@ -18,7 +18,7 @@
       </div>
     </div>
     <div class="topbar-controls">
-      <a class="btn btn-outline present70aa3b108" href="../../index.html#Administration">↗ فتح في المنظومة الكاملة</a>
+      <a class="btn btn-outline present70aa3b108" href="../../index.html">↗ الانتقال إلى التطبيق الرئيسي</a>
     </div>
   </header>
 
@@ -37,28 +37,20 @@
           </div>
         </div>
         <div class="presentb9bbe540d">
-          <button class="btn btn-primary" data-bridge-action="REFRESH" data-bridge-route="Administration">↻ تحديث البيانات</button>
-          <a class="btn btn-teal present4edeb9e71" href="../../index.html#Administration">تشغيل التفاعل الكامل</a>
+          <button id="routeSubmit" class="btn btn-primary" type="button" data-bridge-action="REFRESH" data-bridge-route="Administration">↻ تحديث البيانات</button>
+          <a class="btn btn-teal present4edeb9e71" href="../../index.html">الانتقال إلى التطبيق الرئيسي</a>
         </div>
       </div>
 
-      <div class="presentc67077d00">
-        <div class="present0d6e2345d">
-          <strong>حالة التحميل والبيانات (Loading / Ready State):</strong>
-          <p class="present65c9a6077">يجري ربط الشاشة خلال مراحل تنفيذ المشروع مع <code>WebView2BridgeDispatcher</code> واستقبال أحداث التحديث <code>UiInvalidationEvents</code>.</p>
+      <section class="card" aria-label="البيانات الحقيقية للشاشة">
+        <p class="section-description">عرض المواقع المسجلة من قاعدة البيانات المحلية، دون إجراء أي تعديل.</p>
+        <div id="routeResults" role="region" aria-label="نتائج القراءة" aria-live="polite">
+          <p>اضغط تحديث البيانات لقراءة المواقع.</p>
         </div>
-        <div class="present0d6e2345d">
-          <strong>حالة الصلاحيات والتحقق (RBAC &amp; Validation):</strong>
-          <p class="present65c9a6077">يجب فحص الصلاحية (<code>All authenticated roles; hide/deny unauthorized sections</code>) في طبقة C# قبل تنفيذ أي أمر تعديل.</p>
-        </div>
-        <div class="present0d6e2345d">
-          <strong>حالة الحفظ التاريخي (Historical Immutability):</strong>
-          <p class="present65c9a6077">يجب أن تستخدم العمليات المعرفات الدائمة (<code>PersonId</code>, <code>SiteId</code>, <code>StatusId</code>) واللقطات التاريخية المؤرخة.</p>
-        </div>
-      </div>
+      </section>
 
       <div id="bridgeStatusBox" class="presente11051c0b">
-        <strong>حالة جسر WebView2:</strong> <span id="bridgeStatusText">ربط هذه الشاشة بخدمات البرنامج لم يكتمل بعد.</span>
+        <strong>حالة جسر WebView2:</strong> <span id="bridgeStatusText">اضغط تحديث البيانات لقراءة المواقع.</span>
       </div>
     </article>
   </main>

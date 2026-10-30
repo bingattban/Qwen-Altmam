@@ -201,77 +201,171 @@
     return !!(navigation && navigation.openScreen(routeKey));
   }
 
-  // ---------------------------------------------------------------- REFRESH wiring (04.07)
-  const ROUTE_ACTIONS = {
-    Administration: ['QuerySites'],
-    PersonnelManagement: ['SearchPersons'],
-    PersonPickerAndSearch: ['SearchPersons'],
-    ConfirmationAndWarning: [],
-    DraftsAndTemporarySave: ['ListAttendanceDrafts'],
-    ConflictsAndNotifications: []
-  };
+  // Phase 04: standalone read-only modules use actual C# contracts.
+  // Other legacy HTML routes must NOT represent GetApplicationVersion as a data refresh.
+  const ROUTE_ACTIONS = Object.freeze({
+    Administration: "QuerySites",
+    PersonnelManagement: "SearchPersons",
+    PersonPickerAndSearch: "SearchPersons",
+    DraftsAndTemporarySave: "ListAttendanceDrafts"
+  });
+  const SEARCH_ROUTES = new Set(["PersonnelManagement", "PersonPickerAndSearch"]);
+  let refreshing = false;
 
   function setStatus(text, kind) {
-    const el = document.getElementById('bridgeStatusText');
-    if (!el) return;
-    el.textContent = text;
-    const box = document.getElementById('bridgeStatusBox');
-    if (box && kind === 'error') box.classList.add('error');
+    const label = document.getElementById("bridgeStatusText");
+    if (label) label.textContent = text;
+    const box = document.getElementById("bridgeStatusBox");
+    if (box) {
+      box.classList.remove("error", "success", "warn", "loading", "empty");
+      if (kind) box.classList.add(kind);
+    }
+  }
+
+  function appendMessage(parent, text) {
+    const message = document.createElement("p");
+    message.textContent = text;
+    parent.appendChild(message);
+  }
+
+  // All user/server values are textContent, never HTML markup.
+  function renderScreenData(routeKey, data, mount) {
+    const searching = SEARCH_ROUTES.has(routeKey);
+    const rows = searching ? data?.items : data;
+    if (!Array.isArray(rows))
+      throw new Error("صيغة بيانات الشاشة المستلمة من الخدمة غير صالحة.");
+    mount.replaceChildren();
+    if (rows.length === 0) {
+      appendMessage(mount, searching ? "لا توجد نتائج مطابقة للبحث." :
+        routeKey === "Administration" ? "لا توجد مواقع لعرضها." :
+        "لا توجد مسودات محفوظة لهذا الحساب.");
+      return 0;
+    }
+    const headings = searching
+      ? ["الرقم (ع)", "الاسم", "الموقع", "الوضع التنظيمي"]
+      : routeKey === "Administration"
+        ? ["الموقع", "الحالة"]
+        : ["تاريخ المسودة", "معرّف الموقع", "معرّف الحالة", "عدد الأفراد"];
+    const wrap = document.createElement("div");
+    wrap.className = "functional-table-wrap";
+    const table = document.createElement("table");
+    table.className = "data-table functional-table";
+    const head = document.createElement("thead");
+    const header = document.createElement("tr");
+    for (const heading of headings) {
+      const cell = document.createElement("th");
+      cell.textContent = heading;
+      header.appendChild(cell);
+    }
+    head.appendChild(header);
+    const body = document.createElement("tbody");
+    for (const item of rows) {
+      if (!item || typeof item !== "object" || Array.isArray(item))
+        throw new Error("سجل مستلم غير صالح.");
+      const values = searching
+        ? [item.serviceNumberA, item.displayName, item.siteName,
+            item.organizationalStatus === 1 ? "نشط" : "مؤرشف"]
+        : routeKey === "Administration"
+          ? [item.name, item.active ? "نشط" : "غير نشط"]
+          : [item.businessDate, item.siteId || "غير محدد", item.targetStatusId,
+              Array.isArray(item.selectedPersonIds)
+                ? item.selectedPersonIds.length : "غير متاح"];
+      const row = document.createElement("tr");
+      for (const value of values) {
+        const cell = document.createElement("td");
+        cell.textContent = value == null ? "" : String(value);
+        row.appendChild(cell);
+      }
+      body.appendChild(row);
+    }
+    table.append(head, body);
+    wrap.appendChild(table);
+    mount.appendChild(wrap);
+    return rows.length;
   }
 
   async function refreshCurrentScreen() {
-    const bodyEl = document.body;
-    const routeKey = bodyEl && bodyEl.dataset ? bodyEl.dataset.routeKey : null;
-    if (!routeKey) return;
-    setStatus('جارٍ تحميل البيانات…', 'loading');
-    const actions = ROUTE_ACTIONS[routeKey] || [];
-    try {
-      if (actions.length === 0) {
-        const version = await invoke('GetApplicationVersion', {});
-        setStatus('الجسر متصل — الإصدار ' + ((version.data && version.data.version) || '?') + ' (يعمل دون اتصال خارجي).', 'ok');
+    const routeKey = document.body?.dataset?.routeKey;
+    if (!routeKey || refreshing) return;
+    const action = ROUTE_ACTIONS[routeKey];
+    if (!action) {
+      setStatus("هذه الشاشة قيد الاستكمال ضمن مرحلتها المعتمدة؛ لا يوجد تحديث بيانات فعلي هنا.", "warn");
+      return;
+    }
+    const mount = document.getElementById("routeResults");
+    if (!mount) {
+      setStatus("تعذر عرض نتائج الشاشة: حاوية البيانات غير موجودة.", "error");
+      return;
+    }
+    let payload = {};
+    if (SEARCH_ROUTES.has(routeKey)) {
+      const term = document.getElementById("routeSearch")?.value?.trim() || "";
+      if (!term) {
+        mount.replaceChildren();
+        setStatus("أدخل اسماً أو رقماً (ع) للبحث.", "error");
         return;
       }
-      let lastData = null;
-      for (const action of actions) {
-        const payload = action === 'SearchPersons' ? { term: ' ', take: 10 } : {};
-        const res = await invoke(action, payload);
-        lastData = res.data;
+      if (term.length > 100 || /[\x00-\x1f\x7f]/.test(term)) {
+        mount.replaceChildren();
+        setStatus("خطأ في التحقق: نص البحث غير صالح (الحد 100 حرف).", "error");
+        return;
       }
-      renderScreenData(routeKey, lastData);
-      setStatus('تم تحديث البيانات من خدمات البرنامج المحلية.', 'ok');
+      payload = {term: term, take: 50};
+    }
+    refreshing = true;
+    const button = document.getElementById("routeSubmit");
+    if (button) button.disabled = true;
+    mount.replaceChildren();
+    appendMessage(mount, "جارٍ تحميل البيانات من البرنامج المحلي…");
+    setStatus("جارٍ تحميل البيانات…", "loading");
+    try {
+      const response = await invoke(action, payload);
+      const count = renderScreenData(routeKey, response.data, mount);
+      setStatus(count ? "تم عرض " + count + " سجل من بيانات البرنامج المحلية." :
+        "اكتملت القراءة، ولا توجد بيانات مطابقة.", count ? "success" : "empty");
     } catch (err) {
-      if (err.errorCode === 'SessionExpired' || err.errorCode === 'Unauthorized') {
+      mount.replaceChildren(); // Never retain another session's or an obsolete query's rows.
+      if (err.errorCode === "SessionExpired") {
         setSessionNonce(null);
-        setStatus('الجلسة غير سارية — سجّل الدخول أولاً لعرض البيانات.', 'error');
-      } else if (err.errorCode === 'MissingData') {
-        setStatus('الاتصال بالجسر سليم؛ بيانات هذه الشاشة تُفعَّل في مراحلها المخصصة.', 'warn');
+        setStatus("انتهت الجلسة؛ سجّل الدخول من الواجهة الرئيسية.", "error");
+      } else if (err.errorCode === "Unauthorized") {
+        setStatus("غير مصرح بعرض هذه البيانات وفق صلاحيات الحساب الحالي.", "error");
+      } else if (err.errorCode === "ValidationError" || err.errorCode === "MissingData") {
+        setStatus("خطأ في التحقق: " + (err.message || "بيانات البحث غير صالحة."), "error");
+      } else if (err.errorCode === "ConflictStale") {
+        setStatus("تعارض: تغيرت البيانات؛ أعد القراءة قبل متابعة العمل.", "error");
       } else {
-        setStatus('تعذر التحديث: ' + (err.message || err.errorCode || 'خطأ غير معروف'), 'error');
+        setStatus("تعذر تحديث البيانات: " + (err.message || err.errorCode || "خطأ غير معروف"), "error");
       }
+    } finally {
+      refreshing = false;
+      if (button) button.disabled = false;
     }
   }
 
-  function renderScreenData(routeKey, data) {
-    const mount = document.querySelector('[data-bridge-mount="' + routeKey + '"] .present65c9a6077');
-    if (!mount || !data) return;
-    if (Array.isArray(data) && data.length) {
-      mount.textContent = '';
-      const list = document.createElement('ul');
-      data.slice(0, 10).forEach(function (row) {
-        const li = document.createElement('li');
-        li.textContent = row.name || row.displayName || row.visibleName || JSON.stringify(row);
-        list.appendChild(li);
+  document.addEventListener("click", function (event) {
+    const button = event.target?.closest?.('[data-bridge-action="REFRESH"]');
+    if (button && !button.disabled) {
+      event.preventDefault();
+      void refreshCurrentScreen();
+    }
+  });
+  document.addEventListener("submit", function (event) {
+    if (event.target?.matches?.("form[data-bridge-search]")) {
+      event.preventDefault();
+      void refreshCurrentScreen();
+    }
+  });
+  document.addEventListener("DOMContentLoaded", function () {
+    const routeKey = document.body?.dataset?.routeKey;
+    if (routeKey && !ROUTE_ACTIONS[routeKey]) {
+      document.querySelectorAll('[data-bridge-action="REFRESH"]').forEach(button => {
+        button.disabled = true;
+        button.textContent = "قيد التطوير";
+        button.title = "لم يكتمل الربط الوظيفي لهذه الشاشة بعد";
       });
-      mount.appendChild(list);
-    } else if (data && Array.isArray(data.items)) {
-      mount.textContent = 'نتائج البحث: ' + data.count;
+      setStatus("هذه الشاشة قيد الاستكمال ضمن مرحلتها؛ افتح الواجهة الرئيسية للوظائف المتاحة.", "warn");
     }
-  }
-
-  document.addEventListener('click', function (event) {
-    const button = event.target.closest('[data-bridge-action]');
-    if (!button) return;
-    if (button.dataset.bridgeAction === 'REFRESH') { event.preventDefault(); refreshCurrentScreen(); }
   });
 
   // Loading-state hook: marks the status area busy while a request is in flight.
