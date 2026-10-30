@@ -356,7 +356,10 @@ async function run() {
   // read is still pending. Late replies and pending confirmations cannot
   // repaint a closed dialog or submit an audit overlay write.
   showAuditEntry=true;
-  await buttonNamed("بحث").handlers.click();
+  buttonNamed("بحث").handlers.click();
+  // The click handler intentionally does not return the asynchronous load().
+  // Wait for the actual bridge read and DOM render before locating the row.
+  await new Promise(resolve=>setImmediate(resolve));
   const detailTrigger=buttonNamed("عرض التفاصيل");
   assert.ok(detailTrigger,"individual audit entry can be reviewed");
   deferAuditDetail=true;
