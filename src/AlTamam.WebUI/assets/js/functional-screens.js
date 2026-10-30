@@ -464,7 +464,12 @@
     async function close(){
       if(!await confirmDiscard()||disposed)return;
       dismissAutoPrepared();
-      returnFocus?.focus?.();
+      // Dashboard refresh replaces its counters while the dialog stays open.
+      // Do not return keyboard focus to an element no longer in the document.
+      const focusTarget=returnFocus?.isConnected===false
+        ? view()?.querySelector?.('[data-status-filter="__AUTO_PREPARED__"]')
+        : returnFocus;
+      focusTarget?.focus?.();
     }
     overlay.addEventListener("click",event=>{if(event.target===overlay)void close();});
     overlay.addEventListener("keydown",event=>{
