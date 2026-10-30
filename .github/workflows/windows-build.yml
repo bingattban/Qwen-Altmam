@@ -16,7 +16,7 @@ permissions:
   contents: read
 jobs:
   manifest-contract:
-    name: Manifest contract guard (69 routes / 96 actions)
+    name: Manifest contract guard (69 routes / 101 actions)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +31,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'UI shell contract failed' }
           python build/test-ci-exit-guards.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
+          python build/test-ci-performance-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
           foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
@@ -75,7 +77,7 @@ jobs:
           node build/test-personnel-report-ui.js
           if ($LASTEXITCODE -ne 0) { throw 'Unified individual/group report UI regression' }
 
-  compile-core:
+  core-tests:
     needs: manifest-contract
     runs-on: windows-latest
     steps:
@@ -83,37 +85,36 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Restore production projects
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+      - name: Restore solution (production + tests) once on this runner
         run: dotnet restore AlTamam.slnx
       - name: Record .NET SDK version (step 01.01)
         run: |
           dotnet --list-sdks
           dotnet --version
-      - name: Compile production foundation
+      - name: Compile production and test projects once
         run: dotnet build AlTamam.slnx --configuration Release --no-restore
-
-  core-tests:
-    needs: compile-core
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-      - name: Restore solution (production + tests)
-        run: dotnet restore AlTamam.slnx
       - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
-          --configuration Release --no-restore --logger "trx;LogFileName=core-tests.trx"
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=core-tests.trx"
           --results-directory TestResults
+      - name: Guard against zero tests executing (real TRX required)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/core-tests.trx)) { throw 'Core TRX is missing' }
+          $xml = [xml](Get-Content TestResults/core-tests.trx)
+          $count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Core full tests executed: $count"
+          if ($count -lt 1) { throw 'Core suite executed zero tests' }
       - name: Capture measured ten-thousand-person search benchmark and Windows runner metadata
         shell: pwsh
         env:
           ALTAMAM_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/ten-thousand-person-search.txt
         run: |
           New-Item -ItemType Directory -Path PerformanceEvidence -Force | Out-Null
-          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release --no-restore `
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c Release --no-build --no-restore `
             --filter "FullyQualifiedName~TenThousandSearchDiagnostics" `
             --logger "console;verbosity=normal"
           if ($LASTEXITCODE -ne 0) { throw 'Synthetic performance measurement failed' }
