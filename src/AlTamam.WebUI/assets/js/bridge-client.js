@@ -205,6 +205,8 @@
   // Other legacy HTML routes must NOT represent GetApplicationVersion as a data refresh.
   const ROUTE_ACTIONS = Object.freeze({
     Administration: "QuerySites",
+    Sites: "QuerySites",
+    Statuses: "QueryAttendanceStatuses",
     PersonnelManagement: "SearchPersons",
     PersonPickerAndSearch: "SearchPersons",
     DraftsAndTemporarySave: "ListAttendanceDrafts"
@@ -231,21 +233,25 @@
   // All user/server values are textContent, never HTML markup.
   function renderScreenData(routeKey, data, mount) {
     const searching = SEARCH_ROUTES.has(routeKey);
+    const sites = routeKey === "Administration" || routeKey === "Sites";
     const rows = searching ? data?.items : data;
     if (!Array.isArray(rows))
       throw new Error("صيغة بيانات الشاشة المستلمة من الخدمة غير صالحة.");
     mount.replaceChildren();
     if (rows.length === 0) {
       appendMessage(mount, searching ? "لا توجد نتائج مطابقة للبحث." :
-        routeKey === "Administration" ? "لا توجد مواقع لعرضها." :
+        sites ? "لا توجد مواقع لعرضها." :
+        routeKey === "Statuses" ? "لا توجد حالات نشطة لعرضها." :
         "لا توجد مسودات محفوظة لهذا الحساب.");
       return 0;
     }
     const headings = searching
       ? ["الرقم (ع)", "الاسم", "الموقع", "الوضع التنظيمي"]
-      : routeKey === "Administration"
+      : sites
         ? ["الموقع", "الحالة"]
-        : ["تاريخ المسودة", "معرّف الموقع", "معرّف الحالة", "عدد الأفراد"];
+        : routeKey === "Statuses"
+          ? ["الحالة", "الرمز", "اللون"]
+          : ["تاريخ المسودة", "معرّف الموقع", "معرّف الحالة", "عدد الأفراد"];
     const wrap = document.createElement("div");
     wrap.className = "functional-table-wrap";
     const table = document.createElement("table");
@@ -265,11 +271,13 @@
       const values = searching
         ? [item.serviceNumberA, item.displayName, item.siteName,
             item.organizationalStatus === 1 ? "نشط" : "مؤرشف"]
-        : routeKey === "Administration"
+        : sites
           ? [item.name, item.active ? "نشط" : "غير نشط"]
-          : [item.businessDate, item.siteId || "غير محدد", item.targetStatusId,
-              Array.isArray(item.selectedPersonIds)
-                ? item.selectedPersonIds.length : "غير متاح"];
+          : routeKey === "Statuses"
+            ? [item.displayName, item.shortSymbol, item.color]
+            : [item.businessDate, item.siteId || "غير محدد", item.targetStatusId,
+                Array.isArray(item.selectedPersonIds)
+                  ? item.selectedPersonIds.length : "غير متاح"];
       const row = document.createElement("tr");
       for (const value of values) {
         const cell = document.createElement("td");
