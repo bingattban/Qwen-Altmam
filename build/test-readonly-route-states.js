@@ -203,6 +203,32 @@ async function run() {
     assert.ok(item.posted.every(req=>!["CreateSite","DeleteAttendanceDraft",
       "UpdateAuditPresentation"].includes(req.action)),"read-only route may not mutate");
   }
+  // Section 05.05 applies to EVERY canonical standalone route, not just
+  // the positive read-only examples. Unsupported REFRESH must never send a
+  // misleading real C# request or display a fake successful refresh.
+  const manifest=JSON.parse(fs.readFileSync(
+    path.join(root,"src/AlTamam.WebUI/screen-manifest.json"),"utf8"));
+  assert.equal(manifest.screens.length,69);
+  let disabledUnsupported=0;
+  for(const route of manifest.screens){
+    if(Object.hasOwn(pages,route.routeKey))continue;
+    const html=fs.readFileSync(path.join(root,"src/AlTamam.WebUI",
+      route.localAssetPath),"utf8");
+    if(!html.includes('data-bridge-action="REFRESH"'))continue;
+    const unsupportedRoute=harness(route.routeKey);
+    assert.equal(unsupportedRoute.refreshButton.disabled,true,
+      route.routeKey+" legacy refresh should disclose the missing integration");
+    await unsupportedRoute.bridge.refresh();
+    assert.equal(unsupportedRoute.posted.length,0,
+      route.routeKey+" may not send a fake refresh request");
+    assert.match(unsupportedRoute.nodes.bridgeStatusText.textContent,/قيد/,
+      route.routeKey+" needs a truthful development-only state");
+    disabledUnsupported++;
+  }
+  assert.ok(disabledUnsupported>=55,
+    "review canonical route coverage when an old placeholder becomes functional");
+  console.log("SECTION05 UI STATE COVERAGE — "+disabledUnsupported+
+    " unsupported legacy refresh routes explicitly disabled");
   console.log("PHASE04 READONLY ROUTES PASS — real C# action envelopes, 6 states, no fake success");
 }
 run().catch(err=>{console.error(err);process.exitCode=1;});
