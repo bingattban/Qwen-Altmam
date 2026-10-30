@@ -68,6 +68,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Audit route RBAC regression' }
           node build/test-readonly-route-states.js
           if ($LASTEXITCODE -ne 0) { throw 'Phase 04 authenticated route/state regression' }
+          node build/test-route-return-link-honesty.js
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 route link honesty regression' }
           node build/test-admin-settings-navigation.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings UI regression' }
           node build/test-excel-import-ui.js
