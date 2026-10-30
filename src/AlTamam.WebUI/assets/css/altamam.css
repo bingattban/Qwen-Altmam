@@ -1584,7 +1584,7 @@ label.app-unified-search-wrap>.app-unified-search-caption{
   border-radius:999px;padding:4px 11px;font-weight:800;
   background:var(--bg-subtle);border:1px solid var(--border-color)}
 .status-pill:before{content:"";width:7px;height:7px;flex:none;
-  border-radius:50%;background:currentColor}
+  border-radius:50%;background:var(--status-dot,currentColor)}
 .auth-form{width:min(94vw,540px);margin:auto;overflow:hidden}
 #appViewport:has(.auth-form){min-height:calc(100dvh - 150px);
   display:flex;flex-direction:column;justify-content:center;align-items:center}
@@ -1666,7 +1666,26 @@ body:has(.app-operational-modal:not([hidden]),
 }
 .app-export-progress{width:100%;height:14px;accent-color:var(--accent-teal)}
 .auth-password-field{position:relative}
-.auth-password-toggle{align-self:flex-start;margin-block:6px;min-height:31px;padding:4px 11px}
+.auth-password-toggle{
+  position:absolute;inset-inline-end:9px;bottom:8px;z-index:1;
+  margin:0;min-height:29px;padding:3px 9px;font-size:12px;
+  border-radius:7px;background:var(--bg-subtle)
+}
+.auth-password-field>.form-control{padding-inline-end:130px}
+.auth-brand{
+  display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;
+  column-gap:12px;padding:16px 18px;margin:-16px -16px 6px;
+  color:#fff;background:linear-gradient(135deg,#0F2942,#163A5F);
+  border-radius:10px 10px 0 0
+}
+.auth-brand .section-title{color:#fff;margin:0}
+.auth-brand .section-description{grid-column:2;color:#D8E8F1;margin:0}
+.auth-brand-mark{
+  grid-row:1/3;display:grid;place-items:center;width:44px;height:44px;
+  border-radius:10px;background:linear-gradient(135deg,#14B8A6,#0D9488);
+  color:#fff;font:900 24px/1 "AlTamam Cairo",sans-serif
+}
+.auth-first-run>.auth-brand{grid-column:1/-1}
 .auth-first-run{width:min(94vw,740px);display:grid;
   grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .auth-first-run>.auth-password-policy,

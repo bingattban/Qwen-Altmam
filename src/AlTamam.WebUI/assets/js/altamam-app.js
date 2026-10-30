@@ -168,6 +168,9 @@ async function toggleTheme() {
 }
 
 function closeModal() {
+  // Never hide the backdrop without resolving the pending modal promise:
+  // cleanup also clears countdowns, keyboard handlers and restores focus.
+  if(window.AltamamDialog?.dismiss?.())return;
   document.getElementById("appModalBackdrop")?.classList.remove("open");
 }
 

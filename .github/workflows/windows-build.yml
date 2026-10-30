@@ -33,6 +33,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
           python build/test-ci-performance-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
+          python build/test-release-artifact-provenance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
@@ -73,7 +75,7 @@ jobs:
           node build/test-operation-dialogs.js
           if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
           node build/test-modal-first-design.js
-          if ($LASTEXITCODE -ne 0) { throw "Modal-first UI route and design contract regression" }
+          if ($LASTEXITCODE -ne 0) { throw "Modal-first UI contract regression" }
           node build/test-personnel-separation.js
           if ($LASTEXITCODE -ne 0) { throw 'Personnel separation UI regression' }
           node build/test-personnel-report-ui.js

@@ -41,6 +41,13 @@ async function run(){
  const no=dialog.confirm("إلغاء عملية");
  button("إلغاء").click();
  assert.equal(await no,false);
+ const headerClose=dialog.confirm("إلغاء من زر إغلاق النافذة");
+ assert.equal(overlay.classList.open,true);
+ assert.equal(dialog.dismiss(),true,"header close uses dialog engine, not CSS hide");
+ assert.equal(await headerClose,false,"header close resolves the pending confirmation as rejected");
+ assert.equal(overlay.classList.open,false,"dismiss resets the shared backdrop");
+ assert.equal(document.activeElement,previous,"header close restores the previous focused control");
+ assert.equal(dialog.dismiss(),false,"repeat dismissal is safe when already closed");
  const reason=dialog.reason("سبب الفصل",{minLength:5,danger:true});
  const box=body.all().find(x=>x.tag==="textarea");
  assert.ok(box,"reason entered in centered app modal");

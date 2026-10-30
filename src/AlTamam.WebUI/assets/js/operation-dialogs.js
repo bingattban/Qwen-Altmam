@@ -306,7 +306,12 @@
       }
       const key=ev=>{
         if(ev.key==="Escape"){ev.preventDefault();close(null);}
-        if(ev.key==="Enter" && (!field || !options.input.multiline)){
+        // Native buttons own Enter/Space. Do not turn Enter on Cancel or
+        // inside a multi-field textarea into an unintended confirmation.
+        if(ev.key==="Enter" && ev.target?.tagName!=="BUTTON" &&
+           ev.target?.tag!=="button" && !ev.target?.isContentEditable &&
+           !(ev.target?.tagName==="TEXTAREA"||ev.target?.tag==="textarea") &&
+           (!field||!options.input.multiline)){
           ev.preventDefault();accept.click();
         }
         if(ev.key==="Tab"){
@@ -330,6 +335,7 @@
     }
   },true);
   window.AltamamDialog=Object.freeze({
+    dismiss:()=>{if(!current)return false;close(null);return true;},
     confirm:(message,opts={})=>show({...opts,message}).then(v=>v===true),
     form:(fields,opts={})=>show({...opts,title:opts.title||"بيانات العملية",
       fields:Array.isArray(fields)?fields:[]}),

@@ -136,6 +136,10 @@
     document.getElementById("logoutAction").hidden=true;
     container.replaceChildren(header("تسجيل الدخول إلى التمام اليومي"));
     const form=el("form","card auth-form");
+    const brand=el("div","auth-brand");
+    append(brand,el("div","auth-brand-mark","ت"),
+      el("h2","section-title","التمام اليومي"),
+      el("p","section-description","نظام إدارة القوة والتحضير — تسجيل محلي آمن"));
     const name=field("text","اسم المستخدم",true);
     name.input.autocomplete="username";
     const pass=field("password","كلمة المرور",true);
@@ -156,7 +160,7 @@
     const note=el("p","section-description","يعمل البرنامج على هذا الجهاز دون اتصال بالإنترنت.");
     const status=el("div","auth-status");
     const submit=el("button","btn btn-primary","دخول"); submit.type="submit";
-    append(form,name.wrapper,pass.wrapper,note,status,submit);
+    append(form,brand,name.wrapper,pass.wrapper,note,status,submit);
     container.appendChild(form);
     try {
       const provisioning=parseData(await bridge().invoke("GetProvisioningState",{}));
@@ -196,7 +200,7 @@
         pass.input.addEventListener("input",refreshPolicy);
         confirmation.input.addEventListener("input",refreshPolicy);
         refreshPolicy();
-        form.replaceChildren(name.wrapper,foundingName.wrapper,pass.wrapper,
+        form.replaceChildren(brand,name.wrapper,foundingName.wrapper,pass.wrapper,
           confirmation.wrapper,policy,note,status,submit);
       }
     } catch(e) { showError(status,e); }
@@ -637,8 +641,13 @@
           const td=el("td","",j===4?"":v);
           if(j===4){
             const status=el("span","status-pill",v||"—");
-            if(/^#[0-9a-fA-F]{6}$/.test(person.statusColor||""))
-              status.style.borderColor=person.statusColor;
+            const color=String(person.statusColor||"");
+            if(/^#[0-9a-fA-F]{6}$/.test(color)){
+              const channels=[1,3,5].map(pos=>parseInt(color.slice(pos,pos+2),16));
+              status.style.borderColor=color;
+              status.style.backgroundColor="rgba("+channels.join(",")+",0.13)";
+              status.style.setProperty?.("--status-dot",color);
+            }
             td.appendChild(status);
           }
           tr.appendChild(td);
@@ -825,7 +834,8 @@
             ["الشهر",year+"-"+String(month).padStart(2,"0")],
             ["النطاق",STATE.siteId?"الموقع المحدد":"جميع المواقع"],
             ["عدد الأفراد",String(preview.personCount)],
-            ["نوع الملف","Excel (.xlsx)"]
+            ["عدد ملفات Excel",Number.isSafeInteger(preview.fileCount)&&preview.fileCount>0?
+              String(preview.fileCount):"يُحدد عند إنشاء الملفات"]
           ].forEach(([label,value])=>{
             const property=el("div","app-preview-property");
             append(property,el("dt","",label),el("dd","",value));
