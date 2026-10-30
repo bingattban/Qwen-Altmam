@@ -64,6 +64,8 @@ async function run(){
  assert.equal(overlay.classList.open,true,"review is shown inside app modal");
  assert.equal(body.all().filter(x=>x.tag==="table").length,1,
    "modal contains the entire server-verified attendance list");
+ assert.equal(body.all().filter(x=>x.className==="app-preview-property").length,4,
+   "review summary must show date, mode, target status and selected count in four cards");
  assert.ok(body.all().some(x=>x.textContent==="محمد صالح الحضرمي"));
  assert.ok(body.all().some(x=>x.textContent==="12345"));
  assert.ok(body.all().some(x=>x.textContent==="أحمد سالم باصالح"));
@@ -121,6 +123,14 @@ async function run(){
  assert.equal(await confirmedTransfer,true,"only explicit approval completes modal");
  assert.equal(await dialog.transferReview({...transferPlan,persons:[]}),false,
    "empty transfer selection cannot bypass the modal");
+ const formDialog=dialog.form([{name:"reason",label:"سبب الإجراء",type:"text",
+   required:true,minLength:3}],{title:"بيانات العملية"});
+ assert.equal(overlay.classList.open,true,"shared multi-field dialog opens");
+ const formField=body.all().find(x=>x.tag==="input");
+ formField.value="تفاصيل معتمدة";
+ button("تأكيد العملية").click();
+ assert.equal((await formDialog).reason,"تفاصيل معتمدة",
+   "multi-field forms collect typed user data without changing legacy dialogs");
  const css=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
  assert.ok(css.includes(".modal-backdrop{z-index:1000;align-items:center;justify-content:center}"),

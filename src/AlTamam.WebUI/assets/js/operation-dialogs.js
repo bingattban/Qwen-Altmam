@@ -106,9 +106,17 @@
       }
       if(options.review){
         const detail=make("section","attendance-review");
-        const overview=make("p","attendance-review-summary",
-          "التاريخ: "+options.review.date+" — الحالة الجديدة: "+options.review.status+
-          " — إجمالي الأفراد: "+options.review.persons.length);
+        const overview=make("dl","app-preview-properties attendance-review-stats");
+        [
+          ["تاريخ التحضير",options.review.date],
+          ["نوع العملية",options.review.mode==="revise"?"تغيير الحالة":"تحضير أو اعتماد"],
+          ["الحالة المستهدفة",options.review.status||"بحسب الفرد"],
+          ["عدد المحددين",options.review.persons.length]
+        ].forEach(([label,value])=>{
+          const property=make("div","app-preview-property");
+          property.append(make("dt","",label),make("dd","",value));
+          overview.appendChild(property);
+        });
         detail.appendChild(overview);
         const scrolling=make("div","attendance-review-scroll");
         const grid=make("table","data-table attendance-review-table");
@@ -277,7 +285,7 @@
       let timer=null;
       if(Number(options.delaySeconds)>0 && typeof window.setInterval==="function"){
         let remaining=Math.max(1,Math.ceil(options.delaySeconds));
-        const countdown=make("p","app-dialog-copy","مهلة التأكيد: "+remaining+" ثوانٍ");
+        const countdown=make("p","app-dialog-countdown","مهلة التأكيد: "+remaining+" ثوانٍ");
         body.insertBefore(countdown,actions);
         accept.disabled=true;
         timer=window.setInterval(()=>{
@@ -363,7 +371,7 @@
         message:opts.message||"راجع الأفراد وحالاتهم قبل الاعتماد.",
         confirmLabel:opts.confirmLabel||"تأكيد وحفظ التحضير",
         review:{date:review.businessDate||"",status:review.statusName||"",
-          persons:review.persons}}).then(result=>result===true);
+          mode:review.mode||"",persons:review.persons}}).then(result=>result===true);
     },
     alert:(message,opts={})=>show({title:opts.title||"تنبيه",message,confirmLabel:"حسناً"})
   });

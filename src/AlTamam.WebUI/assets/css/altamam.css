@@ -1651,7 +1651,7 @@ label.app-unified-search-wrap>.app-unified-search-caption{
 body:has(.app-operational-modal:not([hidden]),
   .app-popup-on-content:not(:empty),.separation-selected:not(:empty),
   .separation-retry:not(:empty),.attendance-drafts-modal:not([hidden]),
-  .admin-create-person[open],.app-reset-verification-modal:has(input[type="password"]))
+  .admin-create-person[open],.app-reset-verification-modal input[type="password"])
   #appModalBackdrop.open{z-index:1450}
 .admin-create-person:not([open]){
   background:transparent;border:none;box-shadow:none;padding:0;max-width:max-content
@@ -1717,4 +1717,19 @@ body:has(.app-operational-modal:not([hidden]),
 #appViewport.monthly-dashboard>.monthly-archive-controls{
   width:100%;margin:0;padding:9px 12px;background:var(--bg-surface);
   border:1px solid var(--border-color);border-radius:9px
+}
+
+/* Modal-in-modal confirmations (e.g. export from a report) must be frontmost. */
+body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450}
+.attendance-review-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+.app-dialog-countdown{
+  background:var(--status-warning-bg);color:var(--status-warning);
+  border:1px solid var(--status-warning-border);border-radius:9px;
+  padding:10px 14px;font-weight:900;text-align:center;
+}
+@media(max-width:720px){
+  .attendance-review-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:450px){
+  .attendance-review-stats{grid-template-columns:minmax(0,1fr)}
 }
