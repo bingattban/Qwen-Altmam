@@ -23,6 +23,10 @@ The same probe is exercised by \`build/test-webview-runtime-probe.js\`: nine VM 
 
 `tests/AlTamam.Tests/Persistence/InterruptedWriteAtomicityTests.cs` adds two native SQLCipher xUnit regressions to the EXISTING full Core and Release Windows suites: a synthetic I/O interruption thrown after an INSERT but before COMMIT, followed by a valid retry that commits exactly one row; and a duplicate-key constraint exception after a partial insert, proving the whole transaction rolls back. Both independently inspect the live database and require successful `PRAGMA integrity_check` through `HasValidIntegrity()`. This executes the production `AlTamamDbContext.ExecuteInWriteTransactionAsync` boundary, not mocked SQL. It is not a simulated power cut to physical hardware, and does not change migrations or enable restore.
 
+## CI recovery observed while this PR was prepared
+
+On 2026-10-30, main commit `296ae3996639b7dbd48fde5a84ff42443b830f11` unexpectedly truncated `.github/workflows/windows-release.yml` to `ss`. A subsequent independent main commit `71254e8848ce16d9e03b4d5c3339a8f9566cf4fe` restored the exact previously green blob SHA `aefcb55bb556ac6ba330ee625040f4918be532e3`. Our duplicate emergency PR #146 was closed without merge once the main content was confirmed identical. **A valid workflow file on main does not replace successful exact-head Core and Release runs**; any PR opened during the broken workflow window must be synchronized/retested after recovery. Direct main edits are not the approved ordinary PR-first route.
+
 ## Mandatory outstanding gates
 
 - **05.06:** Native end-to-end interactive flows (user input, unauthorized roles, conflicting concurrent edits, storage failures and interrupted writes) still require a real Windows UI driver and physical acceptance where applicable; prior unit/integration tests cannot be substituted for these.
