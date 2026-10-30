@@ -471,6 +471,24 @@
       if(event.key==="Escape"){
         event.preventDefault?.();
         void close(); // pending selections still require explicit discard consent
+        return;
+      }
+      if(event.key!=="Tab"||disposed)return;
+      // Keep keyboard focus within the active register and exclude disabled
+      // controls from wrap targets as selections and requests change.
+      const controls=Array.from(overlay.querySelectorAll?.(
+        'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')||[])
+        .filter(control=>!control.hidden&&control.getAttribute?.("aria-hidden")!=="true");
+      if(!controls.length){event.preventDefault?.();return;}
+      const first=controls[0],last=controls[controls.length-1];
+      const current=document.activeElement;
+      if(!controls.includes(current)){
+        event.preventDefault?.();
+        (event.shiftKey?last:first).focus?.();
+      }else if(event.shiftKey&&current===first){
+        event.preventDefault?.();last.focus?.();
+      }else if(!event.shiftKey&&current===last){
+        event.preventDefault?.();first.focus?.();
       }
     });
     search.input.addEventListener("keydown",event=>{
