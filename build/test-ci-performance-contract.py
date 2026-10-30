@@ -3,6 +3,7 @@
 
 This runs in BOTH existing Windows preflight jobs. It has no third pipeline.
 """
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -61,7 +62,7 @@ def validate(core: str, release: str) -> list[str]:
             if len(segment) != 2:
                 issues.append(label + " missing job " + job.strip())
                 continue
-            body = segment[1].split("\n  ", 1)[0]
+            body = re.split(r"(?m)^  [a-z][a-z0-9-]*:\\s*$", segment[1], maxsplit=1)[0]
             if "actions/setup-dotnet@v4" not in body:
                 issues.append(label + " missing .NET bootstrap in " + job.strip())
             if "cache: true" not in body or "cache-dependency-path: Directory.Packages.props" not in body:
