@@ -15,6 +15,8 @@
   };
   function close(result){
     if(!current)return;
+    for(const size of ["sm","md","lg","xl"])
+      backdrop.classList.remove("dialog-"+size);
     const previous=current;current=null;
     backdrop.classList.remove("open");
     if(previous.timer && typeof window.clearInterval==="function")window.clearInterval(previous.timer);
@@ -27,6 +29,10 @@
     if(current)return Promise.resolve(null);
     return new Promise(resolve=>{
       const previous=document.activeElement;
+      const size=["sm","md","lg","xl"].includes(options.size)?options.size:
+        (options.unprepared||options.transferReview?"lg":
+          (options.review?.persons?.length>10?"xl":"md"));
+      backdrop.classList.add("dialog-"+size);
       title.textContent=options.title||"تأكيد العملية";
       body.replaceChildren();
       const text=make("p","app-dialog-copy",options.message||"");
@@ -179,7 +185,43 @@
         }
         body.appendChild(detail);
       }
+      // Multi-field dialog API for a single accessible, structured form.
+      // Existing confirm / prompt / reason / preview contracts remain unchanged.
+      const multiFields=[];
       let field=null,feedback=null;
+      if(Array.isArray(options.fields)&&options.fields.length){
+        const form=make("div","app-dialog-form");
+        for(const spec of options.fields){
+          if(!spec||typeof spec.name!=="string"||!spec.name)continue;
+          const label=make("label","app-dialog-field");
+          label.appendChild(make("span","",spec.label||spec.name));
+          let control;
+          if(spec.type==="select"){
+            control=make("select","form-control");
+            for(const item of spec.options||[]){
+              const option=make("option","",item.label||item.value);
+              option.value=String(item.value??"");control.appendChild(option);
+            }
+          }else if(spec.type==="textarea"){
+            control=make("textarea","form-control");control.rows=4;
+          }else{
+            control=make("input","form-control");
+            control.type=["text","password","number","date","color"].includes(spec.type)?
+              spec.type:"text";
+          }
+          control.value=String(spec.value??"");
+          control.setAttribute("name",spec.name);
+          if(spec.required)control.required=true;
+          if(spec.minLength)control.minLength=spec.minLength;
+          if(spec.maxLength)control.maxLength=spec.maxLength;
+          label.appendChild(control);form.appendChild(label);
+          multiFields.push({spec,control});
+        }
+        body.appendChild(form);
+        feedback=make("p","app-dialog-error");
+        feedback.setAttribute("role","alert");
+        body.appendChild(feedback);
+      }
       if(options.input){
         const wrapper=make("label","app-dialog-field");
         wrapper.appendChild(make("span","",options.input.label||"القيمة المطلوبة"));
@@ -210,6 +252,18 @@
             field.focus();return;
           }
           close(value);
+        }else if(multiFields.length){
+          const values={};
+          for(const {spec,control} of multiFields){
+            const value=String(control.value||"").trim();
+            const min=Number(spec.minLength)||0;
+            if((spec.required&&!value)||(min&&value.length<min)){
+              feedback.textContent="أكمل الحقل المطلوب: "+(spec.label||spec.name);
+              control.focus();return;
+            }
+            values[spec.name]=value;
+          }
+          close(values);
         }else if(selectedPeople){
           if(selectedPeople.size===0){
             const notice=make("p","app-dialog-error","اختر فرداً واحداً على الأقل قبل المتابعة.");
@@ -260,6 +314,8 @@
   },true);
   window.AltamamDialog=Object.freeze({
     confirm:(message,opts={})=>show({...opts,message}).then(v=>v===true),
+    form:(fields,opts={})=>show({...opts,title:opts.title||"بيانات العملية",
+      fields:Array.isArray(fields)?fields:[]}),
     prompt:(message,value="",opts={})=>show({
       title:opts.title||"إدخال البيانات",message,
       confirmLabel:opts.confirmLabel||"اعتماد",input:{

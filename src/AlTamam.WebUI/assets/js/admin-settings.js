@@ -39,6 +39,19 @@
     const c=node("section","card admin-card");
     c.appendChild(node("h2","section-title",title));return c;
   }
+  // Keep modal nodes under their active screen for existing virtual DOM tests.
+  function operationalModal(panel,size,hideOnClose=false,initiallyHidden=false){
+    panel.classList.add("app-operational-modal",size||"modal-md");
+    panel.setAttribute("role","dialog");
+    panel.setAttribute("aria-modal","true");
+    if(initiallyHidden)panel.hidden=true;
+    const close=btn("✕ إغلاق",()=>{
+      if(hideOnClose)panel.hidden=true;else panel.remove();
+    },"btn btn-outline app-modal-close");
+    panel.appendChild(close);
+    return {open:()=>{panel.hidden=false;close.focus?.();},
+      close:()=>{if(hideOnClose)panel.hidden=true;else panel.remove();}};
+  }
   function field(label,value,type) {
     const wrap=node("label","admin-input");
     const name=node("span","",label);
@@ -244,11 +257,11 @@
     const picker=node("label","admin-input");
     picker.append(node("span","","اختر الملف من الجهاز"),choose);
     const status=node("div","admin-note");
-    const analysis=node("div","admin-note");
+    const analysis=node("div","admin-note app-popup-on-content modal-lg");
     const confirmBox=node("div","admin-note");
     const history=card("سجل دفعات الاستيراد المعتمدة");
     const historyContent=node("div","admin-note");
-    const historyDetails=node("div","admin-note");
+    const historyDetails=node("div","admin-note app-popup-on-content modal-lg");
     let detailsSerial=0;
     const refreshHistory=btn("تحديث سجل الاستيراد",loadHistory,"btn btn-outline");
     history.append(refreshHistory,historyContent,historyDetails);
@@ -321,7 +334,7 @@
           panel.appendChild(node("p","section-description",
             "لا توجد صفوف مستبعدة لهذه الدفعة."));
         }
-        historyDetails.replaceChildren(panel);
+        historyDetails.replaceChildren(btn("✕ إغلاق",()=>historyDetails.replaceChildren(),"btn btn-outline app-modal-close"),panel);
       }catch(e){if(valid()&&request===detailsSerial)errors(historyDetails,e);}
     }
     const valid=()=>state.active==="import"&&page.isConnected!==false;
@@ -443,7 +456,7 @@
           }catch(e){errors(confirmBox,e);}
           finally{preview.disabled=false;}
         },"btn btn-primary");
-        analysis.replaceChildren(summary);
+        analysis.replaceChildren(btn("✕ إغلاق",()=>analysis.replaceChildren(),"btn btn-outline app-modal-close"),summary);
         if(Number(report.newCount)>0)analysis.appendChild(preview);
         status.replaceChildren(node("p","settings-success","اكتمل التحليل؛ راجع الصفوف قبل اعتماد الخطة."));
       }catch(e){errors(status,e);}
@@ -600,6 +613,7 @@
     function showAdd() {
       if(state.active!=="accounts")return;
       const form=card("إضافة حساب مرتبط بفرد من القوة");
+      operationalModal(form,"modal-md");
       form.classList.add("admin-user-form");
       const personSearch=field("بحث عن فرد بالاسم أو الرقم (ع)");
       const personPick=node("select","form-control");
@@ -672,7 +686,7 @@
         node("label","","نوع الحساب"),role,save,
         btn("إلغاء",()=>form.remove()),message);
       page.appendChild(form);
-      form.scrollIntoView?.({block:"nearest"});
+      // Fixed modal does not displace the list.
     }
 
     async function load() {
@@ -743,6 +757,7 @@
 
     function showPassword(account) {
       const wrapper=card("تغيير كلمة مرور «"+account.username+"»");
+      operationalModal(wrapper,"modal-sm");
       const pwd=field("كلمة المرور الجديدة","","password");
       pwd.input.autocomplete="new-password";
       const result=node("div","admin-note");
@@ -769,7 +784,7 @@
       wrapper.append(pwd.wrap,save,btn("إلغاء",()=>{pwd.input.value="";wrapper.remove();}),
         result);
       page.appendChild(wrapper);
-      wrapper.scrollIntoView?.({block:"nearest"});
+      // Fixed modal keeps the list and current query.
     }
     await load();
   }
@@ -799,6 +814,7 @@
       return types.find(x=>Number(x[0])===code)?.[1]||"غير معروف";
     }
     const add=card("إضافة عمود اختياري");
+    const addColumnModal=operationalModal(add,"modal-md",true,true);
     const caption=field("عنوان العمود الجديد");
     caption.input.maxLength=80;
     const kind=kindPicker(1),label=node("label","admin-input");
@@ -819,7 +835,7 @@
       finally{addButton.disabled=false;}
     },"btn btn-primary");
     add.append(caption.wrap,label,addButton);
-    panel.append(add,feedback);
+    panel.append(btn("+ إضافة عمود اختياري",()=>addColumnModal.open(),"btn btn-primary"),add,feedback);
     try{
       const response=await api().invoke("GetCustomFieldDefinitions",{});
       if(token!==currentRequest)return;
@@ -844,6 +860,7 @@
       const showEditor=item=>{
         editor.replaceChildren();
         const box=card("تعديل العمود: "+item.caption);
+        operationalModal(box,"modal-md");
         const name=field("عنوان العمود",item.caption);
         name.input.maxLength=80;
         const type=kindPicker(item.fieldType);
@@ -922,6 +939,7 @@
       if(token!==currentRequest)return;
       const list=Array.isArray(response.data)?response.data:[];
       const form=card("إنشاء موقع جديد");
+      const siteModal=operationalModal(form,"modal-md",true,true);
       const name=field("اسم الموقع");
       const note=node("div","admin-note");
       let sitePayload=null,siteOperation=null;
@@ -986,7 +1004,7 @@
         t.body.appendChild(row);
       });
       empty(t.body,3,"لا توجد مواقع مسجلة.");
-      output.append(t.wrap,form);
+      output.append(btn("+ إنشاء موقع جديد",()=>siteModal.open(),"btn btn-primary"),t.wrap,form);
     }catch(e){errors(output,e);}
   }
 
@@ -999,6 +1017,7 @@
       if(token!==currentRequest)return;
       const items=Array.isArray(response.data)?response.data:[];
       const frm=card("إضافة حالة جديدة");
+      const statusModal=operationalModal(frm,"modal-md",true,true);
       const name=field("اسم الحالة"), symbol=field("الرمز"),color=field("اللون","#38BDF8","color");
       const note=node("div","admin-note");
       let statusPayload=null,statusOperation=null;
@@ -1015,7 +1034,17 @@
           await statuses();}
         catch(e){errors(note,e);}finally{save.disabled=false;}
       },"btn btn-primary");
-      frm.append(name.wrap,symbol.wrap,color.wrap,save,note);
+      const livePreview=node("div","status-pill status-live-preview","معاينة الحالة");
+      const refreshStatusPreview=()=>{
+        livePreview.textContent=(name.input.value.trim()||"اسم الحالة")+
+          " — "+(symbol.input.value.trim()||"الرمز");
+        livePreview.style.borderColor=safeColor(color.input.value);
+      };
+      name.input.addEventListener("input",refreshStatusPreview);
+      symbol.input.addEventListener("input",refreshStatusPreview);
+      color.input.addEventListener("input",refreshStatusPreview);
+      refreshStatusPreview();
+      frm.append(name.wrap,symbol.wrap,color.wrap,livePreview,save,note);
       const t=table(["الحالة","الرمز","اللون","الإجراءات"]);
       for(const item of items){
         const tr=node("tr"), colorBox=node("span","admin-color",item.color);
@@ -1045,7 +1074,7 @@
         tr.appendChild(td);t.body.appendChild(tr);
       }
       empty(t.body,4,"لا توجد حالات نشطة.");
-      output.append(t.wrap,frm);
+      output.append(btn("+ إضافة حالة جديدة",()=>statusModal.open(),"btn btn-primary"),t.wrap,frm);
     }catch(e){errors(output,e);}
   }
 
@@ -1056,6 +1085,7 @@
     activeTotalNumber.setAttribute("aria-label","إجمالي القوة النشطة");
     page.querySelector(".section-title")?.appendChild(activeTotalNumber);
     const creation=node("details","admin-create-person card");
+    creation.setAttribute("aria-label","إضافة فرد جديد ومراجعة المطابقة مع الأرشيف");
     const toggle=node("summary","btn btn-primary","إضافة فرد واحد للكشف");
     const creationFields=node("div","admin-site-form");
     const nameField=field("الاسم الكامل"),
@@ -1367,7 +1397,7 @@
       showHidden.addEventListener("change",()=>{state.page=1;load();});
       controls.appendChild(toggle);
     }
-    const historyPanel=node("div","admin-note");
+    const historyPanel=node("div","admin-note app-operational-modal modal-xl");
     if(canEditAudit){
       const historyButton=btn("القيود المعدلة والمحذوفة",()=>{
         historyPanel.hidden=false;
@@ -1847,7 +1877,7 @@
         ["استيراد نسخة احتياطية","غير متاح حتى اكتمال اختبارات الاستعادة الآمنة"],
       ]) forthcoming.appendChild(settingsValue(name,detail));
       planned.appendChild(forthcoming);
-      const inspectFeedback=node("div","settings-feedback");
+      const inspectFeedback=node("div","settings-feedback app-popup-when-properties");
       inspectFeedback.setAttribute("aria-live","polite");
       const previewFeedback=node("div","settings-feedback");
       previewFeedback.setAttribute("aria-live","polite");
@@ -1878,7 +1908,7 @@
             ["الحسابات",data.users],
             ["بصمة SHA-256",data.sha256]
           ])detail.appendChild(settingsValue(label,value));
-          inspectFeedback.replaceChildren(node("p","settings-success",data.message),detail);
+          inspectFeedback.replaceChildren(btn("✕ إغلاق",()=>inspectFeedback.replaceChildren(),"btn btn-outline app-modal-close"),node("p","settings-success",data.message),detail);
         }catch(e){if(token===currentRequest)errors(inspectFeedback,e);}
         finally{inspect.disabled=false;}
       },"btn btn-outline settings-action");
@@ -1930,7 +1960,7 @@
         const resetBox=node("section","settings-danger-zone");
         const notice=node("p","settings-copy",
           "التصفير النهائي يمسح الحسابات والأفراد والتحضير والتاريخ وسجل العمليات. لا يمكن التراجع عنه.");
-        const resetStatus=node("div","settings-feedback");
+        const resetStatus=node("div","settings-feedback app-reset-verification-modal");
         const previewButton=btn("معاينة التصفير الكامل",async()=>{
           previewButton.disabled=true;
           resetStatus.replaceChildren(warning("جارٍ إعداد معاينة البيانات التي سيتم حذفها..."));

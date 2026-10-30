@@ -45,7 +45,8 @@
     const find=button("بحث",search,"btn btn-outline");
     const bar=el("div",undefined,"functional-toolbar");
     bar.append(input,find);
-    const results=el("div"),selected=el("div"),feedback=el("div"),preview=el("div");
+    const results=el("div"),selected=el("div",undefined,"separation-selected"),
+      feedback=el("div"),preview=el("div",undefined,"separation-retry");
     root.append(bar,results,selected,feedback,preview);
     let person=null,page=1,seq=0,previewCounter=0;
     const clear=()=>{previewCounter++;preview.replaceChildren();};
@@ -68,6 +69,8 @@
             person=entry;clear();feedback.replaceChildren();
             selected.replaceChildren(el("h3","الفرد المحدد","section-title"),
               el("p",entry.displayName+" — الرقم (ع): "+entry.serviceNumberA+" — "+entry.siteName));
+            selected.appendChild(button("✕ إغلاق",()=>{person=null;selected.replaceChildren();clear();},
+              "btn btn-outline app-modal-close"));
             selected.appendChild(button("تحديد سبب الفصل والمعاينة",async()=>{
               const reason=await dialogs.reason("بيانات الفصل: "+entry.displayName+
                 " — الرقم (ع): "+entry.serviceNumberA+" — الموقع: "+entry.siteName);
@@ -125,7 +128,9 @@
           }catch(error){
             errorToUser(error);
             // Recover from a lost response without changing the preview identity.
-            preview.replaceChildren(button("إعادة مراجعة وتأكيد الفصل",async()=>{
+            preview.replaceChildren(
+              button("✕ إغلاق",()=>preview.replaceChildren(),"btn btn-outline app-modal-close"),
+              button("إعادة مراجعة وتأكيد الفصل",async()=>{
               if(await detailsReview(summary,{title:"معاينة فصل الفرد",
                 message:"المعاينة نفسها محفوظة للمحاولة الآمنة.",
                 confirmLabel:"تأكيد الفصل",danger:true}))

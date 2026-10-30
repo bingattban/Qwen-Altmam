@@ -139,6 +139,15 @@
     const name=field("text","اسم المستخدم",true);
     name.input.autocomplete="username";
     const pass=field("password","كلمة المرور",true);
+    const reveal=button("إظهار كلمة المرور",()=>{
+      const visible=pass.input.type==="password";
+      pass.input.type=visible?"text":"password";
+      reveal.textContent=visible?"إخفاء كلمة المرور":"إظهار كلمة المرور";
+      reveal.setAttribute("aria-pressed",String(visible));
+    },"btn btn-outline auth-password-toggle");
+    reveal.setAttribute("aria-pressed","false");
+    pass.wrapper.classList.add("auth-password-field");
+    pass.wrapper.appendChild(reveal);
     // Existing users may have historical credentials; only NEW founders must
     // satisfy the current strong-password policy during initialization.
     const confirmation=field("password","تأكيد كلمة المرور",true);
@@ -161,8 +170,34 @@
         confirmation.input.minLength=10;
         confirmation.input.autocomplete="new-password";
         foundingName.input.maxLength=200;
+        form.classList.add("auth-first-run");
+        const policy=el("div","auth-password-policy");
+        policy.setAttribute("aria-label","متطلبات كلمة المرور");
+        const checks=[
+          ["10 أحرف فأكثر",v=>v.length>=10],
+          ["3 أحرف إنجليزية",v=>(v.match(/[A-Za-z]/g)||[]).length>=3],
+          ["3 أرقام",v=>(v.match(/[0-9]/g)||[]).length>=3],
+          ["رمز خاص",v=>/[^A-Za-z0-9\s]/.test(v)],
+          ["دون مسافات",v=>!/\s/.test(v)],
+          ["تطابق كلمتي المرور",v=>v.length>0&&v===confirmation.input.value]
+        ];
+        const chips=checks.map(([label])=>{
+          const chip=el("span","auth-policy-chip",label);
+          policy.appendChild(chip);return chip;
+        });
+        const refreshPolicy=()=>{
+          const value=pass.input.value;
+          checks.forEach((check,i)=>{
+            const valid=check[1](value);
+            chips[i].classList.toggle("valid",valid);
+            chips[i].setAttribute("aria-label",check[0]+(valid?" — مستوفى":" — غير مستوفى"));
+          });
+        };
+        pass.input.addEventListener("input",refreshPolicy);
+        confirmation.input.addEventListener("input",refreshPolicy);
+        refreshPolicy();
         form.replaceChildren(name.wrapper,foundingName.wrapper,pass.wrapper,
-          confirmation.wrapper,note,status,submit);
+          confirmation.wrapper,policy,note,status,submit);
       }
     } catch(e) { showError(status,e); }
     form.addEventListener("submit",async event=>{
@@ -580,6 +615,13 @@
         card.setAttribute("aria-pressed",String(isActive));
         card.appendChild(el("span","counter-label",item.name));
         card.appendChild(el("span","counter-value",item.count));
+        if(item.statusId && !["__AUTO_PREPARED__","__TRANSFER_DAY__"].includes(item.statusId)
+          && Number(counts.totalForce)>0){
+          const ratio=Math.round(100*Number(item.count||0)/Number(counts.totalForce));
+          const percentage=el("span","counter-percentage",ratio+"%");
+          percentage.setAttribute("aria-label","النسبة من إجمالي القوة");
+          card.appendChild(percentage);
+        }
         if(/^#[0-9a-fA-F]{6}$/.test(item.color||""))
           card.style.borderRight="4px solid "+item.color;
         counters.appendChild(card);
@@ -592,9 +634,13 @@
         const data=[(STATE.dayPage-1)*DAILY_PAGE_SIZE+i+1, person.serviceNumberA,
           person.name,person.siteName,person.statusName];
         data.forEach((v,j)=> {
-          const td=el("td","",v);
-          if(j===4 && /^#[0-9a-fA-F]{6}$/.test(person.statusColor||""))
-            td.style.borderRight="4px solid "+person.statusColor;
+          const td=el("td","",j===4?"":v);
+          if(j===4){
+            const status=el("span","status-pill",v||"—");
+            if(/^#[0-9a-fA-F]{6}$/.test(person.statusColor||""))
+              status.style.borderColor=person.statusColor;
+            td.appendChild(status);
+          }
           tr.appendChild(td);
         });
         tb.body.appendChild(tr);
@@ -638,7 +684,7 @@
     detailOverlay.appendChild(detailsBox);
     detailsBox.hidden=false;
     const bottom=el("form","card functional-archive monthly-archive-controls");
-    append(container,tool,monthlyTotals,feedback,exportPanel,tableHost,bottom,detailOverlay);
+    append(container,tool,bottom,monthlyTotals,feedback,exportPanel,tableHost,detailOverlay);
     const epoch=Symbol("monthly-request");STATE.monthEpoch=epoch;
     let detailsRequest=0;
     const item=(label,value)=>{
@@ -662,7 +708,7 @@
         const close=button("إغلاق التفاصيل",()=>{detailsRequest++;detailOverlay.hidden=true;
           detailsBox.replaceChildren();});
         append(top,el("h3","section-title","تفاصيل التمام — "+date),close);
-        const content=el("div","monthly-detail-content");
+        const content=el("div","monthly-detail-content app-preview-properties");
         append(content,item("الاسم",data.personName),item("الرقم (ع)",data.serviceNumberA),
           item("الموقع في هذا اليوم",data.attendance?.siteName||data.siteName));
         if(data.attendance){
@@ -752,6 +798,17 @@
             exportPanel.replaceChildren(message("لا توجد أسماء في هذا الشهر والموقع للتصدير."));
             return;
           }
+          const properties=el("dl","app-preview-properties");
+          [
+            ["الشهر",year+"-"+String(month).padStart(2,"0")],
+            ["النطاق",STATE.siteId?"الموقع المحدد":"جميع المواقع"],
+            ["عدد الأفراد",String(preview.personCount)],
+            ["نوع الملف","Excel (.xlsx)"]
+          ].forEach(([label,value])=>{
+            const property=el("div","app-preview-property");
+            append(property,el("dt","",label),el("dd","",value));
+            properties.appendChild(property);
+          });
           const description=el("p","section-description",
             "سيتم حفظ "+preview.personCount+" فرد في ملف Excel لشهر "+
             year+"-"+String(month).padStart(2,"0")+
@@ -804,7 +861,10 @@
                 progressText.textContent="طُلب إلغاء التصدير؛ جارٍ التأكد من توقف الكتابة...";
               }catch(error){showError(exportPanel,error);}
             });
-            exportPanel.replaceChildren(description,progressText,stopExport);
+            const progressBar=el("progress","app-export-progress");
+            progressBar.max=100;progressBar.removeAttribute("value");
+            progressBar.setAttribute("aria-label","تقدم إنشاء ملف Excel");
+            exportPanel.replaceChildren(properties,description,progressText,progressBar,stopExport);
             const poll=(typeof setInterval === "function")?setInterval(async()=>{
               if(!monitoring||pollBusy||STATE.monthEpoch!==epoch)return;
               pollBusy=true;
@@ -814,6 +874,8 @@
                 if(!monitoring||STATE.monthEpoch!==epoch||!info)return;
                 const ratio=Number.isInteger(info.percentage)?
                   " — "+info.percentage+"%":"";
+                if(Number.isInteger(info.percentage))
+                  progressBar.value=Math.max(0,Math.min(100,info.percentage));
                 const written=info.total?
                   " ("+info.processed+" من "+info.total+" صف)":"";
                 progressText.textContent=info.cancelRequested?
@@ -851,7 +913,7 @@
           const cancel=button("إلغاء التصدير",()=>{
             exportPanel.replaceChildren();exportPanel.hidden=true;
           });
-          exportPanel.replaceChildren(description,fileLabel,fileInput,destination,
+          exportPanel.replaceChildren(properties,description,fileLabel,fileInput,destination,
             chooseFolder,confirmSave,cancel);
         }catch(error){
           if(STATE.monthEpoch===epoch)showError(exportPanel,error);

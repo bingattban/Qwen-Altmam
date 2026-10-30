@@ -12,3 +12,43 @@
 .presentf2f1452a6 {background:rgba(255,255,255,0.12) !important;color:#FFF !important;border-color:rgba(255,255,255,0.25) !important;}
 .presentbe8ffda67 {font-size:17px !important;}
 
+
+/* One visual system for every standalone route, including placeholder routes.
+   No static HTML changes, no new inline styles and no route-key renames. */
+.altamam-screen-module .app-topbar{
+  min-height:62px;background:linear-gradient(135deg,#0B1F33,#133353);
+  border-bottom:3px solid #0D9488
+}
+.altamam-screen-module .breadcrumb-bar{
+  border-inline-start:4px solid var(--accent-teal);
+  background:var(--bg-surface);box-shadow:var(--shadow-sm)
+}
+.altamam-screen-module .card{
+  background:var(--bg-surface);border:1px solid var(--border-color);
+  border-radius:12px;box-shadow:var(--shadow-sm)
+}
+.altamam-screen-module .card-header{
+  background:var(--bg-subtle);
+  border-bottom:1px solid var(--border-color);
+  padding:12px 14px;border-radius:10px 10px 0 0
+}
+.altamam-screen-module .presentc67077d00{
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))!important
+}
+.altamam-screen-module .present0d6e2345d{
+  background:var(--bg-subtle)!important;
+  border:1px solid var(--border-subtle)!important;
+  border-radius:10px!important
+}
+.altamam-screen-module .presente11051c0b{
+  border-inline-start:3px solid var(--accent-teal)!important;
+  border-radius:10px!important;line-height:1.7!important
+}
+.altamam-screen-module .route-link:focus-visible,
+.altamam-screen-module .btn:focus-visible{
+  outline:3px solid var(--accent-teal);outline-offset:3px
+}
+@media(max-width:720px){
+  .altamam-screen-module .app-topbar{gap:8px}
+  .altamam-screen-module .breadcrumb-bar{flex-direction:column;align-items:stretch}
+}
