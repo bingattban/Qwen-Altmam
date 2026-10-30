@@ -292,8 +292,19 @@
   }
 
   // Keep this dialog mounted across dashboard invalidations and redraws.
-  let autoPreparedOverlay=null;
-  function dismissAutoPrepared(){if(autoPreparedOverlay){autoPreparedOverlay.remove?.();autoPreparedOverlay=null;}}
+  let autoPreparedOverlay=null,disposeAutoPrepared=null;
+  function dismissAutoPrepared(){
+    if(!autoPreparedOverlay)return;
+    // A route change, logout or a new register invalidates pending previews
+    // and human approvals before detaching the UI. Already submitted writes
+    // are not cancelled; the authoritative C# transaction still decides.
+    disposeAutoPrepared?.();
+    const overlay=autoPreparedOverlay;
+    if(overlay.remove)overlay.remove();
+    else overlay.parentNode?.removeChild(overlay);
+    autoPreparedOverlay=null;
+    disposeAutoPrepared=null;
+  }
   // Automatic register supports the same audited preview/commit pipeline as daily attendance.
   function openAutoPreparedList(){
     dismissAutoPrepared();
@@ -338,6 +349,10 @@
     let disposed=false,page=1,term="",generation=0,choices=[];
     let visiblePeople=[],busy=false,selectionVersion=0;
     const selected=new Map();
+    disposeAutoPrepared=()=>{
+      disposed=true;generation++;selectionVersion++;
+      selected.clear();
+    };
     batchStatus.addEventListener("change",()=>{
       selectionVersion++;
       notice.replaceChildren();
@@ -447,11 +462,8 @@
       finally{busy=false;updateSelected();}
     }
     async function close(){
-      if(!await confirmDiscard())return;
-      disposed=true;generation++;selected.clear();
-      overlay.remove?.();
-      if(!overlay.remove&&overlay.parentNode)overlay.parentNode.removeChild(overlay);
-      if(autoPreparedOverlay===overlay)autoPreparedOverlay=null;
+      if(!await confirmDiscard()||disposed)return;
+      dismissAutoPrepared();
       returnFocus?.focus?.();
     }
     overlay.addEventListener("click",event=>{if(event.target===overlay)void close();});
