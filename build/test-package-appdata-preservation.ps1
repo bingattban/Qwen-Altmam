@@ -41,6 +41,50 @@ function Run-Checked([string]$file, [string[]]$arguments, [int]$timeoutSeconds =
     }
 }
 
+# Cold WebView2 startup on win-x86 Windows runners is sometimes slow.  Keep
+# the SAME real navigation/title/exit-code gate as release pre-package checks,
+# with at most two independent attempts (the host creates a fresh profile).
+# Never accept a nonzero exit or timeout as success; surface the native phases.
+function Run-PackagedWebViewChecked([string]$file, [string]$phase) {
+    Assert-True (Test-Path -LiteralPath $file -PathType Leaf) "Executable absent: $file"
+    $originalTrace = [Environment]::GetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE")
+    $passed = $false
+    try {
+        for ($attempt = 1; $attempt -le 2; $attempt++) {
+            $trace = Join-Path $work ("webview-" + ($phase -replace '[^A-Za-z0-9]', '-') +
+                "-attempt-" + $attempt + ".log")
+            Remove-Item -LiteralPath $trace -Force -ErrorAction SilentlyContinue
+            $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $trace
+            Write-Host "PACKAGED WEBVIEW: $phase ($ExpectedArch), attempt $attempt of 2"
+            try {
+                Run-Checked $file @("--webview-selfcheck") 90
+                $passed = $true
+            }
+            catch {
+                Write-Warning "PACKAGED WEBVIEW attempt $attempt did not pass: $($_.Exception.Message)"
+            }
+            finally {
+                if (Test-Path -LiteralPath $trace -PathType Leaf) {
+                    Get-Content -LiteralPath $trace | ForEach-Object {
+                        Write-Host "PACKAGED WEBVIEW TRACE: $_"
+                    }
+                }
+                else {
+                    Write-Host "PACKAGED WEBVIEW TRACE: no native trace was produced"
+                }
+            }
+            if ($passed) { break }
+        }
+    }
+    finally {
+        if ($null -eq $originalTrace) {
+            Remove-Item Env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE -ErrorAction SilentlyContinue
+        }
+        else { $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $originalTrace }
+    }
+    Assert-True $passed "WebView2 navigation failed for $phase ($ExpectedArch) after 2 bounded attempts"
+}
+
 function Inno-Args([string]$dir) {
     # Quote /DIR explicitly for spaces in ephemeral Windows runner paths.
     return @("/SP-", "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", ('/DIR="' + $dir + '"'))
@@ -92,7 +136,7 @@ try {
     Run-Checked $portableExe @("--layout-selfcheck") 90
     # Real Windows WebView2 navigation from the extracted customer-facing ZIP.
     # This is an automated smoke test, NOT interactive end-to-end or disconnected physical UAT.
-    Run-Checked $portableExe @("--webview-selfcheck") 90
+    Run-PackagedWebViewChecked $portableExe "Portable ZIP"
     Assert-DataPreserved "Portable direct run"
 
     # Fresh silent install from the REAL installer, not the raw publish directory.
@@ -102,7 +146,7 @@ try {
     $portableHash = Hash-OrAbsent $portableExe
     Assert-True ((Hash-OrAbsent $installedExe) -eq $portableHash) "Portable and Installer EXEs differ"
     Run-Checked $installedExe @("--layout-selfcheck") 90
-    Run-Checked $installedExe @("--webview-selfcheck") 90
+    Run-PackagedWebViewChecked $installedExe "Installer"
     Assert-DataPreserved "Installer run"
 
     # Verify unattended uninstall removes installed binaries but retains the
@@ -114,7 +158,7 @@ try {
     Run-Checked $installerExe (Inno-Args $installedDir)
     Assert-True ((Hash-OrAbsent $installedExe) -eq $portableHash) "Reinstall EXE differs"
     Run-Checked $installedExe @("--layout-selfcheck") 90
-    Run-Checked $installedExe @("--webview-selfcheck") 90
+    Run-PackagedWebViewChecked $installedExe "Reinstall"
     Assert-DataPreserved "Reinstall"
     Write-Host ("PACKAGE-PRESERVATION PASS: " + $ExpectedArch +
         "; genuine Portable + Installer + uninstall/reinstall; unchanged LocalAppData data/key")

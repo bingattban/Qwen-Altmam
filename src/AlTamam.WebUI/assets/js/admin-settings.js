@@ -1488,10 +1488,13 @@
       results=node("div","admin-note");
     const canEditAudit=state.session?.role==="GeneralAdministration";
     let openDetail=null;
-    let openOverlay=null;
+    let openOverlay=null,detailOpener=null,detailRequest=0;
     const closeAuditDetail=()=>{
+      detailRequest++;
       openOverlay?.remove?.();
       openOverlay=null;openDetail=null;
+      const previous=detailOpener;detailOpener=null;
+      previous?.focus?.();
     };
     const search=btn("بحث",()=>{state.page=1;load();},"btn btn-primary");
     general.input.addEventListener("keydown",event=>{
@@ -1587,6 +1590,8 @@
     }
     async function showAuditDetails(auditEventId) {
       closeAuditDetail();
+      const request=++detailRequest;
+      detailOpener=document.activeElement||null;
       const detail=card("تفاصيل القيد وسلامة السجل");
       openDetail=detail;
       detail.classList.add("auto-attendance-dialog");
@@ -1596,12 +1601,31 @@
       overlay.setAttribute("aria-label","تفاصيل القيد");
       overlay.appendChild(detail);
       results.after(overlay);
+      const isCurrent=()=>request===detailRequest&&openOverlay===overlay&&state.active==="log";
+      overlay.addEventListener("keydown",event=>{
+        if(event.key==="Escape"){
+          event.preventDefault?.();closeAuditDetail();return;
+        }
+        if(event.key!=="Tab")return;
+        const controls=Array.from(detail.querySelectorAll?.(
+          'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')||[])
+          .filter(control=>!control.hidden);
+        if(controls.length<2)return;
+        const first=controls[0],last=controls[controls.length-1];
+        if(event.shiftKey&&document.activeElement===first){
+          event.preventDefault?.();last.focus?.();
+        }else if(!event.shiftKey&&document.activeElement===last){
+          event.preventDefault?.();first.focus?.();
+        }
+      });
       const content=node("div","admin-note");
-      detail.append(content,btn("إغلاق التفاصيل",closeAuditDetail));
+      const close=btn("إغلاق التفاصيل",closeAuditDetail);
+      detail.append(content,close);
+      close.focus?.();
       content.replaceChildren(warning("جارٍ التحقق من تفاصيل القيد..."));
       try {
         const reply=await api().invoke("GetAuditEntryDetails",{auditEventId});
-        if(state.active!=="log"){closeAuditDetail();return;}
+        if(!isCurrent())return;
         const item=reply.data||{};
         const facts=node("div","settings-properties audit-preview-facts");
         for(const [label,value] of [
@@ -1665,6 +1689,7 @@
           const form=node("div","functional-toolbar");
           let retry=null;
           async function commitOverlay(action){
+            if(!isCurrent())return;
             const reasonText=reason.input.value.trim();
             const description=corrected.input.value.trim();
             if(!reasonText || (action==="UpdateAuditPresentation"&&!description))
@@ -1673,19 +1698,21 @@
             if(retry?.signature!==signature)
               retry={signature,operationId:makeOperationId()};
             const label=action==="DeleteAuditPresentation"?"إخفاء القيد":"حفظ الوصف الظاهر";
-            if(!await dialogs.confirm("تأكيد "+label+"؟ يبقى القيد الأصلي محفوظاً دون تغيير."))return;
+            if(!await dialogs.confirm("تأكيد "+label+"؟ يبقى القيد الأصلي محفوظاً دون تغيير.")||
+              !isCurrent())return;
             edit.disabled=true;hide.disabled=true;
             try{
               const payload={auditEventId,expectedOverlayVersion:revision,
                 reason:reasonText,operationId:retry.operationId};
               if(action==="UpdateAuditPresentation")payload.correctedDescription=description;
               const reply=await api().invoke(action,payload);
+              if(!isCurrent())return;
               if(!reply.data?.rawEvidenceUntouched)
                 throw Error("لم يؤكد الخادم الاحتفاظ بالقيد الأصلي.");
               retry=null;
               closeAuditDetail();
               await load();
-            }catch(e){errors(editBox,e);}
+            }catch(e){if(isCurrent())errors(editBox,e);}
             finally{edit.disabled=false;hide.disabled=false;}
           }
           const edit=btn(latest?.isTombstoned?"إظهار القيد بوصف معدل":"تعديل الوصف الظاهر",
@@ -1696,7 +1723,7 @@
           form.append(edit,hide);
           content.append(reason.wrap,corrected.wrap,form,editBox);
         }
-      }catch(e){errors(content,e);}
+      }catch(e){if(isCurrent())errors(content,e);}
     }
     await load();
   }

@@ -17,8 +17,16 @@ The Windows Core and Windows Release jobs must still pass on the same PR head.
    `RUNNER_TEMP` folder. Inspect its PE architecture, bundled SQLCipher,
    WebView2 and offline resources with the existing layout validator.
 2. Execute the real Portable WPF EXE `--layout-selfcheck` and check exit code
-   with a bounded timeout. No production database or DPAPI key is created,
-   moved or migrated by this check.
+   with a bounded timeout. In addition, run genuine packaged
+   `--webview-selfcheck` navigation/title verification from the extracted ZIP.
+   The same real navigation runs from the installed EXE and reinstalled EXE.
+   Each WebView2 check allows **at most two independent attempts**, each with
+   a fresh temporary browser profile, a 90-second process limit, and a
+   stage-by-stage native trace on failure. If both fail, CI stays **red**;
+   no layout-only or skipped success is accepted. This is necessary because
+   hosted win-x86 browser cold start has previously exceeded 60 seconds.
+   No production database or DPAPI key is created, moved or migrated by
+   these self-checks.
 3. Capture SHA-256 of any pre-existing `%LOCALAPPDATA%\AlTamam\altamam.db`,
    `db.key.protected`, WAL and SHM files, including their *absence* if not
    present. Create one uniquely named synthetic sentinel inside the app's
@@ -40,9 +48,10 @@ The Windows Core and Windows Release jobs must still pass on the same PR head.
 
 ## What remains NOT RUN / NOT accepted
 
-- The EXE layout self-check is **not** an interactive WebView2 end-to-end test.
-  The release workflow separately performs real Windows `--webview-selfcheck`,
-  but complete Arabic UI and operational E2E actions still require a verifier.
+- The EXE layout self-check alone is **not** an end-to-end browser test.
+  Release runs actual offline Windows WebView2 navigation from the published,
+  extracted Portable and installed/reinstalled distributions; however complete
+  Arabic UI and operational E2E actions still require a verifier.
 - Neither first-run founding admin, actual user login, 10k-person UI
   interaction, attendance, external transfer, SQLCipher restoration,
   restore rollback, actual power-loss/disk-full events, nor cross-device key
