@@ -464,13 +464,36 @@
     async function close(){
       if(!await confirmDiscard()||disposed)return;
       dismissAutoPrepared();
-      returnFocus?.focus?.();
+      // Dashboard refresh replaces its counters while the dialog stays open.
+      // Do not return keyboard focus to an element no longer in the document.
+      const focusTarget=returnFocus?.isConnected===false
+        ? view()?.querySelector?.('[data-status-filter="__AUTO_PREPARED__"]')
+        : returnFocus;
+      focusTarget?.focus?.();
     }
     overlay.addEventListener("click",event=>{if(event.target===overlay)void close();});
     overlay.addEventListener("keydown",event=>{
       if(event.key==="Escape"){
         event.preventDefault?.();
         void close(); // pending selections still require explicit discard consent
+        return;
+      }
+      if(event.key!=="Tab"||disposed)return;
+      // Keep keyboard focus within the active register and exclude disabled
+      // controls from wrap targets as selections and requests change.
+      const controls=Array.from(overlay.querySelectorAll?.(
+        'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')||[])
+        .filter(control=>!control.hidden&&control.getAttribute?.("aria-hidden")!=="true");
+      if(!controls.length){event.preventDefault?.();return;}
+      const first=controls[0],last=controls[controls.length-1];
+      const current=document.activeElement;
+      if(!controls.includes(current)){
+        event.preventDefault?.();
+        (event.shiftKey?last:first).focus?.();
+      }else if(event.shiftKey&&current===first){
+        event.preventDefault?.();last.focus?.();
+      }else if(!event.shiftKey&&current===last){
+        event.preventDefault?.();first.focus?.();
       }
     });
     search.input.addEventListener("keydown",event=>{

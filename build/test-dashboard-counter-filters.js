@@ -5,12 +5,24 @@ class El{
    this.className="";this.textContent="";this.style={};this.value="";this.dataset={};this.disabled=false;}
  get classList(){const toggle=(name,on)=>{const tags=this.className.split(/\s+/).filter(Boolean).filter(x=>x!==name);if(on)tags.push(name);this.className=tags.join(" ");};return{toggle,add:name=>toggle(name,true),remove:name=>toggle(name,false)};}
  get tBodies(){return this.children.filter(x=>x.tag==="tbody");}
+ get isConnected(){return viewport.all().includes(this);}
  append(...nodes){this.children.push(...nodes);}
  appendChild(node){this.children.push(node);return node;}
  remove(){this.removed=true;}
  replaceChildren(...nodes){this.children=nodes;}
  addEventListener(name,fn){this.handlers[name]=fn;}
+ focus(){document.activeElement=this;}
+ querySelectorAll(){
+   return this.all().filter(x=>["button","input","select","textarea"].includes(x.tag)&&
+     !x.disabled&&!x.hidden);
+ }
+ querySelector(selector){
+   if(selector==='[data-status-filter="__AUTO_PREPARED__"]')
+     return this.all().find(x=>x.dataset.statusFilter==="__AUTO_PREPARED__")||null;
+   return null;
+ }
  setAttribute(key,value){this.attrs[key]=value;}
+ getAttribute(key){return this.attrs[key]||null;}
  removeAttribute(key){delete this.attrs[key];}
  all(){return [this,...this.children.flatMap(x=>x instanceof El?x.all():[])];}
 }
@@ -73,7 +85,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
      return {data:{count:1,carriedForward:true}};
    throw Error("Unexpected action "+action);
  }};
-const document={createElement:tag=>new El(tag),
+const document={activeElement:null,createElement:tag=>new El(tag),
  getElementById:id=>({appViewport:viewport,headerRoleBadge:badge,logoutAction:logout,...nav})[id]||null,
  querySelector:s=>s===".app-sidebar"?sidebar:null,
  addEventListener:(name,fn)=>{events[name]=fn;}};
@@ -150,7 +162,8 @@ async function main(){
  assert.equal(calls.filter(x=>["SubmitAttendance","ReviseTodayAttendance",
    "PreviewAttendanceChange"].includes(x.action)).length,0);
  assert.ok(counter("__AUTO_PREPARED__"),"automatic-attendance counter is always visible");
- counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const registerOpener=counter("__AUTO_PREPARED__");
+ registerOpener.focus();registerOpener.handlers.click();await settle();
  assert.equal(calls.filter(x=>x.action==="QueryDailyRoster").at(-1).payload.statusId,
    "__AUTO_PREPARED__");
  const readOnly=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
@@ -159,6 +172,26 @@ async function main(){
    "automatic attendance modal is mounted exactly once inside the dashboard viewport");
  assert.equal(readOnly.attrs["aria-modal"],"true",
    "independent register must announce that it is a real modal");
+ const registerClose=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق");
+ assert.equal(document.activeElement,registerClose,
+   "opening the automatic register moves keyboard focus inside the modal");
+ const registerControls=()=>readOnly.all().filter(x=>
+   ["button","input","select","textarea"].includes(x.tag)&&!x.disabled&&!x.hidden);
+ assert.ok(registerControls().length>=3,"keyboard trap has active form controls");
+ let wrapBack=false;
+ readOnly.handlers.keydown({key:"Tab",shiftKey:true,preventDefault(){wrapBack=true}});
+ assert.equal(wrapBack,true,"Shift+Tab at first control is intercepted");
+ assert.equal(document.activeElement,registerControls().at(-1),
+   "Shift+Tab wraps to the last enabled control");
+ let wrapForward=false;
+ readOnly.handlers.keydown({key:"Tab",shiftKey:false,preventDefault(){wrapForward=true}});
+ assert.equal(wrapForward,true,"Tab at last control is intercepted");
+ assert.equal(document.activeElement,registerClose,"Tab wraps back to first control");
+ document.activeElement=registerOpener;
+ let recoverFocus=false;
+ readOnly.handlers.keydown({key:"Tab",shiftKey:false,preventDefault(){recoverFocus=true}});
+ assert.equal(recoverFocus,true,"Tab from outside cannot escape the active modal");
+ assert.equal(document.activeElement,registerClose,"focus is restored inside the modal");
  assert.ok(readOnly.all().some(x=>x.textContent==="P3"));
  assert.ok(readOnly.all().some(x=>x.textContent==="غياب"));
  assert.ok(readOnly.all().some(x=>x.textContent==="تحضير تلقائي 08:00"),
@@ -243,6 +276,11 @@ async function main(){
    "refreshed dashboard must keep the active modal in the same viewport");
  assert.equal(counterAuto.textContent,"المحددون: 2 من 100",
    "refresh must preserve the operator's uncommitted selection");
+ assert.equal(registerOpener.isConnected,false,
+   "dashboard refresh replaces the original automatic-register trigger");
+ const refreshedOpener=counter("__AUTO_PREPARED__");
+ assert.ok(refreshedOpener&&refreshedOpener!==registerOpener,
+   "the refreshed dashboard presents a new automatic counter");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
  discardApproved=true;
  await clearPending.handlers.click();await settle();
@@ -260,6 +298,8 @@ async function main(){
  readOnly.handlers.keydown({key:"Escape",preventDefault(){}});
  await settle();
  assert.equal(readOnly.removed,true,"approved Escape closes the register through the same safe confirmation");
+ assert.equal(document.activeElement,refreshedOpener,
+   "closing after a dashboard redraw restores focus to the current automatic counter");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
 
  // A queued approval must never write attendance after the operator leaves
