@@ -25,7 +25,10 @@ class WebViewSmokeContract(unittest.TestCase):
         self.assertIn('Shutdown(0)', HOST)
 
     def test_diagnostics_expose_early_start_and_webview_stage_without_secrets(self):
-        self.assertIn('TraceWebViewSelfCheck("WPF application startup")', APP)
+        # App.MainWindow is the WPF Window PROPERTY; use the fully qualified
+        # C# type, otherwise CS1061 breaks both Windows workflows.
+        self.assertIn('AlTamam.DesktopHost.MainWindow.TraceWebViewSelfCheck("WPF application startup")', APP)
+        self.assertNotIn('        MainWindow.TraceWebViewSelfCheck(', APP)
         self.assertIn('TraceWebViewSelfCheck("Creating CoreWebView2Environment")', HOST)
         self.assertIn('TraceWebViewSelfCheck("Ensuring CoreWebView2 control")', HOST)
         self.assertIn('TraceWebViewSelfCheck("Navigating to bundled offline WebUI")', HOST)
