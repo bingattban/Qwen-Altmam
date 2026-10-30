@@ -145,7 +145,7 @@ jobs:
       # Until categories are declared on the tests themselves, run the FULL suite.
       - name: Full deterministic test suite (all authored tests; unit+persistence+security+bridge+performance)
         run: >
-          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build
+          dotnet test AlTamam.slnx -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=full-suite.trx" --results-directory TestResults
       - name: Guard against zero-tests-executed (fail if trx reports 0 tests)
         shell: pwsh
@@ -155,6 +155,11 @@ jobs:
           $count = [int]$xml.TestRun.ResultSummary.Counters.total
           Write-Host "Tests executed: $count"
           if ($count -lt 1) { throw 'TEST SUITE RAN 0 TESTS — filter/project drift detected' }
+      - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

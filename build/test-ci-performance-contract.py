@@ -32,6 +32,8 @@ def validate(core: str, release: str) -> list[str]:
         issues.append("Core must reject zero-executed full test suites")
     if "if ($count -lt 1)" not in section:
         issues.append("Core full test count guard must fail closed")
+    if "dotnet test AlTamam.slnx -c $env:CONFIGURATION --no-build --no-restore" not in release:
+        issues.append("Release must run full solution-level tests on the existing build without restoring")
     if "  preflight:\n" not in release or "  build-test:\n    name: Build + full test suite on Windows x64 (15.01)\n    needs: preflight" not in release:
         issues.append("Release full test stage must follow preflight")
     if "  package:\n" not in release:
@@ -68,6 +70,8 @@ def validate(core: str, release: str) -> list[str]:
             if "cache: true" not in body or "cache-dependency-path: Directory.Packages.props" not in body:
                 issues.append(label + " must cache immutable NuGet package downloads in " + job.strip())
     for workflow in (core, release):
+        if "pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1" not in workflow:
+            issues.append("A real WPF/WebView2 UI E2E must run in both Windows test phases")
         if "python build/test-ci-exit-guards.py\n          if ($LASTEXITCODE -ne 0)" not in workflow:
             issues.append("Existing immediate Node/Python failure guard must be retained")
         if "python build/test-ci-performance-contract.py\n          if ($LASTEXITCODE -ne 0)" not in workflow:

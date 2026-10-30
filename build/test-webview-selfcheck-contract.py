@@ -69,6 +69,27 @@ class WebViewSmokeContract(unittest.TestCase):
             self.assertLess(workflow.index("python build/test-webview-selfcheck-contract.py"),
                             workflow.index("dotnet publish") if "dotnet publish" in workflow else len(workflow))
 
+    def test_real_windows_modal_e2e_is_required_before_packaging(self):
+        driver = (ROOT / "build/test-webview-ui-e2e.ps1").read_text(encoding="utf-8")
+        self.assertIn('Contains("--webview-ui-e2e"', HOST)
+        self.assertIn("await CheckActualWebViewModalInteractionsAsync(core)", HOST)
+        for evidence in ('location.origin === "https://manger.adwas.example"',
+                         "document.documentElement.dir", "dialog.form(",
+                         "getBoundingClientRect()", "required field rejects empty input",
+                         'key:"Escape"', "document.activeElement === opener"):
+            self.assertIn(evidence, HOST)
+        self.assertIn('TraceWebViewSelfCheck("UI-E2E PASS', HOST)
+        self.assertIn('("--webview-selfcheck","--webview-ui-e2e")', driver)
+        self.assertIn("WaitForExit(120000)", driver)
+        self.assertIn("UI-E2E PASS real Windows", driver)
+        self.assertIn("if ($process.ExitCode -ne 0)", driver)
+        for workflow in (CORE, RELEASE):
+            test_job = workflow.split("  core-tests:", 1)[-1] if workflow == CORE else workflow.split("  build-test:", 1)[-1].split("  package:", 1)[0]
+            self.assertIn("pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1", test_job)
+            self.assertIn("dotnet build AlTamam.slnx", test_job)
+            self.assertLess(test_job.index("dotnet build AlTamam.slnx"),
+                            test_job.index("pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1"))
+
 
 if __name__ == "__main__":
     unittest.main()
