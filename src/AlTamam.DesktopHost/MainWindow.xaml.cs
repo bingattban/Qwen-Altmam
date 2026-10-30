@@ -401,6 +401,16 @@ public partial class MainWindow : Window
             string title = await core.ExecuteScriptAsync("document.title").ConfigureAwait(true);
             if (!title.Contains("التمام اليومي", StringComparison.Ordinal))
                 throw new InvalidOperationException("Local UI did not load the expected document.");
+            // Check the REAL DOM, RTL, CSS and loaded bridge JS in Windows WebView2,
+            // using a bundled read-only probe. Merely checking the title misses
+            // broken script/CSS paths in both customer-facing package formats.
+            string scriptPath = Path.Combine(ResolveBundledWebUiRoot(),
+                "assets", "js", "webview-runtime-probe.js");
+            string script = await File.ReadAllTextAsync(scriptPath).ConfigureAwait(true);
+            string resultJson = await core.ExecuteScriptAsync(script).ConfigureAwait(true);
+            string? verdict = System.Text.Json.JsonSerializer.Deserialize<string>(resultJson);
+            if (!string.Equals(verdict, "WEBVIEW-UI-PASS", StringComparison.Ordinal))
+                throw new InvalidOperationException("WebView2 UI assets not ready: " + verdict);
             Console.WriteLine("WEBVIEW-SELFCHECK PASS");
             System.Windows.Application.Current.Shutdown(0);
         }
@@ -420,9 +430,9 @@ public partial class MainWindow : Window
         return candidate;
     }
 
+    // Use the EXACT SAME authority check as the authenticated C# bridge:
+    // non-default ports and credentialed URLs are forbidden, not just other hosts.
     private static bool IsLocalVirtualHost(string uriString)
-        => Uri.TryCreate(uriString, UriKind.Absolute, out Uri? uri)
-           && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-           && string.Equals(uri.Host, LocalWebUiOrigin.Host, StringComparison.OrdinalIgnoreCase);
+        => WebView2BridgeDispatcher.IsAllowedOrigin(uriString);
 }
 
