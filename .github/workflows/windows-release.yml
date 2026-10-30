@@ -37,6 +37,8 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
   CONFIGURATION: Release
   RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || (startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.0.{0}-ci', github.run_number)) }}
+  # PR builds test github.sha (synthetic merge ref), but record the source PR head independently.
+  ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   preflight:
@@ -57,6 +59,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI exit-code guard failed' }
           python build/test-ci-performance-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 CI optimization safety guard failed' }
+          python build/test-release-artifact-provenance.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
@@ -294,6 +298,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows package preservation acceptance subset failed' }
       - name: Generate SHA-256 checksums + build metadata (15.07)
         run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
+      - name: Verify bytes, checksums and exact tested commit BEFORE upload (05.12)
+        shell: pwsh
+        run: |
+          python build/verify-release-artifacts.py artifacts $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw "Release package provenance or SHA-256 verification failed" }
       # One download contains ONE customer-facing version, never both.
       - name: Upload standalone Portable package for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
