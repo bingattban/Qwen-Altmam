@@ -1069,10 +1069,13 @@
   function canSeeRoute(route) {
     if(!STATE.session) return false;
     const role=STATE.session.role;
-    if (route.path.startsWith("screens/Administration/Users/") ||
-        route.key==="Users" ||
-        route.key==="ArchivePersons" ||
-        route.key==="DeleteAuditEntry" || route.key==="EditAuditEntry")
+    // Audit presentation mutations are GeneralAdministration-only in the
+    // authoritative C# action manifest. Read-only overlay history is GA/OA.
+    if (route.key==="EditAuditEntry" || route.key==="DeleteAuditEntry")
+      return role==="GeneralAdministration";
+    if (route.key==="ModifiedDeletedAuditEntries" ||
+        route.path.startsWith("screens/Administration/Users/") ||
+        route.key==="Users" || route.key==="ArchivePersons")
       return role==="GeneralAdministration" || role==="OrdinaryAdministration";
     if(route.key==="ResetApplicationData")
       return role==="GeneralAdministration";
