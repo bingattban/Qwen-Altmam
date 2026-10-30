@@ -28,14 +28,14 @@ No new business, history, security, authorization, or retention policy is chosen
 | DTO / bridge action | **None added or altered.** Existing `action-manifest.json`, bridge payloads, `screen-manifest.json`, server handlers and transport are unchanged |
 | Input validation | CI validator compares all checked-in `build/test-*.js` with both workflows, demands an immediate PowerShell failure guard after every JS test and after the validator itself, and self-tests a masked-exit example |
 | RBAC / security | **No permission widening.** All mutation authorization remains in C#; CI explicitly verifies existing bridge-intent and audit-RBAC tests without permitting masked failures |
-| Error handling | A failing Node test or Python validator aborts its Windows preflight job. The route script only changes text and tooltip for explicitly identified misleading return-link labels; no application error codes are changed |
+| Error handling | A failing Node test or Python validator aborts its Windows preflight job. The route script corrects misleading return-link labels and lets Escape navigate from both hash and hashless links to the unchanged main entrypoint; no application error codes are changed |
 | Transaction boundary / rollback | No data mutation, SQL transaction, migration, history or archive change. Windows Release still blocks both packages until full test success. UI changes are presentation-only and revertible by reverting the feature commit |
-| Tests | New `build/test-ci-exit-guards.py` includes failing and passing fixtures; `build/test-route-return-link-honesty.js` verifies all canonical HTML routes retain the shared module and tests label, href, Escape and unrelated links. Both run in the Core and Release preflight |
+| Tests | New `build/test-ci-exit-guards.py` includes failing and passing fixtures; `build/test-route-return-link-honesty.js` verifies all canonical HTML routes retain the shared module and tests label, href, Escape for hash/hashless destinations, and unrelated links. Both run in the Core and Release preflight |
 
 ## 05.05 — Honest UI states / unresolved functional work
 
 - Existing `bridge-client.js` distinguishes Loading, Empty, Validation Error, Conflict, Forbidden, Success for supported read-only WebView2 routes; unsupported routes disable their fake REFRESH action and display an explicit development state.
-- This patch replaces **only misleading navigation labels**, such as "تشغيل التفاعل الكامل" on links actually returning to the main UI. The original target `href`, scripts, working functional screens and server behavior are preserved.
+- This patch replaces **only misleading navigation labels**, such as "تشغيل التفاعل الكامل" on links actually returning to the main UI. The original target `href`, working functional screens and server behavior are preserved; the shared Escape handler now supports both hash and hashless main-entry links.
 - The standalone route skeletons are **not automatically complete** because a directory link or disabled REFRESH exists. Current static inventory still contains many placeholders beyond the four integrated standalone read-only routes. Functional completion must be measured against each screen's actual owning-phase contract, without inventing a new phase or claiming all 69 screens finished.
 
 ## Acceptance still required
