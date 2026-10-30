@@ -50,6 +50,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Monthly cell details UI regression' }
           node build/test-dashboard-counter-filters.js
           node build/test-dashboard-route-navigation.js
+          if ($LASTEXITCODE -ne 0) { throw 'Section 05 Dashboard route navigation regression' }
           if ($LASTEXITCODE -ne 0) { throw 'Dashboard counter filter UI regression' }
           node build/test-attendance-ui.js
           if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
