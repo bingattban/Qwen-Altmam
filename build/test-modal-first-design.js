@@ -101,6 +101,16 @@ check(/livePreview\.style\.backgroundColor/,admin,"new status shows the selected
 check(/\.monthly-revision-table\{/,css,"historical revision table scrolls inside modal");
 check(/\.transfer-review-summary\{/,css,"transfer summary is structured in the modal");
 check(/app-popup-on-content modal-lg/,admin,"import results are never appended below the table");
+
+check(/historyDetails\.setAttribute\("aria-modal","true"\)/,admin,
+  "import outcome opens as an accessible modal");
+check(/const closeOutcome=\(\)=>\{\s*detailsSerial\+\+/,admin,
+  "closing an import outcome invalidates pending reads");
+check(/historyDetails\.replaceChildren\(dismiss,warning\("جارٍ قراءة تفاصيل الدفعة/,admin,
+  "import batch details can be dismissed during native fetch");
+check(/historyDetails\.replaceChildren\(dismiss,panel\)/,admin,
+  "import outcome close button remains mounted across replies");
+
 check(/app-reset-verification-modal/,admin,"full reset final challenge is overlaid");
 
 for(const x of ['x:Name="webViewHost"','x:Name="startupPanel"',

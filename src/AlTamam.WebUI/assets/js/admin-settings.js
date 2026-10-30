@@ -293,14 +293,33 @@
     const status=node("div","admin-note");
     const analysis=node("div","admin-note app-popup-on-content modal-lg");
     analysis.setAttribute("role","dialog");
+    analysis.setAttribute("aria-modal","true");
     analysis.setAttribute("aria-label","نتيجة تحليل الاستيراد");
+    analysis.addEventListener("keydown",event=>{
+      if(event.key!=="Escape")return;
+      event.preventDefault?.();
+      analysis.replaceChildren();
+      examine.focus?.();
+    });
     const confirmBox=node("div","admin-note");
     const history=card("سجل دفعات الاستيراد المعتمدة");
     const historyContent=node("div","admin-note");
     const historyDetails=node("div","admin-note app-popup-on-content modal-lg");
     historyDetails.setAttribute("role","dialog");
+    historyDetails.setAttribute("aria-modal","true");
     historyDetails.setAttribute("aria-label","تفاصيل الدفعة المستوردة");
-    let detailsSerial=0;
+    let detailsSerial=0,historyOpener=null;
+    const closeOutcome=()=>{
+      detailsSerial++;
+      historyDetails.replaceChildren();
+      const previous=historyOpener;historyOpener=null;
+      previous?.focus?.();
+    };
+    historyDetails.addEventListener("keydown",event=>{
+      if(event.key!=="Escape")return;
+      event.preventDefault?.();
+      closeOutcome();
+    });
     const refreshHistory=btn("تحديث سجل الاستيراد",loadHistory,"btn btn-outline");
     history.append(refreshHistory,historyContent,historyDetails);
     let workbookToken="",previewToken="",serial=0;
@@ -308,7 +327,7 @@
     async function loadHistory(){
       const request=++detailsSerial;
       historyContent.replaceChildren(warning("جارٍ قراءة سجل الاستيراد..."));
-      historyDetails.replaceChildren();
+      historyDetails.replaceChildren();historyOpener=null;
       try{
         const response=await api().invoke("QueryImportOutcome",{});
         if(!valid()||request!==detailsSerial)return;
@@ -334,7 +353,11 @@
 
     async function showOutcome(batchId){
       const request=++detailsSerial;
-      historyDetails.replaceChildren(warning("جارٍ قراءة تفاصيل الدفعة..."));
+      historyOpener=document.activeElement||null;
+      // Keep dismissal available throughout the native read, including errors.
+      const dismiss=btn("✕ إغلاق",closeOutcome,"btn btn-outline app-modal-close");
+      historyDetails.replaceChildren(dismiss,warning("جارٍ قراءة تفاصيل الدفعة..."));
+      dismiss.focus?.();
       try{
         const response=await api().invoke("QueryImportOutcome",{importBatchId:batchId});
         if(!valid()||request!==detailsSerial)return;
@@ -364,16 +387,21 @@
                 throw Error("لم يؤكد الخادم إنشاء ملف Excel.");
               historyDetails.appendChild(node("p","settings-success",
                 "تم حفظ تقرير الأخطاء: "+result.data.filePath));
-            }catch(e){if(valid())errors(historyDetails,e);}
-            finally{exportButton.disabled=false;}
+            }catch(e){
+              if(valid()&&request===detailsSerial)
+                panel.appendChild(warning(e.message||"تعذر حفظ التقرير."));
+            }finally{exportButton.disabled=false;}
           },"btn btn-primary");
           panel.appendChild(exportButton);
         }else{
           panel.appendChild(node("p","section-description",
             "لا توجد صفوف مستبعدة لهذه الدفعة."));
         }
-        historyDetails.replaceChildren(btn("✕ إغلاق",()=>historyDetails.replaceChildren(),"btn btn-outline app-modal-close"),panel);
-      }catch(e){if(valid()&&request===detailsSerial)errors(historyDetails,e);}
+        historyDetails.replaceChildren(dismiss,panel);
+      }catch(e){
+        if(valid()&&request===detailsSerial)
+          historyDetails.replaceChildren(dismiss,warning(e.message||"تعذر قراءة تفاصيل الدفعة."));
+      }
     }
     const valid=()=>state.active==="import"&&page.isConnected!==false;
     function reset(){
@@ -495,8 +523,13 @@
           }catch(e){errors(confirmBox,e);}
           finally{preview.disabled=false;}
         },"btn btn-primary");
-        analysis.replaceChildren(btn("✕ إغلاق",()=>analysis.replaceChildren(),"btn btn-outline app-modal-close"),summary);
+        const closeAnalysis=btn("✕ إغلاق",()=>{
+          analysis.replaceChildren();
+          examine.focus?.();
+        },"btn btn-outline app-modal-close");
+        analysis.replaceChildren(closeAnalysis,summary);
         if(Number(report.newCount)>0)analysis.appendChild(preview);
+        closeAnalysis.focus?.();
         status.replaceChildren(node("p","settings-success","اكتمل التحليل؛ راجع الصفوف قبل اعتماد الخطة."));
       }catch(e){errors(status,e);}
       finally{examine.disabled=false;}
