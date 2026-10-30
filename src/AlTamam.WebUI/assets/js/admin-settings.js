@@ -45,17 +45,36 @@
     panel.setAttribute("role","dialog");
     panel.setAttribute("aria-modal","true");
     if(initiallyHidden)panel.hidden=true;
-    const close=btn("✕ إغلاق",()=>{
-      if(hideOnClose)panel.hidden=true;else panel.remove();
-    },"btn btn-outline app-modal-close");
+    let returnFocus=null;
+    const dismiss=()=>{
+      if(hideOnClose)panel.hidden=true;else panel.remove?.();
+      const previous=returnFocus;returnFocus=null;
+      previous?.focus?.();
+    };
+    const close=btn("✕ إغلاق",dismiss,"btn btn-outline app-modal-close");
     panel.appendChild(close);
     panel.addEventListener("keydown",event=>{
-      if(event.key!=="Escape")return;
-      event.preventDefault?.();
-      if(hideOnClose)panel.hidden=true;else panel.remove();
+      if(event.key==="Escape"){
+        event.preventDefault?.();dismiss();return;
+      }
+      if(event.key!=="Tab")return;
+      // Constrain keyboard navigation to the active form. The optional
+      // query keeps existing dependency-free virtual-DOM tests compatible.
+      const controls=Array.from(panel.querySelectorAll?.(
+        'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')||[])
+        .filter(control=>!control.hidden&&control.getAttribute?.("aria-hidden")!=="true");
+      if(controls.length<2)return;
+      const first=controls[0],last=controls[controls.length-1];
+      if(event.shiftKey&&document.activeElement===first){
+        event.preventDefault?.();last.focus?.();
+      }else if(!event.shiftKey&&document.activeElement===last){
+        event.preventDefault?.();first.focus?.();
+      }
     });
-    return {open:()=>{panel.hidden=false;close.focus?.();},
-      close:()=>{if(hideOnClose)panel.hidden=true;else panel.remove();}};
+    return {open:()=>{
+      returnFocus=document.activeElement||null;
+      panel.hidden=false;close.focus?.();
+    },close:dismiss};
   }
   function field(label,value,type) {
     const wrap=node("label","admin-input");
@@ -1066,7 +1085,11 @@
       const refreshStatusPreview=()=>{
         livePreview.textContent=(name.input.value.trim()||"اسم الحالة")+
           " — "+(symbol.input.value.trim()||"الرمز");
-        livePreview.style.borderColor=safeColor(color.input.value);
+        const selected=safeColor(color.input.value);
+        livePreview.style.borderColor=selected;
+        livePreview.style.setProperty?.("--status-dot",selected);
+        const rgb=[1,3,5].map(i=>parseInt(selected.slice(i,i+2),16));
+        livePreview.style.backgroundColor="rgba("+rgb.join(",")+",0.12)";
       };
       name.input.addEventListener("input",refreshStatusPreview);
       symbol.input.addEventListener("input",refreshStatusPreview);

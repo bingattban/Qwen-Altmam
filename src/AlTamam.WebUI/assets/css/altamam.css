@@ -1643,6 +1643,18 @@ label.app-unified-search-wrap>.app-unified-search-caption{
     0 24px 65px rgba(0,10,24,.28);
 }
 .app-operational-modal[hidden],.attendance-drafts-modal[hidden]{display:none!important}
+.status-live-preview{
+  display:inline-flex;align-items:center;gap:8px;
+  width:max-content;max-width:100%;padding:8px 13px;
+  border:1px solid var(--border-color);border-radius:999px;
+  overflow-wrap:anywhere;font-weight:800;
+  transition:border-color .15s ease,background-color .15s ease
+}
+.status-live-preview::before{width:9px;height:9px}
+.app-operational-modal:focus-within{outline:2px solid transparent}
+.app-operational-modal>.app-modal-close{
+  position:sticky;top:0;z-index:3;background:var(--bg-surface)
+}
 .app-operational-modal.modal-sm{width:min(94vw,480px)}
 .app-operational-modal.modal-md{width:min(94vw,720px)}
 .app-operational-modal.modal-lg,.app-popup-on-content.modal-lg{width:min(95vw,940px)}

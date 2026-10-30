@@ -85,6 +85,12 @@ check(/PreviewPersonIdentityUpdate/,admin,"person edits retain the native previe
 check(/معاينة تعديل هوية الفرد/,admin,"old versus new identity opens the shared review");
 check(/\.audit-detail-overlay\{z-index:1350\}/,css,"audit details appear above audit history");
 check(/\.closed-correction-fields\{/,css,"exceptional correction grid is responsive");
+check(/\.status-live-preview\{/,css,"status creation previews configured badge");
+check(/returnFocus=document\.activeElement/,functional,"automatic register restores focus");
+check(/let returnFocus=null;/,admin,"admin action dialogs restore their opening control");
+check(/if\(event\.key!=="Tab"\)return;/,admin,"admin dialogs trap forward/backward keyboard Tab");
+check(/livePreview\.style\.backgroundColor/,admin,"new status shows the selected color");
+
 check(/\.monthly-revision-table\{/,css,"historical revision table scrolls inside modal");
 check(/\.transfer-review-summary\{/,css,"transfer summary is structured in the modal");
 check(/app-popup-on-content modal-lg/,admin,"import results are never appended below the table");
