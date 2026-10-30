@@ -34,9 +34,14 @@ const document={
     assert.equal(selector,'a[href*="index.html#"]');
     return elements.filter(e=>e.href.includes("index.html#"));
   },
-  querySelector:()=>elements[0]
+  querySelector:(selector)=>{
+    assert.equal(selector,'a[href*="index.html"]');
+    return currentReturnLink;
+  }
 };
-const window={location:{assign:()=>{}}};
+let currentReturnLink=elements[0];
+const destinations=[];
+const window={location:{assign:(href)=>destinations.push(href)}};
 vm.runInNewContext(screenModule,{document,window},{filename:"screen-module.js",timeout:1000});
 assert.equal(typeof events.DOMContentLoaded,"function","normalization must run when route loads");
 events.DOMContentLoaded();
@@ -47,4 +52,11 @@ assert.equal(elements[2].textContent,"العودة إلى الرئيسية","exi
 assert.equal(elements[3].textContent,"تشغيل التفاعل الكامل","external unrelated links must be preserved");
 assert.equal(elements[0].href,"../../../index.html#AuditLog","no route destination changed");
 assert.equal(typeof events.keydown,"function","Escape navigation must remain supported");
+events.keydown({key:"Escape"});
+assert.equal(destinations.at(-1),"../../../index.html#AuditLog");
+currentReturnLink={href:"../../index.html"};
+events.keydown({key:"Escape"});
+assert.equal(destinations.at(-1),"../../index.html","root-level modules must also support Escape");
+events.keydown({key:"Enter"});
+assert.equal(destinations.length,2,"other keys must not trigger navigation");
 console.log("SECTION05 ROUTE LINK HONESTY PASS — "+scanned+" routes checked");
