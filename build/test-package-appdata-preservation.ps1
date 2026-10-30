@@ -1,6 +1,7 @@
 # Automated Windows PACKAGE acceptance subset, NOT end-to-end GUI/manual approval.
 # Exercised on each architecture's fresh GitHub Windows runner after full tests:
 # exact shipped ZIP, exact shipped Inno Setup EXE, install/uninstall/reinstall,
+# real Windows WebView2 navigation for BOTH packaged EXEs, not only raw publish,
 # same per-user AppData with no data relocation and no user-data deletion.
 # Only the unique CI sentinel is removed. Existing encrypted records are untouched.
 [CmdletBinding()]
@@ -89,6 +90,9 @@ try {
     & python build/validate-layout.py $portableDir --portable --arch $ExpectedArch
     Assert-True ($LASTEXITCODE -eq 0) "Unzipped Portable failed real PE and offline dependency inspection"
     Run-Checked $portableExe @("--layout-selfcheck") 90
+    # Real Windows WebView2 navigation from the extracted customer-facing ZIP.
+    # This is an automated smoke test, NOT interactive end-to-end or disconnected physical UAT.
+    Run-Checked $portableExe @("--webview-selfcheck") 90
     Assert-DataPreserved "Portable direct run"
 
     # Fresh silent install from the REAL installer, not the raw publish directory.
@@ -98,6 +102,7 @@ try {
     $portableHash = Hash-OrAbsent $portableExe
     Assert-True ((Hash-OrAbsent $installedExe) -eq $portableHash) "Portable and Installer EXEs differ"
     Run-Checked $installedExe @("--layout-selfcheck") 90
+    Run-Checked $installedExe @("--webview-selfcheck") 90
     Assert-DataPreserved "Installer run"
 
     # Verify unattended uninstall removes installed binaries but retains the
@@ -109,6 +114,7 @@ try {
     Run-Checked $installerExe (Inno-Args $installedDir)
     Assert-True ((Hash-OrAbsent $installedExe) -eq $portableHash) "Reinstall EXE differs"
     Run-Checked $installedExe @("--layout-selfcheck") 90
+    Run-Checked $installedExe @("--webview-selfcheck") 90
     Assert-DataPreserved "Reinstall"
     Write-Host ("PACKAGE-PRESERVATION PASS: " + $ExpectedArch +
         "; genuine Portable + Installer + uninstall/reinstall; unchanged LocalAppData data/key")
