@@ -11,11 +11,12 @@ class Element {
   prepend(x){this.children.unshift(x);}
   replaceChildren(...parts){this.children=[...parts];}
   setAttribute(key,value){this.attrs[key]=value;}
+  focus(){context.document.activeElement=this;}
   addEventListener(key,fn){this.handlers[key]=fn;}
   all(){return [this,...this.children.flatMap(c=>c instanceof Element?c.all():[])];}
 }
 const viewport=new Element("main"),calls=[];
-let committed=false;
+let committed=false,delayOutcome=false,finishOutcome=null;
 const sampleBatch={importBatchId:"IMP-TEST-1",fileName:"كشف_القوة.xlsx",
   totalRows:3,acceptedRows:2,rejectedRows:1,status:"COMMITTED",
   committedAtUtc:"2026-10-23T20:00:00Z"};
@@ -33,10 +34,15 @@ const responses={
 };
 const bridge={invoke:async (name,body)=>{
   calls.push({name,body});
-  if(name==="QueryImportOutcome")return {data:body?.importBatchId?
-    {batch:sampleBatch,issues:[{row:4,name:"مكرر",serviceNumberA:"001",
-      reason:"الرقم موجود"}]}:
-    {batches:committed?[sampleBatch]:[]}};
+  if(name==="QueryImportOutcome"){
+    const data=body?.importBatchId?
+      {batch:sampleBatch,issues:[{row:4,name:"مكرر",serviceNumberA:"001",
+        reason:"الرقم موجود"}]}:
+      {batches:committed?[sampleBatch]:[]};
+    if(body?.importBatchId&&delayOutcome)
+      return new Promise(resolve=>{finishOutcome=()=>resolve({data});});
+    return {data};
+  }
   if(!(name in responses)) throw Error("Unexpected bridge call "+name);
   if(name==="CommitImport")committed=true;
   return {data:responses[name]};
@@ -52,7 +58,7 @@ const importReviews=[];
 const context={window:{AltamamBridge:bridge,AltamamDialog:{
   detailsReview:async(data,opts)=>{importReviews.push({data,opts});return allowImport;}
 }},
-  document:{getElementById:x=>x==="appViewport"?viewport:null,
+  document:{activeElement:null,getElementById:x=>x==="appViewport"?viewport:null,
     createElement:tag=>new Element(tag)},
   FileReader:FakeFileReader,console,confirm:()=>true,
   alert:()=>{throw Error("unexpected alert")},
@@ -96,6 +102,28 @@ async function run(){
   assert.equal(calls.filter(x=>x.name==="ExportImportIssues").length,1);
   assert.equal(calls.find(x=>x.name==="ExportImportIssues").body.importBatchId,"IMP-TEST-1");
   assert.ok(all().some(x=>x.textContent.includes("issues.xlsx")));
+
+  // A pending batch-details read must provide immediate close, allow Escape,
+  // restore the original action focus, and never revive stale results after close.
+  const outcome=all().find(x=>x.attrs["aria-label"]==="تفاصيل الدفعة المستوردة");
+  assert.equal(outcome.attrs["aria-modal"],"true","batch details is an accessible modal");
+  const dismiss=outcome.all().find(x=>x.tag==="button"&&x.textContent==="✕ إغلاق");
+  assert.ok(dismiss);
+  outcome.handlers.keydown({key:"Escape",preventDefault(){}});
+  assert.equal(outcome.children.length,0,"Escape dismisses batch details");
+  delayOutcome=true;
+  const openOutcome=button("عرض الدفعة");
+  openOutcome.focus();openOutcome.handlers.click();
+  assert.ok(finishOutcome,"server outcome read is still pending");
+  const pendingClose=outcome.all().find(x=>x.tag==="button"&&x.textContent==="✕ إغلاق");
+  assert.ok(pendingClose,"the close button exists before the server replies");
+  pendingClose.handlers.click();
+  assert.equal(outcome.children.length,0,"close works during pending response");
+  assert.equal(context.document.activeElement,openOutcome,"focus restored to batch row action");
+  finishOutcome();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(outcome.children.length,0,"late response does not redraw a dismissed batch");
+  delayOutcome=false;
   picker.files=[{name:"too-large.xlsx",size:163_841,base64:"A"}];
   const before=calls.length;
   await button("تحليل الملف").handlers.click();

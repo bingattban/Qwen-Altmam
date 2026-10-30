@@ -43,6 +43,7 @@ class Element {
 const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
+let deferAuditHistory = false, completeDeferredAuditHistory = null;
 const document = {
   activeElement:null,
   getElementById: key => key === "appViewport" ? viewport : null,
@@ -51,6 +52,11 @@ const document = {
 const bridge = {
   invoke: async (name, body) => {
     calls.push({ name, body });
+    if(name==="QueryAuditPresentationChanges" && deferAuditHistory){
+      return new Promise(resolve=>{
+        completeDeferredAuditHistory=()=>resolve({data:{items:[],total:0,hasNext:false}});
+      });
+    }
     const responses = {
       GetSettingsOverview: { username:"test-user", roleLabelAr:"الإدارة العامة",
         backupDirectory:"E:\\AlTamamAlYawmi\\Backups", backupTime:"16:00",
@@ -73,6 +79,7 @@ const bridge = {
       GetAllowedRoles: [{ role:"Supervisor",name:"مشرف" }],
       ListUserAccounts: { items:[],total:0,hasNext:false },
       QueryAuditLog: { items:[],total:0,hasNext:false },
+      QueryAuditPresentationChanges: { items:[],total:0,hasNext:false },
       GetActiveAttendanceStatuses: [{statusId:"STS-ABSENT",displayName:"غياب"}],
       GetCustomFieldDefinitions:{items:[
         {columnId:"FLD-SYS-NAME",technicalKey:"sys_person_name",caption:"الاسم",
@@ -280,6 +287,45 @@ async function run() {
   await buttonNamed("بحث").handlers.click();
   assert.ok(calls.some(x=>x.name==="QueryAuditLog"&&x.body.term==="اسم تجريبي"),
     "audit search must query matching records across all pages");
+
+  // Audit history is an action-triggered modal. Closing it via Escape, its
+  // close button, or a late backend response must never revive stale records.
+  const historyTrigger=buttonNamed("القيود المعدلة والمحذوفة");
+  assert.ok(historyTrigger,"GeneralAdministration can open audit history");
+  historyTrigger.focus();historyTrigger.handlers.click();
+  const historyModal=visible().find(x=>x.attrs["aria-label"]==="القيود المعدلة والمحذوفة");
+  assert.ok(historyModal&&!historyModal.hidden,"audit history opens as a modal");
+  assert.equal(historyModal.attrs["aria-modal"],"true");
+  assert.ok(historyModal.className.includes("modal-xl"));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(historyModal.all().some(x=>x.textContent==="لا توجد قيود معدلة أو مخفية."),
+    "empty history renders only after a server response");
+  const historyClose=historyModal.all().find(x=>x.tag==="button"&&x.textContent==="✕ إغلاق");
+  assert.ok(historyClose,"audit history has a keyboard-focusable close control");
+  assert.equal(document.activeElement,historyClose,"opening history focuses its close control");
+  historyModal.handlers.keydown({key:"Escape",preventDefault(){}});
+  assert.equal(historyModal.hidden,true,"Escape closes history");
+  assert.equal(document.activeElement,historyTrigger,"Escape restores focus to the opener");
+  assert.ok(!historyModal.all().some(x=>x.textContent==="لا توجد قيود معدلة أو مخفية."),
+    "closing clears stale history content");
+
+  deferAuditHistory=true;
+  historyTrigger.focus();historyTrigger.handlers.click();
+  assert.ok(!historyModal.hidden);
+  assert.ok(completeDeferredAuditHistory,"history request remains pending");
+  historyClose.handlers.click();
+  assert.ok(historyModal.hidden,"close button dismisses history during fetch");
+  completeDeferredAuditHistory();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(historyModal.hidden,"late audit response cannot reopen history");
+  assert.ok(!historyModal.all().some(x=>x.textContent==="لا توجد قيود معدلة أو مخفية."),
+    "late audit responses cannot render after dismissal");
+  assert.equal(document.activeElement,historyTrigger,
+    "close button restores focus even while server request is pending");
+  deferAuditHistory=false;
+  assert.equal(calls.filter(x=>x.name==="UpdateAuditPresentation"||
+    x.name==="DeleteAuditPresentation").length,0,
+    "opening and dismissing audit history does not mutate audit data");
   buttonNamed("العودة إلى الإدارة").handlers.click();
   byDataset("adminSection").find(x=>x.dataset.adminSection==="users").handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
