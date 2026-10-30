@@ -19,6 +19,7 @@ const viewport=new El("main"),logout=new El("button"),sidebar=new El("aside"),
 for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]=new El("button");
 let transferCount=0,expandedRoster=false,approveReview=true;
 let discardApproved=false,discardPrompts=0;
+let deferAutoReview=false,releaseAutoReview=null;
 let autoPeople=[{personId:"P3",name:"P3",serviceNumberA:"12345",
   siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
   savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 08:00"}];
@@ -78,7 +79,11 @@ const document={createElement:tag=>new El(tag),
  addEventListener:(name,fn)=>{events[name]=fn;}};
 const reviews=[];
 const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
- AltamamDialog:{attendanceReview:async(data,opts)=>{reviews.push({data,opts});return approveReview;},
+ AltamamDialog:{attendanceReview:async(data,opts)=>{
+     reviews.push({data,opts});
+     if(deferAutoReview)return new Promise(resolve=>{releaseAutoReview=resolve;});
+     return approveReview;
+   },
    confirm:async()=>{discardPrompts++;return discardApproved;}}},
  document,location:{hash:"#dashboard"},history:{replaceState:()=>{}},Date,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
@@ -256,6 +261,31 @@ async function main(){
  await settle();
  assert.equal(readOnly.removed,true,"approved Escape closes the register through the same safe confirmation");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
+
+ // A queued approval must never write attendance after the operator leaves
+ // the automatic register (e.g. navigation to another top-level section).
+ context.window.AltamamFunctional.render("dashboard");await settle();
+ counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const abandoned=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
+ assert.ok(abandoned,"fresh automatic register can reopen after a prior close");
+ const individualStatus=abandoned.all().find(x=>x.tag==="select"&&
+   x.attrs["aria-label"]==="الحالة الجديدة لـ P3");
+ individualStatus.value="STS-PRESENT";
+ deferAutoReview=true;
+ const writesBeforeNavigation=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ const startReview=abandoned.all().find(x=>x.tag==="button"&&x.textContent==="معاينة التعديل");
+ startReview.handlers.click();await settle();
+ assert.equal(typeof releaseAutoReview,"function",
+   "a real attendanceReview must remain pending for the race regression");
+ context.window.AltamamFunctional.render("settings");await settle();
+ assert.equal(abandoned.removed,true,"leaving the dashboard unmounts automatic register");
+ releaseAutoReview(true);await settle();
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,writesBeforeNavigation,
+   "late human approval after navigation must not commit stale attendance");
+ deferAutoReview=false;releaseAutoReview=null;
+ context.window.AltamamFunctional.render("dashboard");await settle();
+ assert.ok(counter("all"),"navigation does not break the four main sections");
+
  expandedRoster=true;
  counter("all").handlers.click();await settle();
  const dailyPanel=()=>viewport.all().find(x=>x.className.includes("daily-roster-panel"));
