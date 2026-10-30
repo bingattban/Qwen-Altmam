@@ -114,6 +114,11 @@ jobs:
           $count = [int]$xml.TestRun.ResultSummary.Counters.total
           Write-Host "Core full tests executed: $count"
           if ($count -lt 1) { throw 'Core suite executed zero tests' }
+      - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
       - name: Capture measured ten-thousand-person search benchmark and Windows runner metadata
         shell: pwsh
         env:

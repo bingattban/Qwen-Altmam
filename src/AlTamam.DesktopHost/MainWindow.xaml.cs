@@ -412,6 +412,83 @@ public partial class MainWindow : Window
     /// WebView2, resolves the virtual host, loads the bundled document, and verifies
     /// its title without requiring a database or credentials.
     /// </summary>
+
+    /// <summary>CI-only real WPF/WebView2 RTL/modal interaction check, with an
+    /// isolated temporary profile and no SQLCipher, bridge, or user data.</summary>
+    private static async Task CheckActualWebViewModalInteractionsAsync(CoreWebView2 core)
+    {
+        bool ready = false;
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            string available = await core.ExecuteScriptAsync(
+                "Boolean(window.AltamamDialog && window.AltamamDialog.form && document.getElementById('appModalBackdrop'))")
+                .ConfigureAwait(true);
+            if (available == "true") { ready = true; break; }
+            await Task.Delay(200).ConfigureAwait(true);
+        }
+        if (!ready)
+            throw new InvalidOperationException("UI-E2E: offline modal controller did not initialize.");
+
+        string result = await core.ExecuteScriptAsync("""
+            (() => {
+                const check = (value, name) => { if (!value) throw new Error("UI-E2E: " + name); };
+                check(location.origin === "https://manger.adwas.example", "offline origin");
+                check(document.documentElement.dir === "rtl", "Arabic RTL document");
+                check(document.querySelector("#appViewport"), "live application viewport");
+                for (const [id, label] of [
+                    ["dashboard", "الرئيسية"], ["monthly", "التمام الشهري"],
+                    ["admin", "الإدارة"], ["settings", "الإعدادات"]
+                ]) {
+                    const nav = document.getElementById("navBtn-" + id);
+                    check(nav && nav.querySelector("span")?.textContent === label, "navigation " + id);
+                }
+                check([...document.scripts].every(s => !s.src ||
+                    new URL(s.src).origin === location.origin), "local scripts only");
+                const dialog = window.AltamamDialog;
+                const backdrop = document.getElementById("appModalBackdrop");
+                check(!backdrop.classList.contains("open"), "modal initially closed");
+                const opener = document.createElement("button");
+                opener.type = "button";
+                opener.textContent = "UI-E2E";
+                document.body.appendChild(opener);
+                opener.focus();
+                dialog.form([{name:"e2eName",label:"اسم الاختبار",type:"text",
+                    required:true,minLength:3}], {title:"اختبار نافذة الإدخال",size:"md"});
+                check(backdrop.classList.contains("open"), "form opens as modal");
+                check(backdrop.getAttribute("aria-modal") === "true", "dialog accessibility");
+                check(backdrop.classList.contains("dialog-md"), "medium modal size");
+                const field = document.querySelector('#appModalBody input[name="e2eName"]');
+                const accept = document.querySelector("#appModalBody .app-dialog-actions .btn-primary");
+                check(field && accept, "live modal controls");
+                check(getComputedStyle(backdrop).display !== "none", "modal visible");
+                const bounds = backdrop.querySelector(".modal-box").getBoundingClientRect();
+                check(bounds.width > 0 &&
+                    Math.abs(bounds.left + bounds.width / 2 - innerWidth / 2) < 32,
+                    "centered WPF WebView2 dialog");
+                accept.click();
+                check(backdrop.classList.contains("open") &&
+                    document.querySelector("#appModalBody .app-dialog-error").textContent,
+                    "required field rejects empty input");
+                field.value = "Valid E2E";
+                accept.click();
+                check(!backdrop.classList.contains("open"), "valid form closes");
+                check(document.activeElement === opener, "form restores opener focus");
+                dialog.confirm("تأكيد الاختبار",{size:"sm"});
+                check(backdrop.classList.contains("open") &&
+                    backdrop.classList.contains("dialog-sm"), "confirmation size");
+                document.dispatchEvent(new KeyboardEvent("keydown",
+                    {key:"Escape", bubbles:true,cancelable:true}));
+                check(!backdrop.classList.contains("open"), "Escape dismisses dialog");
+                check(document.activeElement === opener, "Escape restores focus");
+                opener.remove();
+                return "UI-E2E PASS";
+            })()
+            """).ConfigureAwait(true);
+        if (result != "\"UI-E2E PASS\"")
+            throw new InvalidOperationException("UI-E2E: real browser interaction failed: " + result);
+        TraceWebViewSelfCheck("UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus");
+    }
+
     private static async Task CheckActualWebViewNavigationAsync(CoreWebView2 core)
     {
         var completion = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
@@ -430,6 +507,8 @@ public partial class MainWindow : Window
             string title = await core.ExecuteScriptAsync("document.title").ConfigureAwait(true);
             if (!title.Contains("التمام اليومي", StringComparison.Ordinal))
                 throw new InvalidOperationException("Local UI did not load the expected document.");
+            if (Environment.GetCommandLineArgs().Contains("--webview-ui-e2e", StringComparer.Ordinal))
+                await CheckActualWebViewModalInteractionsAsync(core).ConfigureAwait(true);
             TraceWebViewSelfCheck("PASS bundled offline WebUI title verified");
             Console.WriteLine("WEBVIEW-SELFCHECK PASS");
             System.Windows.Application.Current.Shutdown(0);
