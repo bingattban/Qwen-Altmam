@@ -20,7 +20,7 @@
     <div class="topbar-controls">
       <span class="badge-pill">المرحلة: Phase 05</span>
       <span class="badge-pill">النوع: screen</span>
-      <a class="btn btn-outline present70aa3b108" href="../../../../index.html#Statuses">↗ فتح في المنظومة الكاملة</a>
+      <a class="btn btn-outline present70aa3b108" href="../../../../index.html#admin">العودة إلى شاشة الإدارة</a>
     </div>
   </header>
 
@@ -39,28 +39,21 @@
           </div>
         </div>
         <div class="presentb9bbe540d">
-          <button class="btn btn-primary" data-bridge-action="REFRESH" data-bridge-route="Statuses">↻ تحديث البيانات</button>
-          <a class="btn btn-teal present4edeb9e71" href="../../../../index.html#Statuses">تشغيل التفاعل الكامل</a>
+          <button id="routeSubmit" class="btn btn-primary" type="button" data-bridge-action="REFRESH" data-bridge-route="Statuses">↻ تحديث البيانات</button>
+          <a class="btn btn-teal present4edeb9e71" href="../../../../index.html#admin">العودة إلى شاشة الإدارة</a>
         </div>
       </div>
 
-      <div class="presentc67077d00">
-        <div class="present0d6e2345d">
-          <strong>حالة التحميل والبيانات (Loading / Ready State):</strong>
-          <p class="present65c9a6077">يجري ربط الشاشة خلال مراحل تنفيذ المشروع مع <code>WebView2BridgeDispatcher</code> واستقبال أحداث التحديث <code>UiInvalidationEvents</code>.</p>
+      <section class="card" aria-label="البيانات الحقيقية للشاشة">
+        <p class="section-description">عرض حالات التحضير النشطة المسجلة من قاعدة البيانات المحلية للقراءة فقط. لإدارة الحالات استخدم شاشة الإدارة الرئيسية.</p>
+        <span class="badge-pill">قراءة فقط</span>
+        <div id="routeResults" role="region" aria-label="الحالات النشطة" aria-live="polite">
+          <p>اضغط تحديث البيانات لقراءة الحالات النشطة.</p>
         </div>
-        <div class="present0d6e2345d">
-          <strong>حالة الصلاحيات والتحقق (RBAC &amp; Validation):</strong>
-          <p class="present65c9a6077">يجب فحص الصلاحية (<code>All authenticated management roles under original rights</code>) في طبقة C# قبل تنفيذ أي أمر تعديل.</p>
-        </div>
-        <div class="present0d6e2345d">
-          <strong>حالة الحفظ التاريخي (Historical Immutability):</strong>
-          <p class="present65c9a6077">يجب أن تستخدم العمليات المعرفات الدائمة (<code>PersonId</code>, <code>SiteId</code>, <code>StatusId</code>) واللقطات التاريخية المؤرخة.</p>
-        </div>
-      </div>
+      </section>
 
       <div id="bridgeStatusBox" class="presente11051c0b">
-        <strong>حالة جسر WebView2:</strong> <span id="bridgeStatusText">ربط هذه الشاشة بخدمات البرنامج لم يكتمل بعد.</span>
+        <strong>حالة جسر WebView2:</strong> <span id="bridgeStatusText">اضغط تحديث البيانات لقراءة الحالات النشطة.</span>
       </div>
     </article>
   </main>
