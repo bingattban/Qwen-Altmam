@@ -5,6 +5,7 @@ class El{
    this.className="";this.textContent="";this.style={};this.value="";this.dataset={};this.disabled=false;}
  get classList(){const toggle=(name,on)=>{const tags=this.className.split(/\s+/).filter(Boolean).filter(x=>x!==name);if(on)tags.push(name);this.className=tags.join(" ");};return{toggle,add:name=>toggle(name,true),remove:name=>toggle(name,false)};}
  get tBodies(){return this.children.filter(x=>x.tag==="tbody");}
+ get isConnected(){return viewport.all().includes(this);}
  append(...nodes){this.children.push(...nodes);}
  appendChild(node){this.children.push(node);return node;}
  remove(){this.removed=true;}
@@ -14,6 +15,11 @@ class El{
  querySelectorAll(){
    return this.all().filter(x=>["button","input","select","textarea"].includes(x.tag)&&
      !x.disabled&&!x.hidden);
+ }
+ querySelector(selector){
+   if(selector==='[data-status-filter="__AUTO_PREPARED__"]')
+     return this.all().find(x=>x.dataset.statusFilter==="__AUTO_PREPARED__")||null;
+   return null;
  }
  setAttribute(key,value){this.attrs[key]=value;}
  getAttribute(key){return this.attrs[key]||null;}
@@ -270,6 +276,11 @@ async function main(){
    "refreshed dashboard must keep the active modal in the same viewport");
  assert.equal(counterAuto.textContent,"المحددون: 2 من 100",
    "refresh must preserve the operator's uncommitted selection");
+ assert.equal(registerOpener.isConnected,false,
+   "dashboard refresh replaces the original automatic-register trigger");
+ const refreshedOpener=counter("__AUTO_PREPARED__");
+ assert.ok(refreshedOpener&&refreshedOpener!==registerOpener,
+   "the refreshed dashboard presents a new automatic counter");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
  discardApproved=true;
  await clearPending.handlers.click();await settle();
@@ -287,8 +298,8 @@ async function main(){
  readOnly.handlers.keydown({key:"Escape",preventDefault(){}});
  await settle();
  assert.equal(readOnly.removed,true,"approved Escape closes the register through the same safe confirmation");
- assert.equal(document.activeElement,registerOpener,
-   "closing with Escape restores the triggering automatic-counter focus");
+ assert.equal(document.activeElement,refreshedOpener,
+   "closing after a dashboard redraw restores focus to the current automatic counter");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
 
  // A queued approval must never write attendance after the operator leaves
