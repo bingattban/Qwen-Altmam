@@ -150,6 +150,10 @@ async function main(){
    "__AUTO_PREPARED__");
  const readOnly=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
  assert.ok(readOnly,"automatic attendance opens an independent read-only register");
+ assert.equal(viewport.all().filter(x=>x===readOnly).length,1,
+   "automatic attendance modal is mounted exactly once inside the dashboard viewport");
+ assert.equal(readOnly.attrs["aria-modal"],"true",
+   "independent register must announce that it is a real modal");
  assert.ok(readOnly.all().some(x=>x.textContent==="P3"));
  assert.ok(readOnly.all().some(x=>x.textContent==="غياب"));
  assert.ok(readOnly.all().some(x=>x.textContent==="تحضير تلقائي 08:00"),
@@ -225,6 +229,15 @@ async function main(){
  assert.equal(discardPrompts,1,"clearing a pending batch must ask for confirmation");
  assert.equal(counterAuto.textContent,"المحددون: 2 من 100",
    "declined discard must preserve both selected persons");
+ // A dashboard refresh cannot erase a pending selection merely because
+ // the background counters and roster are redrawn.
+ const refreshBehindModal=viewport.all().find(x=>x.tag==="button"&&
+   x.textContent==="تحديث البيانات");
+ refreshBehindModal.handlers.click();await settle();
+ assert.equal(viewport.all().filter(x=>x===readOnly).length,1,
+   "refreshed dashboard must keep the active modal in the same viewport");
+ assert.equal(counterAuto.textContent,"المحددون: 2 من 100",
+   "refresh must preserve the operator's uncommitted selection");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
  discardApproved=true;
  await clearPending.handlers.click();await settle();
@@ -238,8 +251,10 @@ async function main(){
  assert.equal(readOnly.removed,undefined,"refusing close preserves the register");
  assert.equal(counterAuto.textContent,"المحددون: 2 من 100");
  discardApproved=true;
- await closeRegister.handlers.click();await settle();
- assert.equal(readOnly.removed,true,"approved close removes the register");
+ assert.ok(readOnly.handlers.keydown,"modal handles keyboard dismissal at the overlay boundary");
+ readOnly.handlers.keydown({key:"Escape",preventDefault(){}});
+ await settle();
+ assert.equal(readOnly.removed,true,"approved Escape closes the register through the same safe confirmation");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,priorWrites);
  expandedRoster=true;
  counter("all").handlers.click();await settle();

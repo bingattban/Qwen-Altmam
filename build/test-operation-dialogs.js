@@ -4,8 +4,11 @@ const assert=require("node:assert/strict"),fs=require("node:fs"),
 class Element{
  constructor(tag){this.tag=tag;this.children=[];this.textContent="";this.value="";
  this.handlers={};this.className="";this.attrs={};this.type="";this.disabled=false;
- this.style={};this.classList={open:false,add:x=>{if(x==="open")this.classList.open=true},
- remove:x=>{if(x==="open")this.classList.open=false}};}
+ this.style={};this.classList={open:false,sizes:new Set(),
+ add:x=>{if(x==="open")this.classList.open=true;
+   else if(x.startsWith("dialog-"))this.classList.sizes.add(x)},
+ remove:x=>{if(x==="open")this.classList.open=false;
+   else if(x.startsWith("dialog-"))this.classList.sizes.delete(x)}};}
  append(...items){this.children.push(...items);}
  appendChild(item){this.children.push(item);return item;}
  replaceChildren(...items){this.children=[...items];}
@@ -130,6 +133,20 @@ async function run(){
  assert.equal(await confirmedTransfer,true,"only explicit approval completes modal");
  assert.equal(await dialog.transferReview({...transferPlan,persons:[]}),false,
    "empty transfer selection cannot bypass the modal");
+ const crowdedReview=dialog.detailsReview({
+   rows:[["المواقع الجديدة",31]],columns:["الموقع","الأفراد"],
+   items:Array.from({length:31},(_,i)=>["موقع "+(i+1),i+1])
+ });
+ assert.ok(overlay.classList.sizes.has("dialog-xl"),
+   "large imported-row review uses the extra-wide modal instead of truncating the table");
+ button("إلغاء").click();
+ assert.equal(await crowdedReview,false);
+ assert.equal(overlay.classList.sizes.size,0,"dialog sizes are cleared after close");
+ const shortReview=dialog.detailsReview({rows:[["رقم (ع)","12345"]]});
+ assert.ok(overlay.classList.sizes.has("dialog-md"),
+   "single record details use the standard modal width");
+ button("إلغاء").click();
+ assert.equal(await shortReview,false);
  const formDialog=dialog.form([{name:"reason",label:"سبب الإجراء",type:"text",
    required:true,minLength:3}],{title:"بيانات العملية"});
  assert.equal(overlay.classList.open,true,"shared multi-field dialog opens");

@@ -128,6 +128,7 @@
   }
 
   async function loginGate() {
+    dismissAutoPrepared();
     const container=view(); if(!container)return;
     container.classList.toggle("daily-dashboard",false);
     container.classList.toggle("monthly-dashboard",false);
@@ -296,6 +297,7 @@
   // Automatic register supports the same audited preview/commit pipeline as daily attendance.
   function openAutoPreparedList(){
     dismissAutoPrepared();
+    const returnFocus=document.activeElement;
     const date=STATE.date,site=STATE.siteId;
     const overlay=el("div","auto-attendance-overlay");
     overlay.setAttribute("role","dialog");
@@ -328,8 +330,11 @@
     const footer=el("div","functional-pager");
     append(panel,heading,description,actions,notice,content,footer);
     overlay.appendChild(panel);
-    (document.body?.appendChild?document.body:view()).appendChild(overlay);
+    // Keep the dialog in #appViewport for both WebView2 accessibility
+    // and the same DOM ownership model used by the Windows UI smoke tests.
+    view().appendChild(overlay);
     autoPreparedOverlay=overlay;
+    closeButton.focus?.();
     let disposed=false,page=1,term="",generation=0,choices=[];
     let visiblePeople=[],busy=false,selectionVersion=0;
     const selected=new Map();
@@ -447,13 +452,18 @@
       overlay.remove?.();
       if(!overlay.remove&&overlay.parentNode)overlay.parentNode.removeChild(overlay);
       if(autoPreparedOverlay===overlay)autoPreparedOverlay=null;
+      returnFocus?.focus?.();
     }
-    overlay.addEventListener("click",event=>{if(event.target===overlay)close();});
+    overlay.addEventListener("click",event=>{if(event.target===overlay)void close();});
+    overlay.addEventListener("keydown",event=>{
+      if(event.key==="Escape"){
+        event.preventDefault?.();
+        void close(); // pending selections still require explicit discard consent
+      }
+    });
     search.input.addEventListener("keydown",event=>{
       if(event.key==="Enter"){event.preventDefault();term=search.input.value.trim();page=1;void load();}
-      if(event.key==="Escape"){event.preventDefault();close();}
     });
-    closeButton.addEventListener("keydown",event=>{if(event.key==="Escape")close();});
     async function load(){
       const current=++generation;
       content.replaceChildren(message("جارٍ قراءة سجل التحضير التلقائي..."));
@@ -547,6 +557,9 @@
     const container=view();
     container.classList.toggle("daily-dashboard",true);
     container.replaceChildren(header("التمام اليومي"));
+    // Refreshing the background counters must not silently discard an open
+    // auto-prepared register or the user's pending multi-selection.
+    if(autoPreparedOverlay)container.appendChild(autoPreparedOverlay);
     const controls=el("div","card functional-toolbar");
     const feedback=el("div","functional-feedback");
     const counters=el("div","functional-counters");

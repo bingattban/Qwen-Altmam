@@ -354,9 +354,11 @@
       if(!details||!Array.isArray(details.rows)||!details.rows.length||
          !details.rows.every(pair=>Array.isArray(pair)&&pair.length===2))
         return Promise.resolve(false);
+      const size=opts.size||(
+        (details.items?.length||0)>30?"xl":details.items?.length?"lg":"md");
       return show({title:opts.title||"معاينة العملية",message:opts.message||"",
         confirmLabel:opts.confirmLabel||"تأكيد",danger:opts.danger===true,
-        delaySeconds:opts.delaySeconds||0,details
+        delaySeconds:opts.delaySeconds||0,details,size
       }).then(result=>result===true);
     },
     transferReview:(review,opts={})=>{
@@ -368,13 +370,14 @@
         return Promise.resolve(false);
       return show({title:opts.title||"معاينة النقل النهائي",
         message:"راجع أسماء الأفراد وأرقامهم والمواقع وتاريخ الحركة قبل الحفظ.",
-        confirmLabel:"تأكيد النقل النهائي",transferReview:review
+        confirmLabel:"تأكيد النقل النهائي",transferReview:review,
+        size:review.persons.length>25?"xl":"lg"
       }).then(result=>result===true);
     },
     unpreparedSelection:loadPage=>show({
       title:"اعتماد حالة أمس لغير المحضرين",
       message:"اختر فردياً أو جماعياً، ثم راجع الحالة التي ستُعتمد. من لم تحضره يدوياً سيعالجه النظام الساعة 8 صباحاً.",
-      confirmLabel:"معاينة حالة الأمس",
+      confirmLabel:"معاينة حالة الأمس",size:"xl",
       unprepared:{loadPage}
     }),
     attendanceReview:(review,opts={})=>{

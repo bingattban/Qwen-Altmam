@@ -36,6 +36,18 @@ check(/siteModal\.open\(\)/,admin,"site modal opened by deliberate action");
 check(/statusModal\.open\(\)/,admin,"status modal opened by deliberate action");
 check(/app-popup-when-properties/,admin,"backup inspection uses modal");
 check(/app-reset-verification-modal/,admin,"final reset step uses modal");
+check(/returnFocus=document\.activeElement/,functional,
+  "auto-prepared modal restores focus on close");
+check(/view\(\)\.appendChild\(overlay\)/,functional,
+  "auto-prepared modal is owned by the active dashboard viewport");
+check(/if\(autoPreparedOverlay\)container\.appendChild\(autoPreparedOverlay\)/,functional,
+  "background refresh cannot silently dismiss a pending auto-attendance selection");
+check(/overlay\.addEventListener\("keydown",event=>/,functional,
+  "automatic attendance modal handles Escape consistently with confirmation");
+check(/size:review\.persons\.length>25\?"xl":"lg"/,dialogs,
+  "large multi-person transfer previews have sufficient room");
+check(/details\.items\?\.length/,dialogs,
+  "large import previews use a wider shared modal");
 check(/auth-password-policy/,functional,"live first-run password policy");
 check(/auth-brand/,functional,"the branded login block appears inside both login and first-run forms");
 check(/\.auth-brand-mark\{/,css,"login uses the local Cairo heading and teal symbol");
