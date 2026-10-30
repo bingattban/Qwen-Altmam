@@ -5,7 +5,7 @@ Usage: python3 build/make-metadata.py <artifacts-dir> <publish-dir> <version> <W
 Writes SHA256SUMS.txt and BUILD_METADATA.json into <artifacts-dir>. Fails if
 either required artifact is missing — CI must not mint metadata for partial runs.
 """
-import hashlib, json, os, subprocess, sys, datetime
+import hashlib, json, os, subprocess, sys, datetime, re
 
 def sha256(path):
     h = hashlib.sha256()
@@ -26,6 +26,16 @@ def main() -> int:
     art, pub, version, arch = sys.argv[1:5]
     if arch not in ("Windows-64bit", "Windows-32bit"):
         print("METADATA FAIL: invalid target architecture:", arch); return 2
+    # Record BOTH identities: GitHub's tested checkout (a PR merge ref on PR
+    # runs) and the actual PR head. A metadata file with a stale SHA is invalid.
+    checkout_sha = git("rev-parse", "HEAD").lower()
+    source_head_sha = os.environ.get("ALTAMAM_SOURCE_HEAD_SHA", checkout_sha).lower()
+    expected_checkout = os.environ.get("GITHUB_SHA", checkout_sha).lower()
+    if (not re.fullmatch(r"[0-9a-f]{40}", checkout_sha)
+            or not re.fullmatch(r"[0-9a-f]{40}", source_head_sha)
+            or checkout_sha != expected_checkout):
+        print("METADATA FAIL: invalid/stale tested checkout or PR head SHA")
+        return 1
     runtime = "win-x86" if arch == "Windows-32bit" else "win-x64"
     wanted = [f"AlTamam-Portable-{arch}.zip", f"AlTamam-Installer-{arch}.exe"]
     missing = [w for w in wanted if not os.path.isfile(os.path.join(art, w))]
@@ -42,7 +52,8 @@ def main() -> int:
     meta = {
         "product": "AlTamam (التمام اليومي)",
         "version": version,
-        "commit": git("rev-parse", "HEAD"),
+        "commit": checkout_sha,
+        "sourceHeadSha": source_head_sha,
         "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
         "builtUtc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "runnerOs": "windows-latest / x64",
