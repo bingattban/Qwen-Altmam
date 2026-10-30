@@ -13,11 +13,15 @@ class El{
   replaceChildren(...nodes){this.children=nodes;}
   addEventListener(name,fn){this.handlers[name]=fn;}
   setAttribute(key,value){this.attrs[key]=value;}
+  getAttribute(key){return this.attrs[key]||null;}
+  focus(){document.activeElement=this;}
+  querySelectorAll(){return this.all().filter(x=>["button","input","select","textarea"].includes(x.tag)&&!x.disabled&&!x.hidden);}
   removeAttribute(key){delete this.attrs[key];}
   all(){return [this,...this.children.flatMap(x=>x instanceof El?x.all():[])];}
 }
 const viewport=new El("main"),logoutAction=new El("button"),sidebar=new El("aside"),
   badge=new El("span"),events={},calls=[];
+let deferMonthlyPreview=false,resolveMonthlyPreview=null;
 const today=new Date(),year=today.getFullYear(),month=today.getMonth()+1;
 const firstDay=year+"-"+String(month).padStart(2,"0")+"-01";
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
@@ -30,7 +34,12 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
     if(action==="QueryMonthlyGrid")return{data:{total:1,page:1,items:[
       {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
        days:{[firstDay]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
-    if(action==="PreviewMonthlyExport")return{data:{personCount:1,year,month,siteId:payload.siteId,format:"xlsx"}};
+    if(action==="PreviewMonthlyExport"){
+      const reply={data:{personCount:1,year,month,siteId:payload.siteId,format:"xlsx"}};
+      if(deferMonthlyPreview)
+        return new Promise(resolve=>{resolveMonthlyPreview=()=>resolve(reply);});
+      return reply;
+    }
     if(action==="SetOutputDirectory")return{data:{directory:"E:\\\\MonthlyExports"}};
     if(action==="ExportMonthlyWorkbookSet")return{data:{
       filePath:"C:\\Users\\Test\\Documents\\AlTamam\\Exports\\sample.xlsx",
@@ -47,7 +56,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
     throw Error("Unexpected bridge action "+action);
   }
 };
-const document={createElement:tag=>new El(tag),
+const document={activeElement:null,createElement:tag=>new El(tag),
   getElementById:id=>({appViewport:viewport,headerRoleBadge:badge,logoutAction,
     "navBtn-dashboard":new El("button"),"navBtn-monthly":new El("button"),
     "navBtn-admin":new El("button"),"navBtn-settings":new El("button")})[id]||null,
@@ -114,13 +123,48 @@ async function main(){
     "identity text is allowed to wrap instead of being clipped");
   assert.equal(calls.some(x=>x.action==="ExportMonthlyWorkbookSet"),false,
     "initial display must not export");
+  // Test-first: the pending preview must be dismissible before the Bridge
+  // replies. A late result must not recreate the form or initiate an export.
+  deferMonthlyPreview=true;
+  previewButton.focus();
+  const pendingPreview=previewButton.handlers.click();await tick();
+  const loadingPanel=viewport.all().find(x=>x.className.includes("functional-export-preview"));
+  assert.equal(loadingPanel.hidden,false,"preview becomes a real modal during loading");
+  const loadingClose=loadingPanel.all().find(x=>x.tag==="button"&&
+    x.textContent==="إغلاق المعاينة");
+  assert.ok(loadingClose,"preview close is available before the server replies");
+  assert.equal(document.activeElement,loadingClose,"loading modal moves focus to its close control");
+  loadingClose.handlers.click();
+  assert.equal(loadingPanel.hidden,true,"user can dismiss a pending Excel preview");
+  assert.equal(document.activeElement,previewButton,"closing preview restores focus to its opener");
+  resolveMonthlyPreview();await pendingPreview;await tick();
+  assert.equal(loadingPanel.hidden,true,"late preview response cannot reopen dismissed modal");
+  assert.ok(!loadingPanel.all().some(x=>x.textContent==="حفظ ملف Excel"),
+    "late response cannot render saving controls after dismissal");
+  assert.equal(calls.filter(x=>x.action==="ExportMonthlyWorkbookSet").length,0,
+    "dismissing a pending preview never triggers a native export");
+  deferMonthlyPreview=false;
+
+  // A fresh deliberate click still loads the genuine preview and export.
   await previewButton.handlers.click();await tick();
-  assert.equal(calls.filter(x=>x.action==="PreviewMonthlyExport").length,1);
-  assert.equal(calls.find(x=>x.action==="PreviewMonthlyExport").payload.term,"EX٠٠١");
+  assert.equal(calls.filter(x=>x.action==="PreviewMonthlyExport").length,2);
+  assert.equal(calls.filter(x=>x.action==="PreviewMonthlyExport").at(-1).payload.term,"EX٠٠١");
   assert.equal(calls.filter(x=>x.action==="ExportMonthlyWorkbookSet").length,0,
     "preview never writes file");
   const save=viewport.all().find(x=>x.tag==="button"&&x.textContent==="حفظ ملف Excel");
   assert.ok(save,"save is shown only after approved preview");
+  const openPreviewPanel=viewport.all().find(x=>x.className.includes("functional-export-preview"));
+  assert.ok(openPreviewPanel.handlers.keydown,"monthly export modal handles keyboard Escape");
+  let trappedEscape=false;
+  openPreviewPanel.handlers.keydown({key:"Escape",
+    preventDefault(){trappedEscape=true;}});
+  assert.equal(trappedEscape,true,"Escape is handled inside the preview");
+  assert.equal(openPreviewPanel.hidden,true,"Escape dismisses an uncommitted preview");
+  assert.equal(document.activeElement,previewButton,"Escape restores the preview opener focus");
+  assert.equal(calls.filter(x=>x.action==="ExportMonthlyWorkbookSet").length,0);
+  await previewButton.handlers.click();await tick();
+  const saveAgain=viewport.all().find(x=>x.tag==="button"&&x.textContent==="حفظ ملف Excel");
+  assert.ok(saveAgain,"reopening after keyboard dismissal starts a fresh preview");
   const pathPicker=viewport.all().find(x=>x.tag==="button"&&
     x.textContent==="اختيار مجلد الحفظ من Windows");
   assert.ok(pathPicker,"monthly export has a native Windows directory picker");
@@ -129,7 +173,7 @@ async function main(){
     x.attrs["aria-label"]==="اسم ملف التصدير الشهري");
   assert.ok(chosenName,"operator can propose the XLSX filename");
   chosenName.value="كشف مختار.xlsx";
-    await save.handlers.click();await tick();
+    await saveAgain.handlers.click();await tick();
   const exported=calls.filter(x=>x.action==="ExportMonthlyWorkbookSet");
   assert.equal(exported.length,1,"save invokes real native Excel export exactly once");
   assert.equal(exported[0].payload.year,year);
