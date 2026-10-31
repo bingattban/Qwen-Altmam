@@ -32,6 +32,18 @@ check(/\.functional-export-preview:not\(\[hidden\]\)/,css,"Excel preview floats 
 check(/\.person-report-tabs/,css,"report tabs use shared styles");
 check(/body:has\(\.app-operational-modal/,css,"nested confirmation wins layering");
 check(/function operationalModal\(/,admin,"shared administrative modal utility");
+check(/panel\.replaceChildren\(header,body,actions\)/,admin,
+  "administrative action windows retain a single framed modal");
+check(/\.app-operational-modal>\.app-modal-sticky-header\{/,css,
+  "administrative modal header remains outside the scrolling body");
+check(/\.app-operational-modal>\.app-modal-scroll-body\{/,css,
+  "administrative modal body scrolls independently");
+check(/\.app-operational-modal>\.app-modal-sticky-footer:not\(:empty\)\{/,css,
+  "administrative modal action footer stays outside the scrolling body");
+check(/width:min\(96vw,1220px\);max-height:90dvh;min-height:0;overflow:hidden;/,css,
+  "auto-prepared register respects modal-xl width and height");
+check(/brightness>0\.179\?"#000000":"#FFFFFF"/,functional,
+  "monthly contrast uses WCAG-safe black or white ink");
 check(/siteModal\.open\(\)/,admin,"site modal opened by deliberate action");
 check(/statusModal\.open\(\)/,admin,"status modal opened by deliberate action");
 check(/app-popup-when-properties/,admin,"backup inspection uses modal");

@@ -53,7 +53,8 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
       const chosen=payload.year+"-"+String(payload.month).padStart(2,"0")+"-01";
       return{data:{total:1,page:payload.page,items:[
         {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
-         days:{[chosen]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
+         days:{[chosen]:{symbol:"غ",name:"غياب",color:"#EF4444"},
+            [chosen.slice(0,8)+"02"]:{symbol:"إ",name:"إذن",color:"#808080"}}}]}};
     }
     if(action==="GetMonthlyCellDetails"){
       const response={data:{personId:payload.personId,businessDate:payload.businessDate,
@@ -125,6 +126,10 @@ async function main(){
     "monthly current period must disclose active force and visible roster separately");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
   assert.ok(open,"one committed cell has a detail button");
+  const midtone=viewport.all().find(x=>x.className.includes("day-cell")&&x.title==="إذن");
+  assert.ok(midtone,"a midtone status background is present");
+  assert.equal(midtone.style.color,"#000000",
+    "WCAG regular-text contrast must select pure black on medium grey status");
   assert.ok(open.attrs["aria-label"]?.includes(firstDay),"accessible date label");
   assert.equal(calls.filter(x=>x.action==="GetMonthlyCellDetails").length,0,
     "open page must not request details until click");
