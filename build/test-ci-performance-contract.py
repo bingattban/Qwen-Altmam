@@ -24,8 +24,18 @@ def validate(core: str, release: str) -> list[str]:
         issues.append("Core must explicitly compile the full solution after restore")
     if section.count("dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj") != 2:
         issues.append("Core must run its full suite and the 10k diagnostic benchmark")
-    if "--configuration Release --no-build --no-restore" not in section:
+    # Scope the no-build check to the established full-suite step. A new
+    # integration step must NEVER conceal a weakened Core test command.
+    full_suite = section.split(
+        "      - name: Run deterministic core tests on Windows runner", 1
+    )[-1].split("      - name:", 1)[0]
+    if "--configuration Release --no-build --no-restore" not in full_suite:
         issues.append("Core full tests must reuse the validated build outputs")
+    phase02_suite = section.split(
+        "      - name: Phase 02 actual SQLCipher integration tests", 1
+    )[-1].split("      - name:", 1)[0]
+    if "--configuration Release --no-build --no-restore" not in phase02_suite:
+        issues.append("Phase 02 Core tests must reuse the validated build outputs")
     if "-c Release --no-build --no-restore" not in section:
         issues.append("Core benchmark must reuse the same build outputs")
     if "TestResults/core-tests.trx" not in section or "ResultSummary.Counters.total" not in section:
