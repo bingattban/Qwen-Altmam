@@ -881,8 +881,23 @@ async function run() {
     "ordinary administration may reopen permitted read-only history");
   assert.ok(calls.filter(x=>x.name==="QueryAuditPresentationChanges").length>
     historyReadsBefore,"the real server history read must be invoked");
-  assert.ok(!buttonNamed("إظهار القيود المخفية (للمسؤولين فقط)"),
-    "ordinary administration cannot access GA-only hidden-entry controls");
+  assert.ok(visible().some(x=>x.tag==="input"&&x.type==="checkbox"),
+    "ordinary administration can reveal hidden entries for authorized correction");
+  showAuditEntry=true;
+  assert.equal(controller.openOwnedRoute("AuditLog"),true);
+  await new Promise(resolve=>setImmediate(resolve));
+  const oaDetailTrigger=buttonNamed("عرض التفاصيل");
+  assert.ok(oaDetailTrigger,"ordinary administration can open a saved audit entry");
+  oaDetailTrigger.handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const oaPopup=visible().find(x=>x.attrs["aria-label"]==="تفاصيل القيد");
+  assert.ok(oaPopup,"ordinary administration has actual audit details");
+  assert.ok(oaPopup.all().some(x=>x.tag==="button"&&x.textContent==="تعديل الوصف الظاهر"),
+    "ordinary administration sees the existing confirmed edit action");
+  assert.ok(oaPopup.all().some(x=>x.tag==="button"&&x.textContent==="إخفاء القيد من العرض"),
+    "ordinary administration sees the existing confirmed hide action");
+  oaPopup.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق التفاصيل").handlers.click();
+  showAuditEntry=false;
   assert.equal(calls.filter(x=>
     x.name==="UpdateAuditPresentation"||x.name==="DeleteAuditPresentation").length,
     auditWritesBefore,"history navigation never edits the immutable audit log");

@@ -1357,10 +1357,10 @@
   function canSeeRoute(route) {
     if(!STATE.session) return false;
     const role=STATE.session.role;
-    // Audit presentation mutations are GeneralAdministration-only in the
-    // authoritative C# action manifest. Read-only overlay history is GA/OA.
+    // The authoritative C# action manifest grants both administrations
+    // visible-overlay edits; the immutable source evidence is never edited.
     if (route.key==="EditAuditEntry" || route.key==="DeleteAuditEntry")
-      return role==="GeneralAdministration";
+      return role==="GeneralAdministration"||role==="OrdinaryAdministration";
     if (route.key==="ModifiedDeletedAuditEntries" ||
         route.path.startsWith("screens/Administration/Users/") ||
         route.key==="Users" || route.key==="ArchivePersons")

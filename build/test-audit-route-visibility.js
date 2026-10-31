@@ -27,7 +27,7 @@ const routes = [
 
 const expectations = {
   GeneralAdministration: [true, true, true, true, true, true, true, true],
-  OrdinaryAdministration: [true, false, false, true, true, false, true, true],
+  OrdinaryAdministration: [true, true, true, true, true, false, true, true],
   Supervisor: [true, false, false, false, false, false, false, false],
   unauthenticated: [false, false, false, false, false, false, false, false]
 };
@@ -80,4 +80,4 @@ assert.strictEqual(dispatcher("ResetApplicationData"),true);
 assert.deepEqual(Array.from(forwarded.at(-1)),["admin"],
  "Supervisor reset must never be reachable");
 assert.strictEqual(forwarded.length,before+3);
-console.log("AUDIT ROUTE RBAC PASS: 32 route/role checks");
+console.log("AUDIT ROUTE RBAC PASS: 32 route/role checks including both audit display writes");

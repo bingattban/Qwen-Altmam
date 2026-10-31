@@ -50,10 +50,10 @@ public sealed class AuditOverlayService
         string from = ReadString(payload, "fromDate");
         string to = ReadString(payload, "toDate");
         bool includeTombstoned = ReadBool(payload, "includeTombstoned", false);
-        if (includeTombstoned && principal?.Role is not
-            UserRole.GeneralAdministration)
+        if (includeTombstoned &&
+            (principal is null || !RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(principal.Role)))
             return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
-                "عرض القيود المخفية محصور بالإدارة العامة.");
+                "عرض القيود المخفية متاح للإدارة العامة والإدارة العادية فقط.");
         int page = Math.Max(ReadInt(payload, "page", 1), 1);
         int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, MaxPageSize);
 
@@ -336,9 +336,9 @@ public sealed class AuditOverlayService
     {
         // Defense in depth: the Application service owns authorization. A caller
         // bypassing the WebView dispatcher must not edit visible evidence.
-        if (principal.Role != UserRole.GeneralAdministration)
+        if (!RoleAuthorizationPolicy.CanEditOrDeleteVisibleAuditLog(principal.Role))
             return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
-                "تعديل أو إخفاء عرض قيود العمليات محصور بالإدارة العامة فقط.");
+                "تعديل أو إخفاء العرض متاح للإدارة العامة والإدارة العادية فقط.");
         string auditEventId = ReadString(payload, "auditEventId");
         string reason = ReadString(payload, "reason");
         string corrected = ReadString(payload, "correctedDescription");

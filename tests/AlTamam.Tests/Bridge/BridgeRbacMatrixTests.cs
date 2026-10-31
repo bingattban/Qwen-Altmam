@@ -220,6 +220,28 @@ public sealed class BridgeRbacMatrixTests
         Assert.Equal(new[] { "PreviewFullReset" }, executed);
     }
 
+    [Theory]
+    [InlineData("UpdateAuditPresentation")]
+    [InlineData("DeleteAuditPresentation")]
+    public async Task AuditPresentationWrite_BothAdministrationsPermitted_SupervisorDenied(string action)
+    {
+        var dispatcher = BuildAuditedDispatcher(out List<string> executed);
+        foreach (var (nonce, allowed) in new[]
+        {
+            (NonceGa, true), (NonceOa, true), (NonceSv, false), (NonceUnknown, false)
+        })
+        {
+            var response = await dispatcher.DispatchAsync(
+                Envelope(action, nonce, $"AUDIT-ROLE-{action}-{nonce}"),
+                ValidOrigin, isMainFrame: true, Authenticate);
+            Assert.Equal(allowed, response.Response.Success);
+            Assert.Equal(allowed ? BridgeOutcomeKind.Success :
+                nonce == NonceUnknown ? BridgeOutcomeKind.Unauthorized :
+                    BridgeOutcomeKind.Forbidden, response.Kind);
+        }
+        Assert.Equal(2, executed.Count(x => x == action));
+    }
+
     [Fact]
     public async Task UserHierarchy_CrossTierCreation_DeniedByManifestRoles()
     {
