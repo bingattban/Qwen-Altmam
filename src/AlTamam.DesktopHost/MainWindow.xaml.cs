@@ -393,7 +393,37 @@ public partial class MainWindow : Window
         if (webViewSelfCheck)
         {
             TraceWebViewSelfCheck("Navigating to bundled offline WebUI");
-            await CheckActualWebViewNavigationAsync(core).ConfigureAwait(true);
+            if (Environment.GetCommandLineArgs().Contains("--webview-bridge-e2e", StringComparer.Ordinal))
+            {
+                // A separate random-key SQLCipher fixture: NEVER the user's AppData,
+                // DPAPI secret, live account records or browser profile.
+                string fixtureFolder = Path.Combine(Path.GetTempPath(),
+                    "AlTamam-Phase04-Bridge-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(fixtureFolder);
+                var fixture = new AlTamamDbContext(
+                    Path.Combine(fixtureFolder, "phase04-synthetic.db"),
+                    AlTamam.Infrastructure.Security.DatabaseKeyGenerator.Generate(),
+                    useConnectionPooling: false);
+                DesktopBridgeGateway? fixtureGateway = null;
+                try
+                {
+                    await fixture.InitializeAsync().ConfigureAwait(true);
+                    var services = new BridgeSharedServices(fixture);
+                    fixtureGateway = new DesktopBridgeGateway(BridgeHandlerCatalog.Create(services), services);
+                    fixtureGateway.Attach(core);
+                    await CheckActualWebViewNavigationAsync(core, fixture).ConfigureAwait(true);
+                }
+                finally
+                {
+                    if (fixtureGateway is not null)
+                        await fixtureGateway.StopReceivingAndDrainAsync().ConfigureAwait(true);
+                    fixture.Dispose();
+                    try { Directory.Delete(fixtureFolder, recursive: true); }
+                    catch (IOException) { /* Windows may still be releasing synthetic WAL handles. */ }
+                    catch (UnauthorizedAccessException) { /* Best-effort temporary-file cleanup. */ }
+                }
+            }
+            else await CheckActualWebViewNavigationAsync(core).ConfigureAwait(true);
             return;
         }
 
@@ -495,7 +525,8 @@ public partial class MainWindow : Window
         TraceWebViewSelfCheck("UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus");
     }
 
-    private static async Task CheckActualWebViewNavigationAsync(CoreWebView2 core)
+    private static async Task CheckActualWebViewNavigationAsync(
+        CoreWebView2 core, AlTamamDbContext? syntheticDatabase = null)
     {
         var completion = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -515,6 +546,14 @@ public partial class MainWindow : Window
                 throw new InvalidOperationException("Local UI did not load the expected document.");
             if (Environment.GetCommandLineArgs().Contains("--webview-ui-e2e", StringComparer.Ordinal))
                 await CheckActualWebViewModalInteractionsAsync(core).ConfigureAwait(true);
+            if (syntheticDatabase is not null)
+            {
+                await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase).ConfigureAwait(true);
+                TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
+                await Phase04ManifestRouteSelfCheck.RunAsync(
+                    core, ResolveBundledWebUiRoot()).ConfigureAwait(true);
+                TraceWebViewSelfCheck("PASS all 69 manifest routes opened in real Windows WebView2");
+            }
             TraceWebViewSelfCheck("PASS bundled offline WebUI title verified");
             Console.WriteLine("WEBVIEW-SELFCHECK PASS");
             System.Windows.Application.Current.Shutdown(0);
@@ -538,6 +577,7 @@ public partial class MainWindow : Window
     private static bool IsLocalVirtualHost(string uriString)
         => Uri.TryCreate(uriString, UriKind.Absolute, out Uri? uri)
            && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-           && string.Equals(uri.Host, LocalWebUiOrigin.Host, StringComparison.OrdinalIgnoreCase);
+           && string.Equals(uri.Host, LocalWebUiOrigin.Host, StringComparison.OrdinalIgnoreCase)
+           && uri.IsDefaultPort && uri.UserInfo.Length == 0;
 }
 
