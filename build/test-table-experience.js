@@ -146,6 +146,10 @@ async function verifySharedInputCompletion(){
   labeled.append(caption,named);main.append(labeled);
   const audit=new E("input");audit.type="search";
   audit.placeholder="بحث في سجل العمليات";main.append(audit);
+  const monthly=new E("label"),monthlyCaption=new E("span"),monthlySearch=new E("input");
+  monthlyCaption.textContent="بحث بالاسم أو الرقم (ع) في الشهر";
+  monthlySearch.type="search";
+  monthly.append(monthlyCaption,monthlySearch);main.append(monthly);
   const general=new E("input");general.type="text";main.append(general);
   const secret=new E("input");secret.type="password";main.append(secret);
   helper.scan();
@@ -165,6 +169,10 @@ async function verifySharedInputCompletion(){
     "general non-person search inputs have the same dimensions");
   assert.equal(audit.placeholder,"بحث في سجل العمليات",
     "audit-specific search semantics must remain visible");
+  assert.equal(monthlySearch.placeholder,"بحث بالاسم أو الرقم (ع) في الشهر",
+    "monthly search retains its screen-specific hint instead of a generic one");
+  assert.ok(monthly.classList.contains("app-unified-search-wrap"),
+    "the monthly search uses the same compact search field layout");
   assert.ok(person.list?.startsWith("person-suggestions-"));
   assert.equal(general.autocomplete,"on","ordinary text fields retain safe native completion");
   assert.notEqual(secret.autocomplete,"on","passwords never receive completion");
