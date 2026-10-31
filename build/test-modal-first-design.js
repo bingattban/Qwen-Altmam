@@ -61,6 +61,22 @@ check(/width:min\(96vw,1220px\);max-height:90dvh;min-height:0;overflow:hidden;/,
 check(/brightness>0\.179\?"#000000":"#FFFFFF"/,functional,
   "monthly contrast uses WCAG-safe black or white ink");
 check(/siteModal\.open\(\)/,admin,"site modal opened by deliberate action");
+
+check(/\.admin-site-create-form \.app-modal-scroll-body/,css,
+  "site editor keeps accessible fields spaced inside the existing modal");
+check(/\.admin-status-create-form \.admin-status-fields\{/,css,
+  "status editor arranges the name, symbol and color in a responsive grid");
+check(/\.admin-status-create-form \.status-live-preview\{/,css,
+  "real-time status preview is readable and emphasized");
+check(/livePreview\.setAttribute\("aria-live","polite"\)/,admin,
+  "status-color preview is announced accessibly");
+check(/title:"إعادة تسمية الموقع",size:"md"/,admin,
+  "site rename uses a single input dialog");
+check(/title:"تعديل حالة التحضير",size:"md"/,admin,
+  "status editing uses one three-field dialog instead of serial prompts");
+check(/title:"معاينة تعديل الحالة",confirmLabel:"تأكيد تعديل الحالة"/,admin,
+  "status mutation still requires a separate old/new preview");
+
 check(/statusModal\.open\(\)/,admin,"status modal opened by deliberate action");
 check(/app-popup-when-properties/,admin,"backup inspection uses modal");
 check(/app-reset-verification-modal/,admin,"final reset step uses modal");

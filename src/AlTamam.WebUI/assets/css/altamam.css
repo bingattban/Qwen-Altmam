@@ -2185,3 +2185,50 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
   .admin-create-person[open]>.admin-person-actions{padding:12px 14px}
   .admin-password-policy{grid-template-columns:minmax(0,1fr)}
 }
+
+
+/* Batch 02 — site and status operations. All actions remain modal and audited. */
+.admin-site-create-form .app-modal-scroll-body,
+.admin-status-create-form .app-modal-scroll-body{gap:15px}
+.admin-site-create-form .app-modal-scroll-body>label.admin-input{width:100%;min-width:0}
+.admin-site-create-form .app-modal-sticky-footer>.btn-primary,
+.admin-status-create-form .app-modal-sticky-footer>.btn-primary{
+  min-height:48px;flex:1 1 220px;border-radius:11px
+}
+.admin-site-create-form .admin-input :is(input,select):focus-visible,
+.admin-status-create-form .admin-input :is(input,select):focus-visible{
+  outline:none;border-color:var(--accent-teal);
+  box-shadow:0 0 0 3px var(--accent-teal-soft)
+}
+.admin-status-create-form .admin-status-fields{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:start;gap:12px;min-width:0
+}
+.admin-status-create-form .admin-status-fields>label.admin-input{
+  min-width:0;margin:0
+}
+.admin-status-create-form .admin-status-fields>label.admin-input:first-child{
+  grid-column:1/-1
+}
+.admin-status-create-form .admin-status-fields input[type="color"]{
+  display:block;cursor:pointer;padding:27px 9px 7px;min-height:64px;
+  background:var(--bg-surface);border-radius:10px
+}
+.admin-status-create-form .status-live-preview{
+  width:100%;justify-content:center;min-height:52px;
+  padding:12px 15px;border-radius:11px;
+  font-size:15px;line-height:1.5;white-space:normal;
+  border-width:2px;background:var(--bg-subtle)
+}
+.admin-status-create-form .status-live-preview::before{
+  width:13px;height:13px;flex:none
+}
+.admin-status-create-form .admin-note{margin:0}
+@media(max-width:580px){
+  .admin-status-create-form .admin-status-fields{
+    grid-template-columns:minmax(0,1fr)
+  }
+  .admin-status-create-form .admin-status-fields>label.admin-input:first-child{
+    grid-column:auto
+  }
+}
