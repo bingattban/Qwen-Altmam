@@ -60,6 +60,29 @@ check(/size:review\.persons\.length>25\?"xl":"lg"/,dialogs,
   "large multi-person transfer previews have sufficient room");
 check(/details\.items\?\.length/,dialogs,
   "large import previews use a wider shared modal");
+
+/* All text/select fields retain a persistent caption INSIDE their borders:
+   first-run setup, administration, dialogs and historical reports. */
+for(const family of ["form-field","admin-input","app-dialog-field",
+  "person-report-filter","monthly-page-size"])
+  assert.ok(css.includes("label."+family),family+" must use the shared inset caption");
+assert.ok(css.includes(">span:first-child{") &&
+  css.includes("position:absolute;inset-block-start:7px;inset-inline-start:13px;"),
+  "the field title must be positioned inside its border at the RTL leading edge");
+assert.ok(css.includes("padding-block:27px 8px"),
+  "typed values must have separate space below the persistent inset title");
+assert.ok(css.includes('input:not([type="checkbox"]):not([type="radio"]):not([type="file"])'),
+  "the three native type exceptions must be on the SAME input selector");
+for(const native of ["checkbox","radio","file"])
+  assert.ok(css.includes(':not([type="'+native+'"])'),
+    native+" must retain its accessible native presentation");
+assert.ok(css.includes(".auth-form .auth-password-field>input.form-input{padding-inline-end:140px}"),
+  "the password reveal button must not cover entered text");
+assert.ok(report.includes('fromLabel.append(el("span","من تاريخ"),dateFrom)'),
+  "historical report date fields must have inset labels");
+assert.ok(report.includes('siteLabel.append(el("span","الموقع التاريخي"),site)'),
+  "historical report selectors must have inset labels");
+
 check(/auth-password-policy/,functional,"live first-run password policy");
 check(/auth-brand/,functional,"the branded login block appears inside both login and first-run forms");
 check(/\.auth-brand-mark\{/,css,"login uses the local Cairo heading and teal symbol");

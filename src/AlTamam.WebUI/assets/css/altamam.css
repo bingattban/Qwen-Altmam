@@ -1901,3 +1901,31 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
 .admin-subsection-tile{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
 .admin-subsection-tile .admin-tile-subtitle{font-size:11px}
 .admin-primary-tile .admin-tile-subtitle{color:var(--text-muted)}
+
+/* A persistent RTL caption inside each input border, never above it.
+   Native checkboxes, radio and file pickers retain their original controls. */
+:is(label.form-field,label.admin-input,label.app-dialog-field,
+    label.person-report-filter,label.monthly-page-size):has(
+    >span:first-child + :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea)){
+  position:relative;display:flex;flex-direction:column;gap:0;min-width:0
+}
+:is(label.form-field,label.admin-input,label.app-dialog-field,
+    label.person-report-filter,label.monthly-page-size):has(
+    >span:first-child + :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea))>span:first-child{
+  position:absolute;inset-block-start:7px;inset-inline-start:13px;
+  inset-inline-end:13px;z-index:1;pointer-events:none;
+  color:var(--text-muted);font-size:11px;font-weight:700;line-height:1.4;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+:is(label.form-field,label.admin-input,label.app-dialog-field,
+    label.person-report-filter,label.monthly-page-size):has(
+    >span:first-child + :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea))>:is(input,select,textarea){
+  box-sizing:border-box;width:100%;min-height:64px;min-width:0;
+  padding-block:27px 8px;padding-inline:13px;line-height:1.5;
+  background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--border-color);border-radius:8px
+}
+:is(label.form-field,label.admin-input,label.app-dialog-field,
+    label.person-report-filter,label.monthly-page-size):has(
+    >span:first-child + textarea)>textarea{min-height:106px}
+.auth-form .auth-password-field>input.form-input{padding-inline-end:140px}

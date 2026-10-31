@@ -179,17 +179,19 @@
      siteId:site.value,statusId:statusFilter.value,
      movementType:Number(movement.value||0)
    });
-   const fromLabel=el("label",undefined,"من تاريخ"),toLabel=el("label",undefined,"إلى تاريخ");
-   fromLabel.appendChild(dateFrom);toLabel.appendChild(dateTo);
+   const fromLabel=el("label",undefined,"person-report-filter"),
+     toLabel=el("label",undefined,"person-report-filter");
+   fromLabel.append(el("span","من تاريخ"),dateFrom);
+   toLabel.append(el("span","إلى تاريخ"),dateTo);
    const selected=new Map();
    controls.append(term,btn("بحث",search),
      btn("عرض التقرير الجماعي",()=>{void loadGroupReport();}));
-   const siteLabel=el("label",undefined,"الموقع التاريخي");
-   siteLabel.appendChild(site);
-   const statusLabel=el("label",undefined,"حالة التحضير");
-   statusLabel.appendChild(statusFilter);
-   const movementLabel=el("label",undefined,"نوع الحركة");
-   movementLabel.appendChild(movement);
+   const siteLabel=el("label",undefined,"person-report-filter");
+   siteLabel.append(el("span","الموقع التاريخي"),site);
+   const statusLabel=el("label",undefined,"person-report-filter");
+   statusLabel.append(el("span","حالة التحضير"),statusFilter);
+   const movementLabel=el("label",undefined,"person-report-filter");
+   movementLabel.append(el("span","نوع الحركة"),movement);
    searchCard.append(controls,el("p","حدد الأشخاص من نتائج البحث؛ يمكن الاختيار عبر أكثر من عملية بحث، بحد أقصى 100 فرد.","section-description"),
      selectedPanel,fromLabel,toLabel,siteLabel,statusLabel,movementLabel,status,results);
    root.append(searchCard,popup);
