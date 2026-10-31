@@ -9,6 +9,7 @@ using AlTamam.Infrastructure.Persistence;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
+using AlTamam.DesktopHost.Auth;
 namespace AlTamam.DesktopHost;
 
 /// <summary>
@@ -67,10 +68,7 @@ public partial class MainWindow : Window
         // Native WPF keyboard/mouse/touch events are real user input, unlike
         // dispatcher timers or background WebUI refreshes. Browser input is
         // independently observed via trusted WebView2 DOM events.
-        PreviewKeyDown += (_, _) => RefreshIdleFromNativeInput();
-        PreviewMouseDown += (_, _) => RefreshIdleFromNativeInput();
-        PreviewMouseWheel += (_, _) => RefreshIdleFromNativeInput();
-        PreviewTouchDown += (_, _) => RefreshIdleFromNativeInput();
+        ForegroundActivityHooks.Attach(this, RefreshIdleFromNativeInput);
         Closed += async (_, _) =>
         {
             try

@@ -115,6 +115,19 @@ jobs:
           $phase02Count = [int]$xml.TestRun.ResultSummary.Counters.total
           Write-Host "Phase 02 independent integration tests executed: $phase02Count"
           if ($phase02Count -lt 8) { throw 'Phase 02 integration suite missing or did not fully execute' }
+      - name: Phase 03 independent unit tests
+        run: >
+          dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=phase03-unit.trx"
+          --results-directory TestResults
+      - name: Require nonzero Phase 03 unit test count
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/phase03-unit.trx)) { throw 'Phase 03 unit TRX missing' }
+          $xml = [xml](Get-Content TestResults/phase03-unit.trx)
+          $count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Phase 03 unit tests executed: $count"
+          if ($count -lt 4) { throw 'Phase 03 unit tests did not fully execute' }
       - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
+using AlTamam.Application.Identity;
 using AlTamam.Domain.Policies;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Security;
@@ -40,9 +41,8 @@ public sealed class BridgeSharedServices
     public async Task<bool> IsProvisionedAsync(CancellationToken cancellationToken = default)
     {
         using var connection = _db.CreateOpenConnection();
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM Users);";
-        return Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false)) == 1;
+        return await FoundingProvisioningGuard.HasExistingEvidenceAsync(
+            connection, null, cancellationToken).ConfigureAwait(false);
     }
 
     private static BridgeResponse? ValidateFoundingCredentials(
@@ -100,10 +100,8 @@ public sealed class BridgeSharedServices
         {
             // Verify one-time founding authority inside the SAME serialized write
             // transaction. An existing disabled founder cannot be replaced.
-            using var initialized = connection.CreateCommand();
-            initialized.Transaction = tx;
-            initialized.CommandText = "SELECT EXISTS(SELECT 1 FROM Users);";
-            if (Convert.ToInt32(await initialized.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
+            if (await FoundingProvisioningGuard.HasExistingEvidenceAsync(
+                connection, tx, ct).ConfigureAwait(false))
                 return Error(BridgeErrorCodes.ConflictStale,
                     "تمت تهيئة البرنامج مسبقاً؛ لا يمكن إنشاء مدير عام آخر.");
             using var dup = connection.CreateCommand();
