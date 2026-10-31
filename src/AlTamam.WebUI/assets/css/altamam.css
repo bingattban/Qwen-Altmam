@@ -2332,3 +2332,11 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
 .audit-log-table :is(th,td):nth-child(9){width:101px;text-align:center}
 .audit-log-table tbody tr{height:46px}
 .audit-log-table td:last-child .btn{white-space:nowrap;padding:7px 9px}
+
+/* Phase 06: keep all declined-person diagnostics legible in Arabic RTL. */
+.attendance-conflict-warning{white-space:pre-line}
+.attendance-status-preview{display:inline-flex;align-items:center;min-height:34px;
+  border-inline-start:4px solid transparent;padding:4px 10px;
+  border-radius:8px;color:var(--text-main);font-weight:700}
+.attendance-status-pill{display:inline-block;border:1px solid var(--border-color);
+  border-radius:10px;padding:3px 9px}

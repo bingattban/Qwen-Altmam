@@ -29,11 +29,11 @@ const bridge={invoke:async(name,payload)=>{
  const data={
    QuerySites:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}],
    GetActiveAttendanceStatuses:[
-      {statusId:"STS-PRESENT",displayName:"موجود"},
-      {statusId:"STS-ABSENT",displayName:"غياب"}],
+      {statusId:"STS-PRESENT",displayName:"موجود",color:"#22AA55"},
+      {statusId:"STS-ABSENT",displayName:"غياب",color:"#BB3355"}],
    QueryDailyRoster:{total:2,hasNext:false,items:[
       {personId:"P1",name:"شخص تجريبي",serviceNumberA:"12345",siteName:"غير محدد",
-       statusName:"غير محضر"},
+       statusName:"غير محضر",statusColor:"#22AA55"},
       {personId:"P2",name:"شخص تجريبي آخر",serviceNumberA:"67890",siteName:"غير محدد",
        statusName:"غير محضر"}]},
    PreviewAttendanceChange:{previewToken:"SERVER_ONE_TIME_TOKEN",
@@ -76,8 +76,18 @@ async function main(){
  assert.ok(calls.some(x=>x.name==="QueryDailyRoster"&&x.payload.statusId==="__ELIGIBLE__"&&x.payload.pageSize===100),
    "attendance selection must exclude the movement-day roster on the C# query");
  assert.equal(root.all().filter(x=>x.tag==="input"&&x.type==="checkbox").length,2);
+ assert.equal(selects()[1].children[1].style.color,"#22AA55",
+   "allowed statuses expose their configured color");
+ assert.ok(root.all().some(x=>x.className.includes("attendance-status-pill") &&
+   x.style.borderColor==="#22AA55"),
+   "saved current status uses its real color on the roster");
  assert.equal(writes.length,0,"no write on load");
- selects()[1].value="STS-PRESENT";await choose();
+ selects()[1].value="STS-PRESENT";
+ selects()[1].handlers.change();
+ assert.ok(root.all().some(x=>x.className.includes("attendance-status-preview") &&
+   x.style.borderColor==="#22AA55"),
+   "native status selection exposes a live color-coded indicator");
+ await choose();
  await one("معاينة التحضير").handlers.click();await flush();
  assert.equal(reviews.length,1,"one modal with the review list is opened");
  assert.equal(reviews[0].data.persons[0].name,"شخص تجريبي");

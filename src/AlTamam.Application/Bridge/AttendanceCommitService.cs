@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Application.Attendance;
 using AlTamam.Contracts.Events;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -156,35 +157,65 @@ public sealed class AttendanceCommitService
             return Fail(BridgeErrorCodes.ValidationError,"سبب التعديل المدخل غير صالح.");
         using var c=_db.CreateOpenConnection();
         if(await Closed(c,null,date,ct).ConfigureAwait(false))
-            return Fail(BridgeErrorCodes.HistoricDayLocked,"اليوم أو الشهر مغلق، ولا يسمح بتعديل تحضيره.");
+        {
+            if(ids.Length==0)return Fail(BridgeErrorCodes.HistoricDayLocked,
+                "اليوم أو الشهر مغلق، ولا يسمح بتعديل تحضيره.");
+            var blocked=new JsonArray();
+            foreach(var id in ids)
+                blocked.Add(await AttendanceConflictDetails.DescribeAsync(c,null,id,date,
+                    "اليوم أو الشهر مغلق؛ لا يسمح بالتحضير أو التعديل إلا من المسار الاستثنائي المخوّل.",ct)
+                    .ConfigureAwait(false));
+            return AttendanceConflictDetails.Reject(BridgeErrorCodes.HistoricDayLocked,blocked);
+        }
         var status=await Status(c,null,statusId,ct).ConfigureAwait(false);
         if(status is null)
             return Fail(BridgeErrorCodes.CustomStatusInactive,"الحالة المحددة غير نشطة.");
         var people=new JsonArray();
+        var conflicts=new JsonArray();
+        string? firstError=null;
         foreach(var id in ids)
         {
             var s=await GetSnapshot(c,null,id,date,ct).ConfigureAwait(false);
             if(s is null)
-                return Fail(BridgeErrorCodes.TransferDayAttendanceForbidden,
-                    "تعذر تحضير "+await PersonLabelAsync(c,null,id,ct).ConfigureAwait(false)+
-                    ": الفرد غير نشط أو منقول اليوم أو ليس له موقع صالح؛ أُلغيت العملية كاملة.");
-            string who=PersonLabel(s.Name,s.Number);
+            {
+                conflicts.Add(await AttendanceConflictDetails.DescribeAsync(c,null,id,date,
+                    "الفرد غير نشط أو منقول اليوم أو ليس له انتساب صالح إلى موقع؛ لا يمكن تحضيره.",ct)
+                    .ConfigureAwait(false));
+                firstError??=BridgeErrorCodes.TransferDayAttendanceForbidden;
+                continue;
+            }
             if(siteFilter.Length>0 && s.SiteId!=siteFilter)
-                return Fail(BridgeErrorCodes.TransferDayAttendanceForbidden,
-                    "تعذر تحضير "+who+": الموقع الحالي لا يطابق الموقع المحدد.");
+            {
+                conflicts.Add(AttendanceConflictDetails.Known(s.PersonId,s.Name,s.Number,
+                    "موقع الفرد الحالي «"+s.SiteName+"» لا يطابق الموقع المحدد."));
+                firstError??=BridgeErrorCodes.TransferDayAttendanceForbidden;
+                continue;
+            }
             if(mode=="initial" && s.PreviousRevision!=0)
-                return Fail(BridgeErrorCodes.AlreadyPrepared,
-                    "تعذر تحضير "+who+": الحالة الحالية «"+s.PreviousName+
-                    "» مسجلة اليوم؛ استخدم تغيير الحالة.");
+            {
+                conflicts.Add(AttendanceConflictDetails.Known(s.PersonId,s.Name,s.Number,
+                    "الحالة «"+s.PreviousName+"» مسجلة بالفعل اليوم؛ استخدم تغيير الحالة."));
+                firstError??=BridgeErrorCodes.AlreadyPrepared;
+                continue;
+            }
             if(mode=="revise" && s.PreviousRevision==0)
-                return Fail(BridgeErrorCodes.ValidationError,
-                    "تعذر تغيير حالة "+who+": لا يوجد تحضير سابق لهذا اليوم.");
+            {
+                conflicts.Add(AttendanceConflictDetails.Known(s.PersonId,s.Name,s.Number,
+                    "لا توجد حالة تمّام سابقة لهذا اليوم حتى تُعدّل."));
+                firstError??=BridgeErrorCodes.ValidationError;
+                continue;
+            }
             if(mode=="revise" && s.PreviousStatus==statusId)
-                return Fail(BridgeErrorCodes.ValidationError,
-                    "تعذر تغيير حالة "+who+": الحالة المختارة «"+status.Value.Name+
-                    "» هي نفسها الحالة المعتمدة.");
+            {
+                conflicts.Add(AttendanceConflictDetails.Known(s.PersonId,s.Name,s.Number,
+                    "الحالة «"+status.Value.Name+"» هي نفسها الحالة المعتمدة؛ لم تُنشأ مراجعة مكررة."));
+                firstError??=BridgeErrorCodes.ValidationError;
+                continue;
+            }
             people.Add(ToJson(s));
         }
+        if(conflicts.Count>0)
+            return AttendanceConflictDetails.Reject(firstError??BridgeErrorCodes.ConflictStale,conflicts);
         var sealedData=new JsonObject
         {
             ["businessDate"]=date,["statusId"]=statusId,["statusName"]=status.Value.Name,
@@ -240,33 +271,49 @@ public sealed class AttendanceCommitService
             if(status is null)return Fail(BridgeErrorCodes.CustomStatusInactive,
                 "الحالة توقفت عن العمل بعد المعاينة.");
             var snapshots=new List<Snapshot>();
+            var conflicts=new JsonArray();
             foreach(var item in selected)
             {
-                if(item is not JsonObject prev)return Fail(BridgeErrorCodes.ValidationError,"المعاينة غير صالحة.");
+                if(item is not JsonObject prev)
+                    return Fail(BridgeErrorCodes.ValidationError,"المعاينة غير صالحة.");
                 string personId=Read(prev,"personId");
                 var current=await GetSnapshot(c,t,personId,date,ct).ConfigureAwait(false);
-                long revision;try{revision=prev["previousRevision"]!.GetValue<long>();}
+                long revision;
+                try{revision=prev["previousRevision"]!.GetValue<long>();}
                 catch{return Fail(BridgeErrorCodes.ValidationError,"مراجعة المعاينة غير صالحة.");}
                 if(current is null)
-                    return Fail(BridgeErrorCodes.ConflictStale,
-                        "تعذر اعتماد تحضير "+await PersonLabelAsync(c,t,personId,ct).ConfigureAwait(false)+
-                        ": الفرد غير متاح للتحضير الآن؛ حدّث القائمة.");
-                string who=PersonLabel(current.Name,current.Number);
+                {
+                    conflicts.Add(await AttendanceConflictDetails.DescribeAsync(c,t,personId,date,
+                        "الفرد غير متاح للتحضير الآن؛ تغير وضعه أو حركته منذ المعاينة.",ct)
+                        .ConfigureAwait(false));
+                    continue;
+                }
                 if(current.AssignmentId!=Read(prev,"assignmentId")
                     || current.PreviousRevision!=revision
                     || (current.PreviousStatus??"")!=Read(prev,"previousStatusId"))
-                    return Fail(BridgeErrorCodes.ConflictStale,
-                        "تعذر اعتماد تحضير "+who+
-                        ": تغيرت حالته أو موقعه بعد المعاينة؛ حدّث الكشف.");
+                {
+                    conflicts.Add(AttendanceConflictDetails.Known(current.PersonId,
+                        current.Name,current.Number,
+                        "تغيرت الحالة أو الموقع بعد المعاينة؛ أعد تحميل الكشف."));
+                    continue;
+                }
                 if(!revise && revision!=0)
-                    return Fail(BridgeErrorCodes.ConflictStale,
-                        "تعذر اعتماد تحضير "+who+": تم تحضيره مسبقاً بعد المعاينة.");
+                {
+                    conflicts.Add(AttendanceConflictDetails.Known(current.PersonId,
+                        current.Name,current.Number,"تم تحضير الفرد مسبقاً بعد المعاينة."));
+                    continue;
+                }
                 if(revise && (revision==0||current.PreviousStatus==statusId))
-                    return Fail(BridgeErrorCodes.ConflictStale,
-                        "تعذر تغيير حالة "+who+
-                        ": الحالة الحالية غير مناسبة للتعديل؛ أعد المعاينة.");
+                {
+                    conflicts.Add(AttendanceConflictDetails.Known(current.PersonId,
+                        current.Name,current.Number,
+                        "الحالة الحالية لا تقبل التعديل المطلوب أو لا يوجد تغير فعلي."));
+                    continue;
+                }
                 snapshots.Add(current);
             }
+            if(conflicts.Count>0)
+                return AttendanceConflictDetails.Reject(BridgeErrorCodes.ConflictStale,conflicts);
             long? consumed=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,t,token,
                 "ATTENDANCE-"+mode,actor.UserId,0,ct).ConfigureAwait(false);
             if(consumed!=0)return Fail(BridgeErrorCodes.ConflictStale,"معاينة قديمة أو مستخدمة.");

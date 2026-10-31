@@ -15,7 +15,9 @@
    const o=make("option",title);o.value=value;return o;
  };
  const showError=(box,error)=>{
-   box.replaceChildren(make("p",error.message||"تعذرت العملية","admin-warning"));
+   const message=make("p",error.message||"تعذرت العملية",
+     "admin-warning attendance-conflict-warning");
+   box.replaceChildren(message);
  };
  function localDate(){
    const now=new Date();
@@ -44,6 +46,9 @@
    mode.append(option("initial","تحضير جديد"),option("revise","تغيير حالة التحضير"));
    const list=make("div",undefined,"daily-roster-panel"),info=make("div");
    const choice=make("span","لم يتم تحديد أسماء");
+   const statusColors=new Map();
+   const colorPreview=make("span","اختر الحالة لعرض لونها","attendance-status-preview");
+   colorPreview.setAttribute("aria-live","polite");
    const draftPanel=make("section",undefined,"card attendance-drafts attendance-drafts-modal");
    draftPanel.hidden=true;
    draftPanel.setAttribute("role","dialog");
@@ -77,7 +82,17 @@
      clearReview();
      previewButton.textContent=mode.value==="revise"?"معاينة تغيير الحالة":"معاينة التحضير";
    });
-   status.addEventListener("change",clearReview);
+   status.addEventListener("change",()=>{
+     clearReview();
+     const color=statusColors.get(status.value);
+     colorPreview.textContent=color?
+       "الحالة: "+(Array.from(status.children).find(x=>x.value===status.value)?.textContent||""):
+       "اختر الحالة لعرض لونها";
+     if(colorPreview.style){
+       colorPreview.style.borderColor=color||"";
+       colorPreview.style.backgroundColor=color?color+"1F":"";
+     }
+   });
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
    search.addEventListener("keydown",event=>{
      if(event.key==="Enter"){event.preventDefault();pageNo=1;void load();}
@@ -86,7 +101,7 @@
    const clearSearch=button("مسح البحث",()=>{
      search.value="";pageNo=1;void load();
    });
-   filters.append(site,status,mode,search,searchButton,clearSearch);
+   filters.append(site,status,colorPreview,mode,search,searchButton,clearSearch);
    header.append(filters,choice,info,list);
    host.appendChild(draftPanel);
    host.insertBefore(header,draftPanel);
@@ -123,7 +138,17 @@
            summary();clearReview();
          });
          td.appendChild(cb);tr.appendChild(td);
-         [p.serviceNumberA,p.name,p.siteName,p.statusName].forEach(v=>tr.appendChild(make("td",v)));
+         [p.serviceNumberA,p.name,p.siteName].forEach(v=>tr.appendChild(make("td",v)));
+         const stateCell=make("td"),statePill=make("span",p.statusName,
+           "status-pill attendance-status-pill");
+         const savedColor=String(p.statusColor||"");
+         if(/^#[0-9a-fA-F]{6}$/.test(savedColor)){
+           if(statePill.style){
+             statePill.style.borderColor=savedColor;
+             statePill.style.backgroundColor=savedColor+"1F";
+           }
+         }
+         stateCell.appendChild(statePill);tr.appendChild(stateCell);
          t.body.appendChild(tr);
        }
        if(!t.body.children.length){
@@ -269,7 +294,14 @@
        bridge.invoke("QuerySites",{}),bridge.invoke("GetActiveAttendanceStatuses",{})
      ]);
      for(const s of sites.data||[])if(s.active!==false)site.appendChild(option(s.siteId,s.name));
-     for(const x of statuses.data||[])status.appendChild(option(x.statusId,x.displayName));
+     for(const x of statuses.data||[]){
+       const entry=option(x.statusId,x.displayName);
+       if(/^#[0-9a-fA-F]{6}$/.test(x.color||"")){
+         statusColors.set(x.statusId,x.color);
+         if(entry.style)entry.style.color=x.color;
+       }
+       status.appendChild(entry);
+     }
      await Promise.all([load(),refreshDrafts()]);
    }catch(e){showError(info,e);}
  }
