@@ -30,7 +30,7 @@ vm.runInNewContext(source,context,{filename:"bridge-client.js"});
 const bridge=window.AltamamBridge;
 (async()=>{
   const mutations=manifest.actions.filter(a=>a.isMutating&&a.action!=="Logout");
-  assert.equal(mutations.length,41,"all 41 current mutation actions covered");
+  assert.equal(mutations.length,42,"all 42 current mutation actions covered");
   for(const {action} of mutations){
     const payload={example:"value"};
     await bridge.invoke(action,payload);
@@ -52,5 +52,5 @@ const bridge=window.AltamamBridge;
   assert.equal(sent.at(-1).payload.operationId,undefined);
   await bridge.invoke("Logout",{});
   assert.equal(sent.at(-1).payload.operationId,undefined);
-  console.log("SECTION02 mutation UI bridge PASS: 41 actions, persistent intent, explicit ID, reads and logout");
+  console.log("SECTION02 mutation UI bridge PASS: 42 actions, persistent intent, explicit ID, reads and logout");
 })().catch(e=>{console.error(e);process.exitCode=1;});
