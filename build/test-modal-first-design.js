@@ -83,6 +83,43 @@ assert.ok(report.includes('fromLabel.append(el("span","من تاريخ"),dateFro
 assert.ok(report.includes('siteLabel.append(el("span","الموقع التاريخي"),site)'),
   "historical report selectors must have inset labels");
 
+
+/* The first-run page is a real form, not an instructional screenshot:
+   labels float over RTL fields; all credential semantics remain unchanged. */
+check(/function decorateAuthField\(control, id, glyph\)/,functional,
+  "authentication uses a single accessible floating-field builder");
+check(/caption\.htmlFor=id;control\.input\.placeholder=" "/,functional,
+  "caption remains a real label while focus/value move it");
+check(/auth-setup-heading","التهيئة الأولى"/,functional,
+  "first-run title is a plain heading outside the form card");
+check(/auth-password-area/,functional,
+  "password rules appear immediately after the password input");
+check(/function addPasswordReveal\(control\)/,functional,
+  "password and confirmation use icon-only, keyboard-accessible visibility buttons");
+check(/aria-pressed",String\(visible\)/,functional,
+  "password reveal communicates visible state");
+check(/chips\[i\]\.indicator\.textContent=valid\?"✓":"○"/,functional,
+  "rule indicators change in real time");
+check(/pass\.input\.addEventListener\("input",refreshPolicy\)/,functional,
+  "password requirements refresh on input");
+check(/confirmation\.input\.addEventListener\("input",refreshPolicy\)/,functional,
+  "password matching refreshes when confirmation changes");
+check(/if\(optionalFullName\) payload\.fullName=optionalFullName/,functional,
+  "founder full name stays optional");
+check(/bridge\(\)\.invoke\("AuthenticateLocalUser",payload\)/,functional,
+  "real offline C# provisioning endpoint is not replaced");
+check(/\.auth-form \.form-input:focus~\.auth-floating-caption/,css,
+  "caption floats on focus");
+check(/\.auth-form \.form-input:not\(:placeholder-shown\)~\.auth-floating-caption/,css,
+  "caption remains raised after typing");
+check(/\.auth-form \.auth-floating-field>\.form-input:focus/,css,
+  "active field gets an accent-colored focus border");
+check(/\.auth-first-run \.auth-password-policy\{\s*display:grid/,css,
+  "password rules are displayed as a responsive list");
+check(/\.auth-first-run>\.auth-info-box\{/,css,
+  "founder instructions are readable in a light information panel");
+check(/\.auth-first-run>\.btn\.btn-primary\{/,css,
+  "primary action is full-width and touch-friendly");
 check(/auth-password-policy/,functional,"live first-run password policy");
 check(/auth-brand/,functional,"the branded login block appears inside both login and first-run forms");
 check(/\.auth-brand-mark\{/,css,"login uses the local Cairo heading and teal symbol");

@@ -33,7 +33,19 @@
     inp.required = !!required;
     inp.autocomplete = type === "password" ? "current-password" : type === "search" ? "off" : "on";
     append(wrapper, text, inp);
-    return { wrapper, input: inp };
+    return { wrapper, input: inp, label: text };
+  }
+  // Names remain explicitly associated with their controls even while the
+  // visual caption moves. No password/username value is mirrored into the DOM.
+  function decorateAuthField(control, id, glyph) {
+    const wrapper=el("div","form-field auth-floating-field");
+    const caption=el("label","auth-floating-caption",control.label.textContent);
+    control.input.id=id;caption.htmlFor=id;control.input.placeholder=" ";
+    const icon=el("span","auth-field-icon",glyph);
+    icon.setAttribute("aria-hidden","true");
+    append(wrapper,icon,control.input,caption);
+    control.wrapper=wrapper;
+    return control;
   }
   function message(text, error) {
     const p = el("div", error ? "ui-alert ui-error" : "ui-alert", text);
@@ -141,22 +153,35 @@
     append(brand,el("div","auth-brand-mark","ت"),
       el("h2","section-title","التمام اليومي"),
       el("p","section-description","نظام إدارة القوة والتحضير — تسجيل محلي آمن"));
-    const name=field("text","اسم المستخدم",true);
+    const name=decorateAuthField(field("text","اسم المستخدم",true),"auth-username","👤");
     name.input.autocomplete="username";
-    const pass=field("password","كلمة المرور",true);
-    const reveal=button("إظهار كلمة المرور",()=>{
-      const visible=pass.input.type==="password";
-      pass.input.type=visible?"text":"password";
-      reveal.textContent=visible?"إخفاء كلمة المرور":"إظهار كلمة المرور";
-      reveal.setAttribute("aria-pressed",String(visible));
-    },"btn btn-outline auth-password-toggle");
-    reveal.setAttribute("aria-pressed","false");
-    pass.wrapper.classList.add("auth-password-field");
-    pass.wrapper.appendChild(reveal);
+    const pass=decorateAuthField(field("password","كلمة المرور",true),"auth-password","🔒");
+    // Both password controls have an accessible, keyboard-operable icon toggle.
+    function addPasswordReveal(control) {
+      const reveal=button("👁",()=>{
+        const visible=control.input.type==="password";
+        control.input.type=visible?"text":"password";
+        reveal.textContent=visible?"🙈":"👁";
+        const description=visible?"إخفاء كلمة المرور":"إظهار كلمة المرور";
+        reveal.title=description;
+        reveal.setAttribute("aria-label",description);
+        reveal.setAttribute("aria-pressed",String(visible));
+        control.input.focus();
+      },"auth-password-toggle");
+      reveal.setAttribute("aria-label","إظهار كلمة المرور");
+      reveal.setAttribute("aria-pressed","false");
+      reveal.title="إظهار كلمة المرور";
+      control.wrapper.classList.add("auth-password-field");
+      control.wrapper.appendChild(reveal);
+    }
+    addPasswordReveal(pass);
     // Existing users may have historical credentials; only NEW founders must
     // satisfy the current strong-password policy during initialization.
-    const confirmation=field("password","تأكيد كلمة المرور",true);
-    const foundingName=field("text","الاسم الكامل لصاحب الحساب (اختياري)",false);
+    const confirmation=decorateAuthField(field("password","تأكيد كلمة المرور",true),
+      "auth-confirm-password","🔒");
+    addPasswordReveal(confirmation);
+    const foundingName=decorateAuthField(
+      field("text","الاسم الكامل لصاحب الحساب (اختياري)",false),"auth-full-name","👤");
     let firstUse=false;
     const note=el("p","section-description","يعمل البرنامج على هذا الجهاز دون اتصال بالإنترنت.");
     const status=el("div","auth-status");
@@ -167,7 +192,10 @@
       const provisioning=parseData(await bridge().invoke("GetProvisioningState",{}));
       if (provisioning && provisioning.provisioned===false) {
         firstUse=true;
-        container.replaceChildren(header("التهيئة الأولى"),form);
+        const heading=el("h1","auth-setup-heading","التهيئة الأولى");
+        container.replaceChildren(heading,form);
+        note.classList.add("auth-info-box");
+        note.setAttribute("role","note");
         note.textContent="أنشئ اسم المستخدم وكلمة مرور قوية مع تأكيدها. الاسم الكامل اختياري؛ سيظهر الحساب «الإدارة العامة - اسم المستخدم» ويُضاف الاسم إن أدخلته. لا توجد بيانات دخول افتراضية.";
         submit.textContent="إنشاء الإدارة العامة والدخول";
         pass.input.minLength=10;
@@ -177,6 +205,7 @@
         foundingName.input.maxLength=200;
         form.classList.add("auth-first-run");
         const policy=el("div","auth-password-policy");
+        policy.setAttribute("role","list");
         policy.setAttribute("aria-label","متطلبات كلمة المرور");
         const checks=[
           ["10 أحرف فأكثر",v=>v.length>=10],
@@ -187,22 +216,30 @@
           ["تطابق كلمتي المرور",v=>v.length>0&&v===confirmation.input.value]
         ];
         const chips=checks.map(([label])=>{
-          const chip=el("span","auth-policy-chip",label);
-          policy.appendChild(chip);return chip;
+          const chip=el("div","auth-policy-chip");
+          chip.setAttribute("role","listitem");
+          const indicator=el("span","auth-policy-icon","○");
+          indicator.setAttribute("aria-hidden","true");
+          append(chip,indicator,el("span","",label));
+          policy.appendChild(chip);
+          return {chip,indicator};
         });
         const refreshPolicy=()=>{
           const value=pass.input.value;
-          checks.forEach((check,i)=>{
-            const valid=check[1](value);
-            chips[i].classList.toggle("valid",valid);
-            chips[i].setAttribute("aria-label",check[0]+(valid?" — مستوفى":" — غير مستوفى"));
+          checks.forEach(([label,passes],i)=>{
+            const valid=passes(value);
+            chips[i].chip.classList.toggle("valid",valid);
+            chips[i].indicator.textContent=valid?"✓":"○";
+            chips[i].chip.setAttribute("aria-label",label+(valid?" — مستوفى":" — غير مستوفى"));
           });
         };
         pass.input.addEventListener("input",refreshPolicy);
         confirmation.input.addEventListener("input",refreshPolicy);
         refreshPolicy();
-        form.replaceChildren(brand,name.wrapper,foundingName.wrapper,pass.wrapper,
-          confirmation.wrapper,policy,note,status,submit);
+        const passwordArea=el("div","auth-password-area");
+        append(passwordArea,pass.wrapper,policy);
+        form.replaceChildren(brand,name.wrapper,foundingName.wrapper,passwordArea,
+          confirmation.wrapper,note,status,submit);
       }
     } catch(e) { showError(status,e); }
     form.addEventListener("submit",async event=>{
