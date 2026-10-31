@@ -120,6 +120,10 @@ assert.match(css,/height:38px;min-height:38px/,"search height must accommodate A
 assert.match(css,/width:100%;min-width:200px;max-width:360px/,"search is flexible, not fixed");
 assert.match(css,/label\.app-unified-search-wrap\{\s*display:flex;flex:1 1 240px;min-width:200px;max-width:360px/);
 assert.doesNotMatch(css,/170px!important/,"old narrow search footprint must not regress");
+assert.match(css,/input\.app-search-control\{/,
+  "search boxes have their own height instead of inheriting oversized forms");
+assert.match(css,/height:44px;min-height:44px;max-height:44px/,
+  "screen search inputs use a consistent accessible height");
 const html=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/index.html"),"utf8");
 assert.match(html,/assets\/js\/table-experience\.js/);
@@ -150,8 +154,10 @@ async function verifySharedInputCompletion(){
   assert.equal(person.placeholder,"بحث بالاسم أو الرقم (ع)");
   assert.ok(named.classList.contains("app-unified-search"),
     "admin text search receives the same compact dimensions");
-  assert.equal(named.placeholder,"بحث بالاسم أو الرقم (ع)",
-    "person-search hint moves inside the input");
+  assert.equal(named.placeholder,"بحث عن فرد بالاسم أو الرقم (ع)",
+    "the person-search field keeps the specific label used on this screen");
+  assert.ok(named.classList.contains("app-search-control"),
+    "the shared search sizing excludes the 64px data-entry rule");
   assert.ok(labeled.classList.contains("app-unified-search-wrap"));
   assert.ok(caption.classList.contains("app-unified-search-caption"),
     "visible search caption is visually hidden but remains accessible");

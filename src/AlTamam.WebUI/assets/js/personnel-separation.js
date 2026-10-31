@@ -32,9 +32,30 @@
     const wrapper=el("section",undefined,"card");
     wrapper.classList.add("separation-screen");
     host.appendChild(wrapper);
-    if(screen==="separatePerson")return form(wrapper);
-    if(screen==="separatedArchive")return archive(wrapper);
-    wrapper.appendChild(el("p","هذه الشاشة غير متاحة.","admin-warning"));
+    // One owning screen: the historical register is an internal tab rather
+    // than a second management tile. Legacy deep links choose the same tab.
+    const tabs=el("div",undefined,"separation-tabs");
+    tabs.setAttribute("role","tablist");
+    tabs.setAttribute("aria-label","الفصل والأرشيف");
+    const content=el("div",undefined,"separation-content");
+    const separateTab=button("فصل فرد",()=>activate("separatePerson"));
+    const archiveTab=button("أرشيف الفصل",()=>activate("separatedArchive"));
+    for(const tab of [separateTab,archiveTab])tab.setAttribute("role","tab");
+    tabs.append(separateTab,archiveTab);
+    wrapper.append(tabs,content);
+    function activate(selected){
+      const isArchive=selected==="separatedArchive";
+      separateTab.className=isArchive?"btn btn-outline":"btn btn-primary";
+      archiveTab.className=isArchive?"btn btn-primary":"btn btn-outline";
+      separateTab.setAttribute("aria-selected",String(!isArchive));
+      archiveTab.setAttribute("aria-selected",String(isArchive));
+      separateTab.setAttribute("tabindex",isArchive?"-1":"0");
+      archiveTab.setAttribute("tabindex",isArchive?"0":"-1");
+      const pane=el("div",undefined,"separation-pane");
+      content.replaceChildren(pane);
+      return isArchive?archive(pane):form(pane);
+    }
+    return activate(screen==="separatedArchive"?"separatedArchive":"separatePerson");
   }
   async function form(root) {
     root.replaceChildren(el("h2","فصل فرد من القوة","section-title"),

@@ -48,7 +48,12 @@ const ui=context.window.AltamamSeparation;
 const byText=text=>root.all().find(x=>x.tag==="button"&&x.textContent===text);
 async function tick(){await new Promise(resolve=>setImmediate(resolve));}
 async function run(){
- await ui.render(root,"separatePerson");
+ await ui.render(root,"separation");
+ assert.ok(byText("فصل فرد")&&byText("أرشيف الفصل"),
+   "the separation screen includes both the active operation and its read-only archive");
+ const tabs=root.all().filter(x=>x.attrs.role==="tab");
+ assert.equal(tabs.length,2);
+ assert.equal(tabs[0].attrs["aria-selected"],"true");
  assert.ok(byText("بحث"));
  assert.equal(commits.length,0);
  byText("اختيار").handlers.click();
@@ -65,8 +70,10 @@ async function run(){
  assert.equal(commits.length,1,"explicitly accepting the verified modal commits once");
  assert.equal(previews.length,2);
  assert.equal(commits[0].previewToken,"ONLY_SERVER_TOKEN");
- const archive=new Node("div");
- await ui.render(archive,"separatedArchive");
+ await byText("أرشيف الفصل").handlers.click();
+ await tick();
+ assert.equal(root.all().filter(x=>x.attrs.role==="tab")[1].attrs["aria-selected"],"true");
+ const archive=root;
  assert.ok(archive.all().some(x=>x.textContent.includes("فرد مفصول")));
  assert.ok(calls.includes("QuerySeparationArchive"));
  assert.ok(calls.includes("CommitSeparation"));
@@ -79,6 +86,13 @@ async function run(){
    x[1]==="سبب فصل مسجل"));
  assert.equal(previews[2].options.confirmLabel,"إغلاق التفاصيل");
  assert.equal(commits.length,1,"opening or dismissing archived details never separates again");
+ await byText("فصل فرد").handlers.click();
+ await tick();
+ assert.ok(byText("بحث"),"return to the current separation screen without leaving it");
+ const oldRoute=new Node("div");
+ await ui.render(oldRoute,"separatedArchive");
+ assert.ok(oldRoute.all().some(x=>x.textContent.includes("فرد مفصول")),
+   "legacy archive deep links still open the archive tab inside the separation screen");
  console.log("SEPARATION UI PASS: timed preview, secure commit, read-only archive details popup");
 }
 run().catch(err=>{console.error(err);process.exitCode=1;});

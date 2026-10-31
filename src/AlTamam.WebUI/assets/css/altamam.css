@@ -2245,3 +2245,109 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
     grid-column:auto
   }
 }
+
+
+/* Compact search inputs across active screens: one actual input height.
+   Overrides the 64px inset data-entry field only for marked search controls. */
+input.app-search-control{
+  box-sizing:border-box;width:100%;min-width:0;max-width:100%;
+  height:44px;min-height:44px;max-height:44px;
+  padding:9px 14px;border:1px solid var(--border-color);
+  border-radius:10px;background:var(--bg-surface);color:var(--text-main);
+  font:600 14px/1.5 "AlTamam Tajawal",sans-serif;
+  text-align:right;direction:rtl
+}
+input.app-search-control::placeholder{
+  color:var(--text-muted);opacity:1;font-size:13px;font-weight:500
+}
+input.app-search-control:focus-visible{
+  outline:none;border-color:var(--accent-teal);
+  box-shadow:0 0 0 3px var(--accent-teal-soft)
+}
+:is(#appViewport,#appModalBody,.auto-attendance-overlay)
+  label.app-unified-search-wrap:has(input.app-search-control){
+  position:relative;display:block;align-self:center;
+  flex:0 1 340px;width:min(100%,340px);min-width:0;max-width:380px;
+  height:44px;min-height:44px;max-height:44px;margin:0;padding:0
+}
+:is(#appViewport,#appModalBody,.auto-attendance-overlay)
+  label.app-unified-search-wrap>input.app-search-control{
+  box-sizing:border-box;display:block;width:100%;min-width:0;max-width:100%;
+  height:44px;min-height:44px;max-height:44px;
+  padding:9px 14px;border-radius:10px
+}
+:is(#appViewport,#appModalBody,.auto-attendance-overlay)
+  label.app-unified-search-wrap>.app-unified-search-caption{
+  position:absolute;width:1px;height:1px;overflow:hidden;
+  clip-path:inset(50%);white-space:nowrap
+}
+/* Root attendance toolbars previously stretched one search field above
+   adjacent buttons. Keep the site filter, search and actions on one scale. */
+#appViewport.daily-dashboard>.functional-toolbar
+  label.form-field.app-unified-search-wrap:has(input[type="search"]),
+#appViewport.monthly-dashboard>.functional-toolbar
+  label.form-field.app-unified-search-wrap:has(input[type="search"]){
+  flex:0 1 340px;align-self:center;width:clamp(220px,29vw,340px);
+  min-width:220px;max-width:340px;
+  height:44px;min-height:44px;max-height:44px
+}
+#appViewport.daily-dashboard>.functional-toolbar
+  label.form-field.app-unified-search-wrap>input.app-search-control,
+#appViewport.monthly-dashboard>.functional-toolbar
+  label.form-field.app-unified-search-wrap>input.app-search-control{
+  height:44px;min-height:44px;max-height:44px;
+  padding:9px 14px;font-size:14px
+}
+#appViewport.daily-dashboard>.functional-toolbar :is(select,.btn),
+#appViewport.monthly-dashboard>.functional-toolbar :is(select,.btn){
+  min-height:44px;padding:9px 12px;font-size:13px;border-radius:9px
+}
+/* Unlabelled inputs in movement/archive/report toolbars have a bounded size
+   too; no global resize of unrelated names, dates or password fields. */
+:is(#appViewport,#appModalBody,.auto-attendance-overlay)
+  .functional-toolbar>input.app-search-control{
+  flex:0 1 340px;width:min(100%,340px);min-width:190px;max-width:380px;
+  height:44px;min-height:44px;max-height:44px
+}
+:is(#appViewport,#appModalBody,.auto-attendance-overlay)
+  .table-local-search input.app-unified-search{
+  flex:1 1 220px;max-width:420px;height:40px;min-height:40px;max-height:40px
+}
+@media(max-width:620px){
+  :is(#appViewport,#appModalBody,.auto-attendance-overlay)
+    .functional-toolbar>input.app-search-control{
+    flex-basis:100%;min-width:0
+  }
+}
+
+/* Separation: archive lives inside the same screen, not a sibling route tile. */
+.separation-screen>.separation-tabs{
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+  margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border-color)
+}
+.separation-screen>.separation-tabs>.btn{
+  flex:1 1 165px;min-height:46px;padding:10px 18px;
+  border-radius:10px;font-size:14px;font-weight:800
+}
+.separation-screen>.separation-tabs>.btn[aria-selected="true"]{
+  box-shadow:0 0 0 2px var(--accent-teal-soft)
+}
+.separation-screen>.separation-content{
+  min-width:0;display:flex;flex-direction:column;gap:12px
+}
+.separation-screen>.separation-content>.separation-pane{
+  min-width:0;display:flex;flex-direction:column;gap:12px
+}
+.separation-pane>.functional-toolbar{
+  min-width:0;gap:10px;padding:12px;
+  border:1px solid var(--border-color);
+  background:var(--bg-subtle);border-radius:11px
+}
+.separation-pane>.functional-toolbar>:is(select,.btn){
+  min-height:44px;border-radius:9px
+}
+.separation-pane>.functional-table-wrap{max-width:100%;overflow:auto}
+@media(max-width:550px){
+  .separation-screen>.separation-tabs>.btn{flex-basis:100%}
+  .separation-pane>.functional-toolbar{flex-wrap:wrap}
+}

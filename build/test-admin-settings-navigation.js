@@ -233,12 +233,12 @@ async function run() {
   byDataset("adminSection")[0].handlers.click();
   assert.equal(byDataset("adminSection").length,0,"top-level cards hidden in subgroup");
   assert.deepEqual(byDataset("adminScreen").map(x=>x.dataset.adminScreen),
-    ["attendance","persons","transfers","separation","separatedArchive","personReport","closedCorrection"]);
+    ["attendance","persons","transfers","separation","personReport","closedCorrection"]);
   byDataset("adminScreen")[0].handlers.click();
   assert.equal(byDataset("adminScreen").length,0,"only selected detail page is visible");
   assert.ok(buttonNamed("العودة إلى إدارة القوة"),"back from detail to parent");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  assert.equal(byDataset("adminScreen").length,7,"re-open every distinct force-management screen");
+  assert.equal(byDataset("adminScreen").length,6,"dismissal archive is inside its owning separation screen");
   buttonNamed("العودة إلى الإدارة").handlers.click();
   assert.equal(byDataset("adminSection").length,5,"return to clean admin landing");
 
@@ -253,11 +253,13 @@ async function run() {
   assert.equal(byDataset("adminNested").length,4,"back restores transfer and both archive choices");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="separation").handlers.click();
-  assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["separatePerson"],"dismissal and the archived-personnel register are separate cards");
+  assert.equal(byDataset("adminNested").length,0,
+    "separation opens its real form and archived roster as two internal tabs");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="separatedArchive"),
-    "the dismissed-personnel archive has its own navigable roster card");
+  assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="separatedArchive"),
+    "the archive is no longer a separate administration screen tile");
+  assert.ok(!visible().some(x=>x.textContent==="عرض الشاشة وتنفيذ عملياتها المتاحة"),
+    "administration tiles do not show developer-oriented guidance");
   assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="personReport"),
     "one unified report card is present on roster landing");
   assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="archives"),
