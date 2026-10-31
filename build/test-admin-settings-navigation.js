@@ -453,7 +453,7 @@ async function run() {
   // The saved audit table is a compact nine-column overview. Historical
   // before/after evidence remains available only in the existing detail view.
   const auditTable=visible().find(x=>x.tag==="table"&&
-    x.className.split(/\\s+/).includes("audit-log-table"));
+    x.className.split(/\s+/).includes("audit-log-table"));
   assert.ok(auditTable,"audit listing must use its own responsive table layout");
   const auditHeaders=auditTable.children[0].children[0].children.map(x=>x.textContent);
   assert.deepEqual(auditHeaders,[
@@ -464,13 +464,13 @@ async function run() {
     "every audit listing cell must align with a corresponding header");
   assert.equal(auditTable.children[1].children[0].children[4].textContent,
     "2026-10-30 18:00 UTC","table timestamp is concise and unambiguously UTC");
-  const auditWrap=visible().find(x=>x.className.split(/\\s+/).includes("audit-log-table-wrap"));
+  const auditWrap=visible().find(x=>x.className.split(/\s+/).includes("audit-log-table-wrap"));
   assert.ok(auditWrap,"audit scrolling must be scoped to the log table");
   const css=fs.readFileSync(path.join(__dirname,
     "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
-  assert.match(css,/\\.audit-log-table\\s+:is\\(th,td\\)/,
+  assert.match(css,/\.audit-log-table\s+:is\(th,td\)/,
     "audit table must have its own readable column layout without global table changes");
-  assert.match(css,/\\.audit-log-table-wrap/, "audit table must keep bounded scrolling");
+  assert.match(css,/\.audit-log-table-wrap/, "audit table must keep bounded scrolling");
   const detailTrigger=buttonNamed("عرض التفاصيل");
   assert.ok(detailTrigger,"individual audit entry can be reviewed");
   deferAuditDetail=true;
