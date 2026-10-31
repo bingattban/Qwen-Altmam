@@ -181,7 +181,7 @@
       "auth-confirm-password","🔒");
     addPasswordReveal(confirmation);
     const foundingName=decorateAuthField(
-      field("text","الاسم الكامل لصاحب الحساب (اختياري)",false),"auth-full-name","👤");
+      field("text","الاسم الكامل (اختياري)",false),"auth-full-name","👤");
     let firstUse=false;
     const note=el("p","section-description","يعمل البرنامج على هذا الجهاز دون اتصال بالإنترنت.");
     const status=el("div","auth-status");
@@ -212,7 +212,7 @@
           ["3 أحرف إنجليزية",v=>(v.match(/[A-Za-z]/g)||[]).length>=3],
           ["3 أرقام",v=>(v.match(/[0-9]/g)||[]).length>=3],
           ["رمز خاص",v=>/[^A-Za-z0-9\s]/.test(v)],
-          ["دون مسافات",v=>!/\s/.test(v)],
+          ["دون مسافات",v=>v.length>0&&!/\s/.test(v)],
           ["تطابق كلمتي المرور",v=>v.length>0&&v===confirmation.input.value]
         ];
         const chips=checks.map(([label])=>{

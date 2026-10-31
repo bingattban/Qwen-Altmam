@@ -104,6 +104,8 @@ check(/pass\.input\.addEventListener\("input",refreshPolicy\)/,functional,
   "password requirements refresh on input");
 check(/confirmation\.input\.addEventListener\("input",refreshPolicy\)/,functional,
   "password matching refreshes when confirmation changes");
+check(/v=>v.length>0&&!\/\\s\/\.test\(v\)/,functional,
+  "an empty password must not show a green no-spaces check");
 check(/if\(optionalFullName\) payload\.fullName=optionalFullName/,functional,
   "founder full name stays optional");
 check(/bridge\(\)\.invoke\("AuthenticateLocalUser",payload\)/,functional,
