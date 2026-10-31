@@ -16,7 +16,7 @@
   const sections = [
     {key:"force",title:"إدارة القوة",children:[
       ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
-      ["separation","الفصل"],["separatedArchive","الأرشيف"],["personReport","التقرير"],
+      ["separation","الفصل"],["personReport","التقرير"],
       ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]]},
     {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
@@ -196,13 +196,14 @@
       ["archiveExternal","أرشيف النقل الخارجي"]
     ],
     separation: [
-      ["separatePerson","فصل فرد"]
+      ["separatePerson","فصل فرد"],
+      ["separatedArchive","أرشيف الفصل"]
     ]
   });
   const nestedParents = Object.freeze({
     transferInternal:"transfers",transferExternal:"transfers",
     archiveInternal:"transfers",archiveExternal:"transfers",
-    separatePerson:"separation"
+    separatePerson:"separation",separatedArchive:"separation"
   });
   function parentOf(screen) {
     return sections.find(section => section.children.some(child => child[0] === screen));
@@ -284,7 +285,6 @@
     for(const [key,title] of section.children) {
       if(key==="closedCorrection" && !["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))continue;
       const item=btn(title,()=>navigate(key),"admin-subsection-tile");
-      item.appendChild(node("span","admin-tile-subtitle","عرض الشاشة وتنفيذ عملياتها المتاحة"));
       item.dataset.adminScreen=key;
       item.setAttribute("aria-label","فتح شاشة "+title);
       grid.appendChild(item);
