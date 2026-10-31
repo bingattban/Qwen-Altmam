@@ -2471,6 +2471,62 @@
       }
     },
     {
+      "action": "PreviewAdministrativeAttendanceCatchUp",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": false,
+      "idempotentByRequestId": false,
+      "errorCodes": [
+        "Unauthorized",
+        "SessionExpired",
+        "ValidationError",
+        "HistoricDayLocked",
+        "ConflictStale",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
+      "action": "CommitAdministrativeAttendanceCatchUp",
+      "owningService": "AttendanceService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "SessionExpired",
+        "ValidationError",
+        "HistoricDayLocked",
+        "ConflictStale",
+        "MissingData"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
       "action": "SetClosedDayCorrectionPolicy",
       "owningService": "AttendanceService",
       "allowedRoles": [

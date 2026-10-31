@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Data.Sqlite;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -28,7 +29,7 @@ public sealed record AutoAttendanceRunResult(
 public sealed class AutoAttendanceService
 {
     public const int DefaultDueHour = 8;
-    public const int DefaultCatchUpDays = 7;
+    public const int DefaultCatchUpDays = 1;
     public const string SystemActorUserId = "USR-SYSTEM";
     private static readonly TimeSpan ClockRollbackTolerance = TimeSpan.FromMinutes(1);
 
@@ -71,9 +72,9 @@ public sealed class AutoAttendanceService
 
         // The configured 24-hour local schedule is read from persisted settings.
         // The 08:00 default remains only when no administrator value exists.
-        // Legacy AutoAttendanceCatchUpDays must not truncate history: the operator
-        // explicitly chose all earlier dates. No artificial retroactive baseline.
-        int catchUpDays = int.MaxValue;
+        // Owner policy: unattended recovery may reach yesterday only. Older missing
+        // days need a separate explicitly authorized seven-day administrator action.
+        int catchUpDays = DefaultCatchUpDays;
         bool dayDue = localNow.TimeOfDay >= await GetDueTimeAsync(ct).ConfigureAwait(false);
 
         List<DateOnly> pending = EnumeratePendingDates(today, dayDue, catchUpDays,
@@ -87,7 +88,8 @@ public sealed class AutoAttendanceService
                 r = r with { UnrecoverableMissedCount = unrecoverable,
                              SummaryArabic = $"{r.SummaryArabic} — فوات غير قابل للتدارك: {unrecoverable} يوم." };
             results.Add(r);
-            if (!r.WasAlreadyCompleted && r.BlockedClosedDay) break; // stop ascending catch-up at a blocked date
+            // A blocked yesterday must not prevent independent current-day preparation.
+            if (!r.WasAlreadyCompleted && r.BlockedClosedDay && date == today) break;
         }
         await PersistLastObservedAsync(nowUtc, ct).ConfigureAwait(false);
         return results;
@@ -96,20 +98,27 @@ public sealed class AutoAttendanceService
     /// <summary>Runs (or replays from the ledger) the automatic attendance for exactly one business date.</summary>
     public async Task<AutoAttendanceRunResult> RunForDateAsync(DateOnly businessDate, bool isCatchUp, CancellationToken ct = default)
     {
-        string jobKey = JobKey(businessDate);
-        AutoAttendanceRunResult? existing = await ReadLedgerAsync(jobKey, ct).ConfigureAwait(false);
-        if (existing is not null)
-            return existing with { WasAlreadyCompleted = true };
+        AutoAttendanceRunResult? existing = await ReadLedgerAsync(JobKey(businessDate), ct).ConfigureAwait(false);
+        if (existing is not null) return existing with { WasAlreadyCompleted = true };
+        return await _db.ExecuteInWriteTransactionAsync((connection, tx) =>
+            RunForDateInTransactionAsync(businessDate, isCatchUp, connection, tx, ct), ct).ConfigureAwait(false);
+    }
 
-        string source = isCatchUp ? "08h-catchup" : "08h-auto";
+    // The administrator path uses the SAME attendance algorithm within its own
+    // atomic preview/receipt/audit transaction; no parallel business rules.
+    internal async Task<AutoAttendanceRunResult> RunForDateInTransactionAsync(
+        DateOnly businessDate, bool isCatchUp, SqliteConnection connection, SqliteTransaction tx,
+        CancellationToken ct, AlTamam.Contracts.Bridge.BridgePrincipal? administrator = null)
+    {
+        string jobKey = JobKey(businessDate);
+        string source = administrator is null ? (isCatchUp ? "08h-catchup" : "08h-auto")
+            : "08h-admin-catchup";
         DateTimeOffset startedUtc = _time.GetUtcNow();
         string configuredDue = await Bridge.AutoAttendancePolicyService.ReadClockAsync(
-            _db,Bridge.AutoAttendancePolicyService.DueTimeKey,
-            Bridge.AutoAttendancePolicyService.DefaultDueTime,ct).ConfigureAwait(false);
+            _db, Bridge.AutoAttendancePolicyService.DueTimeKey,
+            Bridge.AutoAttendancePolicyService.DefaultDueTime, ct).ConfigureAwait(false);
         string dueLocal = Iso(businessDate) + "T" + configuredDue + ":00";
 
-        return await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
-        {
             // Closed-date lock enforced by the database authority (DAY or MONTH closure).
             using (var closed = connection.CreateCommand())
             {
@@ -118,7 +127,7 @@ public sealed class AutoAttendanceService
                                         WHERE IsClosed = 1 AND PeriodKey IN ($day, $month));";
                 closed.Parameters.AddWithValue("$day", Iso(businessDate));
                 closed.Parameters.AddWithValue("$month", businessDate.ToString("yyyy-MM", CultureInfo.InvariantCulture));
-                if (Convert.ToInt32(await closed.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
+                if (administrator is null && Convert.ToInt32(await closed.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
                 {
                     return new AutoAttendanceRunResult(jobKey, businessDate, false, true, 0, 0, 0, 0, 0,
                         $"التحضير التلقائي مرفوض: تاريخ الأعمال {Iso(businessDate)} مغلق إدارياً.");
@@ -160,11 +169,12 @@ public sealed class AutoAttendanceService
                         AND a.ValidFromLocalDate <= $date
                         AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate > $date)
                     JOIN Sites s ON s.SiteId=a.SiteId
-                    WHERE p.ActiveFlag=1 AND p.OrganizationalStatus=1
+                    WHERE ((p.ActiveFlag=1 AND p.OrganizationalStatus=1) OR $admin=1)
                       AND p.FirstRecordedLocalDate <= $date
                     ORDER BY p.PersonId;
                     """;
                 roster.Parameters.AddWithValue("$date", Iso(businessDate));
+                roster.Parameters.AddWithValue("$admin", administrator is null ? 0 : 1);
                 using var reader = await roster.ExecuteReaderAsync(ct).ConfigureAwait(false);
                 while (await reader.ReadAsync(ct).ConfigureAwait(false))
                     people.Add((reader.GetString(0), reader.GetString(1),
@@ -270,7 +280,7 @@ public sealed class AutoAttendanceService
                 insert.Parameters.AddWithValue("$site", person.SiteId);
                 insert.Parameters.AddWithValue("$siteName", person.SiteName);
                 insert.Parameters.AddWithValue("$source", source);
-                insert.Parameters.AddWithValue("$actor", SystemActorUserId);
+                insert.Parameters.AddWithValue("$actor", administrator?.UserId ?? SystemActorUserId);
                 insert.Parameters.AddWithValue("$now", startedUtc.ToString("O"));
                 insert.Parameters.AddWithValue("$idem", $"AUTO08H-{Iso(businessDate)}-{person.PersonId}");
                 await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
@@ -284,9 +294,9 @@ public sealed class AutoAttendanceService
             await Bridge.BridgeAuditWriter.WriteAsync(connection, tx, _time,
                 operationCode: "AUTO_ATTENDANCE_08H",
                 operationArabicName: "التحضير التلقائي وفق الوقت المحدد",
-                actorUserId: SystemActorUserId,
-                actorUsername: "النظام (جدولة تلقائية)",
-                actorDisplayName: null,
+                actorUserId: administrator?.UserId ?? SystemActorUserId,
+                actorUsername: administrator?.Username ?? "النظام (جدولة تلقائية)",
+                actorDisplayName: administrator?.Username,
                 targetEntityType: "AutoAttendanceRun",
                 targetEntityId: jobKey,
                 targetDisplay: $"تحضير تلقائي ليوم {Iso(businessDate)}",
@@ -330,7 +340,6 @@ public sealed class AutoAttendanceService
 
             return new AutoAttendanceRunResult(jobKey, businessDate, false, false,
                 copied, skipNoYesterday, skipTransfer, skipManual, 0, summary, isCatchUp);
-        }, ct).ConfigureAwait(false);
     }
 
     /// <summary>Reads the scheduling diagnostics: last ledger rows plus next scheduled due time.</summary>
@@ -367,13 +376,10 @@ public sealed class AutoAttendanceService
             lastObservedValid = false;
 
         DateOnly? lastCompleted = runs.Count > 0 ? runs[0].BusinessDate : null;
-        int pending = 0;
-        if (lastCompleted is not null)
-        {
-            DateOnly start = lastCompleted.Value.AddDays(1);
-            DateOnly end = dayDue ? today : today.AddDays(-1);
-            if (end >= start) pending = (end.DayNumber - start.DayNumber) + 1;
-        }
+        // Report the actual bounded automatic queue, not an unsupported historic
+        // backlog that the scheduler is forbidden to process.
+        int pending = EnumeratePendingDates(today, dayDue, DefaultCatchUpDays,
+            lastCompleted, out _).Count;
 
         string dueText=await Bridge.AutoAttendancePolicyService.ReadClockAsync(
             _db,Bridge.AutoAttendancePolicyService.DueTimeKey,
@@ -403,24 +409,18 @@ public sealed class AutoAttendanceService
         DateOnly? lastCompleted, out int unrecoverable)
     {
         unrecoverable = 0;
-        DateOnly end = dayDue ? today : today.AddDays(-1);
-        if (lastCompleted is null)
-        {
-            // Fresh database: only the current due day (if due) is eligible; no back-fill without a baseline.
-            return dayDue ? [today] : [];
-        }
-        DateOnly firstPending = lastCompleted.Value.AddDays(1);
-        if (end < firstPending) return [];
-        int span = end.DayNumber - firstPending.DayNumber + 1;
-        // Owner decision: recover EVERY eligible date after the latest completed
-        // ledger entry, not just the former seven-day window. The caller still
-        // processes in date order, preserving historical locks and idempotency.
-        // catchUpDays is retained for API compatibility but is no longer a cap.
-        _ = span;
+        // On first setup there is no reliable earlier baseline to reconstruct.
+        if (lastCompleted is null) return dayDue ? [today] : [];
+        DateOnly yesterday = today.AddDays(-1);
+        DateOnly firstMissing = lastCompleted.Value.AddDays(1);
+        if (firstMissing < yesterday)
+            unrecoverable = yesterday.DayNumber - firstMissing.DayNumber;
+        // The obsolete catchUpDays setting cannot extend the automatic window.
         _ = catchUpDays;
-        var list = new List<DateOnly>();
-        for (DateOnly d = firstPending; d <= end; d = d.AddDays(1)) list.Add(d);
-        return list;
+        var pending = new List<DateOnly>(2);
+        if (firstMissing <= yesterday) pending.Add(yesterday);
+        if (dayDue && firstMissing <= today) pending.Add(today);
+        return pending;
     }
 
     private async Task<AutoAttendanceRunResult?> ReadLedgerAsync(string jobKey, CancellationToken ct)

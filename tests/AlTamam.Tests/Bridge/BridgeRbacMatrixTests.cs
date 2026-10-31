@@ -106,7 +106,7 @@ public sealed class BridgeRbacMatrixTests
         }
     }
 
-    /// <summary>101 actions × 4 caller identities (GA/OA/SV/unauthenticated) = 404 cases.</summary>
+    /// <summary>103 actions × 4 caller identities (GA/OA/SV/unauthenticated) = 412 cases.</summary>
     public static IEnumerable<object[]> AllActionsByRole()
     {
         foreach (var meta in ActionManifest.All)
@@ -119,10 +119,10 @@ public sealed class BridgeRbacMatrixTests
     }
 
     [Fact]
-    public void ManifestMirror_ContainsAll101DeclaredActions()
+    public void ManifestMirror_ContainsAll103DeclaredActions()
     {
-        Assert.Equal(101, ActionManifest.All.Length);
-        Assert.Equal(101, ActionManifest.All.Select(a => a.Action).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(103, ActionManifest.All.Length);
+        Assert.Equal(103, ActionManifest.All.Select(a => a.Action).Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]
