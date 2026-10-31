@@ -209,26 +209,25 @@ async function run() {
   const manifest=JSON.parse(fs.readFileSync(
     path.join(root,"src/AlTamam.WebUI/screen-manifest.json"),"utf8"));
   assert.equal(manifest.screens.length,69);
-  let disabledUnsupported=0;
+  let cleanUnbound=0;
   for(const route of manifest.screens){
     if(Object.hasOwn(pages,route.routeKey))continue;
     const html=fs.readFileSync(path.join(root,"src/AlTamam.WebUI",
       route.localAssetPath),"utf8");
-    if(!html.includes('data-bridge-action="REFRESH"'))continue;
-    const unsupportedRoute=harness(route.routeKey);
-    assert.equal(unsupportedRoute.refreshButton.disabled,true,
-      route.routeKey+" legacy refresh should disclose the missing integration");
-    await unsupportedRoute.bridge.refresh();
-    assert.equal(unsupportedRoute.posted.length,0,
-      route.routeKey+" may not send a fake refresh request");
-    assert.match(unsupportedRoute.nodes.bridgeStatusText.textContent,/قيد/,
-      route.routeKey+" needs a truthful development-only state");
-    disabledUnsupported++;
+    // A route without an implemented read contract must not display a
+    // disabled pretend-refresh or exposed implementation notes.
+    // The shipped bridge handler remains fail-closed for forged refresh actions.
+    assert.doesNotMatch(html,/data-bridge-action="REFRESH"/,
+      route.routeKey+" must not display an unsupported refresh control");
+    assert.doesNotMatch(html,
+      /يجري ربط الشاشة خلال مراحل تنفيذ المشروع|ربط هذه الشاشة بخدمات البرنامج لم يكتمل بعد|قيد التطوير/,
+      route.routeKey+" must not leak developer guidance");
+    cleanUnbound++;
   }
-  assert.ok(disabledUnsupported>=55,
-    "review canonical route coverage when an old placeholder becomes functional");
-  console.log("SECTION05 UI STATE COVERAGE — "+disabledUnsupported+
-    " unsupported legacy refresh routes explicitly disabled");
+  assert.equal(cleanUnbound,manifest.screens.length-Object.keys(pages).length,
+    "every unbound canonical route must have a clean operator presentation");
+  console.log("SECTION05 UI STATE COVERAGE — "+cleanUnbound+
+    " unbound routes have no pretend refresh; bridge rejects forged requests");
   console.log("PHASE04 READONLY ROUTES PASS — real C# action envelopes, 6 states, no fake success");
 }
 run().catch(err=>{console.error(err);process.exitCode=1;});
