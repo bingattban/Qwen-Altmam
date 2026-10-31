@@ -460,6 +460,14 @@ public partial class MainWindow : Window
                 const field = document.querySelector('#appModalBody input[name="e2eName"]');
                 const accept = document.querySelector("#appModalBody .app-dialog-actions .btn-primary");
                 check(field && accept, "live modal controls");
+                const caption = field.closest(".app-dialog-field")?.querySelector("span");
+                const fieldBounds = field.getBoundingClientRect();
+                const captionBounds = caption?.getBoundingClientRect();
+                check(captionBounds && captionBounds.top >= fieldBounds.top &&
+                    captionBounds.bottom < fieldBounds.top + fieldBounds.height / 2 &&
+                    captionBounds.left >= fieldBounds.left &&
+                    captionBounds.right <= fieldBounds.right,
+                    "field caption stays inside input border in RTL");
                 check(getComputedStyle(backdrop).display !== "none", "modal visible");
                 const bounds = backdrop.querySelector(".modal-box").getBoundingClientRect();
                 check(bounds.width > 0 &&

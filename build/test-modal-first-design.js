@@ -60,6 +60,71 @@ check(/size:review\.persons\.length>25\?"xl":"lg"/,dialogs,
   "large multi-person transfer previews have sufficient room");
 check(/details\.items\?\.length/,dialogs,
   "large import previews use a wider shared modal");
+
+/* All text/select fields retain a persistent caption INSIDE their borders:
+   first-run setup, administration, dialogs and historical reports. */
+for(const family of ["form-field","admin-input","app-dialog-field",
+  "person-report-filter","monthly-page-size"])
+  assert.ok(css.includes("label."+family),family+" must use the shared inset caption");
+assert.ok(css.includes(">span:first-child{") &&
+  css.includes("position:absolute;inset-block-start:7px;inset-inline-start:13px;"),
+  "the field title must be positioned inside its border at the RTL leading edge");
+assert.ok(css.includes("padding-block:27px 8px"),
+  "typed values must have separate space below the persistent inset title");
+assert.ok(css.includes('input:not([type="checkbox"]):not([type="radio"]):not([type="file"])'),
+  "the three native type exceptions must be on the SAME input selector");
+for(const native of ["checkbox","radio","file"])
+  assert.ok(css.includes(':not([type="'+native+'"])'),
+    native+" must retain its accessible native presentation");
+assert.ok(css.includes(".auth-form .auth-password-field>input.form-input{padding-inline-end:140px}"),
+  "the password reveal button must not cover entered text");
+assert.ok(report.includes('fromLabel.append(el("span","من تاريخ"),dateFrom)'),
+  "historical report date fields must have inset labels");
+assert.ok(report.includes('siteLabel.append(el("span","الموقع التاريخي"),site)'),
+  "historical report selectors must have inset labels");
+
+
+/* The first-run page is a real form, not an instructional screenshot:
+   labels float over RTL fields; all credential semantics remain unchanged. */
+check(/function decorateAuthField\(control, id, glyph\)/,functional,
+  "authentication uses a single accessible floating-field builder");
+check(/caption\.htmlFor=id;control\.input\.placeholder=" "/,functional,
+  "caption remains a real label while focus/value move it");
+check(/auth-setup-heading","التهيئة الأولى"/,functional,
+  "first-run title is a plain heading outside the form card");
+check(/auth-password-area/,functional,
+  "password rules appear immediately after the password input");
+check(/function addPasswordReveal\(control\)/,functional,
+  "password and confirmation use icon-only, keyboard-accessible visibility buttons");
+check(/aria-pressed",String\(visible\)/,functional,
+  "password reveal communicates visible state");
+check(/chips\[i\]\.indicator\.textContent=valid\?"✓":"○"/,functional,
+  "rule indicators change in real time");
+check(/pass\.input\.addEventListener\("input",refreshPolicy\)/,functional,
+  "password requirements refresh on input");
+check(/confirmation\.input\.addEventListener\("input",refreshPolicy\)/,functional,
+  "password matching refreshes when confirmation changes");
+check(/v=>v.length>0&&!\/\\s\/\.test\(v\)/,functional,
+  "an empty password must not show a green no-spaces check");
+check(/if\(optionalFullName\) payload\.fullName=optionalFullName/,functional,
+  "founder full name stays optional");
+check(/bridge\(\)\.invoke\("AuthenticateLocalUser",payload\)/,functional,
+  "real offline C# provisioning endpoint is not replaced");
+check(/\.auth-form \.form-input:focus~\.auth-floating-caption/,css,
+  "caption floats on focus");
+check(/\.auth-form \.form-input:not\(:placeholder-shown\)~\.auth-floating-caption/,css,
+  "caption remains raised after typing");
+check(/\.auth-form \.auth-floating-field>\.form-input:focus/,css,
+  "active field gets an accent-colored focus border");
+check(/\.auth-first-run \.auth-password-policy\{\s*display:grid/,css,
+  "password rules are displayed as a responsive list");
+check(/\.auth-first-run>\.auth-info-box\{/,css,
+  "founder instructions are readable in a light information panel");
+check(/\.auth-first-run>\.btn\.btn-primary\{/,css,
+  "primary action is full-width and touch-friendly");
+assert.ok(css.lastIndexOf(".auth-form .auth-password-field>input.form-input{") >
+  css.indexOf("padding-inline-end:140px"),
+  "the new eye control must override legacy 140px text-button spacing");
 check(/auth-password-policy/,functional,"live first-run password policy");
 check(/auth-brand/,functional,"the branded login block appears inside both login and first-run forms");
 check(/\.auth-brand-mark\{/,css,"login uses the local Cairo heading and teal symbol");
