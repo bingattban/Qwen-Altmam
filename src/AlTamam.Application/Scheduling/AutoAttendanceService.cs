@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.Data.Sqlite;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -108,7 +107,7 @@ public sealed class AutoAttendanceService
     // atomic preview/receipt/audit transaction; no parallel business rules.
     internal async Task<AutoAttendanceRunResult> RunForDateInTransactionAsync(
         DateOnly businessDate, bool isCatchUp, SqliteConnection connection, SqliteTransaction tx,
-        CancellationToken ct, AlTamam.Contracts.Bridge.BridgePrincipal? administrator = null)
+        CancellationToken ct, AlTamam.Application.Bridge.BridgePrincipal? administrator = null)
     {
         string jobKey = JobKey(businessDate);
         string source = administrator is null ? (isCatchUp ? "08h-catchup" : "08h-auto")
