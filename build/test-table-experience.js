@@ -120,6 +120,22 @@ assert.match(css,/height:38px;min-height:38px/,"search height must accommodate A
 assert.match(css,/width:100%;min-width:200px;max-width:360px/,"search is flexible, not fixed");
 assert.match(css,/label\.app-unified-search-wrap\{\s*display:flex;flex:1 1 240px;min-width:200px;max-width:360px/);
 assert.doesNotMatch(css,/170px!important/,"old narrow search footprint must not regress");
+
+/* Real screenshot regression: wrapped search input must never consume
+   its flex-basis as vertical HEIGHT in dashboard, monthly or other forms. */
+const lastSearchRules=css.slice(css.lastIndexOf("/* Search box height regression"));
+assert.ok(lastSearchRules.length>0,"shared search-height regression guard exists");
+assert.match(lastSearchRules,/label\.app-unified-search-wrap>input\.app-unified-search/,
+  "all inset-label searches share a bounded input height");
+assert.match(lastSearchRules,/flex:0 0 auto;/,
+  "vertical search input does not grow from flex-basis 240px or 285px");
+assert.match(lastSearchRules,/height:44px;min-height:44px;max-height:44px/,
+  "search input height is exactly one readable row");
+assert.match(lastSearchRules,/\.functional-toolbar>input\[type="search"\]/,
+  "unwrapped separation and archives searches share the same height");
+assert.match(lastSearchRules,/\.functional-toolbar>label\.app-unified-search-wrap/,
+  "a wrapped dashboard search does not stretch the whole toolbar");
+
 const html=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/index.html"),"utf8");
 assert.match(html,/assets\/js\/table-experience\.js/);
