@@ -202,6 +202,7 @@ public sealed class AdministrativeAttendanceCatchUpService
                 actor.UserId, actor.Username, actor.Username,
                 "AutoAttendanceRun", AutoAttendanceService.JobKey(date),
                 "استدراك التحضير لتاريخ " + dateText, null, result.ToJsonString(),
+                "اعتماد الإداري للتحضير الناقص بعد معاينة وتأكيد موثقين",
                 Read(preview, "reason"), dateText, Guid.NewGuid().ToString("N"), ct)
                 .ConfigureAwait(false);
             await MutationIdempotency.StoreAsync(c, tx, receipt, result, _time, ct)
