@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using AlTamam.Contracts.Bridge;
 using Microsoft.Web.WebView2.Core;
