@@ -13,9 +13,18 @@ const ROUTE_BY_PATH = new Map(SCREEN_CATALOG.filter(route => !route.embedded).ma
 let activeSection = "dashboard";
 
 function sectionForRoute(route) {
-  if (route.path.startsWith("screens/Dashboard/")) return "dashboard";
-  if (route.path.startsWith("screens/MonthlyAttendance/")) return "monthly";
-  if (route.path.startsWith("screens/Administration/")) return "admin";
+  // Root entry files sit directly under screens/<Section>/index.html.
+  // Match the exact root and its children, never a similarly-prefixed folder.
+  const path = route.path;
+  for (const [folder, section] of [
+    ["Dashboard","dashboard"],
+    ["MonthlyAttendance","monthly"],
+    ["Administration","admin"]
+  ]) {
+    const prefix = "screens/" + folder;
+    if (path === prefix + "/index.html" || path.startsWith(prefix + "/"))
+      return section;
+  }
   return "settings";
 }
 
