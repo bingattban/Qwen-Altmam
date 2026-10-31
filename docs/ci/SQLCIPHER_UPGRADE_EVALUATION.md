@@ -1,7 +1,7 @@
 > **Binding owner decision, 2026-10-31 — NO PROVIDER REPLACEMENT.**
 > The earlier conditional authorization to investigate and then replace SQLCipher
 > has been withdrawn for now. Keep the existing native provider
-> \`SQLitePCLRaw.bundle_e_sqlcipher 2.1.10\` and all working key, database, WAL,
+> `SQLitePCLRaw.bundle_e_sqlcipher 2.1.10` and all working key, database, WAL,
 > encrypted-backup and recovery formats unchanged. Nothing in this historical
 > evaluation authorizes a dependency upgrade, rekey, or data migration in
 > Phase 02 or any later phase. Any reconsideration needs a NEW explicit owner
