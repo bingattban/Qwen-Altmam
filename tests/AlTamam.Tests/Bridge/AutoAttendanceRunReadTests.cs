@@ -78,17 +78,22 @@ public sealed class AutoAttendanceRunReadTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
-    public void CatchUpIncludesAllMissedDays_WithoutSevenDayTruncation()
+    public void AutomaticCatchUp_OnlyYesterday_AndNeverChainsHistoricMissedDays()
     {
-        var svc=new AutoAttendanceService(_db);
-        var end=new DateOnly(2026,10,30);
-        var since=new DateOnly(2026,8,1);
-        var due=svc.EnumeratePendingDates(end,true,7,since,out int omitted);
-        Assert.Equal(0,omitted);
-        Assert.Equal(since.AddDays(1),due[0]);
-        Assert.Equal(end,due[^1]);
-        Assert.Equal(end.DayNumber-since.DayNumber,due.Count);
-        Assert.Empty(svc.EnumeratePendingDates(end,false,7,null,out _));
+        var svc = new AutoAttendanceService(_db);
+        var today = new DateOnly(2026, 10, 30);
+        var oldLedger = new DateOnly(2026, 8, 1);
+        var pending = svc.EnumeratePendingDates(today, true, 7, oldLedger, out int skipped);
+        Assert.Equal(new[] { today.AddDays(-1), today }, pending);
+        Assert.Equal(today.AddDays(-1).DayNumber - oldLedger.AddDays(1).DayNumber, skipped);
+        Assert.Equal(new[] { today.AddDays(-1) },
+            svc.EnumeratePendingDates(today, false, 7, oldLedger, out _));
+        Assert.Equal(new[] { today },
+            svc.EnumeratePendingDates(today, true, 7, today.AddDays(-1), out _));
+        Assert.Empty(svc.EnumeratePendingDates(today, false, 7, today.AddDays(-1), out _));
+        Assert.Equal(new[] { today },
+            svc.EnumeratePendingDates(today, true, 7, null, out _));
+        Assert.Empty(svc.EnumeratePendingDates(today, false, 7, null, out _));
     }
 
     [Fact]

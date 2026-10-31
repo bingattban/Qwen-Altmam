@@ -678,8 +678,50 @@
       }catch(e){errors(previewPanel,e);}
       finally{preview.disabled=false;}
     },"btn btn-primary");
+    const openCatchUp=btn("استدراك يوم سابق (خلال 7 أيام)",()=>{
+      const form=card("استدراك التحضير الناقص — للإدارة فقط");
+      const day=field("تاريخ الاستدراك","","date");
+      const why=field("سبب الاستدراك (10 إلى 400 حرف)");
+      const resultBox=node("div","admin-note");
+      form.append(node("p","section-description",
+        "يُستدرك تاريخ واحد من الأيام السبعة السابقة بعد معاينة وتأكيد مستقلين. لا يُعدّل أي تحضير محفوظ ولا يُعاد فتح يوم مغلق."));
+      const review=btn("معاينة الاستدراك",async()=>{
+        review.disabled=true;resultBox.replaceChildren();
+        try{
+          const response=await api().invoke("PreviewAdministrativeAttendanceCatchUp",{
+            businessDate:day.input.value,reason:why.input.value
+          });
+          const data=response?.data||{};
+          if(!data.previewToken||data.requiresExplicitConfirmation!==true)
+            throw Error("لم تُصدر الخدمة معاينة صالحة.");
+          const detailsReview=window.AltamamDialog?.detailsReview;
+          if(typeof detailsReview!=="function")
+            throw Error("نافذة تأكيد الاستدراك غير متاحة؛ لم تُكتب بيانات.");
+          const confirmed=await detailsReview({rows:[
+            ["التاريخ",data.businessDate],["المستهدفون غير المحضّرين",data.pendingCount],
+            ["المؤهلون",data.eligibleCount],["السبب",data.reason]
+          ]},{title:"معاينة استدراك يوم سابق",
+            message:"بعد التأكيد ستضاف الحالات الناقصة فقط مع تسجيل الفاعل والسبب في سجل العمليات.",
+            confirmLabel:"اعتماد استدراك اليوم"});
+          if(!confirmed)return;
+          const operationId=makeOperationId();
+          const commit=await api().invoke("CommitAdministrativeAttendanceCatchUp",{
+            previewToken:data.previewToken,operationId
+          });
+          if(commit?.data?.businessDate!==data.businessDate)
+            throw Error("الخادم لم يؤكد اعتماد الاستدراك.");
+          resultBox.appendChild(node("p","settings-success",
+            "تم اعتماد "+commit.data.appliedCount+" حالة ناقصة بتاريخ "+data.businessDate+
+            "؛ لم تتغير الحالات المحفوظة سابقاً."));
+        }catch(e){errors(resultBox,e);}
+        finally{review.disabled=false;}
+      },"btn btn-primary");
+      form.append(day.wrap,why.wrap,review,resultBox);
+      operationalModal(form,"modal-md");
+      page.appendChild(form);
+    });
     controls.append(search,btn("تفعيل الإذن الاستثنائي",setPolicy(true)),
-      btn("إيقاف الإذن الاستثنائي",setPolicy(false)),preview);
+      btn("إيقاف الإذن الاستثنائي",setPolicy(false)),preview,openCatchUp);
     correctionFields.append(date.wrap,personSearch.wrap,searchResults,statuses,reason.wrap);
     box.append(policyBanner,correctionFields,controls,notice,previewPanel);
     page.appendChild(box);

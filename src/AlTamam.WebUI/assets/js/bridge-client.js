@@ -54,6 +54,7 @@
     "CommitFullReset",
     "SetTheme",
     "SetClosedDayCorrectionPolicy",
+    "CommitAdministrativeAttendanceCatchUp",
     "CommitClosedDayCorrection"
   ]);
   const SESSION_NONCE_STORAGE_KEY = 'altamam.sessionNonce.v1';

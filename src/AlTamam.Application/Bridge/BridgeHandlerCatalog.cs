@@ -298,6 +298,18 @@ public static class BridgeHandlerCatalog
                 activeOnly: req.Action == "SearchActivePersonsForAccount").ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
+        "PreviewAdministrativeAttendanceCatchUp" => async (req,principal,ct) =>
+        {
+            var svc = new AdministrativeAttendanceCatchUpService(services.Db,services.Time);
+            return (await svc.PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false))
+                with {RequestId=req.RequestId};
+        },
+        "CommitAdministrativeAttendanceCatchUp" => async (req,principal,ct) =>
+        {
+            var svc = new AdministrativeAttendanceCatchUpService(services.Db,services.Time);
+            return (await svc.CommitAsync(req.Payload,principal!,ct).ConfigureAwait(false))
+                with {RequestId=req.RequestId};
+        },
         "SetClosedDayCorrectionPolicy" => async (req,principal,ct) =>
         {
             var service = new ClosedDayCorrectionService(services.Db,services.Time);

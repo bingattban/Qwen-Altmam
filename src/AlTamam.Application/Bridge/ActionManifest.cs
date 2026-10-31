@@ -26,6 +26,8 @@ public static class ActionManifest
         new("SaveAttendanceDraft", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("ListAttendanceDrafts", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
         new("DeleteAttendanceDraft", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
+        new("PreviewAdministrativeAttendanceCatchUp", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, false),
+        new("CommitAdministrativeAttendanceCatchUp", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
         new("SetClosedDayCorrectionPolicy", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
         new("PreviewClosedDayCorrection", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, false),
         new("CommitClosedDayCorrection", "AttendanceService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),

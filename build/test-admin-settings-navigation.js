@@ -151,6 +151,11 @@ const bridge = {
       PreviewClosedDayCorrection: {previewToken:"T".repeat(64),requiresExplicitConfirmation:true,
         personName:"اختبار",serviceNumberA:"C-1",siteName:"غير محدد",
         businessDate:"2026-10-10",beforeStatusName:"موجود",afterStatusName:"غياب",reason:"تصحيح مستند"},
+      PreviewAdministrativeAttendanceCatchUp: {previewToken:"B".repeat(64),
+        requiresExplicitConfirmation:true,businessDate:"2026-10-29",
+        reason:"استدراك موثق لحالة تحضير ناقصة",pendingCount:3,eligibleCount:4},
+      CommitAdministrativeAttendanceCatchUp: {businessDate:"2026-10-29",
+        appliedCount:3,summary:"تم الاستدراك"},
       CommitClosedDayCorrection: {revisionNumber:2}
     };
     if (!(name in responses)) throw Error("Unexpected bridge action " + name);
@@ -280,6 +285,28 @@ async function run() {
   await buttonNamed("معاينة التصحيح").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,1);
   assert.ok(visible().some(x=>x.textContent.includes("اعتمد التصحيح بنجاح")));
+  assert.ok(buttonNamed("استدراك يوم سابق (خلال 7 أيام)"),
+    "backfill is part of the existing authorized administration screen");
+  await buttonNamed("استدراك يوم سابق (خلال 7 أيام)").handlers.click();
+  const catchUpForm=visible().find(x=>x.className.includes("app-operational-modal")&&
+    x.all().some(y=>y.textContent.includes("استدراك التحضير الناقص")));
+  assert.ok(catchUpForm,"new action opens a controlled modal without changing route hierarchy");
+  const catchUpDate=catchUpForm.all().find(x=>x.type==="date");
+  const catchUpReason=catchUpForm.all().find(x=>x.tag==="input"&&x.type==="text");
+  catchUpDate.value="2026-10-29";
+  catchUpReason.value="استدراك موثق لحالة تحضير ناقصة";
+  approveDetailPreview=false;
+  await buttonNamed("معاينة الاستدراك").handlers.click();
+  assert.equal(calls.filter(x=>x.name==="PreviewAdministrativeAttendanceCatchUp").length,1);
+  assert.equal(calls.filter(x=>x.name==="CommitAdministrativeAttendanceCatchUp").length,0,
+    "cancel of the preview must not write historical attendance");
+  approveDetailPreview=true;
+  await buttonNamed("معاينة الاستدراك").handlers.click();
+  const priorCommit=calls.filter(x=>x.name==="CommitAdministrativeAttendanceCatchUp");
+  assert.equal(priorCommit.length,1);
+  assert.ok(priorCommit[0].body.operationId?.length>=16 &&
+    priorCommit[0].body.previewToken==="B".repeat(64));
+  assert.ok(visible().some(x=>x.textContent.includes("تم اعتماد 3 حالة ناقصة")));
   controller.renderAdmin(admin);
   byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"));
