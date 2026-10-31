@@ -16,4 +16,20 @@ document.addEventListener("DOMContentLoaded", function () {
     link.textContent = "العودة إلى الواجهة الرئيسية";
     link.title = "فتح الواجهة الرئيسية؛ لا يعني اكتمال وظيفة هذا المسار المستقل";
   });
+  // Screens without an independent business owner must not display empty shells.
+  // Reopen the existing authenticated owner by its registered route key. Existing
+  // read-only screens and the dedicated dashboard register retain their behavior.
+  const independentlyWired = new Set([
+    "Administration","Sites","Statuses","PersonnelManagement",
+    "PersonPickerAndSearch","DraftsAndTemporarySave",
+    "Dashboard","UnpreparedPersonnel","SelectStatusAndConfirm",
+    "ConfirmationAndWarning","ConflictsAndNotifications"
+  ]);
+  const key = document.body?.dataset?.routeKey;
+  if(!key || independentlyWired.has(key))return;
+  const link = document.querySelector('a[href*="index.html#"]');
+  const relative = link?.getAttribute?.("href");
+  if(typeof relative!=="string" || !/^(?:\.\.\/)+index\.html#[^#]*$/.test(relative))
+    return; // Fail closed rather than navigating an unverified origin.
+  window.location.replace(relative.split("#")[0]+"#"+encodeURIComponent(key));
 });

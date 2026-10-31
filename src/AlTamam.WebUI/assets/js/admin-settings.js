@@ -2275,5 +2275,46 @@
         ()=>renderSettings(session,logout),"btn btn-outline"));
     }
   }
-  window.AltamamAdminSettings=Object.freeze({renderAdmin,renderGroup,renderSettings});
+  // Route aliases are entry points into existing C#-guarded workflows, NOT new
+  // screens. A modal without a selected PersonId/record opens its owning list,
+  // where the real preview and confirmation can be initiated by the user.
+  const ownedRoutes=Object.freeze({
+    Administration:"home",PersonnelManagement:"group:force",
+    Attendance:"attendance",ConfirmAttendance:"attendance",
+    EditPersonnelNames:"persons",EditPersonDetails:"persons",
+    RemovePersonnel:"persons",AddPerson:"persons",
+    Transfers:"transfers",InternalTransfer:"transferInternal",
+    ConfirmTransfer:"transferInternal",ExternalTransfer:"transferExternal",
+    ConfirmExternalTransfer:"transferExternal",TransferArchive:"transfers",
+    ReportsAndDismissal:"group:force",Dismissal:"separation",
+    DismissPerson:"separatePerson",ConfirmDismissal:"separatePerson",
+    DismissedPersonnelArchive:"separatedArchive",
+    PersonnelReport:"personReport",ExportPersonReport:"personReport",
+    StatusesAndSites:"group:config",Statuses:"statuses",
+    AddStatus:"statuses",EditStatus:"statuses",DeleteStatus:"statuses",
+    Sites:"sites",AddSite:"sites",EditSite:"sites",DeleteSite:"sites",
+    Rosters:"group:sheets",Import:"import",SelectFile:"import",
+    PreviewAndValidate:"import",ImportResults:"import",
+    Export:"export",PreviewAndConfirmExport:"export",
+    ExportProgressAndResult:"export",RosterLayout:"layout",
+    AddOrEditColumn:"layout",Users:"accounts",AddUser:"accounts",
+    ChangePassword:"accounts",DeleteAccount:"accounts",
+    AuditLog:"log",EditAuditEntry:"log",DeleteAuditEntry:"log",
+    ModifiedDeletedAuditEntries:"log",
+    ClosedDayExceptionalCorrection:"closedCorrection"
+  });
+  function openOwnedRoute(key){
+    if(!state.session || !Object.hasOwn(ownedRoutes,key))return false;
+    const destination=ownedRoutes[key],role=state.session.role;
+    if(destination==="accounts" && role==="Supervisor")return false;
+    if(destination==="closedCorrection" &&
+       !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
+    if(["EditAuditEntry","DeleteAuditEntry"].includes(key) &&
+       role!=="GeneralAdministration")return false;
+    if(destination==="home")renderAdmin(state.session);
+    else if(destination.startsWith("group:"))renderGroup(destination.slice(6));
+    else navigate(destination);
+    return true;
+  }
+  window.AltamamAdminSettings=Object.freeze({renderAdmin,renderGroup,renderSettings,openOwnedRoute});
 })();

@@ -70,4 +70,49 @@ events.keydown({key:"Escape"});
 assert.equal(destinations.at(-1),"../../index.html","root-level modules must also support Escape");
 events.keydown({key:"Enter"});
 assert.equal(destinations.length,2,"other keys must not trigger navigation");
-console.log("SECTION05 ROUTE LINK HONESTY PASS — "+scanned+" routes checked");
+// A legacy standalone document with no real independent write owner MUST
+// hand off to the already implemented authenticated main-window workflow.
+// Read-only modules and the existing dashboard automatic-register redirects stay intact.
+const stayStandalone=new Set(["Administration","Sites","Statuses","PersonnelManagement",
+  "PersonPickerAndSearch","DraftsAndTemporarySave","Dashboard",
+  "UnpreparedPersonnel","SelectStatusAndConfirm","ConfirmationAndWarning",
+  "ConflictsAndNotifications"]);
+let handedOver=0;
+for (const route of manifest.screens) {
+  if (stayStandalone.has(route.routeKey)) continue;
+  const html=fs.readFileSync(web+"/"+route.localAssetPath,"utf8");
+  const routeKey=html.match(/<body[^>]*data-route-key="([^"]+)"/)?.[1];
+  if(routeKey!==route.routeKey)continue; // AddPerson is an embedded action, not another file.
+  const link=html.match(/href="((?:\.\.\/)+index\.html#[^"]*)"/)?.[1];
+  assert.ok(link,route.routeKey+" must retain a safe relative main-window link");
+  const routeDocument={
+    body:{dataset:{routeKey}},
+    addEventListener:(name,fn)=>{routeEvents[name]=fn;},
+    querySelector:selector=>selector==='a[href*="index.html#"]'
+      ?{getAttribute:(name)=>name==="href"?link:null}:null,
+    querySelectorAll:()=>[]
+  };
+  const routeEvents={};
+  const redirected=[];
+  vm.runInNewContext(screenModule,{document:routeDocument,
+    window:{location:{replace:url=>redirected.push(url)}}},
+    {filename:"screen-module.js",timeout:1000});
+  routeEvents.DOMContentLoaded();
+  assert.deepEqual(redirected,[link.split("#")[0]+"#"+routeKey],
+    route.routeKey+" must open its canonical owner, not an inert HTML shell");
+  handedOver++;
+}
+assert.ok(handedOver>=50,"standalone handover should cover existing business routes");
+
+for (const key of stayStandalone) {
+  const e={};
+  const jumps=[];
+  const doc={body:{dataset:{routeKey:key}},
+    addEventListener:(name,fn)=>{e[name]=fn;},
+    querySelector:()=>({getAttribute:()=> "../../index.html#"+key}),
+    querySelectorAll:()=>[]};
+  vm.runInNewContext(screenModule,{document:doc,window:{location:{replace:x=>jumps.push(x)}}});
+  e.DOMContentLoaded();
+  assert.deepEqual(jumps,[],key+" has its own legitimate surface or dedicated redirect");
+}
+console.log("SECTION05 ROUTE LINK HONESTY PASS — "+scanned+" routes checked; "+handedOver+" canonical handovers");

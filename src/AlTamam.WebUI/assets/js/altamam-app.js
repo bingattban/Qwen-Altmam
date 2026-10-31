@@ -195,7 +195,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   navigateTop(Object.hasOwn(MAIN_SECTIONS, requested) ? requested : "dashboard", false);
 });
-window.AltamamNavigation = Object.freeze({ navigateTop, openScreen, sectionForRoute });
+window.AltamamNavigation = Object.freeze({ navigateTop, openScreen, sectionForRoute, getRoute:key=>SCREEN_BY_KEY.get(key)||null });
 window.navigateTop = navigateTop;
 window.toggleTheme = toggleTheme;
 window.AltamamTheme=Object.freeze({

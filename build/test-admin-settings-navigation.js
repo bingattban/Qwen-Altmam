@@ -182,6 +182,26 @@ const buttonNamed = name => visible().find(x => x.tag==="button" && x.textConten
 async function run() {
   const admin = { role:"GeneralAdministration", username:"test-user" };
   controller.renderAdmin(admin);
+  // Canonical legacy screens open their existing owner; modal-like routes do not
+  // execute a mutation without the normal user selection and confirmation.
+  assert.equal(controller.openOwnedRoute("PersonnelManagement"),true);
+  assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="attendance"));
+  controller.renderAdmin(admin);
+  assert.equal(controller.openOwnedRoute("StatusesAndSites"),true);
+  assert.deepEqual(byDataset("adminScreen").map(x=>x.dataset.adminScreen),
+    ["sites","statuses"]);
+  controller.renderAdmin(admin);
+  assert.equal(controller.openOwnedRoute("ConfirmAttendance"),true);
+  assert.ok(!calls.some(x=>x.name==="SubmitAttendance"),
+    "opening confirmation route may not commit attendance");
+  controller.renderAdmin({role:"Supervisor",username:"supervisor"});
+  assert.equal(controller.openOwnedRoute("Users"),false,
+    "supervisor cannot deep-link to account management");
+  assert.equal(controller.openOwnedRoute("ClosedDayExceptionalCorrection"),false,
+    "supervisor cannot deep-link to closed-day correction");
+  controller.renderAdmin(admin);
+  assert.equal(controller.openOwnedRoute("UnknownStandaloneRoute"),false);
+  controller.renderAdmin(admin);
   assert.equal(byDataset("adminSection").length,5,"five primary administrative cards");
   assert.equal(byDataset("adminScreen").length,0,"no nested options on main admin page");
   assert.deepEqual(byDataset("adminSection").map(x=>x.dataset.adminSection),
