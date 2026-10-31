@@ -133,9 +133,9 @@
     const tr=node("tr"),td=node("td","",text);td.colSpan=count;
     tr.appendChild(td);body.appendChild(tr);
   }
-  function navigate(screen) {
+  function navigate(screen,sourceRoute=null) {
     state.active=screen;state.page=1;state.term="";currentRequest++;
-    renderDetail(screen);
+    renderDetail(screen,sourceRoute);
   }
   const nestedOptions = Object.freeze({
     transfers: [
@@ -252,7 +252,7 @@
     }
     page.appendChild(grid);
   }
-  function renderDetail(screen) {
+  function renderDetail(screen,sourceRoute=null) {
     if(screen==="attendance" && window.AltamamAttendance)
       return window.AltamamAttendance.render(target());
     if(["transferInternal","transferExternal","archiveInternal","archiveExternal"].includes(screen) && window.AltamamMovements){
@@ -276,7 +276,7 @@
     if(screen==="statuses")return statuses();
     if(screen==="layout")return rosterLayout();
     if(screen==="persons")return persons();
-    if(screen==="log")return audit();
+    if(screen==="log")return audit(sourceRoute==="ModifiedDeletedAuditEntries");
     if(screen==="transfers")return renderNested(screen,"التنقلات");
      if(screen==="separation")return renderNested(screen,"الفصل");
 
@@ -1542,7 +1542,7 @@
     await load();
   }
 
-  async function audit() {
+  async function audit(openHistoryRoute=false) {
     const page=start("الإدارة / سجل العمليات"),box=card("سجل العمليات المحفوظ");
     page.appendChild(box);
     const general=field("بحث شامل في سجل العمليات","","search");
@@ -1552,6 +1552,7 @@
       endDate=field("إلى تاريخ","","date"),controls=node("div","functional-toolbar"),
       results=node("div","admin-note");
     const canEditAudit=state.session?.role==="GeneralAdministration";
+    const canViewAuditHistory=canEditAudit||state.session?.role==="OrdinaryAdministration";
     let openDetail=null;
     let openOverlay=null,detailOpener=null,detailRequest=0;
     const closeAuditDetail=()=>{
@@ -1585,7 +1586,7 @@
       historyContent.replaceChildren();
     });
     historyPanel.appendChild(historyContent);
-    if(canEditAudit){
+    if(canViewAuditHistory){
       const historyButton=btn("القيود المعدلة والمحذوفة",()=>{
         historyModal.open();
         void loadEdits(1);
@@ -1593,6 +1594,12 @@
       controls.append(historyButton);
     }
     box.append(controls,results,historyPanel);
+    // A named history route opens the existing permitted read-only review.
+    // The mutation controls in individual audit details remain GA-only.
+    if(openHistoryRoute && canViewAuditHistory){
+      historyModal.open();
+      void loadEdits(1);
+    }
     async function loadEdits(pageNumber) {
       const request=++historySerial;
       historyContent.replaceChildren(warning("جارٍ قراءة القيود المعدلة والمحذوفة..."));
@@ -2342,9 +2349,11 @@
        !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
     if(["EditAuditEntry","DeleteAuditEntry"].includes(key) &&
        role!=="GeneralAdministration")return false;
+    if(key==="ModifiedDeletedAuditEntries" &&
+       !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
     if(destination==="home")renderAdmin(state.session);
     else if(destination.startsWith("group:"))renderGroup(destination.slice(6));
-    else navigate(destination);
+    else navigate(destination,key);
     return true;
   }
   window.AltamamAdminSettings=Object.freeze({renderAdmin,renderGroup,renderSettings,openOwnedRoute});

@@ -754,6 +754,43 @@ async function run() {
   assert.ok(!buttonNamed("حفظ جدول النسخ التلقائي"));
   await controller.renderSettings({role:"Supervisor",username:"supervisor"},()=>{},"ResetApplicationData");
   assert.ok(!buttonNamed("معاينة التصفير الكامل"));
+  // The ordinary administration role has READ access to immutable audit
+  // presentation-history (according to the C# ActionManifest), but never
+  // access to the GA-only edit and hide commands.
+  const historyReadsBefore=calls.filter(x=>x.name==="QueryAuditPresentationChanges").length;
+  const auditWritesBefore=calls.filter(x=>
+    x.name==="UpdateAuditPresentation"||x.name==="DeleteAuditPresentation").length;
+  const ordinary={role:"OrdinaryAdministration",username:"test-admin"};
+  controller.renderAdmin(ordinary);
+  assert.equal(controller.openOwnedRoute("ModifiedDeletedAuditEntries"),true,
+    "ordinary administration must open the actual permitted history route");
+  await new Promise(resolve=>setImmediate(resolve));
+  const archivedHistory=visible().find(x=>
+    x.attrs["aria-label"]==="القيود المعدلة والمحذوفة");
+  assert.ok(archivedHistory && !archivedHistory.hidden,
+    "deep link opens the actual read-only history panel, not generic audit search");
+  assert.ok(buttonNamed("القيود المعدلة والمحذوفة"),
+    "ordinary administration may reopen permitted read-only history");
+  assert.ok(calls.filter(x=>x.name==="QueryAuditPresentationChanges").length>
+    historyReadsBefore,"the real server history read must be invoked");
+  assert.ok(!buttonNamed("إظهار القيود المخفية (للمسؤولين فقط)"),
+    "ordinary administration cannot access GA-only hidden-entry controls");
+  assert.equal(calls.filter(x=>
+    x.name==="UpdateAuditPresentation"||x.name==="DeleteAuditPresentation").length,
+    auditWritesBefore,"history navigation never edits the immutable audit log");
+  const supervisor={role:"Supervisor",username:"supervisor"};
+  controller.renderAdmin(supervisor);
+  assert.equal(controller.openOwnedRoute("ModifiedDeletedAuditEntries"),false,
+    "supervisor may not use direct routing to enter restricted history");
+  controller.renderAdmin(admin);
+  assert.equal(controller.openOwnedRoute("ModifiedDeletedAuditEntries"),true,
+    "GA deep link also opens the existing audit history panel");
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(visible().some(x=>
+    x.attrs["aria-label"]==="القيود المعدلة والمحذوفة"&&!x.hidden));
+  assert.equal(calls.filter(x=>
+    x.name==="UpdateAuditPresentation"||x.name==="DeleteAuditPresentation").length,
+    auditWritesBefore,"GA deep link must remain a read until explicitly confirmed");
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
 run().catch(error => { console.error(error); process.exitCode=1; });
