@@ -32,8 +32,14 @@ def validate(core: str, release: str) -> list[str]:
         issues.append("Core must reject zero-executed full test suites")
     if "if ($count -lt 1)" not in section:
         issues.append("Core full test count guard must fail closed")
-    if "dotnet test AlTamam.slnx -c $env:CONFIGURATION --no-build --no-restore" not in release:
-        issues.append("Release must run full solution-level tests on the existing build without restoring")
+    if "dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore" not in release:
+        issues.append("Release must execute the established full xUnit suite without building or restoring")
+    if "dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj -c $env:CONFIGURATION --no-build --no-restore" not in release:
+        issues.append("Release must execute the independent Phase 02 SQLCipher suite before packaging")
+    if "dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj" not in core:
+        issues.append("Core must execute the independent Phase 02 integration project")
+    if "phase02-integration.trx" not in core or "phase02-integration.trx" not in release:
+        issues.append("Both workflows must retain Phase 02 real TRX evidence")
     if "  preflight:\n" not in release or "  build-test:\n    name: Build + full test suite on Windows x64 (15.01)\n    needs: preflight" not in release:
         issues.append("Release full test stage must follow preflight")
     if "  package:\n" not in release:

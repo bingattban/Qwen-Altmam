@@ -1,4 +1,14 @@
-# Phase 01 — SQLCipher provider upgrade evaluation (owner decision 2026-10-31)
+> **Binding owner decision, 2026-10-31 — NO PROVIDER REPLACEMENT.**
+> The earlier conditional authorization to investigate and then replace SQLCipher
+> has been withdrawn for now. Keep the existing native provider
+> \`SQLitePCLRaw.bundle_e_sqlcipher 2.1.10\` and all working key, database, WAL,
+> encrypted-backup and recovery formats unchanged. Nothing in this historical
+> evaluation authorizes a dependency upgrade, rekey, or data migration in
+> Phase 02 or any later phase. Any reconsideration needs a NEW explicit owner
+> instruction and independent compatibility proof. This file is retained
+> solely to preserve the historical technical assessment; it is NOT a work order.
+>
+# Historical reference — SQLCipher provider upgrade evaluation (withdrawn / deferred 2026-10-31)
 
 ## Exact current baseline
 - Infrastructure: `Microsoft.Data.Sqlite.Core 9.0.2` plus
@@ -64,7 +74,7 @@
 
 ## Present decision / gate
 
-**Candidate switch: BLOCKED / NOT PROVEN.** The owner authorized studying
+**Candidate switch: NOT AUTHORIZED / DEFERRED BY OWNER.** The owner authorized studying
 and switching only after evidence. No Zetetic commercial entitlement, pinned
 supported x86/x64 native candidate, cross-provider compatibility evidence or
 clean-machine acceptance has been supplied. Retain the existing tested

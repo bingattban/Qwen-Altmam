@@ -107,3 +107,18 @@ A green build with the *old* provider cannot be counted as proof that a
 
 This approval reconciles the naming conflict; it is **not** permission to
 silently change the database encryption provider in later phases.
+
+
+## Owner decision for Phase 02 (2026-10-31): keep SQLCipher unchanged
+
+No SQLCipher provider replacement, native-version change, schema rekey or database
+migration to a different encryption engine is authorized. The current
+\`SQLitePCLRaw.bundle_e_sqlcipher 2.1.10\` is intentionally preserved.
+The historical evaluation document is **not** a pending implementation action.
+Phase 02 adds an independent \`tests/AlTamam.IntegrationTests\` project to
+verify the existing provider against encrypted-reopen, wrong-key/unencrypted
+rejection, temporal snapshots, half-open assignment intervals, concurrent
+writes, immutable audit and transactional rollback on actual Windows runners.
+Both Windows CI workflows execute it after one solution build and before any
+Release package is generated, failing if the dedicated TRX reports fewer than
+eight real tests. No personnel data or production secrets are used.
