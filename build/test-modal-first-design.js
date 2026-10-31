@@ -27,8 +27,10 @@ check(/input\.app-unified-search/,css,"unified search remains accessible");
 
 assert.ok(!admin.includes('"عرض الشاشة وتنفيذ عملياتها المتاحة"'),
   "admin page tiles must not include developer guidance captions");
-check(/separation:\s*\[\s*\["separatePerson","فصل فرد"\],\s*\["separatedArchive","أرشيف الفصل"\]/,
-  admin,"separation archive is inside the separation screen");
+assert.ok(separation.includes('["separation","separatePerson","separatedArchive"]'),
+  "separation and archive share one actual tabbed screen");
+assert.ok(!admin.includes('separation: ['),
+  "the intermediary separation archive menu has been removed");
 assert.ok(!/\["separation","الفصل"\],\["separatedArchive"/.test(admin),
   "separation archive must not be a sibling of the separation screen");
 

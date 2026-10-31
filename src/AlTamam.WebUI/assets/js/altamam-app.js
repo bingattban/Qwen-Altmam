@@ -39,7 +39,7 @@ function parentRoute(route) {
 }
 
 function getPrimaryRoutes(section) {
-  return SCREEN_CATALOG.filter(route => !route.embedded && route.key!=="SelectStatusAndConfirm" && sectionForRoute(route) === section &&
+  return SCREEN_CATALOG.filter(route => !route.embedded && route.key!=="SelectStatusAndConfirm" && route.key!=="DismissedPersonnelArchive" && sectionForRoute(route) === section &&
     (!window.AltamamFunctional || window.AltamamFunctional.canSeeRoute(route)));
 }
 
