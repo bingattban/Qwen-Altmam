@@ -1682,8 +1682,8 @@
       op=field("نوع العملية (رمز)"),startDate=field("من تاريخ","","date"),
       endDate=field("إلى تاريخ","","date"),controls=node("div","functional-toolbar"),
       results=node("div","admin-note");
-    const canEditAudit=state.session?.role==="GeneralAdministration";
-    const canViewAuditHistory=canEditAudit||state.session?.role==="OrdinaryAdministration";
+    const canEditAudit=["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role);
+    const canViewAuditHistory=canEditAudit;
     let openDetail=null;
     let openOverlay=null,detailOpener=null,detailRequest=0;
     const closeAuditDetail=()=>{
@@ -2479,7 +2479,7 @@
     if(destination==="closedCorrection" &&
        !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
     if(["EditAuditEntry","DeleteAuditEntry"].includes(key) &&
-       role!=="GeneralAdministration")return false;
+       !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
     if(key==="ModifiedDeletedAuditEntries" &&
        !["GeneralAdministration","OrdinaryAdministration"].includes(role))return false;
     if(destination==="home")renderAdmin(state.session);
