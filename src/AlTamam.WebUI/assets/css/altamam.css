@@ -1712,13 +1712,6 @@ body:has(.app-operational-modal:not([hidden]),
   border-radius:10px;background:linear-gradient(135deg,#14B8A6,#0D9488);
   color:#fff;font:900 24px/1 "AlTamam Cairo",sans-serif
 }
-.auth-first-run>.auth-brand{grid-column:1/-1}
-.auth-first-run{width:min(94vw,740px);display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.auth-first-run>.auth-password-policy,
-.auth-first-run>.auth-status,
-.auth-first-run>.section-description,
-.auth-first-run>.btn{grid-column:1/-1}
 .auth-password-policy{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px}
 .auth-policy-chip{padding:5px 10px;background:var(--bg-subtle);
   border:1px solid var(--border-color);border-radius:999px;
@@ -1738,7 +1731,6 @@ body:has(.app-operational-modal:not([hidden]),
   grid-column:1/-1
 }
 @media(max-width:780px){
-  .auth-first-run{grid-template-columns:minmax(0,1fr)}
   .monthly-detail-content.app-preview-properties{
     grid-template-columns:repeat(2,minmax(0,1fr))
   }
@@ -1984,29 +1976,38 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
   color:var(--accent-teal);border-color:var(--accent-teal);
   outline:2px solid var(--accent-teal-soft);outline-offset:1px
 }
+/* First-run small-window CTA visibility: fixed card header/footer, scrolling fields.
+   The login form keeps its original compact sizing and behavior. */
 #appViewport:has(.auth-first-run){
-  justify-content:flex-start;padding-block:22px 32px
+  min-height:0;height:100%;overflow:hidden;justify-content:flex-start;
+  padding-block:clamp(8px,1.4dvh,18px)
 }
 .auth-setup-heading{
-  width:min(94vw,740px);margin:0 0 18px;
-  font-size:clamp(24px,3vw,32px);line-height:1.4;
+  flex:0 0 auto;width:min(94vw,740px);
+  margin:0 0 clamp(6px,1dvh,12px);
+  font-size:clamp(23px,3vw,31px);line-height:1.4;
   color:var(--text-main);font-weight:900;text-align:center
 }
 .auth-first-run{
-  width:min(94vw,740px);gap:15px;padding:22px;
+  display:flex;flex-direction:column;min-height:0;overflow:hidden;
+  flex:1 1 auto;width:min(94vw,740px);max-width:740px;
+  margin:0 auto;gap:0;padding:0;
   border-radius:16px;box-shadow:var(--shadow-md)
 }
 .auth-first-run>.auth-brand{
-  margin:-22px -22px 6px;padding:19px 22px;
+  flex:0 0 auto;margin:0;padding:clamp(11px,1.5dvh,17px) 20px;
   border-radius:16px 16px 0 0
 }
-.auth-first-run>.auth-password-area,
-.auth-first-run>.auth-password-field,
-.auth-first-run>.auth-info-box,
-.auth-first-run>.auth-status,
-.auth-first-run>.btn{
-  grid-column:1/-1
+.auth-setup-scroll{
+  min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-gutter:stable;flex:1 1 auto;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;align-content:start;padding:16px 20px;
 }
+.auth-setup-scroll>.auth-password-area,
+.auth-setup-scroll>.auth-password-field,
+.auth-setup-scroll>.auth-info-box,
+.auth-setup-scroll>.auth-status{grid-column:1/-1}
 .auth-password-area{display:grid;gap:11px;min-width:0}
 .auth-first-run .auth-password-policy{
   display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
@@ -2031,7 +2032,7 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
 .auth-first-run .auth-policy-chip.valid .auth-policy-icon{
   border-color:var(--status-positive);color:var(--status-positive)
 }
-.auth-first-run>.auth-info-box{
+.auth-setup-scroll>.auth-info-box{
   padding:13px 16px;margin:0;
   border:1px solid var(--border-color);
   border-inline-start:3px solid var(--accent-teal);
@@ -2039,19 +2040,32 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
   color:var(--text-main);font-size:13px;line-height:1.8
 }
 .auth-first-run>.btn.btn-primary{
-  width:100%;min-height:54px;padding:13px 20px;
-  border-radius:12px;font-size:16px;font-weight:900
+  flex:0 0 auto;width:calc(100% - 40px);
+  min-height:54px;margin:10px 20px 16px;padding:13px 20px;
+  border-radius:12px;font-size:16px;font-weight:900;
+  box-shadow:0 3px 10px rgba(13,148,136,.15)
 }
 @media(max-width:780px){
+  .auth-setup-scroll{grid-template-columns:minmax(0,1fr)}
   .auth-first-run .auth-password-policy{
     grid-template-columns:repeat(2,minmax(0,1fr))
   }
 }
 @media(max-width:420px){
-  .auth-first-run{padding:16px;gap:12px}
-  .auth-first-run>.auth-brand{margin:-16px -16px 3px;padding:15px 16px}
+  .auth-setup-scroll{padding:12px 14px;gap:10px}
+  .auth-first-run>.auth-brand{padding:12px 14px}
+  .auth-first-run>.btn.btn-primary{
+    width:calc(100% - 28px);margin:8px 14px 12px
+  }
   .auth-first-run .auth-password-policy{grid-template-columns:1fr}
 }
+@media(max-height:560px){
+  #appViewport:has(.auth-first-run){padding-block:5px}
+  .auth-setup-heading{margin-bottom:4px;font-size:21px}
+  .auth-first-run>.auth-brand{padding-block:8px}
+  .auth-first-run>.btn.btn-primary{min-height:46px;margin-block:6px 8px}
+}
+
 
 
 /* Batch 01 — personnel creation, identity editing and account management.

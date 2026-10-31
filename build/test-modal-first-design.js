@@ -150,10 +150,28 @@ check(/\.auth-form \.auth-floating-field>\.form-input:focus/,css,
   "active field gets an accent-colored focus border");
 check(/\.auth-first-run \.auth-password-policy\{\s*display:grid/,css,
   "password rules are displayed as a responsive list");
-check(/\.auth-first-run>\.auth-info-box\{/,css,
+check(/\.auth-setup-scroll>\.auth-info-box\{/,css,
   "founder instructions are readable in a light information panel");
 check(/\.auth-first-run>\.btn\.btn-primary\{/,css,
   "primary action is full-width and touch-friendly");
+
+/* First-run setup: the button must not be scrolled out of a short window. */
+check(/const setupFields=el\("div","auth-setup-scroll"\)/,functional,
+  "first-run fields are grouped in a bounded scrolling region");
+check(/form\.replaceChildren\(brand,setupFields,submit\)/,functional,
+  "first-run submit remains outside the fields scroller");
+const firstRunLayout=css.slice(css.lastIndexOf("/* First-run small-window CTA visibility"));
+assert.ok(firstRunLayout.length>0,
+  "first-run layout override exists");
+check(/#appViewport:has\(\.auth-first-run\)\{[^}]*min-height:0;[^}]*overflow:hidden/,firstRunLayout,
+  "setup viewport fits the actual client area");
+check(/\.auth-first-run\{[^}]*display:flex;[^}]*flex-direction:column;[^}]*min-height:0;[^}]*overflow:hidden/,firstRunLayout,
+  "setup card has a bounded column layout");
+check(/\.auth-setup-scroll\{[^}]*min-height:0;[^}]*overflow-y:auto;/,firstRunLayout,
+  "only the founder form fields scroll");
+check(/\.auth-first-run>\.btn\.btn-primary\{[^}]*flex:0 0 auto;/,firstRunLayout,
+  "create-and-sign-in button remains visible below the scroll area");
+
 assert.ok(css.lastIndexOf(".auth-form .auth-password-field>input.form-input{") >
   css.indexOf("padding-inline-end:140px"),
   "the new eye control must override legacy 140px text-button spacing");
