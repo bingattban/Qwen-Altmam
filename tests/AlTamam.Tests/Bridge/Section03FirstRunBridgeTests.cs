@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Microsoft.Data.Sqlite;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Infrastructure.Persistence;
@@ -11,6 +12,7 @@ namespace AlTamam.Tests.Bridge;
 /// 03.02–03.04 and 03.16: run the REAL first-startup WebView2 bridge route
 /// against a fresh encrypted database with no roster entries.
 /// </summary>
+[Collection("SQLCipherGlobalPool")]
 public sealed class Section03FirstRunBridgeTests : IAsyncLifetime, IDisposable
 {
     private const string GuestNonce = "00112233445566778899aabbccddeeff";
@@ -22,7 +24,10 @@ public sealed class Section03FirstRunBridgeTests : IAsyncLifetime, IDisposable
 
     public async Task InitializeAsync()
     {
-        _db = new AlTamamDbContext(_path, SyntheticFixtures.TestKeyHex);
+        // Separate these short-lived synthetic databases from process-wide pooled handles.
+        // Other restore regression tests legitimately clear all SQLCipher connection pools.
+        _db = new AlTamamDbContext(_path, SyntheticFixtures.TestKeyHex,
+            useConnectionPooling: false);
         await _db.InitializeAsync();
         _services = new BridgeSharedServices(_db);
         _dispatcher = BridgeHandlerCatalog.Create(_services);
@@ -145,6 +150,25 @@ public sealed class Section03FirstRunBridgeTests : IAsyncLifetime, IDisposable
         Assert.False(attempt.Response.Success);
         Assert.Equal(0L, Convert.ToInt64(Scalar("SELECT COUNT(*) FROM Users;")));
         Assert.False(await _services.IsProvisionedAsync());
+    }
+
+
+    [Fact]
+    public async Task FirstRunBridge_UnpooledSqlCipherHandleRemainsValidAfterGlobalPoolClear()
+    {
+        using var connection = _db.CreateOpenConnection();
+        Assert.False(new SqliteConnectionStringBuilder(connection.ConnectionString).Pooling);
+        using var count = connection.CreateCommand();
+        count.CommandText = "SELECT COUNT(*) FROM Persons;";
+        Assert.Equal(0L, Convert.ToInt64(count.ExecuteScalar()));
+
+        // Offline restore intentionally clears SQLite pools process-wide. The isolated
+        // first-run fixture must never borrow a handle from those pools.
+        SqliteConnection.ClearAllPools();
+        Assert.Equal(0L, Convert.ToInt64(count.ExecuteScalar()));
+        var provision = await SendAsync("GetProvisioningState", new JsonObject());
+        Assert.True(provision.Response.Success, provision.Response.UserMessage);
+        Assert.False(Assert.IsType<JsonObject>(provision.Response.Data)["provisioned"]!.GetValue<bool>());
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
