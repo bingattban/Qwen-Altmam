@@ -14,7 +14,7 @@ $previousTrace = [Environment]::GetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHEC
 $process = $null
 try {
     $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $trace
-    $process = Start-Process -FilePath $exe -ArgumentList @("--webview-selfcheck","--webview-ui-e2e") -PassThru
+    $process = Start-Process -FilePath $exe -ArgumentList @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e") -PassThru
     if (-not $process.WaitForExit(120000)) {
         $process.Kill($true)
         $process.WaitForExit()
@@ -29,10 +29,11 @@ try {
     }
     $evidence = Get-Content -LiteralPath $trace -Raw
     if ($evidence -notmatch 'UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus' -or
-        $evidence -notmatch 'PASS bundled offline WebUI title verified') {
+        $evidence -notmatch 'PASS bundled offline WebUI title verified' -or
+        $evidence -notmatch 'PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests') {
         throw "UI-E2E FAIL: modal interaction or offline navigation evidence missing; $evidence"
     }
-    Write-Host "UI-E2E PASS: real Windows WPF/WebView2 rendered RTL and modal interactions, no database"
+    Write-Host "UI-E2E PASS: real Windows WPF/WebView2 + synthetic SQLCipher bridge roundtrip and forbidden requests"
 }
 finally {
     [Environment]::SetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE", $previousTrace)

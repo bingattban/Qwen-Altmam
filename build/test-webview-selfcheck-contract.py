@@ -79,7 +79,10 @@ class WebViewSmokeContract(unittest.TestCase):
                          'key:"Escape"', "document.activeElement === opener"):
             self.assertIn(evidence, HOST)
         self.assertIn('TraceWebViewSelfCheck("UI-E2E PASS', HOST)
-        self.assertIn('("--webview-selfcheck","--webview-ui-e2e")', driver)
+        self.assertIn('("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e")', driver)
+        self.assertIn("PASS actual HTML-C#-SQLCipher-HTML roundtrip", driver)
+        self.assertIn("await Phase04BridgeRoundTripSelfCheck.RunAsync", HOST)
+        self.assertIn("uri.IsDefaultPort && uri.UserInfo.Length == 0", HOST)
         self.assertIn("WaitForExit(120000)", driver)
         self.assertIn("UI-E2E PASS real Windows", driver)
         self.assertIn("if ($process.ExitCode -ne 0)", driver)
