@@ -17,7 +17,6 @@
  const showError=(box,error)=>{
    const message=make("p",error.message||"تعذرت العملية",
      "admin-warning attendance-conflict-warning");
-   message.style.whiteSpace="pre-line";
    box.replaceChildren(message);
  };
  function localDate(){
@@ -89,8 +88,10 @@
      colorPreview.textContent=color?
        "الحالة: "+(Array.from(status.children).find(x=>x.value===status.value)?.textContent||""):
        "اختر الحالة لعرض لونها";
-     colorPreview.style.borderColor=color||"";
-     colorPreview.style.backgroundColor=color?color+"1F":"";
+     if(colorPreview.style){
+       colorPreview.style.borderColor=color||"";
+       colorPreview.style.backgroundColor=color?color+"1F":"";
+     }
    });
    site.addEventListener("change",()=>{pageNo=1;reset();load();});
    search.addEventListener("keydown",event=>{
@@ -142,8 +143,10 @@
            "status-pill attendance-status-pill");
          const savedColor=String(p.statusColor||"");
          if(/^#[0-9a-fA-F]{6}$/.test(savedColor)){
-           statePill.style.borderColor=savedColor;
-           statePill.style.backgroundColor=savedColor+"1F";
+           if(statePill.style){
+             statePill.style.borderColor=savedColor;
+             statePill.style.backgroundColor=savedColor+"1F";
+           }
          }
          stateCell.appendChild(statePill);tr.appendChild(stateCell);
          t.body.appendChild(tr);
@@ -295,7 +298,7 @@
        const entry=option(x.statusId,x.displayName);
        if(/^#[0-9a-fA-F]{6}$/.test(x.color||"")){
          statusColors.set(x.statusId,x.color);
-         entry.style.color=x.color;
+         if(entry.style)entry.style.color=x.color;
        }
        status.appendChild(entry);
      }
