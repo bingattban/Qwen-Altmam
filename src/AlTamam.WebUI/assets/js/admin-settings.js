@@ -1337,7 +1337,7 @@
         event.preventDefault?.();creation.open=false;
       }
     });
-    const toggle=node("summary","btn btn-primary","إضافة فرد واحد للكشف");
+    const toggle=node("summary","btn btn-primary","إضافة فرد");
     const creationFields=node("div","admin-site-form");
     const nameField=field("الاسم الكامل"),
       numberField=field("الرقم (ع) — أربع خانات فأكثر");
@@ -1517,11 +1517,26 @@
       creation.open=true;
       nameField.input.focus?.();
     }
+    // Selection is a temporary UI draft; the C# preview must validate the
+    // entire chosen set again before any archival write occurs.
+    const selectedRemoval=new Map();
+    const canRemove=["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role);
     const controls=node("div","functional-toolbar"),search=field("بحث بالاسم أو الرقم (ع)",state.term);
     const filter=node("select","form-select");
     filter.appendChild(node("option","","جميع المواقع"));filter.firstChild.value="";
     const go=btn("بحث",()=>{state.term=search.input.value.trim();state.page=1;load();},"btn btn-primary");
-    controls.append(search.wrap,filter,go);box.appendChild(controls);
+    controls.append(search.wrap,filter,go);
+    if(canRemove){
+      const batch=btn("إزالة المحددين (0)",()=>archiveSelected(),"btn btn-outline");
+      batch.disabled=true;
+      const refreshBatch=()=>{
+        batch.textContent="إزالة المحددين ("+selectedRemoval.size+")";
+        batch.disabled=selectedRemoval.size===0;
+      };
+      selectedRemoval.refresh=refreshBatch;
+      controls.appendChild(batch);
+    }
+    box.appendChild(controls);
     const content=node("div","admin-note");box.appendChild(content);
     try {
       const response=await api().invoke("QuerySites",{});
@@ -1554,9 +1569,28 @@
         const data=response.data||{};
         const activeTotal=all?.data?.total??data.total??0;
         activeTotalNumber.textContent="("+activeTotal+")";
-        const t=table(["الرقم (ع)","الاسم","الموقع","إجراء"]);
+        const t=table(canRemove
+          ?["تحديد","الرقم (ع)","الاسم","الموقع","إجراء"]
+          :["الرقم (ع)","الاسم","الموقع","إجراء"]);
         for(const person of data.items||[]){
           const row=node("tr");
+          if(canRemove){
+            const cell=node("td"),check=node("input");
+            check.type="checkbox";check.checked=selectedRemoval.has(person.personId);
+            check.setAttribute("aria-label","تحديد "+person.displayName+" للإزالة");
+            check.addEventListener("change",()=>{
+              if(check.checked){
+                if(selectedRemoval.size>=100&&!selectedRemoval.has(person.personId)){
+                  check.checked=false;
+                  void dialogs.alert("الحد الأقصى للإزالة الجماعية 100 فرد.");
+                  return;
+                }
+                selectedRemoval.set(person.personId,person);
+              }else selectedRemoval.delete(person.personId);
+              selectedRemoval.refresh();
+            });
+            cell.appendChild(check);row.appendChild(cell);
+          }
           for(const value of [person.serviceNumberA,person.displayName,person.siteName])
             row.appendChild(node("td","",value));
           const actions=node("td","admin-row-buttons");
@@ -1568,13 +1602,63 @@
             actions.appendChild(btn("إزالة من القوة",()=>archivePerson(person)));
           row.appendChild(actions);t.body.appendChild(row);
         }
-        empty(t.body,4,"لا توجد أسماء مطابقة.");
+        empty(t.body,canRemove?5:4,"لا توجد أسماء مطابقة.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
         prev.disabled=state.page<=1;next.disabled=!data.hasNext;
         pager.append(node("span","","إجمالي "+(data.total||0)),prev,next);
         content.replaceChildren(t.wrap,pager);
       }catch(e){if(token===currentRequest)errors(content,e);}
+    }
+    async function archiveSelected() {
+      if(!canRemove||selectedRemoval.size===0)return;
+      const persons=Array.from(selectedRemoval.values());
+      const ids=persons.map(p=>p.personId);
+      const now=new Date();
+      const effectiveLocalDate=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
+        String(now.getDate()).padStart(2,"0")].join("-");
+      try {
+        const preview=(await api().invoke("PreviewArchivePersons",{
+          personIds:ids,effectiveLocalDate
+        })).data||{};
+        const candidates=preview.candidates||[];
+        if(!preview.previewToken||!Number.isSafeInteger(preview.baseRevision)||
+           candidates.length!==ids.length||candidates.some(p=>p.blocker)||
+           candidates.some((p,i)=>p.personId!==ids[i]))
+          throw Error("تغيرت قائمة المحددين أو توجد حالة تمنع الإزالة؛ لم يُحفظ شيء.");
+        const review=window.AltamamDialog?.detailsReview;
+        if(typeof review!=="function")
+          throw Error("نافذة المعاينة الجماعية غير متاحة؛ لم يحدث أي تعديل.");
+        const rows=[["عدد الأفراد",String(candidates.length)],
+          ["التاريخ",effectiveLocalDate],
+          ["الأثر","إزالة من القوة الفعالة فقط، مع الاحتفاظ بجميع السجلات التاريخية"]];
+        for(const candidate of candidates)
+          rows.push([candidate.serviceNumberA,candidate.displayName+
+            " — "+candidate.currentSiteName+" — أيام التمام: "+candidate.attendanceDays]);
+        const approved=await review({rows},{
+          title:"معاينة الإزالة الجماعية",
+          message:"لن تُنفذ العملية إلا إذا كانت جميع الهويات والإصدارات مطابقة للمعاينة.",
+          confirmLabel:"تأكيد إزالة "+ids.length+" فرد من القوة",
+          size:"lg"
+        });
+        if(!approved)return;
+        const proposed=await dialogs.prompt("اكتب سبب الإزالة الجماعية من القوة",
+          "إخراج من القوة الفعالة بقرار إداري موثق");
+        if(proposed===null)return;
+        const reason=proposed.trim();
+        if(reason.length<5)throw Error("سبب الإزالة مطلوب بخمسة أحرف على الأقل.");
+        const result=(await api().invoke("ArchivePersons",{
+          personIds:ids,effectiveLocalDate,previewToken:preview.previewToken,
+          baseRevision:preview.baseRevision,expectedRevision:preview.baseRevision,
+          reason,operationId:makeOperationId()
+        })).data||{};
+        const saved=result.archivedPersonIds;
+        if(!Array.isArray(saved)||saved.length!==ids.length||
+           ids.some(id=>!saved.includes(id)))
+          throw Error("لم يؤكد الخادم إتمام إزالة جميع الأفراد؛ تحقق من سجل العمليات.");
+        selectedRemoval.clear();selectedRemoval.refresh();
+        await load();
+      }catch(error){await dialogs.alert(error.message||"تعذرت الإزالة الجماعية.");}
     }
     async function archivePerson(person) {
       if(!["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))

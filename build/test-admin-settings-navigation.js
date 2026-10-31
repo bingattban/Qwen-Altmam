@@ -657,6 +657,25 @@ async function run() {
   assert.equal(savedArchive.body.expectedRevision,1);
   assert.ok(savedArchive.body.operationId.length>=16);
   assert.equal(savedArchive.body.personIds[0],"TST-ACTIVE-1");
+  // Phase 05: selected single/bulk roster removals share the same
+  // server-bound preview and transactional ArchivePersons API.
+  const selector=visible().find(x=>x.tag==="input"&&
+    (x.attrs?.["aria-label"]||"").includes("تحديد فرد في القوة للإزالة"));
+  assert.ok(selector,"administrators receive a bulk removal picker");
+  selector.checked=true;
+  selector.handlers.change();
+  const batch=buttonNamed("إزالة المحددين (1)");
+  assert.ok(batch&&!batch.disabled,"selection enables authenticated bulk removal");
+  const beforeBulk=calls.filter(x=>x.name==="ArchivePersons").length;
+  approveDetailPreview=false;
+  await batch.handlers.click();
+  assert.equal(calls.filter(x=>x.name==="ArchivePersons").length,beforeBulk,
+    "declined bulk preview must not write");
+  approveDetailPreview=true;
+  await batch.handlers.click();
+  assert.ok(calls.some(x=>x.name==="ArchivePersons"&&
+    x.body.personIds.length===1&&x.body.personIds[0]==="TST-ACTIVE-1"),
+    "approved selection is sent in one atomic roster archive request");
   // One two-field modal replaces the old two consecutive prompts.
   nextIdentityForm=null;approveDetailPreview=false;
   const beforeEdit=calls.filter(x=>x.name==="UpdatePersonIdentity").length;

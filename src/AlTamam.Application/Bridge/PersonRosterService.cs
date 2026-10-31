@@ -208,11 +208,15 @@ public sealed class PersonRosterService
             if(replay is not null)return replay;
             using var dup = connection.CreateCommand();
             dup.Transaction = tx;
-            dup.CommandText = "SELECT EXISTS(SELECT 1 FROM Persons WHERE NormalizedServiceNumberA = $n AND ActiveFlag = 1);";
+            dup.CommandText = """
+                SELECT PersonId, CurrentVisibleName FROM Persons
+                WHERE NormalizedServiceNumberA = $n AND ActiveFlag = 1 LIMIT 1;
+                """;
             dup.Parameters.Add("$n", SqliteType.Text).Value = normalizedNumber;
-            if (Convert.ToInt32(await dup.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
-                return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
-                    "«الرقم (ع)» مستخدم بالفعل لفرد نشط بعد التطبيع؛ لا يمكن تكراره.");
+            using(var activeConflict = await dup.ExecuteReaderAsync(ct).ConfigureAwait(false))
+                if(await activeConflict.ReadAsync(ct).ConfigureAwait(false))
+                    return BridgeHelpers.Error(BridgeErrorCodes.DuplicateServiceNumber,
+                        $"«الرقم (ع)» مستخدم بالفعل للفرد النشط «{activeConflict.GetString(1)}» (PersonId: {activeConflict.GetString(0)})؛ لم يُحفظ أي فرد جديد.");
 
             // The ONLY exception to an archived-number conflict is a verified,
             // explicitly approved reuse of ONE dismissed person's number for a
