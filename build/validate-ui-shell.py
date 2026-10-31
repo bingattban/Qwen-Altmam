@@ -118,7 +118,10 @@ def main() -> None:
         for r in manifest["screens"]
     )
     print(f"UI SHELL GUARD PASS: 4 Arabic sections, 69 paths, 100 bridge contracts.")
-    print(f"FUNCTIONAL COMPLETENESS: {scaffolded}/69 pages still show a placeholder.")
+    check(scaffolded == 0, f"developer scaffold still visible in {scaffolded} route entries")
+    # These 69 manifest entries point to 68 distinct files; a clean shell is not
+    # evidence that all standalone routes independently implement a full workflow.
+    print("DEVELOPER GUIDANCE: 0/69 route entries contain development scaffolds.")
     print("Passing this guard does NOT count as completed user-facing integration.")
 
 if __name__ == "__main__":
