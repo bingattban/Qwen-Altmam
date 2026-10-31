@@ -1207,7 +1207,7 @@
             const rgb=[1,3,5].map(i=>parseInt(info.color.slice(i,i+2),16)/255)
               .map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);
             const brightness=rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
-            cell.style.color=brightness>0.179?"#17212B":"#FFFFFF";
+            cell.style.color=brightness>0.179?"#000000":"#FFFFFF";
           }
           tr.appendChild(cell);
         }

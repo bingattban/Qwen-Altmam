@@ -53,7 +53,29 @@
       previous?.focus?.();
     };
     const close=btn("✕ إغلاق",dismiss,"btn btn-outline app-modal-close");
-    panel.appendChild(close);
+    // Preserve action nodes and native payloads while framing the modal into
+    // a fixed heading, independently scrollable contents and fixed actions.
+    const heading=Array.from(panel.children).find(child=>
+      child.className?.split(/\s+/).includes("section-title"))||
+      node("h2","section-title",panel.getAttribute?.("aria-label")||"تفاصيل العملية");
+    const header=node("div","app-modal-sticky-header");
+    const body=node("div","app-modal-scroll-body");
+    const actions=node("div","app-modal-sticky-footer");
+    header.append(heading,close);
+    let framed=false;
+    const frame=()=>{
+      if(framed)return;
+      for(const child of Array.from(panel.children)){
+        if(child===heading||child===close)continue;
+        const tag=(child.tagName||child.tag||"").toLowerCase();
+        (tag==="button"?actions:body).appendChild(child);
+      }
+      panel.replaceChildren(header,body,actions);
+      framed=true;
+    };
+    // Account/password/edit forms are populated synchronously after creation.
+    // Frame after those fields arrive; hidden action dialogs frame on open.
+    if(!initiallyHidden)Promise.resolve().then(frame);
     panel.addEventListener("keydown",event=>{
       if(event.key==="Escape"){
         event.preventDefault?.();dismiss();return;
@@ -73,6 +95,7 @@
       }
     });
     return {open:()=>{
+      frame();
       returnFocus=document.activeElement||null;
       panel.hidden=false;close.focus?.();
     },close:dismiss};
