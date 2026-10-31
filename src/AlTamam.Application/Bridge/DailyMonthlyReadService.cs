@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AlTamam.Domain.Policies;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Application.Dashboard;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -71,34 +72,18 @@ public sealed class DailyMonthlyReadService
             """;
         cmd.Parameters.AddWithValue("$date", Iso(date));
         cmd.Parameters.AddWithValue("$site", siteId);
-        var totals = new Dictionary<string, long>(StringComparer.Ordinal);
-        long force = 0, unprepared = 0, transferDay = 0, autoPrepared = 0;
+        // Date/status grouping remains in the indexed SQL query. The typed
+        // accumulator enforces the same force/unprepared/transfer semantics
+        // for every filtered dashboard and preserves committed Absent records.
+        var strength=new DashboardStrengthSummary();
         using (var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
         {
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
-            {
-                long amount = reader.GetInt64(2);
-                force += amount;
-                bool transferredToday = reader.GetInt64(1) != 0;
-                if (transferredToday)
-                {
-                    // The movement is a separate event, not a replacement for
-                    // attendance already committed before today's transfer.
-                    transferDay += amount;
-                }
-                if (reader.IsDBNull(0))
-                {
-                    if (!transferredToday) unprepared += amount;
-                }
-                else
-                {
-                    string statusId = reader.GetString(0);
-                    totals[statusId] = totals.GetValueOrDefault(statusId) + amount;
-                }
-                // Auto preparation remains a recorded fact after a later move
-                // and continues to appear under its actual saved status.
-                autoPrepared += reader.GetInt64(3);
-            }
+                strength.Accumulate(
+                    reader.IsDBNull(0)?null:reader.GetString(0),
+                    reader.GetInt64(1)!=0,
+                    reader.GetInt64(2),
+                    reader.GetInt64(3));
         }
 
         using var statusesCmd = connection.CreateCommand();
@@ -119,7 +104,7 @@ public sealed class DailyMonthlyReadService
                     ["name"] = reader.GetString(1),
                     ["symbol"] = reader.GetString(2),
                     ["color"] = reader.GetString(3),
-                    ["count"] = totals.GetValueOrDefault(key)
+                    ["count"] = strength.StatusCount(key)
                 });
             }
         }
@@ -127,14 +112,12 @@ public sealed class DailyMonthlyReadService
         {
             ["businessDate"] = Iso(date),
             ["siteId"] = siteId,
-            ["totalForce"] = force,
-            ["unprepared"] = unprepared,
-            ["automaticallyPrepared"] = autoPrepared,
-            ["internalTransferDay"] = transferDay,
-            ["attendanceEligible"] = force - transferDay,
-            ["completionPercentage"] = force == transferDay ? 0 :
-                (int)Math.Round(100m * (force - transferDay - unprepared) /
-                    (force - transferDay), MidpointRounding.AwayFromZero),
+            ["totalForce"] = strength.TotalForce,
+            ["unprepared"] = strength.Unprepared,
+            ["automaticallyPrepared"] = strength.AutomaticallyPrepared,
+            ["internalTransferDay"] = strength.InternalTransferDay,
+            ["attendanceEligible"] = strength.Eligible,
+            ["completionPercentage"] = strength.CompletionPercentage,
             ["statusCounts"] = statuses
         });
     }

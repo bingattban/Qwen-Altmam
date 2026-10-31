@@ -149,6 +149,38 @@ public sealed class Phase06AttendanceAcceptanceTests : IAsyncLifetime, IDisposab
         Assert.Equal(1L, Count("AuditEvents"));
     }
 
+    [Fact]
+    public async Task InterruptedSecondInsert_RollsBackFirstAttendanceAndItsAudit()
+    {
+        Seed(2);
+        var service = new AttendanceCommitService(_db, new SyntheticDaytimeClock());
+        var preview = await service.PreviewAsync(Selection("initial","STS-PRESENT",
+            "TST-PHASE06-P0001","TST-PHASE06-P0002"),Actor,default);
+        Assert.True(preview.Success,preview.UserMessage);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        using(var c=_db.CreateOpenConnection())
+        using(var trigger=c.CreateCommand())
+        {
+            trigger.CommandText="""
+                CREATE TRIGGER TST_Phase06_FailSecondInsert
+                BEFORE INSERT ON AttendanceRecords
+                WHEN NEW.PersonId='TST-PHASE06-P0002'
+                BEGIN SELECT RAISE(ABORT,'synthetic disk write failure'); END;
+                """;
+            await trigger.ExecuteNonQueryAsync();
+        }
+        var request=new JsonObject {
+            ["previewToken"]=((JsonObject)preview.Data!)["previewToken"]!.GetValue<string>(),
+            ["operationId"]="phase06-fault-injection-rollback-001"
+        };
+        await Assert.ThrowsAnyAsync<Exception>(async () =>
+            await service.CommitAsync(request,Actor,false,default));
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        Assert.Equal(0L,Count("AuditEvents"));
+        Assert.Equal(0L,Count("MutationReceipts"));
+        Assert.Equal(0L,Count("AttendanceRevisions"));
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {

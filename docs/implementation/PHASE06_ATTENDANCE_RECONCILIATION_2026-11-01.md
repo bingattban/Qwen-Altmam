@@ -26,3 +26,8 @@ The backend still authorizes all changes and revalidates one-use token,
 assignment, original status/revision, and day closure inside the write
 transaction. Phase 11 remains owner of exceptional closed-day corrections.
 This phase does **not** claim future reporting/export or physical Windows UAT.
+
+The indexed dashboard grouping delegates final saved/unprepared/transfer
+arithmetic to `src/AlTamam.Application/Dashboard/DashboardStrengthSummary.cs`.
+A synthetic SQLCipher trigger forces the second write in a two-person batch
+to fail and proves the first attendance, audit and receipt all roll back.

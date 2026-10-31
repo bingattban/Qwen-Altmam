@@ -82,7 +82,12 @@ async function main(){
    x.style.borderColor==="#22AA55"),
    "saved current status uses its real color on the roster");
  assert.equal(writes.length,0,"no write on load");
- selects()[1].value="STS-PRESENT";await choose();
+ selects()[1].value="STS-PRESENT";
+ selects()[1].handlers.change();
+ assert.ok(root.all().some(x=>x.className.includes("attendance-status-preview") &&
+   x.style.borderColor==="#22AA55"),
+   "native status selection exposes a live color-coded indicator");
+ await choose();
  await one("معاينة التحضير").handlers.click();await flush();
  assert.equal(reviews.length,1,"one modal with the review list is opened");
  assert.equal(reviews[0].data.persons[0].name,"شخص تجريبي");
