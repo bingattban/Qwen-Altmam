@@ -16,6 +16,8 @@ class Element {
     this.attrs = {};
     this.handlers = {};
     this.disabled = false;
+    this.isConnected = true;
+    this.value = "";
     this.style = {};
   }
   get firstChild() { return this.children[0]||null; }
@@ -139,6 +141,8 @@ const bridge = {
             serviceNumberA:"91001",siteName:"غير محدد",revision:1}],
             total:1,hasNext:false}
         : {items:[],total:body?.siteId==="SITE-REMOVABLE"?2:0,hasNext:false},
+      QuerySeparationArchive:{items:[{movementId:"SEP-TEST",serviceNumberA:"91001",
+        name:"مفصول تجريبي",siteName:"غير محدد",date:"2026-10-30"}],total:1,hasNext:false},
       PreviewArchivePersons:{candidates:[{personId:"TST-ACTIVE-1",
         displayName:"فرد في القوة",serviceNumberA:"91001",
         currentSiteName:"غير محدد",attendanceDays:3,blocker:null}],
@@ -197,6 +201,9 @@ const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
   confirm: () => true };
 const script = fs.readFileSync(
   path.join(__dirname,"../src/AlTamam.WebUI/assets/js/admin-settings.js"),"utf8");
+vm.runInNewContext(fs.readFileSync(path.join(__dirname,
+  "../src/AlTamam.WebUI/assets/js/personnel-separation.js"),"utf8"),
+  context,{filename:"personnel-separation.js"});
 vm.runInNewContext(script,context,{filename:"admin-settings.js"});
 const controller = context.window.AltamamAdminSettings;
 const visible = () => viewport.all();
@@ -253,15 +260,20 @@ async function run() {
   assert.equal(byDataset("adminNested").length,4,"back restores transfer and both archive choices");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="separation").handlers.click();
-  assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["separatePerson","separatedArchive"],
-    "the separation screen contains both the operation and its read-only archive");
-  byDataset("adminNested").find(x=>x.dataset.adminNested==="separatedArchive").handlers.click();
+  assert.equal(byDataset("adminNested").length,0,
+    "separation opens the actual screen rather than a second menu");
+  assert.ok(buttonNamed("فصل فرد") && buttonNamed("أرشيف الفصل"),
+    "archive tab lives on the separation screen");
+  await buttonNamed("أرشيف الفصل").handlers.click();
+  assert.ok(calls.some(x=>x.name==="QuerySeparationArchive"),
+    "archive tab calls historical archive read");
+  assert.equal(controller.openOwnedRoute("DismissedPersonnelArchive"),true,
+    "old archive deep link keeps working");
+  await new Promise(resolve=>setImmediate(resolve));
   assert.ok(buttonNamed("العودة إلى الفصل"),
-    "the archived personnel route returns to its containing separation screen");
+    "archive deep link is owned by separation");
   buttonNamed("العودة إلى الفصل").handlers.click();
-  assert.equal(byDataset("adminNested").length,2,
-    "returning from archived details restores both separation choices");
+  assert.ok(buttonNamed("أرشيف الفصل"),"integrated archive tab survives return");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
   assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="separatedArchive"),
     "the archive is no longer duplicated on the force-management landing");

@@ -65,6 +65,12 @@ async function run(){
  assert.equal(commits.length,1,"explicitly accepting the verified modal commits once");
  assert.equal(previews.length,2);
  assert.equal(commits[0].previewToken,"ONLY_SERVER_TOKEN");
+ assert.ok(byText("أرشيف الفصل"),"archive belongs on the separation screen");
+ await byText("أرشيف الفصل").handlers.click();
+ assert.ok(root.all().some(x=>x.textContent.includes("فرد مفصول")),
+   "archive content appears inside the same separation screen");
+ await byText("فصل فرد").handlers.click();
+ assert.ok(byText("بحث"),"returning to separation keeps person search");
  const archive=new Node("div");
  await ui.render(archive,"separatedArchive");
  assert.ok(archive.all().some(x=>x.textContent.includes("فرد مفصول")));

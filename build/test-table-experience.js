@@ -136,6 +136,9 @@ assert.match(lastSearchRules,/\.functional-toolbar>input\[type="search"\]/,
 assert.match(lastSearchRules,/\.functional-toolbar>label\.app-unified-search-wrap/,
   "a wrapped dashboard search does not stretch the whole toolbar");
 
+assert.match(lastSearchRules,/height:34px;min-height:34px;max-height:34px/,
+  "dashboard and monthly search boxes match their compact controls");
+
 const html=fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/index.html"),"utf8");
 assert.match(html,/assets\/js\/table-experience\.js/);
@@ -156,6 +159,10 @@ async function verifySharedInputCompletion(){
   caption.textContent="بحث عن فرد بالاسم أو الرقم (ع)";
   const named=new E("input");named.type="text";
   labeled.append(caption,named);main.append(labeled);
+  const monthly=new E("label"),monthlyCaption=new E("span");
+  monthlyCaption.textContent="بحث بالاسم أو الرقم (ع) في الشهر";
+  const monthlyInput=new E("input");monthlyInput.type="search";
+  monthly.append(monthlyCaption,monthlyInput);main.append(monthly);
   const audit=new E("input");audit.type="search";
   audit.placeholder="بحث في سجل العمليات";main.append(audit);
   const general=new E("input");general.type="text";main.append(general);
@@ -166,8 +173,10 @@ async function verifySharedInputCompletion(){
   assert.equal(person.placeholder,"بحث بالاسم أو الرقم (ع)");
   assert.ok(named.classList.contains("app-unified-search"),
     "admin text search receives the same compact dimensions");
-  assert.equal(named.placeholder,"بحث بالاسم أو الرقم (ع)",
-    "person-search hint moves inside the input");
+  assert.equal(named.placeholder,"بحث عن فرد بالاسم أو الرقم (ع)",
+    "hint must match the hosting screen's caption");
+  assert.equal(monthlyInput.placeholder,"بحث بالاسم أو الرقم (ع) في الشهر",
+    "monthly hint must retain its month context");
   assert.ok(labeled.classList.contains("app-unified-search-wrap"));
   assert.ok(caption.classList.contains("app-unified-search-caption"),
     "visible search caption is visually hidden but remains accessible");
