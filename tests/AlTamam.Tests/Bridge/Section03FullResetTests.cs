@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Microsoft.Data.Sqlite;
 using AlTamam.Application.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
@@ -8,6 +9,7 @@ using Xunit;
 namespace AlTamam.Tests.Bridge;
 
 /// <summary>Never run on a real database. Uses throwaway SQLCipher fixtures.</summary>
+[Collection("SQLCipherGlobalPool")]
 public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
 {
     private readonly string _file=SyntheticFixtures.CreateTempDatabasePath();
@@ -16,7 +18,10 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
     private BridgePrincipal _admin=null!;
     public async Task InitializeAsync()
     {
-        _db=new AlTamamDbContext(_file,SyntheticFixtures.TestKeyHex);
+        // Global pool clearing in other restore fixtures can invalidate pooled
+        // SQLCipher SafeHandles; keep this synthetic reset database unpooled.
+        _db=new AlTamamDbContext(_file,SyntheticFixtures.TestKeyHex,
+            useConnectionPooling:false);
         await _db.InitializeAsync();
         _auth=new BridgeSharedServices(_db);
         var founded=await _auth.ProvisionFirstAdministratorAsync(
@@ -47,6 +52,16 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         ["confirmDeleteLiveData"]=true,
         ["confirmDeleteOwnedBackups"]=true
     };
+    [Fact]
+    public void FullResetFixture_UsesUnpooledSqlCipherConnection()
+    {
+        using var conn=_db.CreateOpenConnection();
+        Assert.False(new SqliteConnectionStringBuilder(conn.ConnectionString).Pooling);
+        using var query=conn.CreateCommand();
+        query.CommandText="SELECT COUNT(*) FROM Users;";
+        Assert.Equal(1L,Convert.ToInt64(query.ExecuteScalar()));
+    }
+
     [Fact]
     public async Task OnlyGeneralAdminMayPreviewOrCommit_AndPasswordIsRequired()
     {
