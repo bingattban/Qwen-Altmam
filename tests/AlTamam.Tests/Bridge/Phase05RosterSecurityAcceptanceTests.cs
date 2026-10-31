@@ -87,8 +87,8 @@ public sealed class Phase05RosterSecurityAcceptanceTests : IAsyncLifetime, IDisp
         var shared=new BridgeSharedServices(_db);
         var original=Assert.IsType<JsonArray>(
             (await shared.ListActiveStatusesAsync(default)).Data);
-        foreach(string id in new[]{"STS-PRESENT","STS-LEAVE","STS-ABSENT","STS-PERMISSION"})
-            Assert.Contains(original,x=>x?["statusId"]?.GetValue<string>()==id);
+        foreach(string seededStatusId in new[]{"STS-PRESENT","STS-LEAVE","STS-ABSENT","STS-PERMISSION"})
+            Assert.Contains(original,x=>x?["statusId"]?.GetValue<string>()==seededStatusId);
         var catalog=new AdminConfigurationService(_db);
         var added=await catalog.CreateStatusAsync(new JsonObject{
             ["name"]="حالة تجريبية مضافة",["symbol"]="ت",["color"]="#12ABCD",
