@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
+using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
