@@ -107,6 +107,57 @@
     input.type=type||"text";input.value=value||"";
     wrap.append(name,input);return {wrap,input};
   }
+  // Password controls stay local to their field; no additional secret storage.
+  function attachSecretReveal(control){
+    const toggle=btn("👁",()=>{
+      const visible=control.input.type==="password";
+      control.input.type=visible?"text":"password";
+      toggle.textContent=visible?"🙈":"👁";
+      toggle.setAttribute("aria-label",visible?"إخفاء كلمة المرور":"إظهار كلمة المرور");
+      toggle.setAttribute("aria-pressed",String(visible));
+      control.input.focus?.();
+    },"admin-secret-reveal");
+    toggle.setAttribute("aria-label","إظهار كلمة المرور");
+    toggle.setAttribute("aria-pressed","false");
+    control.wrap.classList.add("admin-secret-field");
+    control.wrap.appendChild(toggle);
+  }
+  function livePasswordPolicy(password,confirmation=null){
+    const list=node("div","admin-password-policy");
+    list.setAttribute("role","list");
+    list.setAttribute("aria-label","متطلبات كلمة المرور");
+    const checks=[
+      ["8 أحرف فأكثر",v=>v.length>=8],
+      ["3 أحرف إنجليزية",v=>(v.match(/[A-Za-z]/g)||[]).length>=3],
+      ["3 أرقام",v=>(v.match(/[0-9]/g)||[]).length>=3],
+      ["رمز خاص",v=>/[^A-Za-z0-9\s]/.test(v)],
+      ["دون مسافات",v=>v.length>0&&!/\s/.test(v)]
+    ];
+    if(confirmation)checks.push(["تطابق كلمتي المرور",
+      v=>v.length>0&&v===confirmation.value]);
+    const rows=checks.map(([label])=>{
+      const row=node("div","admin-password-rule");
+      row.setAttribute("role","listitem");
+      const icon=node("span","admin-password-rule-icon","○");
+      icon.setAttribute("aria-hidden","true");
+      row.append(icon,node("span","",label));list.appendChild(row);
+      return {row,icon,label};
+    });
+    const update=()=>{
+      const value=password.value;
+      checks.forEach(([,passes],i)=>{
+        const good=passes(value);
+        rows[i].row.classList.toggle("valid",good);
+        rows[i].row.setAttribute("aria-label",rows[i].label+
+          (good?" — مستوفى":" — غير مستوفى"));
+        rows[i].icon.textContent=good?"✓":"○";
+      });
+    };
+    password.addEventListener("input",update);
+    confirmation?.addEventListener("input",update);
+    update();
+    return list;
+  }
   function warning(text) {
     const el=node("p","admin-warning",text);el.setAttribute("role","status");return el;
   }
@@ -770,8 +821,11 @@
       const username=field("اسم المستخدم");
       const password=field("كلمة المرور الجديدة","","password");
       password.input.autocomplete="new-password";
+      attachSecretReveal(password);
       const passwordConfirm=field("تأكيد كلمة المرور","","password");
       passwordConfirm.input.autocomplete="new-password";
+      attachSecretReveal(passwordConfirm);
+      const passwordHints=livePasswordPolicy(password.input,passwordConfirm.input);
       const role=node("select","form-control");
       role.setAttribute("aria-label","نوع الحساب");
       for(const allowed of allowedRoles){
@@ -826,11 +880,18 @@
         }catch(e){password.input.value="";errors(message,e);}
         finally{save.disabled=false;}
       },"btn btn-primary");
-      form.append(personSearch.wrap,searchButton,personPick,selected,
-        username.wrap,password.wrap,passwordConfirm.wrap,node("p","section-description",
-          "كلمة المرور: 8 خانات على الأقل، 3 أحرف إنجليزية، 3 أرقام ورمز خاص دون مسافات."),
-        node("label","","نوع الحساب"),role,save,
-        btn("إلغاء",()=>form.remove()),message);
+      const pickerLabel=node("label","admin-input");
+      pickerLabel.append(node("span","","الفرد المرتبط بالحساب"),personPick);
+      const roleLabel=node("label","admin-input");
+      roleLabel.append(node("span","","نوع الحساب"),role);
+      const personSearchRow=node("div","admin-account-person-search");
+      personSearchRow.append(personSearch.wrap,searchButton);
+      const secrets=node("div","admin-account-credentials");
+      secrets.append(password.wrap,passwordHints,passwordConfirm.wrap);
+      const layout=node("div","admin-account-form-grid");
+      layout.append(personSearchRow,pickerLabel,selected,username.wrap,
+        secrets,roleLabel);
+      form.append(layout,save,btn("إلغاء",()=>form.remove()),message);
       page.appendChild(form);
       // Fixed modal does not displace the list.
     }
@@ -906,6 +967,8 @@
       operationalModal(wrapper,"modal-sm");
       const pwd=field("كلمة المرور الجديدة","","password");
       pwd.input.autocomplete="new-password";
+      attachSecretReveal(pwd);
+      const requirements=livePasswordPolicy(pwd.input);
       const result=node("div","admin-note");
       // Do not cache the plaintext password in an additional JS signature.
       // The field owns its value; changing it starts a fresh operation ID.
@@ -927,8 +990,8 @@
           errors(result,e);
         }finally{save.disabled=false;}
       },"btn btn-primary");
-      wrapper.append(pwd.wrap,save,btn("إلغاء",()=>{pwd.input.value="";wrapper.remove();}),
-        result);
+      wrapper.append(pwd.wrap,requirements,save,
+        btn("إلغاء",()=>{pwd.input.value="";wrapper.remove();}),result);
       page.appendChild(wrapper);
       // Fixed modal keeps the list and current query.
     }
@@ -1262,6 +1325,20 @@
         String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0)));
     });
     const addMessage=node("div","admin-note");
+    addMessage.setAttribute("aria-live","polite");
+    const inputHint=node("p","admin-form-hint");
+    inputHint.setAttribute("aria-live","polite");
+    const inspectPersonInputs=()=>{
+      const personName=nameField.input.value.trim(),number=numberField.input.value.trim();
+      const invalidName=personName.length>0&&personName.length<3;
+      const invalidNumber=number.length>0&&!/^[0-9]{4,70}$/.test(number);
+      nameField.input.setAttribute("aria-invalid",String(invalidName));
+      numberField.input.setAttribute("aria-invalid",String(invalidNumber));
+      inputHint.textContent=invalidName?"الاسم يجب أن يحتوي على ثلاثة أحرف على الأقل.":
+        invalidNumber?"الرقم (ع) يتكون من 4 إلى 70 رقماً.":"";
+    };
+    nameField.input.addEventListener("input",inspectPersonInputs);
+    numberField.input.addEventListener("input",inspectPersonInputs);
     let lastPersonPayload=null,lastPersonOperation=null;
     const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
       const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
@@ -1396,7 +1473,9 @@
       creation.open=false;
       addMessage.replaceChildren();
     });
-    creation.append(toggle,creationFields,saveNew,cancelCreation,addMessage);
+    const creationActions=node("div","admin-person-actions");
+    creationActions.append(saveNew,cancelCreation);
+    creation.append(toggle,creationFields,inputHint,creationActions,addMessage);
     page.append(creation,box);
     const controls=node("div","functional-toolbar"),search=field("بحث بالاسم أو الرقم (ع)",state.term);
     const filter=node("select","form-select");
@@ -1506,10 +1585,24 @@
       }catch(error){await dialogs.alert(error.message||"تعذر أرشفة الفرد.");}
     }
     async function editPerson(person) {
-      const visibleName=await dialogs.prompt("الاسم الكامل الجديد",person.displayName);
-      if(visibleName===null)return;
-      const serviceNumberA=await dialogs.prompt("الرقم (ع) الجديد",person.serviceNumberA);
-      if(serviceNumberA===null)return;
+      const showForm=window.AltamamDialog?.form;
+      if(typeof showForm!=="function"){
+        await dialogs.alert("نافذة تعديل بيانات الفرد غير متاحة؛ لم تُحفظ أي تغييرات.");
+        return;
+      }
+      const changes=await showForm([
+        {name:"visibleName",label:"الاسم الكامل",type:"text",
+          value:person.displayName,required:true,minLength:3,maxLength:200},
+        {name:"serviceNumberA",label:"الرقم (ع)",type:"text",
+          value:person.serviceNumberA,required:true,minLength:4,maxLength:70}
+      ],{title:"تعديل بيانات الفرد",confirmLabel:"معاينة التعديل",size:"md"});
+      if(changes===null)return;
+      const visibleName=String(changes.visibleName||"").trim();
+      const serviceNumberA=String(changes.serviceNumberA||"").trim();
+      if(visibleName.length<3||!/^[0-9٠-٩۰-۹]{4,70}$/.test(serviceNumberA)){
+        await dialogs.alert("أدخل الاسم كاملاً والرقم (ع) من 4 إلى 70 رقماً.");
+        return;
+      }
       const now=new Date();
       const businessDate=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
         String(now.getDate()).padStart(2,"0")].join("-");

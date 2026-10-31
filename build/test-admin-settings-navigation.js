@@ -22,7 +22,16 @@ class Element {
   get classList() {
     return {
       add: (...tokens) => { this.className += " " + tokens.join(" "); },
-      contains: token => this.className.split(/\s+/).includes(token)
+      contains: token => this.className.split(/\s+/).includes(token),
+      toggle: (token, force) => {
+        const tokens=this.className.split(/\s+/).filter(Boolean);
+        const has=tokens.includes(token);
+        const next=typeof force==="boolean"?force:!has;
+        if(next&&!has)tokens.push(token);
+        if(!next&&has)tokens.splice(tokens.indexOf(token),1);
+        this.className=tokens.join(" ");
+        return next;
+      }
     };
   }
   append(...items) { this.children.push(...items); }
@@ -146,6 +155,11 @@ const bridge = {
             serviceNumberA:"5151",exitDate:"2026-10-12",exitType:"فصل",numberMatch:false,nameMatch:true}]},
       CommitArchivedReturn:{returned:true,personId:"TST-ARCHIVED-P1"},
       CreatePerson:{personId:"PRN-NEW-DIFFERENT"},
+      PreviewPersonIdentityUpdate:{
+        oldName:"فرد في القوة",newName:"الاسم المحدّث",
+        oldServiceNumberA:"91001",newServiceNumberA:"91002"
+      },
+      UpdatePersonIdentity:{personId:"TST-ACTIVE-1"},
       SearchPersons: {items:[{personId:"TST-CLOSED-P1",displayName:"اختبار",serviceNumberA:"C-1"}]},
       SetClosedDayCorrectionPolicy: {enabled:true},
       PreviewClosedDayCorrection: {previewToken:"T".repeat(64),requiresExplicitConfirmation:true,
@@ -163,9 +177,12 @@ const bridge = {
   }
 };
 const modalReviews=[];
+const editDialogRequests=[];
+let nextIdentityForm=null;
 let approveDetailPreview=false;
 const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
   detailsReview:async(details,opts)=>{modalReviews.push({details,opts});return approveDetailPreview;},
+  form:async(fields,opts)=>{editDialogRequests.push({fields,opts});return nextIdentityForm;},
   confirm:async()=>true, prompt:async(message,value="")=>value, alert:async()=>true
  } }, document, console,
   alert: () => { throw Error("Unexpected alert"); },
@@ -489,8 +506,26 @@ async function run() {
   const usernameField=addUserForm.all().find(x=>x.tag==="label"&&
     x.children[0]?.textContent==="اسم المستخدم");
   assert.ok(usernameField,"a dedicated username field is required");
+  const reveals=addUserForm.all().filter(x=>x.className.includes("admin-secret-reveal"));
+  assert.equal(reveals.length,2,"each credential field has a keyboard-operable eye toggle");
+  assert.equal(reveals[0].attrs["aria-label"],"إظهار كلمة المرور");
+  const passwordRules=addUserForm.all().filter(x=>x.className.split(/\s+/).includes("admin-password-rule"));
+  assert.equal(passwordRules.length,6,"live account rules include password confirmation");
+  assert.ok(passwordRules.every(x=>!x.className.includes("valid")));
   usernameField.children.find(x=>x.tag==="input").value="tester-user";
-  secrets[0].value="Abc123!secure";secrets[1].value="Different123!";
+  secrets[0].value="Abc123!secure";secrets[1].value="Abc123!secure";
+  secrets[0].handlers.input();
+  assert.ok(passwordRules.every(x=>x.className.includes("valid")),
+    "typing valid credentials lights all six live indicators");
+  reveals[0].handlers.click();
+  assert.equal(secrets[0].type,"text","eye reveals the existing password without changing its value");
+  assert.equal(reveals[0].attrs["aria-pressed"],"true");
+  reveals[0].handlers.click();
+  assert.equal(secrets[0].type,"password","eye restores hidden field");
+  secrets[1].value="Different123!";
+  secrets[1].handlers.input();
+  assert.ok(!passwordRules.at(-1).className.includes("valid"),
+    "mismatched confirmation must never show a green match");
   const beforeUserWrites=calls.filter(x=>x.name==="CreateUserAccount").length;
   await buttonNamed("تأكيد إضافة الحساب").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CreateUserAccount").length,beforeUserWrites,
@@ -565,6 +600,27 @@ async function run() {
   assert.equal(savedArchive.body.expectedRevision,1);
   assert.ok(savedArchive.body.operationId.length>=16);
   assert.equal(savedArchive.body.personIds[0],"TST-ACTIVE-1");
+  // One two-field modal replaces the old two consecutive prompts.
+  nextIdentityForm=null;approveDetailPreview=false;
+  const beforeEdit=calls.filter(x=>x.name==="UpdatePersonIdentity").length;
+  await buttonNamed("تعديل الاسم والرقم").handlers.click();
+  assert.equal(editDialogRequests.at(-1).fields.length,2);
+  assert.equal(editDialogRequests.at(-1).opts.title,"تعديل بيانات الفرد");
+  assert.equal(calls.filter(x=>x.name==="UpdatePersonIdentity").length,beforeEdit,
+    "canceling form never changes the stored identity");
+  nextIdentityForm={visibleName:"الاسم المحدّث",serviceNumberA:"91002"};
+  await buttonNamed("تعديل الاسم والرقم").handlers.click();
+  assert.ok(calls.some(x=>x.name==="PreviewPersonIdentityUpdate"),
+    "identity edit must use the real server preview");
+  assert.equal(calls.filter(x=>x.name==="UpdatePersonIdentity").length,beforeEdit,
+    "declined identity preview prevents the write");
+  approveDetailPreview=true;
+  await buttonNamed("تعديل الاسم والرقم").handlers.click();
+  assert.ok(calls.some(x=>x.name==="UpdatePersonIdentity"&&
+    x.body.visibleName==="الاسم المحدّث"&&x.body.serviceNumberA==="91002"&&
+    typeof x.body.operationId==="string"),
+    "approved identity edit retains the backend authorization and operation ID");
+  nextIdentityForm=null;approveDetailPreview=false;
   controller.renderAdmin({role:"Supervisor",username:"supervisor"});
   byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="persons").handlers.click();

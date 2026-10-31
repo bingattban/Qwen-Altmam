@@ -28,6 +28,22 @@ check(/\.app-operational-modal:not\(\[hidden\]\)/,css,"action forms are true ove
 check(/\.app-popup-on-content:not\(:empty\)/,css,"outcome dialogs float above tables");
 check(/\.attendance-drafts-modal:not\(\[hidden\]\)/,css,"saved drafts appear in dialog");
 check(/\.admin-create-person\[open\]/,css,"identity conflict form appears as a modal");
+
+check(/\.admin-create-person\[open\]>\.admin-site-form\{/,css,
+  "personnel creation uses a balanced RTL two-column form in the modal");
+check(/\.admin-person-actions>\.btn-primary/,css,
+  "personnel creation keeps a prominent full-width-friendly save action");
+check(/\.admin-user-form \.admin-account-form-grid\{/,css,
+  "account creation uses one responsive structured editor");
+check(/\.admin-password-rule\.valid\{/,css,
+  "live password requirements have a verified success presentation");
+check(/function attachSecretReveal\(control\)/,admin,
+  "user account secrets expose an accessible eye toggle");
+check(/function livePasswordPolicy\(password,confirmation=null\)/,admin,
+  "account policy is computed from the real field values");
+check(/const changes=await showForm\(\[/,admin,
+  "identity correction is edited together in one modal before the real preview");
+
 check(/\.functional-export-preview:not\(\[hidden\]\)/,css,"Excel preview floats above the grid");
 check(/\.person-report-tabs/,css,"report tabs use shared styles");
 check(/body:has\(\.app-operational-modal/,css,"nested confirmation wins layering");
