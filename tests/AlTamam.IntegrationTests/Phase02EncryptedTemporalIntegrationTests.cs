@@ -316,7 +316,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         var second = Attempt("TST-RACE-2");
         start.Set();
         var outcomes = await Task.WhenAll(first, second);
-        Assert.Single(outcomes.Where(value => value));
+        Assert.Single(outcomes, value => value);
         using var inspect = _database.CreateOpenConnection();
         Assert.Equal(1L, Count(inspect,
             "SELECT COUNT(*) FROM PersonAssignments WHERE PersonId='TST-CONCURRENT';"));
