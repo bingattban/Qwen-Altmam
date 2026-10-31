@@ -238,8 +238,13 @@
         refreshPolicy();
         const passwordArea=el("div","auth-password-area");
         append(passwordArea,pass.wrapper,policy);
-        form.replaceChildren(brand,name.wrapper,foundingName.wrapper,passwordArea,
-          confirmation.wrapper,note,status,submit);
+        // Only the credential fields scroll; the primary action remains on screen.
+        const setupFields=el("div","auth-setup-fields");
+        append(setupFields,name.wrapper,foundingName.wrapper,passwordArea,
+          confirmation.wrapper,note);
+        const submitFooter=el("div","auth-submit-footer");
+        append(submitFooter,status,submit);
+        form.replaceChildren(brand,setupFields,submitFooter);
       }
     } catch(e) { showError(status,e); }
     form.addEventListener("submit",async event=>{

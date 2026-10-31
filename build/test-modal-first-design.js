@@ -150,13 +150,33 @@ check(/\.auth-form \.auth-floating-field>\.form-input:focus/,css,
   "active field gets an accent-colored focus border");
 check(/\.auth-first-run \.auth-password-policy\{\s*display:grid/,css,
   "password rules are displayed as a responsive list");
-check(/\.auth-first-run>\.auth-info-box\{/,css,
-  "founder instructions are readable in a light information panel");
-check(/\.auth-first-run>\.btn\.btn-primary\{/,css,
-  "primary action is full-width and touch-friendly");
+check(/\.auth-first-run \.auth-setup-fields>\.auth-info-box\{/,css,
+  "founder instructions remain readable inside the scrollable credential region");
+check(/\.auth-first-run>\.auth-submit-footer>\.btn\.btn-primary\{/,css,
+  "primary action is full-width and touch-friendly in the fixed footer");
 assert.ok(css.lastIndexOf(".auth-form .auth-password-field>input.form-input{") >
   css.indexOf("padding-inline-end:140px"),
   "the new eye control must override legacy 140px text-button spacing");
+/* Regression for short Windows viewports: the creation button must never
+   be clipped by the legacy overflow:hidden form or the desktop shell. */
+check(/const setupFields=el\("div","auth-setup-fields"\)/,functional,
+  "first-run fields are grouped into a bounded, independently scrolling area");
+check(/const submitFooter=el\("div","auth-submit-footer"\)/,functional,
+  "first-run creates an independently visible bottom action region");
+check(/append\(submitFooter,status,submit\)/,functional,
+  "the status and original submit control stay together in the visible footer");
+check(/form\.replaceChildren\(brand,setupFields,submitFooter\)/,functional,
+  "first-run card keeps the brand, scrolling fields and action footer in that order");
+check(/#appViewport:has\(\.auth-first-run\)\{\s*height:100%;min-height:0;overflow:hidden;/,css,
+  "setup viewport fits the available Windows height instead of expanding and clipping");
+check(/\.auth-form\.auth-first-run\{\s*flex:1 1 auto;display:flex;flex-direction:column;/,css,
+  "setup form shrinks to the viewport and cannot hide its submit footer");
+check(/\.auth-first-run>\.auth-setup-fields\{[^}]*min-height:0;[^}]*overflow-y:auto;/,css,
+  "only credential content scrolls when the window is short");
+check(/\.auth-first-run>\.auth-submit-footer\{[^}]*flex:none;[^}]*width:100%;/,css,
+  "the footer cannot shrink or scroll out of the card");
+check(/@media\(max-height:740px\)\{[^}]*#appViewport:has\(\.auth-first-run\)/,css,
+  "short-height desktop windows have compact heading and safe field spacing");
 check(/auth-password-policy/,functional,"live first-run password policy");
 check(/auth-brand/,functional,"the branded login block appears inside both login and first-run forms");
 check(/\.auth-brand-mark\{/,css,"login uses the local Cairo heading and teal symbol");
