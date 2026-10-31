@@ -14,12 +14,23 @@ for(const route of manifest.screens){
   const file=web+"/"+route.localAssetPath;
   const html=fs.readFileSync(file,"utf8");
   assert.match(html,/assets\/js\/screen-module\.js/,route.routeKey+" missing shared route behavior");
+  // Every standalone route remains registered, but no developer-only scaffold or
+  // disabled pretend-refresh may leak to the operator.
+  assert.doesNotMatch(html,/يجري ربط الشاشة خلال مراحل تنفيذ المشروع|ربط هذه الشاشة بخدمات البرنامج لم يكتمل بعد|المرحلة: Phase|المعرف القياسي|الصلاحية المعتمدة:|مرتبط بعقد WebView2 المحلي|Loading \/ Ready State|RBAC &amp; Validation|Historical Immutability|قيد التطوير/,
+    route.routeKey+" contains internal development guidance");
+  assert.doesNotMatch(html,/↗ فتح في المنظومة الكاملة|تشغيل التفاعل الكامل/,
+    route.routeKey+" advertises a misleading standalone interaction");
+  const actualReadRoutes=new Set(["Administration","Sites","Statuses","PersonnelManagement",
+    "PersonPickerAndSearch","DraftsAndTemporarySave"]);
+  if(!actualReadRoutes.has(route.routeKey)&&route.routeKey!=="AddPerson")
+    assert.doesNotMatch(html,/data-bridge-action="REFRESH"/,
+      route.routeKey+" must not render a non-functional refresh button");
   scanned++;
   const matches=[...html.matchAll(/<a\b[^>]*href="([^"]*index\.html#[^"]*)"[^>]*>([^<]+)<\/a>/g)];
   legacyLinks+=matches.filter(m=>/تشغيل التفاعل الكامل|فتح في المنظومة الكاملة/.test(m[2])).length;
 }
 assert.equal(scanned,manifest.screenCount,"every canonical route must be checked");
-assert.ok(legacyLinks>0,"expected legacy route return links to be covered");
+assert.equal(legacyLinks,0,"developer-facing legacy return labels must be gone");
 
 const elements=[
   {href:"../../../index.html#AuditLog",textContent:"تشغيل التفاعل الكامل",title:""},
