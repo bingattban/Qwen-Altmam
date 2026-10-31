@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = (
-    ROOT / ".github/workflows/windows-build.yml",
+    ROOT / ".github/workflows/windows-ci.yml",
     ROOT / ".github/workflows/windows-release.yml",
 )
 TEST_LINE = re.compile(r"^\s*node\s+build/(test-[\w-]+\.js)\s*$")

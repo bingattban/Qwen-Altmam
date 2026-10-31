@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST = (ROOT / "src/AlTamam.DesktopHost/MainWindow.xaml.cs").read_text(encoding="utf-8")
 APP = (ROOT / "src/AlTamam.DesktopHost/App.xaml.cs").read_text(encoding="utf-8")
 RELEASE = (ROOT / ".github/workflows/windows-release.yml").read_text(encoding="utf-8")
-CORE = (ROOT / ".github/workflows/windows-build.yml").read_text(encoding="utf-8")
+CORE = (ROOT / ".github/workflows/windows-ci.yml").read_text(encoding="utf-8")
 
 
 class WebViewSmokeContract(unittest.TestCase):

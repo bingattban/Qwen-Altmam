@@ -57,3 +57,25 @@ db.key.protected
 *.log
 *.trx
 *.dmp
+
+# Phase 01: encrypted cross-machine restore payloads and SQLite crash journals
+*.altrecovery
+*.altbackup
+*.altrestore
+*.dbbackup
+*.dbbackup-wal
+*.dbbackup-shm
+*.dbbackup-journal
+*.db-journal
+*.db3
+*.db3-wal
+*.db3-shm
+*.db3-journal
+*.sqlite-journal
+*.sqlite3-journal
+
+# Never commit Windows user exports or device-specific secret containers
+*.kdbx
+*.pfx
+*.p12
+*.pem
