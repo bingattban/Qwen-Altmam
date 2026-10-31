@@ -1813,7 +1813,19 @@
     // Host-agnostic fallback is a correlation token, never a credential.
     return Date.now().toString(36)+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
   }
-  async function renderSettings(session,logout) {
+  // Route handovers focus an existing control only; they never invoke an action.
+  // Disabled controls remain disabled and all sensitive C# previews retain their
+  // own consent, validation, authorization and audit flows.
+  const settingsRouteButtons=Object.freeze({
+    CreateBackup:["إنشاء نسخة احتياطية الآن","اختيار مجلد من Windows"],
+    ScheduledBackups:["حفظ جدول النسخ التلقائي"],
+    RestoreBackup:["اختيار نسخة مشفرة وفحص سلامتها"],
+    AppearanceAndDiagnostics:["فحص سلامة البيانات"],
+    EightPmScheduler:["حفظ إعدادات التحضير التلقائي"],
+    ResetApplicationData:["معاينة التصفير الكامل"],
+    Logout:["تسجيل الخروج"]
+  });
+  async function renderSettings(session,logout,requestedRoute=null) {
     state.session=session;
     const token=++currentRequest;
     const page=target();page.replaceChildren();
@@ -2267,6 +2279,25 @@
         planned.appendChild(resetBox);
       }
       grid.appendChild(planned);
+      // Honor named settings routes only after the authenticated settings
+      // response has produced real controls. No click, submit or write occurs.
+      if(token===currentRequest && requestedRoute){
+        let focusTarget=null;
+        if(requestedRoute==="AboutApplication"){
+          focusTarget=account;
+          focusTarget.setAttribute("tabindex","-1");
+        }else{
+          const available=Array.from(grid.querySelectorAll("button"));
+          const labels=settingsRouteButtons[requestedRoute]||[];
+          focusTarget=labels.map(label=>
+            available.find(control=>control.textContent.trim()===label && !control.disabled))
+            .find(Boolean)||null;
+        }
+        if(focusTarget){
+          focusTarget.focus?.({preventScroll:true});
+          focusTarget.scrollIntoView?.({block:"nearest"});
+        }
+      }
     }catch(e) {
       if(token!==currentRequest)return;
       grid.replaceChildren();
