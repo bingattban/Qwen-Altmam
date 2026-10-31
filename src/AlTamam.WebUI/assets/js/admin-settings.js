@@ -194,10 +194,6 @@
       ["transferExternal","نقل خارجي"],
       ["archiveInternal","أرشيف النقل الداخلي"],
       ["archiveExternal","أرشيف النقل الخارجي"]
-    ],
-    separation: [
-      ["separatePerson","فصل فرد"],
-      ["separatedArchive","أرشيف الفصل"]
     ]
   });
   const nestedParents = Object.freeze({
@@ -310,7 +306,7 @@
       const page=start("الإدارة / التنقلات");
       return window.AltamamMovements.render(page,screen);
     }
-    if(["separatePerson","separatedArchive"].includes(screen) && window.AltamamSeparation){
+    if(["separation","separatePerson","separatedArchive"].includes(screen) && window.AltamamSeparation){
       const page=start(screen==="separatedArchive"
         ?"الإدارة / إدارة القوة / الأرشيف"
         :"الإدارة / إدارة القوة / الفصل");
@@ -329,7 +325,6 @@
     if(screen==="persons")return persons();
     if(screen==="log")return audit(sourceRoute==="ModifiedDeletedAuditEntries");
     if(screen==="transfers")return renderNested(screen,"التنقلات");
-     if(screen==="separation")return renderNested(screen,"الفصل");
 
     const labels={
       attendance:"التمام",transferInternal:"النقل الداخلي",

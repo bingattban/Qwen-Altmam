@@ -29,12 +29,31 @@
     body.appendChild(r);return r;
   }
   function render(host,screen){
-    const wrapper=el("section",undefined,"card");
-    wrapper.classList.add("separation-screen");
+    const wrapper=el("section",undefined,"card separation-screen");
     host.appendChild(wrapper);
-    if(screen==="separatePerson")return form(wrapper);
-    if(screen==="separatedArchive")return archive(wrapper);
-    wrapper.appendChild(el("p","هذه الشاشة غير متاحة.","admin-warning"));
+    if(!["separation","separatePerson","separatedArchive"].includes(screen)){
+      wrapper.appendChild(el("p","هذه الشاشة غير متاحة.","admin-warning"));
+      return;
+    }
+    const tabs=el("div",undefined,"separation-tabs");
+    tabs.setAttribute("role","tablist");
+    tabs.setAttribute("aria-label","أقسام شاشة الفصل");
+    const content=el("div",undefined,"separation-tab-content");
+    const separateTab=button("فصل فرد",()=>show("separatePerson"));
+    const archiveTab=button("أرشيف الفصل",()=>show("separatedArchive"));
+    for(const tab of [separateTab,archiveTab])tab.setAttribute("role","tab");
+    tabs.append(separateTab,archiveTab);
+    wrapper.append(tabs,content);
+    function show(selected){
+      const isArchive=selected==="separatedArchive";
+      separateTab.className=isArchive?"btn btn-outline":"btn btn-primary";
+      archiveTab.className=isArchive?"btn btn-primary":"btn btn-outline";
+      separateTab.setAttribute("aria-selected",String(!isArchive));
+      archiveTab.setAttribute("aria-selected",String(isArchive));
+      content.replaceChildren();
+      return isArchive?archive(content):form(content);
+    }
+    return show(screen==="separatedArchive"?"separatedArchive":"separatePerson");
   }
   async function form(root) {
     root.replaceChildren(el("h2","فصل فرد من القوة","section-title"),
@@ -42,7 +61,7 @@
     const today=date();
     const input=el("input");input.type="search";input.placeholder="بحث بالاسم أو الرقم (ع)";
     input.setAttribute("aria-label","البحث عن فرد نشط");
-    const find=button("بحث",search,"btn btn-outline");
+    const find=button("بحث",()=>{page=1;return search();},"btn btn-outline");
     const bar=el("div",undefined,"functional-toolbar");
     bar.append(input,find);
     const results=el("div"),selected=el("div",undefined,"separation-selected"),
@@ -53,6 +72,9 @@
     preview.setAttribute("aria-label","إعادة مراجعة الفصل");
     root.append(bar,results,selected,feedback,preview);
     let person=null,page=1,seq=0,previewCounter=0;
+    input.addEventListener("keydown",event=>{
+      if(event.key==="Enter"){event.preventDefault();page=1;void search();}
+    });
     const clear=()=>{previewCounter++;preview.replaceChildren();};
     async function search(){
       person=null;selected.replaceChildren();clear();
@@ -158,6 +180,7 @@
     root.replaceChildren(el("h2","أرشيف الفصل","section-title"),
       el("p","الأرشيف للقراءة فقط، ولا يحذف سجلات الأفراد أو تحضيراتهم السابقة.","section-description"));
     const query=el("input");query.type="search";query.placeholder="بحث بالاسم أو الرقم (ع)";
+    query.setAttribute("aria-label","بحث في أرشيف الفصل");
     const sites=el("select");sites.appendChild(option("","جميع المواقع"));
     const bar=el("div",undefined,"functional-toolbar");
     const out=el("div"),feedback=el("div");
@@ -182,6 +205,9 @@
       for(const s of response.data||[])sites.appendChild(option(s.siteId,s.name));
     }catch(e){error(out,e);}
     sites.addEventListener("change",()=>{page=1;load();});
+    query.addEventListener("keydown",event=>{
+      if(event.key==="Enter"){event.preventDefault();page=1;void load();}
+    });
     async function load(){
       const request=++sequence;
       out.replaceChildren(el("p","جارٍ تحميل أرشيف الفصل..."));
