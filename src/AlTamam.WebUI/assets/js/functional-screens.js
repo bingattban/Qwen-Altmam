@@ -232,9 +232,12 @@
         document.getElementById("headerRoleBadge").textContent=
           result.username+" — "+(result.roleLabelAr||result.role);
         document.getElementById("logoutAction").hidden=false;
-        const openAutomaticRegister=location.hash.slice(1)==="auto-prepared";
-        render("dashboard");
-        if(openAutomaticRegister)openAutoPreparedList();
+        const requested=decodeURIComponent(location.hash.slice(1));
+        if(!openRoute(requested)){
+          const automatic=requested==="auto-prepared";
+          render("dashboard");
+          if(automatic)openAutoPreparedList();
+        }
         void checkOutputAfterLogin();
       } catch(e) { showError(status,e); }
       finally { submit.disabled=false; }
@@ -1240,6 +1243,34 @@
     else nav.navigateTop(section);
   }
 
+  // Navigate legacy named HTML routes into their real authenticated owning
+  // screens. This never creates/commits a draft, transfer or other mutation.
+  function openRoute(routeKey){
+    if(!STATE.session)return false;
+    const route=nav?.getRoute?.(routeKey);
+    if(!route)return false;
+    if(!canSeeRoute(route)){
+      render("admin");
+      view().appendChild(message("لا تملك صلاحية الدخول إلى الشاشة المطلوبة.",true));
+      return true;
+    }
+    if(routeKey==="UnpreparedPersonnel"||routeKey==="SelectStatusAndConfirm"){
+      render("dashboard");openAutoPreparedList();return true;
+    }
+    // Provisioning and authentication remain database-authoritative.
+    if(routeKey==="Login"||routeKey==="FirstRunSetup"){
+      render("dashboard");return true;
+    }
+    const section=routeKey==="ClosedDayExceptionalCorrection"
+      ?"admin":nav.sectionForRoute(route);
+    render(section);
+    if(section==="admin" && routeKey!=="Administration" &&
+       !window.AltamamAdminSettings?.openOwnedRoute?.(routeKey)){
+      view().appendChild(message("لم تتوفر وجهة عملية معتمدة لهذا المسار.",true));
+    }
+    return true;
+  }
+
   async function boot() {
     STATE.date=startOfToday();
     if (!bridge() || !bridge().hasBridge()) {
@@ -1261,14 +1292,14 @@
         document.getElementById("headerRoleBadge").textContent=
           state.username+" — "+(state.roleLabelAr||state.role);
         document.getElementById("logoutAction").hidden=false;
-        const openAutomaticRegister=location.hash.slice(1)==="auto-prepared";
-        const initialSection=["dashboard","monthly","admin","settings"].includes(location.hash.slice(1))
-          ?location.hash.slice(1):"dashboard";
-        render(initialSection);
-        if(openAutomaticRegister)openAutoPreparedList();
-        // A restored monthly/report page is read-only; check the output-drive
-        // on fresh dashboard login and whenever Settings is opened instead.
-        if(initialSection==="dashboard")void checkOutputAfterLogin();
+        const requested=decodeURIComponent(location.hash.slice(1));
+        if(!openRoute(requested)){
+          const automatic=requested==="auto-prepared";
+          const initialSection=sections.has(requested)?requested:"dashboard";
+          render(initialSection);
+          if(automatic)openAutoPreparedList();
+          if(initialSection==="dashboard")void checkOutputAfterLogin();
+        }
       } else await loginGate();
     } catch { await loginGate(); }
   }
@@ -1308,7 +1339,7 @@
     render(control.dataset.section);
   },true);
   document.addEventListener("DOMContentLoaded",boot);
-  window.AltamamFunctional=Object.freeze({render, canSeeRoute});
+  window.AltamamFunctional=Object.freeze({render, canSeeRoute, openRoute});
   bridge().onInvalidation(evt=>{
     const name=typeof evt==="string"?evt:(evt&&evt.eventName);
     if(["AttendanceCommitted","AttendanceRevised","PersonnelMoved","PersonnelArchived","SiteCreated",
