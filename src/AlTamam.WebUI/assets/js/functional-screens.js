@@ -238,8 +238,12 @@
         refreshPolicy();
         const passwordArea=el("div","auth-password-area");
         append(passwordArea,pass.wrapper,policy);
-        form.replaceChildren(brand,name.wrapper,foundingName.wrapper,passwordArea,
-          confirmation.wrapper,note,status,submit);
+        // Only fields and their feedback scroll in a short Windows viewport.
+        // The existing submit stays visible as the form's stable footer.
+        const setupFields=el("div","auth-setup-scroll");
+        append(setupFields,name.wrapper,foundingName.wrapper,passwordArea,
+          confirmation.wrapper,note,status);
+        form.replaceChildren(brand,setupFields,submit);
       }
     } catch(e) { showError(status,e); }
     form.addEventListener("submit",async event=>{
