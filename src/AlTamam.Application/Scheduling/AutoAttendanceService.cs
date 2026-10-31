@@ -113,9 +113,16 @@ public sealed class AutoAttendanceService
         string source = administrator is null ? (isCatchUp ? "08h-catchup" : "08h-auto")
             : "08h-admin-catchup";
         DateTimeOffset startedUtc = _time.GetUtcNow();
-        string configuredDue = await Bridge.AutoAttendancePolicyService.ReadClockAsync(
-            _db, Bridge.AutoAttendancePolicyService.DueTimeKey,
-            Bridge.AutoAttendancePolicyService.DefaultDueTime, ct).ConfigureAwait(false);
+        string configuredDue = Bridge.AutoAttendancePolicyService.DefaultDueTime;
+        // Read the configured clock via the existing SQLCipher transaction.
+        using (var due = connection.CreateCommand())
+        {
+            due.Transaction = tx;
+            due.CommandText = "SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
+            due.Parameters.AddWithValue("$key", Bridge.AutoAttendancePolicyService.DueTimeKey);
+            string? stored = await due.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+            if (Bridge.AutoAttendancePolicyService.IsValidClock(stored)) configuredDue = stored!;
+        }
         string dueLocal = Iso(businessDate) + "T" + configuredDue + ":00";
 
             // Closed-date lock enforced by the database authority (DAY or MONTH closure).

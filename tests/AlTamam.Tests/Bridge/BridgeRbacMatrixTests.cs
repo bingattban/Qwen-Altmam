@@ -82,7 +82,7 @@ public sealed class BridgeRbacMatrixTests
         bool shouldAllow = expectedAllowedRoles.Contains(callerRole, StringComparer.Ordinal);
 
         BridgeDispatchResult result = await dispatcher.DispatchAsync(
-            Envelope(action, callerNonce, $"RBAC-{action}-{callerRole}"),
+            Envelope(action, callerNonce, $"RBAC-{Guid.NewGuid():N}"),
             ValidOrigin, isMainFrame: true, Authenticate);
 
         if (shouldAllow)

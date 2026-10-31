@@ -123,9 +123,16 @@ public sealed class AutoAttendancePolicyService
                     null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
                     .ConfigureAwait(false);
             }
+            // Reuse the transaction connection: opening another SQLCipher pool connection
+            // while a write is active can race test pool resets and acquire a lock.
+            using var due=c.CreateCommand();
+            due.Transaction=t;
+            due.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
+            due.Parameters.AddWithValue("$key",DueTimeKey);
+            string? storedDue=await due.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
             var data=new JsonObject{["defaultStatusId"]=statusId,["defaultStatusName"]=name,
                 ["configured"]=true,
-                ["dueTimeLocal"]=await ReadClockAsync(_db,DueTimeKey,DefaultDueTime,ct)};
+                ["dueTimeLocal"]=IsValidClock(storedDue)?storedDue:DefaultDueTime};
             await MutationIdempotency.StoreAsync(c,t,receipt,data,_time,ct).ConfigureAwait(false);
             return BridgeHelpers.Ok(data);
         },ct).ConfigureAwait(false);
