@@ -114,7 +114,8 @@ const bridge = {
       QueryAuditLog: { items:showAuditEntry?[auditTestEntry]:[],
         total:showAuditEntry?1:0,hasNext:false },
       QueryAuditPresentationChanges: { items:[],total:0,hasNext:false },
-      GetActiveAttendanceStatuses: [{statusId:"STS-ABSENT",displayName:"غياب"}],
+      GetActiveAttendanceStatuses: [{statusId:"STS-ABSENT",displayName:"غياب",
+        shortSymbol:"غ",color:"#D97706",version:3}],
       GetCustomFieldDefinitions:{items:[
         {columnId:"FLD-SYS-NAME",technicalKey:"sys_person_name",caption:"الاسم",
           fieldType:1,displayOrder:3,isSystemProtected:true,
@@ -129,7 +130,7 @@ const bridge = {
       CreateCustomFieldDefinition:{columnId:"FLD-TST-NEW"},
       UpdateCustomFieldMetadata:{columnId:"FLD-TST-ONE"},
       DeactivateCustomField:{columnId:"FLD-TST-ONE"},
-      QuerySites:[{siteId:"SITE-RETURN",name:"الموقع الجديد",active:true},
+      QuerySites:[{siteId:"SITE-RETURN",name:"الموقع الجديد",active:true,rowVersion:4},
         {siteId:"SITE-REMOVABLE",name:"موقع تجريبي قابل للإزالة",active:true,rowVersion:3},
         {siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true,rowVersion:1}],
       QueryPersons: showRosterPerson && name === "QueryPersons" &&
@@ -146,6 +147,8 @@ const bridge = {
       ArchivePersons:{archivedPersonIds:["TST-ACTIVE-1"],
         effectiveLocalDate:"2026-10-29"},
       RemoveSiteAndReassignCurrentPersons:{siteId:"SITE-REMOVABLE",reassignedCount:2,active:false},
+      RenameSite:{siteId:"SITE-RETURN"},
+      UpdateAttendanceStatus:{statusId:"STS-ABSENT"},
       PreviewArchivedIdentity:body.serviceNumberA==="4141"
         ?{requiresResolution:true,previewToken:"T".repeat(64),
           candidates:[{personId:"TST-ARCHIVED-P1",name:"شخص تجريبي قديم",
@@ -178,11 +181,15 @@ const bridge = {
 };
 const modalReviews=[];
 const editDialogRequests=[];
-let nextIdentityForm=null;
+let nextIdentityForm=null,nextConfigForm=null;
 let approveDetailPreview=false;
 const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
   detailsReview:async(details,opts)=>{modalReviews.push({details,opts});return approveDetailPreview;},
-  form:async(fields,opts)=>{editDialogRequests.push({fields,opts});return nextIdentityForm;},
+  form:async(fields,opts)=>{
+    editDialogRequests.push({fields,opts});
+    return ["إعادة تسمية الموقع","تعديل حالة التحضير"].includes(opts.title)?
+      nextConfigForm:nextIdentityForm;
+  },
   confirm:async()=>true, prompt:async(message,value="")=>value, alert:async()=>true
  } }, document, console,
   alert: () => { throw Error("Unexpected alert"); },
@@ -675,6 +682,28 @@ async function run() {
   assert.equal(mutation.body.expectedActiveCount,2);
   assert.equal(mutation.body.confirmed,true);
   assert.ok(mutation.body.operationId.length>=16);
+  // Rename uses one accessible form and a separate before/after confirmation.
+  const renameRow=visible().find(x=>x.tag==="tr"&&
+    x.children[0]?.textContent==="الموقع الجديد");
+  const rename=renameRow.all().find(x=>x.tag==="button"&&x.textContent==="إعادة تسمية");
+  const beforeRename=calls.filter(x=>x.name==="RenameSite").length;
+  nextConfigForm=null;approveDetailPreview=false;
+  await rename.handlers.click();
+  assert.equal(editDialogRequests.at(-1).opts.title,"إعادة تسمية الموقع");
+  assert.equal(calls.filter(x=>x.name==="RenameSite").length,beforeRename,
+    "canceling the site editor does not rename");
+  nextConfigForm={name:"الموقع الحديث"};
+  await rename.handlers.click();
+  assert.ok(modalReviews.at(-1).details.rows.some(x=>x[0]==="الاسم السابق"));
+  assert.equal(calls.filter(x=>x.name==="RenameSite").length,beforeRename,
+    "declining preview leaves the site unchanged");
+  approveDetailPreview=true;
+  await rename.handlers.click();
+  assert.ok(calls.some(x=>x.name==="RenameSite"&&
+    x.body.siteId==="SITE-RETURN"&&x.body.name==="الموقع الحديث"&&
+    x.body.expectedRevision===4&&x.body.operationId?.length>=16),
+    "approved site rename uses existing C# optimistic revision");
+  nextConfigForm=null;approveDetailPreview=false;
   // Status creation uses the same reusable modal and previews the actual
   // configured badge color while keeping all native action payloads intact.
   controller.renderAdmin(admin);
@@ -707,6 +736,29 @@ async function run() {
     "closing status editor restores focus to its originating action");
   assert.equal(calls.filter(x=>x.name==="CreateAttendanceStatus").length,0,
     "preview and close cannot save an unconfirmed status");
+  assert.equal(badge.attrs["aria-live"],"polite",
+    "live status preview exposes its visual changes to screen readers");
+  const changeStatus=buttonNamed("تعديل");
+  assert.ok(changeStatus,"active status is editable through its own action");
+  const beforeUpdate=calls.filter(x=>x.name==="UpdateAttendanceStatus").length;
+  nextConfigForm=null;approveDetailPreview=false;
+  await changeStatus.handlers.click();
+  assert.equal(editDialogRequests.at(-1).opts.title,"تعديل حالة التحضير");
+  assert.equal(calls.filter(x=>x.name==="UpdateAttendanceStatus").length,beforeUpdate,
+    "canceling status form never writes");
+  nextConfigForm={name:"غياب معدل",symbol:"غ",color:"#15803D"};
+  await changeStatus.handlers.click();
+  assert.ok(modalReviews.at(-1).details.rows.some(x=>x[0]==="اللون السابق"),
+    "status edit preview shows old and proposed colors");
+  assert.equal(calls.filter(x=>x.name==="UpdateAttendanceStatus").length,beforeUpdate,
+    "declining status preview prevents an edit");
+  approveDetailPreview=true;
+  await changeStatus.handlers.click();
+  assert.ok(calls.some(x=>x.name==="UpdateAttendanceStatus"&&
+    x.body.statusId==="STS-ABSENT"&&x.body.name==="غياب معدل"&&
+    x.body.color==="#15803D"&&x.body.expectedRevision===3),
+    "confirmed edit uses the existing C# status API and revision");
+  nextConfigForm=null;approveDetailPreview=false;
   await controller.renderSettings(admin,()=>{});
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
     .map(x=>x.textContent);

@@ -1148,8 +1148,10 @@
       if(token!==currentRequest)return;
       const list=Array.isArray(response.data)?response.data:[];
       const form=card("إنشاء موقع جديد");
+      form.classList.add("admin-site-create-form");
       const siteModal=operationalModal(form,"modal-md",true,true);
       const name=field("اسم الموقع");
+      name.input.required=true;
       const note=node("div","admin-note");
       let sitePayload=null,siteOperation=null;
       const send=btn("إضافة الموقع",async()=>{
@@ -1174,13 +1176,25 @@
         else if(!item.active)actions.append(node("span","section-description","موقع محفوظ تاريخيًا"));
         else{
           actions.append(btn("إعادة تسمية",async()=>{
-            const next=await dialogs.prompt("اسم الموقع الجديد",item.name);
-            if(!next||next.trim()===item.name)return;
-            if(!await dialogs.confirm("اعتماد تغيير اسم الموقع من «"+
-                item.name+"» إلى «"+next+"»؟"))return;
+            const formDialog=window.AltamamDialog?.form;
+            const review=window.AltamamDialog?.detailsReview;
+            if(typeof formDialog!=="function"||typeof review!=="function"){
+              await dialogs.alert("نافذة تعديل الموقع غير متاحة؛ لم يحدث تغيير.");return;
+            }
+            const values=await formDialog([
+              {name:"name",label:"اسم الموقع الجديد",type:"text",value:item.name,required:true}
+            ],{title:"إعادة تسمية الموقع",size:"md",confirmLabel:"معاينة التسمية"});
+            if(!values)return;
+            const next=String(values.name||"").trim();
+            if(!next||next===item.name)return;
+            const approved=await review({rows:[
+              ["الاسم السابق",item.name],["الاسم الجديد",next],
+              ["السجل التاريخي","ستبقى هوية الموقع وسجلاته محفوظة."]
+            ]},{title:"معاينة إعادة التسمية",confirmLabel:"تأكيد تغيير الاسم"});
+            if(!approved)return;
             try{
               await api().invoke("RenameSite",{siteId:item.siteId,
-                name:next.trim(),expectedRevision:item.rowVersion,operationId:makeOperationId()});
+                name:next,expectedRevision:item.rowVersion,operationId:makeOperationId()});
               await sites();
             }catch(e){void dialogs.alert(e.message||"تعذرت إعادة التسمية.");}
           }));
@@ -1226,8 +1240,11 @@
       if(token!==currentRequest)return;
       const items=Array.isArray(response.data)?response.data:[];
       const frm=card("إضافة حالة جديدة");
+      frm.classList.add("admin-status-create-form");
       const statusModal=operationalModal(frm,"modal-md",true,true);
       const name=field("اسم الحالة"), symbol=field("الرمز"),color=field("اللون","#38BDF8","color");
+      name.input.required=true;
+      symbol.input.required=true;
       const note=node("div","admin-note");
       let statusPayload=null,statusOperation=null;
       const save=btn("إضافة حالة",async()=>{
@@ -1244,6 +1261,8 @@
         catch(e){errors(note,e);}finally{save.disabled=false;}
       },"btn btn-primary");
       const livePreview=node("div","status-pill status-live-preview","معاينة الحالة");
+      livePreview.setAttribute("role","status");
+      livePreview.setAttribute("aria-live","polite");
       const refreshStatusPreview=()=>{
         livePreview.textContent=(name.input.value.trim()||"اسم الحالة")+
           " — "+(symbol.input.value.trim()||"الرمز");
@@ -1257,7 +1276,9 @@
       symbol.input.addEventListener("input",refreshStatusPreview);
       color.input.addEventListener("input",refreshStatusPreview);
       refreshStatusPreview();
-      frm.append(name.wrap,symbol.wrap,color.wrap,livePreview,save,note);
+      const statusFields=node("div","admin-status-fields");
+      statusFields.append(name.wrap,symbol.wrap,color.wrap);
+      frm.append(statusFields,livePreview,save,note);
       const t=table(["الحالة","الرمز","اللون","الإجراءات"]);
       for(const item of items){
         const tr=node("tr"), colorBox=node("span","admin-color",item.color);
@@ -1266,13 +1287,30 @@
         const tdColor=node("td");tdColor.appendChild(colorBox);tr.appendChild(tdColor);
         const td=node("td","admin-row-buttons");
         td.appendChild(btn("تعديل",async()=>{
-          const newName=await dialogs.prompt("اسم الحالة",item.displayName);
-          if(newName===null)return;
-          const newSymbol=await dialogs.prompt("رمز الحالة",item.shortSymbol);
-          if(newSymbol===null)return;
-          const newColor=await dialogs.prompt("لون الحالة #RRGGBB",item.color);
-          if(newColor===null)return;
-          if(!await dialogs.confirm("تأكيد تعديل الحالة «"+item.displayName+"»؟"))return;
+          const formDialog=window.AltamamDialog?.form;
+          const review=window.AltamamDialog?.detailsReview;
+          if(typeof formDialog!=="function"||typeof review!=="function"){
+            await dialogs.alert("نافذة تعديل الحالة غير متاحة؛ لم يحدث تغيير.");return;
+          }
+          const values=await formDialog([
+            {name:"name",label:"اسم الحالة",type:"text",value:item.displayName,required:true},
+            {name:"symbol",label:"الرمز",type:"text",value:item.shortSymbol,required:true},
+            {name:"color",label:"اللون",type:"color",value:safeColor(item.color),required:true}
+          ],{title:"تعديل حالة التحضير",size:"md",confirmLabel:"معاينة الحالة"});
+          if(!values)return;
+          const newName=String(values.name||"").trim();
+          const newSymbol=String(values.symbol||"").trim();
+          const newColor=String(values.color||"");
+          if(!newName||!newSymbol||!/^#[0-9a-fA-F]{6}$/.test(newColor)){
+            await dialogs.alert("أكمل اسم الحالة ورمزها واختر لوناً صالحاً.");return;
+          }
+          const approved=await review({rows:[
+            ["اسم الحالة السابق",item.displayName],["اسم الحالة الجديد",newName],
+            ["الرمز السابق",item.shortSymbol],["الرمز الجديد",newSymbol],
+            ["اللون السابق",item.color],["اللون الجديد",newColor],
+            ["السجلات السابقة","لن يُحذف تاريخ الحالات المحفوظة."]
+          ]},{title:"معاينة تعديل الحالة",confirmLabel:"تأكيد تعديل الحالة"});
+          if(!approved)return;
           try{await api().invoke("UpdateAttendanceStatus",{
             statusId:item.statusId,name:newName,symbol:newSymbol,color:newColor,
             expectedRevision:item.version,operationId:makeOperationId()});await statuses();}
