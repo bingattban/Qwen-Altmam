@@ -232,7 +232,7 @@ public sealed class BridgeRbacMatrixTests
         })
         {
             var response = await dispatcher.DispatchAsync(
-                Envelope(action, nonce, $"AUDIT-ROLE-{action}-{nonce}"),
+                Envelope(action, nonce, $"AUD-{(action == "UpdateAuditPresentation" ? "UP" : "DEL")}-{nonce[..4]}"),
                 ValidOrigin, isMainFrame: true, Authenticate);
             Assert.Equal(allowed, response.Response.Success);
             Assert.Equal(allowed ? BridgeOutcomeKind.Success :
