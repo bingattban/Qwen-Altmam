@@ -74,8 +74,7 @@
 
 ## Present decision / gate
 
-**Candidate switch: NOT AUTHORIZED / DEFERRED BY OWNER.** The owner authorized studying
-and switching only after evidence. No Zetetic commercial entitlement, pinned
+**Candidate switch: CANCELLED / NOT AUTHORIZED (owner's updated Phase 02 decision, 2026-10-31).** The owner explicitly withdrew the earlier conditional authorization to switch providers. Do not implement a provider replacement in Phase 02 or in subsequent phases without a new explicit owner instruction. The historical evaluation above is retained for audit context, not an active implementation plan. No Zetetic commercial entitlement, pinned
 supported x86/x64 native candidate, cross-provider compatibility evidence or
 clean-machine acceptance has been supplied. Retain the existing tested
 SQLCipher provider without changing database format, key derivation, recovery
@@ -85,3 +84,7 @@ has been modernized; it is a recorded conditional follow-up.
 **Phase 01 PR boundary:** no rename of `DesktopHost` or duplicate WebUI
 project. No unrelated business/UI changes. A successful PR CI run validates
 only the unchanged current provider and candidate application build.
+
+## Phase 02 decision: retain SQLCipher unchanged
+
+The existing SQLCipher encryption implementation and pinned `SQLitePCLRaw.bundle_e_sqlcipher 2.1.10` remain the production baseline. No new provider, migration of encryption format, rekeying, DPAPI changes, native binary substitution, or changes to encrypted backup/restore behavior are authorized. Phase 02's encryption acceptance must be verified using the current provider and synthetic data. This decision supersedes the previous conditional upgrade proposal, without deleting its historical documentation.
