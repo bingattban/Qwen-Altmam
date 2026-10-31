@@ -113,7 +113,7 @@ async function main(){
   const visibleStatus=viewport.all().find(x=>x.tag==="td"&&
     x.style.backgroundColor==="#EF4444");
   assert.ok(visibleStatus,"committed attendance is color coded");
-  assert.equal(visibleStatus.style.color,"#17212B",
+  assert.equal(visibleStatus.style.color,"#000000",
     "colored cells choose contrasting text instead of possibly invisible default ink");
   const css=fs.readFileSync(path.join(__dirname,
     "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
