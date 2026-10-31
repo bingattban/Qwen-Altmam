@@ -1,0 +1,3691 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://manger.adwas.example/schemas/bridge-v1.schema.json",
+  "title": "AlTamam offline WebView2 protocol version 1",
+  "description": "Canonical versioned machine-readable request and response shapes. C# BridgeRequestParser verifies envelope; owning application services validate action payloads. No external network or executable JavaScript required.",
+  "type": "object",
+  "required": [
+    "requestId",
+    "protocolVersion",
+    "action",
+    "sessionNonce",
+    "payload"
+  ],
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "protocolVersion": {
+      "const": 1
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "GetProvisioningState",
+        "AuthenticateLocalUser",
+        "GetCurrentSession",
+        "GetNavigationPermissions",
+        "Logout",
+        "GetAllowedRoles",
+        "GetDashboardSummary",
+        "QueryDailyRoster",
+        "QueryUnprepared",
+        "GetAutoAttendanceRun",
+        "GetActiveAttendanceStatuses",
+        "PreviewAttendanceChange",
+        "SubmitAttendance",
+        "ReviseTodayAttendance",
+        "SaveAttendanceDraft",
+        "ListAttendanceDrafts",
+        "DeleteAttendanceDraft",
+        "GetAvailableArchivePeriods",
+        "QueryMonthlyGrid",
+        "GetMonthlyCellDetails",
+        "SearchPersons",
+        "GetPersonSummary",
+        "QueryPersons",
+        "PreviewArchivedIdentity",
+        "CommitArchivedReturn",
+        "CreatePerson",
+        "PreviewPersonIdentityUpdate",
+        "UpdatePersonIdentity",
+        "PreviewArchivePersons",
+        "ArchivePersons",
+        "QueryActivePersonsBySite",
+        "PreviewInternalTransfer",
+        "CommitInternalTransfer",
+        "PreviewExternalTransfer",
+        "CommitExternalTransfer",
+        "QueryMovementArchive",
+        "GetMovementDetails",
+        "PreviewSeparation",
+        "CommitSeparation",
+        "QuerySeparationArchive",
+        "GetSeparationDetails",
+        "QueryPersonAttendanceTimeline",
+        "QueryPersonAttendanceTotals",
+        "BuildPersonLifetimeReport",
+        "QueryPersonOperationsTimeline",
+        "QueryPersonMovements",
+        "ExportPersonLifetimeExcel",
+        "QueryAttendanceStatuses",
+        "CreateAttendanceStatus",
+        "UpdateAttendanceStatus",
+        "DeactivateOrDeleteStatus",
+        "QuerySites",
+        "CreateSite",
+        "RenameSite",
+        "RemoveSiteAndReassignCurrentPersons",
+        "GetCustomFieldDefinitions",
+        "CreateCustomFieldDefinition",
+        "UpdateCustomFieldMetadata",
+        "DeactivateCustomField",
+        "SelectImportWorkbook",
+        "AnalyzeImport",
+        "PreviewImportPlan",
+        "CommitImport",
+        "QueryImportOutcome",
+        "ExportImportIssues",
+        "GetExportablePeriods",
+        "PreviewMonthlyExport",
+        "ExportMonthlyWorkbookSet",
+        "GetExportProgress",
+        "CancelExport",
+        "ListUserAccounts",
+        "SearchActivePersonsForAccount",
+        "CreateUserAccount",
+        "ChangeUserPassword",
+        "DeactivateUserAccount",
+        "ReactivateUserAccount",
+        "QueryAuditLog",
+        "GetAuditEntryDetails",
+        "UpdateAuditPresentation",
+        "DeleteAuditPresentation",
+        "QueryAuditPresentationChanges",
+        "GetAutoAttendancePolicy",
+        "SetAutoAttendanceDefaultStatus",
+        "SetAttendanceSchedule",
+        "GetSettingsOverview",
+        "SetOutputDirectory",
+        "CreateVerifiedBackup",
+        "VerifyBackup",
+        "InspectBackup",
+        "PreviewRestore",
+        "RestoreDatabaseAtomically",
+        "GetBackupSchedule",
+        "UpdateBackupSchedule",
+        "RunDatabaseIntegrityCheck",
+        "PreviewFullReset",
+        "CommitFullReset",
+        "SetTheme",
+        "GetApplicationVersion",
+        "PreviewAdministrativeAttendanceCatchUp",
+        "CommitAdministrativeAttendanceCatchUp",
+        "SetClosedDayCorrectionPolicy",
+        "PreviewClosedDayCorrection",
+        "CommitClosedDayCorrection"
+      ]
+    },
+    "sessionNonce": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{32}$"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetProvisioningState"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetProvisioningState"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "AuthenticateLocalUser"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_AuthenticateLocalUser"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetCurrentSession"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetCurrentSession"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetNavigationPermissions"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetNavigationPermissions"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "Logout"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_Logout"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetAllowedRoles"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetAllowedRoles"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetDashboardSummary"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetDashboardSummary"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryDailyRoster"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryDailyRoster"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryUnprepared"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryUnprepared"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetAutoAttendanceRun"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetAutoAttendanceRun"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetActiveAttendanceStatuses"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetActiveAttendanceStatuses"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewAttendanceChange"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewAttendanceChange"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SubmitAttendance"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SubmitAttendance"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ReviseTodayAttendance"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ReviseTodayAttendance"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SaveAttendanceDraft"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SaveAttendanceDraft"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ListAttendanceDrafts"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ListAttendanceDrafts"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "DeleteAttendanceDraft"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_DeleteAttendanceDraft"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetAvailableArchivePeriods"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetAvailableArchivePeriods"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryMonthlyGrid"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryMonthlyGrid"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetMonthlyCellDetails"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetMonthlyCellDetails"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SearchPersons"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SearchPersons"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetPersonSummary"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetPersonSummary"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryPersons"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryPersons"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewArchivedIdentity"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewArchivedIdentity"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CommitArchivedReturn"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CommitArchivedReturn"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CreatePerson"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CreatePerson"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewPersonIdentityUpdate"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewPersonIdentityUpdate"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "UpdatePersonIdentity"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_UpdatePersonIdentity"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewArchivePersons"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewArchivePersons"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ArchivePersons"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ArchivePersons"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryActivePersonsBySite"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryActivePersonsBySite"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewInternalTransfer"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewInternalTransfer"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CommitInternalTransfer"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CommitInternalTransfer"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewExternalTransfer"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewExternalTransfer"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CommitExternalTransfer"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CommitExternalTransfer"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryMovementArchive"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryMovementArchive"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetMovementDetails"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetMovementDetails"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewSeparation"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewSeparation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CommitSeparation"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CommitSeparation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QuerySeparationArchive"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QuerySeparationArchive"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetSeparationDetails"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetSeparationDetails"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryPersonAttendanceTimeline"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryPersonAttendanceTimeline"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryPersonAttendanceTotals"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryPersonAttendanceTotals"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "BuildPersonLifetimeReport"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_BuildPersonLifetimeReport"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryPersonOperationsTimeline"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryPersonOperationsTimeline"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryPersonMovements"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryPersonMovements"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ExportPersonLifetimeExcel"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ExportPersonLifetimeExcel"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryAttendanceStatuses"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryAttendanceStatuses"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CreateAttendanceStatus"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CreateAttendanceStatus"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "UpdateAttendanceStatus"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_UpdateAttendanceStatus"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "DeactivateOrDeleteStatus"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_DeactivateOrDeleteStatus"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QuerySites"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QuerySites"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CreateSite"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CreateSite"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "RenameSite"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_RenameSite"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "RemoveSiteAndReassignCurrentPersons"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_RemoveSiteAndReassignCurrentPersons"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetCustomFieldDefinitions"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetCustomFieldDefinitions"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CreateCustomFieldDefinition"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CreateCustomFieldDefinition"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "UpdateCustomFieldMetadata"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_UpdateCustomFieldMetadata"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "DeactivateCustomField"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_DeactivateCustomField"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SelectImportWorkbook"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SelectImportWorkbook"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "AnalyzeImport"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_AnalyzeImport"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewImportPlan"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewImportPlan"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CommitImport"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CommitImport"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryImportOutcome"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryImportOutcome"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ExportImportIssues"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ExportImportIssues"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetExportablePeriods"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetExportablePeriods"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewMonthlyExport"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewMonthlyExport"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ExportMonthlyWorkbookSet"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ExportMonthlyWorkbookSet"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetExportProgress"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetExportProgress"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CancelExport"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CancelExport"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ListUserAccounts"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ListUserAccounts"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SearchActivePersonsForAccount"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SearchActivePersonsForAccount"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CreateUserAccount"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CreateUserAccount"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ChangeUserPassword"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ChangeUserPassword"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "DeactivateUserAccount"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_DeactivateUserAccount"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ReactivateUserAccount"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ReactivateUserAccount"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryAuditLog"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryAuditLog"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetAuditEntryDetails"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetAuditEntryDetails"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "UpdateAuditPresentation"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_UpdateAuditPresentation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "DeleteAuditPresentation"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_DeleteAuditPresentation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "QueryAuditPresentationChanges"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_QueryAuditPresentationChanges"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetAutoAttendancePolicy"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetAutoAttendancePolicy"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SetAutoAttendanceDefaultStatus"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SetAutoAttendanceDefaultStatus"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SetAttendanceSchedule"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SetAttendanceSchedule"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetSettingsOverview"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetSettingsOverview"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SetOutputDirectory"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SetOutputDirectory"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CreateVerifiedBackup"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CreateVerifiedBackup"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "VerifyBackup"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_VerifyBackup"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "InspectBackup"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_InspectBackup"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewRestore"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewRestore"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "RestoreDatabaseAtomically"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_RestoreDatabaseAtomically"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetBackupSchedule"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetBackupSchedule"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "UpdateBackupSchedule"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_UpdateBackupSchedule"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "RunDatabaseIntegrityCheck"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_RunDatabaseIntegrityCheck"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewFullReset"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewFullReset"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CommitFullReset"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CommitFullReset"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SetTheme"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SetTheme"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "GetApplicationVersion"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_GetApplicationVersion"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewAdministrativeAttendanceCatchUp"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewAdministrativeAttendanceCatchUp"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CommitAdministrativeAttendanceCatchUp"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CommitAdministrativeAttendanceCatchUp"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "SetClosedDayCorrectionPolicy"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_SetClosedDayCorrectionPolicy"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "PreviewClosedDayCorrection"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_PreviewClosedDayCorrection"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "CommitClosedDayCorrection"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_CommitClosedDayCorrection"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "response": {
+      "type": "object",
+      "required": [
+        "requestId",
+        "success"
+      ],
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": [
+            "object",
+            "array",
+            "null"
+          ]
+        },
+        "errorCode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "userMessage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "invalidationEvents": {
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "payload_GetProvisioningState": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_AuthenticateLocalUser": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "passwordConfirmation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "setupIntent": {
+          "const": "firstTimeSetup"
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "username",
+        "password"
+      ],
+      "additionalProperties": true
+    },
+    "payload_GetCurrentSession": {
+      "type": "object",
+      "properties": {
+        "userActivity": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetNavigationPermissions": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_Logout": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetAllowedRoles": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetDashboardSummary": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_QueryDailyRoster": {
+      "type": "object",
+      "properties": {
+        "term": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        },
+        "siteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "statusId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_QueryUnprepared": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetAutoAttendanceRun": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetActiveAttendanceStatuses": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_PreviewAttendanceChange": {
+      "type": "object",
+      "properties": {
+        "personIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "statusId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "businessDate": {
+          "type": "string",
+          "pattern": "^\\\\d{4}-\\\\d{2}-\\\\d{2}$"
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_SubmitAttendance": {
+      "type": "object",
+      "properties": {
+        "personIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "statusId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_ReviseTodayAttendance": {
+      "type": "object",
+      "properties": {
+        "personIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 100
+        },
+        "statusId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_SaveAttendanceDraft": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_ListAttendanceDrafts": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_DeleteAttendanceDraft": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_GetAvailableArchivePeriods": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_QueryMonthlyGrid": {
+      "type": "object",
+      "properties": {
+        "year": {
+          "type": "integer",
+          "minimum": 1900,
+          "maximum": 2200
+        },
+        "month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "siteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "term": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetMonthlyCellDetails": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_SearchPersons": {
+      "type": "object",
+      "properties": {
+        "term": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetPersonSummary": {
+      "type": "object",
+      "properties": {
+        "personId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "personId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QueryPersons": {
+      "type": "object",
+      "properties": {
+        "term": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "includeArchived": {
+          "type": "boolean"
+        },
+        "siteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_PreviewArchivedIdentity": {
+      "type": "object",
+      "properties": {
+        "visibleName": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "serviceNumberA": {
+          "type": "string",
+          "pattern": "^[0-9٠-٩۰-۹]{4,70}$"
+        },
+        "siteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "visibleName",
+        "serviceNumberA"
+      ],
+      "additionalProperties": true
+    },
+    "payload_CommitArchivedReturn": {
+      "type": "object",
+      "properties": {
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "personId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "decision": {
+          "const": "same"
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "previewToken",
+        "personId",
+        "decision",
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_CreatePerson": {
+      "type": "object",
+      "properties": {
+        "visibleName": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "serviceNumberA": {
+          "type": "string",
+          "pattern": "^[0-9٠-٩۰-۹]{4,70}$"
+        },
+        "siteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "identityResolutionToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "identityDecision": {
+          "enum": [
+            "different",
+            "replaceDismissed"
+          ]
+        },
+        "dismissedPersonId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "visibleName",
+        "serviceNumberA",
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_PreviewPersonIdentityUpdate": {
+      "type": "object",
+      "properties": {
+        "personId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "visibleName": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 200
+        },
+        "serviceNumberA": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 70
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_UpdatePersonIdentity": {
+      "type": "object",
+      "properties": {
+        "personId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_PreviewArchivePersons": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_ArchivePersons": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QueryActivePersonsBySite": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_PreviewInternalTransfer": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CommitInternalTransfer": {
+      "type": "object",
+      "properties": {
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "sourceSiteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "destinationSiteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_PreviewExternalTransfer": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CommitExternalTransfer": {
+      "type": "object",
+      "properties": {
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "destinationExternalName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QueryMovementArchive": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "siteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetMovementDetails": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_PreviewSeparation": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CommitSeparation": {
+      "type": "object",
+      "properties": {
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QuerySeparationArchive": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetSeparationDetails": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_QueryPersonAttendanceTimeline": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_QueryPersonAttendanceTotals": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_BuildPersonLifetimeReport": {
+      "type": "object",
+      "properties": {
+        "personId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "personIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "dateFrom": {
+          "type": "string",
+          "pattern": "^\\\\d{4}-\\\\d{2}-\\\\d{2}$"
+        },
+        "dateTo": {
+          "type": "string",
+          "pattern": "^\\\\d{4}-\\\\d{2}-\\\\d{2}$"
+        },
+        "exportPreview": {
+          "type": "boolean"
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_QueryPersonOperationsTimeline": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_QueryPersonMovements": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_ExportPersonLifetimeExcel": {
+      "type": "object",
+      "properties": {
+        "exportId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "personId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "personIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "minItems": 1,
+          "maxItems": 100
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QueryAttendanceStatuses": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CreateAttendanceStatus": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_UpdateAttendanceStatus": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_DeactivateOrDeleteStatus": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QuerySites": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CreateSite": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_RenameSite": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_RemoveSiteAndReassignCurrentPersons": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_GetCustomFieldDefinitions": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CreateCustomFieldDefinition": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_UpdateCustomFieldMetadata": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_DeactivateCustomField": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_SelectImportWorkbook": {
+      "type": "object",
+      "properties": {
+        "fileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        "base64": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 250000
+        },
+        "allSheets": {
+          "type": "boolean"
+        },
+        "sheetIndexes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "required": [
+        "fileName",
+        "base64"
+      ],
+      "additionalProperties": true
+    },
+    "payload_AnalyzeImport": {
+      "type": "object",
+      "properties": {
+        "workbookToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "workbookToken"
+      ],
+      "additionalProperties": true
+    },
+    "payload_PreviewImportPlan": {
+      "type": "object",
+      "properties": {
+        "workbookToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "workbookToken"
+      ],
+      "additionalProperties": true
+    },
+    "payload_CommitImport": {
+      "type": "object",
+      "properties": {
+        "workbookToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QueryImportOutcome": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_ExportImportIssues": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_GetExportablePeriods": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_PreviewMonthlyExport": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_ExportMonthlyWorkbookSet": {
+      "type": "object",
+      "properties": {
+        "year": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_GetExportProgress": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CancelExport": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_ListUserAccounts": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "term": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_SearchActivePersonsForAccount": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CreateUserAccount": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "password": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 256
+        },
+        "passwordConfirmation": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 256
+        },
+        "personId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "role": {
+          "enum": [
+            "OrdinaryAdministration",
+            "Supervisor"
+          ]
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "username",
+        "password",
+        "passwordConfirmation",
+        "personId",
+        "role",
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_ChangeUserPassword": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_DeactivateUserAccount": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_ReactivateUserAccount": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QueryAuditLog": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "term": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetAuditEntryDetails": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_UpdateAuditPresentation": {
+      "type": "object",
+      "properties": {
+        "auditEventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_DeleteAuditPresentation": {
+      "type": "object",
+      "properties": {
+        "auditEventId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_QueryAuditPresentationChanges": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_GetAutoAttendancePolicy": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_SetAutoAttendanceDefaultStatus": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_SetAttendanceSchedule": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_GetSettingsOverview": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_SetOutputDirectory": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_CreateVerifiedBackup": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_VerifyBackup": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_InspectBackup": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_PreviewRestore": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_RestoreDatabaseAtomically": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_GetBackupSchedule": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_UpdateBackupSchedule": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_RunDatabaseIntegrityCheck": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_PreviewFullReset": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CommitFullReset": {
+      "type": "object",
+      "properties": {
+        "previewToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_SetTheme": {
+      "type": "object",
+      "properties": {
+        "theme": {
+          "enum": [
+            "light",
+            "dark"
+          ]
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "theme",
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_GetApplicationVersion": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_PreviewAdministrativeAttendanceCatchUp": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CommitAdministrativeAttendanceCatchUp": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_SetClosedDayCorrectionPolicy": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_PreviewClosedDayCorrection": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "payload_CommitClosedDayCorrection": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "required": [
+        "operationId"
+      ],
+      "additionalProperties": true
+    }
+  }
+}

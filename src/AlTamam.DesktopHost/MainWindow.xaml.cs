@@ -550,6 +550,9 @@ public partial class MainWindow : Window
             {
                 await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase).ConfigureAwait(true);
                 TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
+                await Phase04ManifestRouteSelfCheck.RunAsync(
+                    core, ResolveBundledWebUiRoot()).ConfigureAwait(true);
+                TraceWebViewSelfCheck("PASS all 69 manifest routes opened in real Windows WebView2");
             }
             TraceWebViewSelfCheck("PASS bundled offline WebUI title verified");
             Console.WriteLine("WEBVIEW-SELFCHECK PASS");

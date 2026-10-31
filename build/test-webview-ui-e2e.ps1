@@ -15,10 +15,10 @@ $process = $null
 try {
     $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $trace
     $process = Start-Process -FilePath $exe -ArgumentList @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e") -PassThru
-    if (-not $process.WaitForExit(120000)) {
+    if (-not $process.WaitForExit(240000)) {
         $process.Kill($true)
         $process.WaitForExit()
-        throw "UI-E2E FAIL: Windows WebView2 did not complete within 120 seconds"
+        throw "UI-E2E FAIL: Windows WebView2 did not complete within 240 seconds"
     }
     if ($process.ExitCode -ne 0) {
         $diagnostic = if (Test-Path -LiteralPath $trace) { Get-Content -LiteralPath $trace -Raw } else { "<no trace>" }
@@ -30,7 +30,8 @@ try {
     $evidence = Get-Content -LiteralPath $trace -Raw
     if ($evidence -notmatch 'UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus' -or
         $evidence -notmatch 'PASS bundled offline WebUI title verified' -or
-        $evidence -notmatch 'PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests') {
+        $evidence -notmatch 'PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests' -or
+        $evidence -notmatch 'PASS all 69 manifest routes opened in real Windows WebView2') {
         throw "UI-E2E FAIL: modal interaction or offline navigation evidence missing; $evidence"
     }
     Write-Host "UI-E2E PASS: real Windows WPF/WebView2 + synthetic SQLCipher bridge roundtrip and forbidden requests"

@@ -47,3 +47,20 @@ four Portable/Installer packages.
 - Real clean-machine offline UAT, hardware sleep/resume, comprehensive
   accessibility checks and Phase 15 Acceptance category evidence remain
   separate open gates.
+
+## 69-route real browser navigation and versioned request schema
+
+The same isolated Windows WebView2 test also loads each of the 69 canonical
+manifest entries by its exact virtual-host URL (including the unique embedded
+screen_070 alias), allowing a legitimate same-origin standalone redirect to its
+authenticated owner. It rejects missing HTML assets, duplicate/retired IDs,
+external origins, or a failed navigation timeout. Node's existing route tests
+remain separate from these actual browser navigations.
+
+The machine-readable `src/AlTamam.Contracts/Schemas/bridge-v1.schema.json`
+records all 103 canonical action names, required versioned JSON envelope
+fields, typed operation IDs for mutating actions, typed request payload
+properties for the owning workflows, and the typed native response envelope.
+A dependency-free CI schema drift check runs BEFORE build in both Windows
+workflows. This documents and tests wire compatibility; it does not substitute
+for C# per-action authorization and validation already present in service code.
