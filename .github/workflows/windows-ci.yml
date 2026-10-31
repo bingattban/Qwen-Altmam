@@ -102,19 +102,6 @@ jobs:
           dotnet --version
       - name: Compile production and test projects once
         run: dotnet build AlTamam.slnx --configuration Release --no-restore
-      - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
-        run: >
-          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
-          --configuration Release --no-build --no-restore --logger "trx;LogFileName=core-tests.trx"
-          --results-directory TestResults
-      - name: Guard against zero tests executing (real TRX required)
-        shell: pwsh
-        run: |
-          if (-not (Test-Path TestResults/core-tests.trx)) { throw 'Core TRX is missing' }
-          $xml = [xml](Get-Content TestResults/core-tests.trx)
-          $count = [int]$xml.TestRun.ResultSummary.Counters.total
-          Write-Host "Core full tests executed: $count"
-          if ($count -lt 1) { throw 'Core suite executed zero tests' }
       - name: Phase 02 actual SQLCipher integration tests (independent project)
         run: >
           dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj
@@ -128,6 +115,19 @@ jobs:
           $phase02Count = [int]$xml.TestRun.ResultSummary.Counters.total
           Write-Host "Phase 02 independent integration tests executed: $phase02Count"
           if ($phase02Count -lt 8) { throw 'Phase 02 integration suite missing or did not fully execute' }
+      - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
+        run: >
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=core-tests.trx"
+          --results-directory TestResults
+      - name: Guard against zero tests executing (real TRX required)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/core-tests.trx)) { throw 'Core TRX is missing' }
+          $xml = [xml](Get-Content TestResults/core-tests.trx)
+          $count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Core full tests executed: $count"
+          if ($count -lt 1) { throw 'Core suite executed zero tests' }
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
         run: |

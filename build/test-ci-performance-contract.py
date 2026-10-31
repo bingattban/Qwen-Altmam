@@ -98,9 +98,19 @@ def validate(core: str, release: str) -> list[str]:
 
 
 def self_test(core: str, release: str) -> None:
-    broken = core.replace("--configuration Release --no-build --no-restore",
-                          "--configuration Release --no-restore", 1)
+    marker = "      - name: Run deterministic core tests on Windows runner"
+    before, after = core.split(marker, 1)
+    broken = before + marker + after.replace(
+        "--configuration Release --no-build --no-restore",
+        "--configuration Release --no-restore", 1)
     assert any("reuse the validated build outputs" in x for x in validate(broken, release))
+    phase02_marker = "      - name: Phase 02 actual SQLCipher integration tests"
+    first, second = core.split(phase02_marker, 1)
+    broken_phase02 = first + phase02_marker + second.replace(
+        "--configuration Release --no-build --no-restore",
+        "--configuration Release --no-restore", 1)
+    assert any("Phase 02 Core tests must reuse" in x
+               for x in validate(broken_phase02, release))
     broken_release = release.replace("    needs: build-test", "    needs: preflight", 1)
     assert any("MUST depend on full green" in x for x in validate(core, broken_release))
     unsafe = release.replace("compression-level: 0", "compression-level: 6", 1)

@@ -38,6 +38,16 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         catch (UnauthorizedAccessException) { /* Windows may still release file handles */ }
     }
 
+    // SQLCipher can retain Windows file handles for WAL/locking. Share reads.
+    private static byte[] ReadHeader(string path)
+    {
+        byte[] header = new byte[16];
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        file.ReadExactly(header);
+        return header;
+    }
+
     private static void Execute(SqliteConnection connection, string sql, SqliteTransaction? transaction = null)
     {
         using var command = connection.CreateCommand();
@@ -104,7 +114,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
             Assert.Equal("11", Value(valid, "SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
             Assert.NotEmpty(Value(valid, "PRAGMA cipher_version;"));
         }
-        byte[] header = File.ReadAllBytes(DatabasePath).Take(16).ToArray();
+        byte[] header = ReadHeader(DatabasePath);
         Assert.False(header.SequenceEqual("SQLite format 3\0"u8.ToArray()));
         Assert.Equal(16, header.Length);
         byte[] originalHeader = header.ToArray();
@@ -121,7 +131,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
             read.ExecuteScalar();
         });
         Assert.NotNull(wrongAccess);
-        Assert.Equal(originalHeader, File.ReadAllBytes(DatabasePath).Take(16).ToArray());
+        Assert.Equal(originalHeader, ReadHeader(DatabasePath));
         using var reopened = new AlTamamDbContext(DatabasePath, _key,
             useConnectionPooling: false);
         Assert.True(reopened.HasValidIntegrity());
@@ -141,7 +151,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
             Execute(connection, "CREATE TABLE UnencryptedSynthetic(Id INTEGER PRIMARY KEY);");
         }
         Assert.Equal("SQLite format 3\0", Encoding.ASCII.GetString(
-            File.ReadAllBytes(plaintext).Take(16).ToArray()));
+            ReadHeader(plaintext)));
 
         var failure = Record.Exception(() =>
         {
@@ -154,7 +164,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         });
         Assert.NotNull(failure);
         Assert.Equal("SQLite format 3\0", Encoding.ASCII.GetString(
-            File.ReadAllBytes(plaintext).Take(16).ToArray()));
+            ReadHeader(plaintext)));
     }
 
     [Theory]
