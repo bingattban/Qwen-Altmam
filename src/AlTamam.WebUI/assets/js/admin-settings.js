@@ -1670,6 +1670,7 @@
 
   async function audit(openHistoryRoute=false) {
     const page=start("الإدارة / سجل العمليات"),box=card("سجل العمليات المحفوظ");
+    box.classList.add("audit-log-card");
     page.appendChild(box);
     const general=field("بحث شامل في سجل العمليات","","search");
     general.input.placeholder="بحث بالاسم أو الرقم (ع) أو العملية أو الوصف";
@@ -1757,6 +1758,14 @@
           errors(historyContent,e);
       }
     }
+    // Table-only UTC formatting: retain complete original timestamps in
+    // GetAuditEntryDetails and never alter stored audit evidence.
+    function compactAuditUtc(value) {
+      if(!value)return "—";
+      const instant=new Date(value);
+      return Number.isNaN(instant.getTime())?String(value):
+        instant.toISOString().slice(0,16).replace("T"," ")+" UTC";
+    }
     async function load() {
       const token=++currentRequest;
       try {
@@ -1767,18 +1776,17 @@
           page:state.page,pageSize:100});
         if(token!==currentRequest)return;
         const data=response.data||{},t=table(["م","العملية","الهدف",
-          "المنفذ وقت الحدث","التاريخ","القيمة السابقة","القيمة الجديدة",
-          "السبب","النتيجة","الوصف"]);
+          "المنفذ وقت الحدث","التاريخ","السبب","النتيجة","الوصف","التفاصيل"]);
+        t.wrap.classList.add("audit-log-table-wrap");
+        t.wrap.firstChild.classList.add("audit-log-table");
+        t.wrap.firstChild.setAttribute("aria-label","سجل العمليات المحفوظ");
         (data.items||[]).forEach(item=>addRow(t.body,[
           item.sequence,item.operationArabicName+(item.isTombstoned?" (مخفي)":""),
           item.targetDisplay,item.actorDisplay||item.actorUsername,
-          item.executedAtUtc,
-          item.oldValue==null?"—":JSON.stringify(item.oldValue),
-          item.newValue==null?"—":JSON.stringify(item.newValue),
-          item.reason||"—",item.outcome||"تم الاعتماد",
-          item.description||item.rawDescription
+          compactAuditUtc(item.executedAtUtc),item.reason||"—",
+          item.outcome||"تم الاعتماد",item.description||item.rawDescription
         ],"عرض التفاصيل",()=>showAuditDetails(item.auditEventId)));
-        empty(t.body,10,"لا توجد عمليات مطابقة.");
+        empty(t.body,9,"لا توجد عمليات مطابقة.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
         prev.disabled=state.page<=1;next.disabled=!data.hasNext;

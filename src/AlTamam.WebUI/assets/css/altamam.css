@@ -2308,3 +2308,27 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
     .functional-toolbar>label.app-unified-search-wrap{min-width:190px}
   #appViewport .separation-tabs>.btn{flex:1 1 130px}
 }
+
+/* Operations log only: keep the original navy header, palette and Cairo/Tajawal
+   typography while fitting useful record fields into readable fixed columns. */
+.audit-log-card .audit-log-table-wrap{
+  max-width:100%;max-height:min(55dvh,550px);overflow:auto;
+}
+.audit-log-table{min-width:1010px;width:100%;table-layout:fixed}
+.audit-log-table :is(th,td){
+  white-space:normal;word-break:normal;overflow-wrap:anywhere;
+  text-align:right;vertical-align:middle;line-height:1.65;padding:9px 10px;
+}
+.audit-log-table :is(th,td):nth-child(1){width:46px;text-align:center}
+.audit-log-table :is(th,td):nth-child(2){width:126px}
+.audit-log-table :is(th,td):nth-child(3){width:104px}
+.audit-log-table :is(th,td):nth-child(4){width:128px}
+.audit-log-table :is(th,td):nth-child(5){
+  width:155px;white-space:nowrap;direction:ltr;text-align:center;
+}
+.audit-log-table :is(th,td):nth-child(6){width:102px}
+.audit-log-table :is(th,td):nth-child(7){width:98px}
+.audit-log-table :is(th,td):nth-child(8){width:150px}
+.audit-log-table :is(th,td):nth-child(9){width:101px;text-align:center}
+.audit-log-table tbody tr{height:46px}
+.audit-log-table td:last-child .btn{white-space:nowrap;padding:7px 9px}
