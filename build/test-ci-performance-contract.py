@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CORE = ROOT / ".github/workflows/windows-build.yml"
+CORE = ROOT / ".github/workflows/windows-ci.yml"
 RELEASE = ROOT / ".github/workflows/windows-release.yml"
 
 

@@ -1,4 +1,5 @@
 name: Windows Core Build
+# Phase 01 canonical filename: windows-ci.yml; this is the SAME Core workflow, not a third one.
 on:
   # Validate proposed code on its PR BEFORE promotion to main.
   # Main is validated again after a successful PR merge.

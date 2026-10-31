@@ -66,14 +66,18 @@ def main() -> None:
           "retired duplicate Reports HTML remains bundled")
     # Sensitive records must not be staged accidentally when operators build locally.
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
-    for pattern in ("*.db", "*.db-wal", "*.db-shm", "*.sqlite", "*.sqlite3",
-                    "*.key", "*.protected", "*.bak", "*.xlsx", "*.pdf"):
+    for pattern in ("*.db", "*.db-wal", "*.db-shm", "*.db-journal", "*.sqlite", "*.sqlite3",
+                    "*.key", "*.protected", "*.bak", "*.xlsx", "*.pdf", "*.altrecovery",
+                    "*.altbackup", "*.altrestore", "*.pfx", "*.p12", "*.pem"):
         check(pattern in ignored, "missing sensitive file ignore pattern: " + pattern)
     import subprocess
     tracked = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT,
                              capture_output=True, check=True).stdout.decode("utf-8").split("\0")
-    dangerous = re.compile(r"(?i)\.(?:db|sqlite|sqlite3|db-wal|db-shm|key|protected|bak|xlsx|xlsm|pdf)$")
-    leaked = [f for f in tracked if dangerous.search(f) and not f.startswith("tests/fixtures/")]
+    dangerous = re.compile(r"\.(?:db|db3|sqlite|sqlite3)(?:-wal|-shm|-journal)?$"
+                           r"|\.(?:key|protected|bak|backup|sqlcipher|altrecovery|altbackup|altrestore|xlsx|xlsm|xls|pdf|pfx|p12|pem|kdbx|csv)$",
+                           re.IGNORECASE)
+    leaked = [f for f in tracked if dangerous.search(f)
+              and f != "docs/requirements/SCREEN_MATRIX.csv"]
     check(not leaked, "possible tracked personnel data / key / report: " + str(leaked[:5]))
     check(len(actions) == 103, "action manifest drift")
     for section, title in sections.items():
