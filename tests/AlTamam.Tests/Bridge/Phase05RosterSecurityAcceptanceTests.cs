@@ -81,6 +81,28 @@ public sealed class Phase05RosterSecurityAcceptanceTests : IAsyncLifetime, IDisp
         Assert.Equal(1,Count());
     }
 
+    [Fact]
+    public async Task Catalog_NewUnusedStatusStartsAtZeroAndFourDefaultsExist()
+    {
+        var shared=new BridgeSharedServices(_db);
+        var original=Assert.IsType<JsonArray>(
+            (await shared.ListActiveStatusesAsync(default)).Data);
+        foreach(string id in new[]{"STS-PRESENT","STS-LEAVE","STS-ABSENT","STS-PERMISSION"})
+            Assert.Contains(original,x=>x?["statusId"]?.GetValue<string>()==id);
+        var catalog=new AdminConfigurationService(_db);
+        var added=await catalog.CreateStatusAsync(new JsonObject{
+            ["name"]="حالة تجريبية مضافة",["symbol"]="ت",["color"]="#12ABCD",
+            ["operationId"]="TEST-PHASE05-ADD-STATUS-0001"
+        },_founder,default);
+        Assert.True(added.Success,added.UserMessage);
+        string id=Assert.IsType<JsonObject>(added.Data)["statusId"]!.GetValue<string>();
+        var current=Assert.IsType<JsonArray>(
+            (await shared.ListActiveStatusesAsync(default)).Data);
+        var newStatus=Assert.Single(current.OfType<JsonObject>(),
+            x=>x["statusId"]?.GetValue<string>()==id);
+        Assert.Equal(0L,newStatus["todayCount"]!.GetValue<long>());
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose(){_db?.Dispose();SyntheticFixtures.DeleteTempDatabase(_path);}
 }

@@ -454,7 +454,18 @@ public sealed class BridgeSharedServices
     {
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT StatusId, VisibleName, ShortSymbol, ChosenColorHex, ActiveFlag, RowVersion FROM AttendanceStatusDefinitions WHERE ActiveFlag = 1 ORDER BY SortOrder;";
+        cmd.CommandText = """
+            SELECT s.StatusId,s.VisibleName,s.ShortSymbol,s.ChosenColorHex,
+                   s.ActiveFlag,s.RowVersion,COALESCE(today.TodayCount,0)
+            FROM AttendanceStatusDefinitions s
+            LEFT JOIN (
+                SELECT StatusId,COUNT(*) AS TodayCount FROM AttendanceRecords
+                WHERE AttendanceLocalDate=$today GROUP BY StatusId
+            ) today ON today.StatusId=s.StatusId
+            WHERE s.ActiveFlag=1
+            ORDER BY s.SortOrder,s.StatusId;
+            """;
+        cmd.Parameters.AddWithValue("$today",_time.GetLocalNow().ToString("yyyy-MM-dd"));
         var statuses = new JsonArray();
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
@@ -465,7 +476,8 @@ public sealed class BridgeSharedServices
                 ["shortSymbol"] = reader.GetString(2),
                 ["color"] = reader.GetString(3),
                 ["active"] = Convert.ToInt32(reader.GetValue(4)) == 1,
-                ["version"] = reader.GetInt64(5)
+                ["version"] = reader.GetInt64(5),
+                ["todayCount"] = reader.GetInt64(6)
             });
         return Ok(statuses);
     }

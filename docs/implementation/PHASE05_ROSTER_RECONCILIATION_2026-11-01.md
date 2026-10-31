@@ -23,6 +23,7 @@ active-site protection, status symbol/name checks, archive audit and snapshots.
 - Edit Names retains the existing sole Add Person modal (screen_070) and
   adds selection with a 100-person cap, complete batch preview, explicit reason
   and ONE atomic ArchivePersons commit; individual removal stays unchanged.
+- Active status catalog queries expose a real todayCount with SQL COALESCE(...,0), and the existing administrative catalog shows "عدد اليوم" without inventing attendance for newly created statuses.
 - Existing tests for archived return, dismissal reuse, external transfer,
   month-15 blank dates, site retirement and statuses remain required alongside
   new product-gateway security/duplicate and JS bulk UI tests.

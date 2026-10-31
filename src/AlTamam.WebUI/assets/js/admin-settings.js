@@ -1274,11 +1274,12 @@
       const statusFields=node("div","admin-status-fields");
       statusFields.append(name.wrap,symbol.wrap,color.wrap);
       frm.append(statusFields,livePreview,save,note);
-      const t=table(["الحالة","الرمز","اللون","الإجراءات"]);
+      const t=table(["الحالة","الرمز","عدد اليوم","اللون","الإجراءات"]);
       for(const item of items){
         const tr=node("tr"), colorBox=node("span","admin-color",item.color);
         colorBox.style.borderRight="5px solid "+safeColor(item.color);
-        [item.displayName,item.shortSymbol].forEach(x=>tr.appendChild(node("td","",x)));
+        [item.displayName,item.shortSymbol,String(item.todayCount??0)]
+          .forEach(x=>tr.appendChild(node("td","",x)));
         const tdColor=node("td");tdColor.appendChild(colorBox);tr.appendChild(tdColor);
         const td=node("td","admin-row-buttons");
         td.appendChild(btn("تعديل",async()=>{
