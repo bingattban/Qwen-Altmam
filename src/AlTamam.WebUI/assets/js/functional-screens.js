@@ -1225,7 +1225,7 @@
     } catch(e) { if(STATE.monthEpoch===epoch)showError(feedback,e); }
   }
 
-  function render(section) {
+  function render(section, requestedRoute=null) {
     if(section!=="dashboard")dismissAutoPrepared();
     if(section!=="dashboard")stopDashboardClock();
     if (!STATE.session) { loginGate();return; }
@@ -1239,7 +1239,7 @@
     else if (section==="admin" && window.AltamamAdminSettings)
       window.AltamamAdminSettings.renderAdmin(STATE.session);
     else if (section==="settings" && window.AltamamAdminSettings)
-      window.AltamamAdminSettings.renderSettings(STATE.session, logout);
+      window.AltamamAdminSettings.renderSettings(STATE.session, logout, requestedRoute);
     else nav.navigateTop(section);
   }
 
@@ -1263,7 +1263,7 @@
     }
     const section=routeKey==="ClosedDayExceptionalCorrection"
       ?"admin":nav.sectionForRoute(route);
-    render(section);
+    render(section,section==="settings"?routeKey:null);
     if(section==="admin" && routeKey!=="Administration" &&
        !window.AltamamAdminSettings?.openOwnedRoute?.(routeKey)){
       view().appendChild(message("لم تتوفر وجهة عملية معتمدة لهذا المسار.",true));
@@ -1330,6 +1330,9 @@
       return role==="GeneralAdministration" || role==="OrdinaryAdministration";
     if(route.key==="ResetApplicationData")
       return role==="GeneralAdministration";
+    // Only administrators may change the daily backup / 08:00 scheduler.
+    if(route.key==="ScheduledBackups"||route.key==="EightPmScheduler")
+      return role==="GeneralAdministration"||role==="OrdinaryAdministration";
     return true;
   }
   document.addEventListener("click",e=>{

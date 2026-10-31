@@ -722,6 +722,38 @@ async function run() {
     "a supervisor can inspect a backup but cannot open a restore preview");
   assert.ok(!buttonNamed("حفظ إعدادات التحضير التلقائي"),
     "supervisors cannot see or invoke schedule and default-status policy changes");
+  // A deep link focuses its existing real action; it must never execute writes,
+  // inspect another user's backups, restore a database or log out by itself.
+  const privileged={role:"GeneralAdministration",username:"test-user"};
+  const activeButton=()=>document.activeElement;
+  const checkRoute=async(route,label,forbiddenWrites=[])=>{
+    const before=calls.length;
+    await controller.renderSettings(privileged,()=>{},route);
+    assert.equal(activeButton()?.textContent,label,
+      route+" must focus the real existing action without changing layouts");
+    const newlyCalled=calls.slice(before).map(x=>x.name);
+    assert.ok(!newlyCalled.includes("RestoreDatabaseAtomically"),
+      route+" must never enable native destructive restore");
+    for(const name of forbiddenWrites)
+      assert.ok(!newlyCalled.includes(name),route+" must not auto-run "+name);
+  };
+  await checkRoute("CreateBackup","اختيار مجلد من Windows",["CreateVerifiedBackup"]);
+  await checkRoute("ScheduledBackups","حفظ جدول النسخ التلقائي",["UpdateBackupSchedule"]);
+  await checkRoute("RestoreBackup","اختيار نسخة مشفرة وفحص سلامتها",["InspectBackup","PreviewRestore"]);
+  await checkRoute("AppearanceAndDiagnostics","فحص سلامة البيانات",["RunDatabaseIntegrityCheck"]);
+  await checkRoute("EightPmScheduler","حفظ إعدادات التحضير التلقائي",
+    ["SetAttendanceSchedule","SetAutoAttendanceDefaultStatus"]);
+  await checkRoute("ResetApplicationData","معاينة التصفير الكامل",
+    ["PreviewFullReset","CommitFullReset"]);
+  await checkRoute("Logout","تسجيل الخروج",["Logout"]);
+  await controller.renderSettings(privileged,()=>{},"AboutApplication");
+  assert.ok(activeButton()?.className.includes("settings-account-panel"),
+    "AboutApplication targets read-only account/version details instead of logout");
+  // Supervisor must have no hidden schedule/reset action exposed by a deep link.
+  await controller.renderSettings({role:"Supervisor",username:"supervisor"},()=>{},"ScheduledBackups");
+  assert.ok(!buttonNamed("حفظ جدول النسخ التلقائي"));
+  await controller.renderSettings({role:"Supervisor",username:"supervisor"},()=>{},"ResetApplicationData");
+  assert.ok(!buttonNamed("معاينة التصفير الكامل"));
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
 run().catch(error => { console.error(error); process.exitCode=1; });
