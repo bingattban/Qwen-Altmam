@@ -24,6 +24,14 @@ check(/--bg-main:\s*#0B1524/i,css,"new dark palette");
 check(/--accent-teal:\s*#0D9488/i,css,"new action accent");
 assert.ok(!css.includes("170px!important"),"search must never be capped at 170px");
 check(/input\.app-unified-search/,css,"unified search remains accessible");
+
+assert.ok(!admin.includes('"عرض الشاشة وتنفيذ عملياتها المتاحة"'),
+  "admin page tiles must not include developer guidance captions");
+check(/separation:\s*\[\s*\["separatePerson","فصل فرد"\],\s*\["separatedArchive","أرشيف الفصل"\]/,
+  admin,"separation archive is inside the separation screen");
+assert.ok(!/\["separation","الفصل"\],\["separatedArchive"/.test(admin),
+  "separation archive must not be a sibling of the separation screen");
+
 check(/\.app-operational-modal:not\(\[hidden\]\)/,css,"action forms are true overlays");
 check(/\.app-popup-on-content:not\(:empty\)/,css,"outcome dialogs float above tables");
 check(/\.attendance-drafts-modal:not\(\[hidden\]\)/,css,"saved drafts appear in dialog");
