@@ -122,6 +122,9 @@ check(/\.auth-first-run>\.auth-info-box\{/,css,
   "founder instructions are readable in a light information panel");
 check(/\.auth-first-run>\.btn\.btn-primary\{/,css,
   "primary action is full-width and touch-friendly");
+assert.ok(css.lastIndexOf(".auth-form .auth-password-field>input.form-input{") >
+  css.indexOf("padding-inline-end:140px"),
+  "the new eye control must override legacy 140px text-button spacing");
 check(/auth-password-policy/,functional,"live first-run password policy");
 check(/auth-brand/,functional,"the branded login block appears inside both login and first-run forms");
 check(/\.auth-brand-mark\{/,css,"login uses the local Cairo heading and teal symbol");

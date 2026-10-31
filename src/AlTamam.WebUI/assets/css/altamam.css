@@ -1967,7 +1967,7 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
   transform:translateY(-50%);z-index:2;
   pointer-events:none;font-size:17px;line-height:1
 }
-.auth-form .auth-password-field>.form-input{
+.auth-form .auth-password-field>input.form-input{
   padding-inline-end:54px
 }
 .auth-form .auth-password-toggle{
