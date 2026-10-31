@@ -67,18 +67,47 @@ def main() -> None:
     # Sensitive records must not be staged accidentally when operators build locally.
     ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
     for pattern in ("*.db", "*.db-wal", "*.db-shm", "*.db-journal", "*.sqlite", "*.sqlite3",
-                    "*.key", "*.protected", "*.bak", "*.xlsx", "*.pdf", "*.altrecovery",
+                    "*.key", "*.protected", "*.bak", "*.dbbackup", "*.xlsx", "*.pdf", "*.altrecovery",
                     "*.altbackup", "*.altrestore", "*.pfx", "*.p12", "*.pem"):
         check(pattern in ignored, "missing sensitive file ignore pattern: " + pattern)
     import subprocess
     tracked = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT,
                              capture_output=True, check=True).stdout.decode("utf-8").split("\0")
-    dangerous = re.compile(r"\.(?:db|db3|sqlite|sqlite3)(?:-wal|-shm|-journal)?$"
+    dangerous = re.compile(r"\.(?:db|db3|dbbackup|sqlite|sqlite3)(?:-wal|-shm|-journal)?$"
                            r"|\.(?:key|protected|bak|backup|sqlcipher|altrecovery|altbackup|altrestore|xlsx|xlsm|xls|pdf|pfx|p12|pem|kdbx|csv)$",
                            re.IGNORECASE)
     leaked = [f for f in tracked if dangerous.search(f)
               and f != "docs/requirements/SCREEN_MATRIX.csv"]
     check(not leaked, "possible tracked personnel data / key / report: " + str(leaked[:5]))
+    # Phase 01: .gitignore must actually reject sensitive extensions, including
+    # the .dbbackup format used by encrypted restore staging in production.
+    # --no-index evaluates ignore rules even when this repository already tracks
+    # some public .csv documentation.
+    secret_samples = (
+        "docs/requirements/real-personnel.db",
+        "docs/requirements/real-personnel.db-wal",
+        "docs/requirements/restore-rescue.dbbackup",
+        "docs/requirements/restore-rescue.dbbackup-wal",
+        "docs/requirements/recovery.altrecovery",
+        "docs/requirements/device-secret.protected",
+        "docs/requirements/attendance.xlsx",
+        "docs/requirements/private-report.pdf",
+        "docs/requirements/production-export.csv",
+    )
+    for candidate in secret_samples:
+        result = subprocess.run(
+            ["git", "check-ignore", "--no-index", "--quiet", "--", candidate],
+            cwd=ROOT, capture_output=True, check=False
+        )
+        check(result.returncode == 0, "sensitive Git ignore bypass: " + candidate)
+    public_matrix = subprocess.run(
+        ["git", "check-ignore", "--no-index", "--quiet", "--",
+         "docs/requirements/SCREEN_MATRIX.csv"],
+        cwd=ROOT, capture_output=True, check=False
+    )
+    check(public_matrix.returncode == 1,
+          "canonical public SCREEN_MATRIX.csv must remain committable")
+
     check(len(actions) == 103, "action manifest drift")
     for section, title in sections.items():
         tag = re.search(

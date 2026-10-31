@@ -73,9 +73,9 @@ in **both** Windows preflights. It is not a replacement for human secret review.
   https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions
 - The pinned `SQLitePCLRaw.bundle_e_sqlcipher` **2.1.10** provider has been
   deprecated by its maintainer (2026). It is retained for now to preserve
-  existing encrypted databases; a supported alternative requires the owner's
-  explicit decision, compatibility/restore migration tests and renewed
-  redistribution-license review before it can replace the working provider.
+  existing encrypted databases; the owner conditionally approved a supported
+  alternative, **only after** x86/x64 cross-provider compatibility, recovery
+  and redistribution-license checks have actually passed.
   See https://github.com/ericsink/SQLitePCL.raw/wiki/SQLite-encryption-options-for-use-with-SQLitePCLRaw
 - Excel import/export uses built-in `System.Xml` and `System.IO.Compression`
   for OOXML, not a third-party Excel runtime. Cairo and Tajawal fonts and their
@@ -85,11 +85,25 @@ in **both** Windows preflights. It is not a replacement for human secret review.
   run. Unsigned CI candidate artifacts and pending clean-machine manual UAT
   must never be represented as signed/final production releases.
 
-## Existing Phase 01 structural discrepancy (awaits owner direction)
+## Owner-reconciled Phase 01 architecture decision (2026-10-31)
 
-The working executable is `src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj`
-(assembly `AlTamam.DesktopHost`), while the wording of Phase 01.02 names
-`AlTamam.Desktop`. `src/AlTamam.WebUI` is already a separately maintained
-static-asset module but has no `.csproj`. Do not silently rename executable,
-installation identities, or create duplicate UI projects without reconciling
-this requirement with the current, tested runtime and package contracts.
+The owner explicitly approved preserving `AlTamam.DesktopHost` as the actual
+WPF executable/project identity and `src/AlTamam.WebUI` as a separately managed
+static HTML/CSS/JavaScript asset module. The six logical responsibilities
+remain partitioned; introducing duplicate C# wrappers or renaming the
+executable would risk packaging, installation and existing user data with no
+approved benefit. No other routes, users, screens or features change here.
+
+The owner also authorized **investigating** a supported SQLCipher upgrade and
+implementing it **only after** complete compatibility with existing encrypted
+databases and backups is proven. The current native SQLCipher bundle is
+therefore deliberately unchanged in this Phase 01 PR: no alternative provider
+and licensed native binaries are provisioned, and no cross-provider read,
+write, restore and on-disk compatibility suite has run. See
+[`SQLCIPHER_UPGRADE_EVALUATION.md`](SQLCIPHER_UPGRADE_EVALUATION.md) for
+authoritative sources, compatibility requirements and outstanding evidence.
+A green build with the *old* provider cannot be counted as proof that a
+*different* provider would open existing files.
+
+This approval reconciles the naming conflict; it is **not** permission to
+silently change the database encryption provider in later phases.
