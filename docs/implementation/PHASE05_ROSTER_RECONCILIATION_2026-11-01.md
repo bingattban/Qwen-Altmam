@@ -9,6 +9,7 @@ active-site protection, status symbol/name checks, archive audit and snapshots.
 
 ## Newly closed gaps
 
+- Every catalog mutation also explicitly checks the recognized native role at the C# AdminConfigurationService boundary using src/AlTamam.Application/Catalogs/CatalogMutationPolicy.cs; unknown roles cannot write sites or status definitions.
 - The production bridge now routes sensitive roster edits through
   `RosterAuthorizedCommands` (src/AlTamam.Application/Roster/). The C# service
   entry checks the authenticated actor against the currently active SQLCipher
