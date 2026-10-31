@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Policies;
+using AlTamam.Application.Catalogs;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -52,6 +53,8 @@ public sealed class AdminConfigurationService
 
     public async Task<BridgeResponse> CreateSiteAsync(JsonObject? payload, BridgePrincipal actor, CancellationToken ct)
     {
+        if (!CatalogMutationPolicy.Allows(actor.Role))
+            return Fail("لا تملك صلاحية تعديل المواقع أو الحالات.", BridgeErrorCodes.Unauthorized);
         string name = Read(payload, "name");
         if (name.Length is < 2 or > 100 || name == "غير محدد")
             return Fail("اسم الموقع مطلوب من حرفين إلى 100 حرف، ولا يجوز استعمال الاسم المحمي.");
@@ -94,6 +97,8 @@ public sealed class AdminConfigurationService
 
     public async Task<BridgeResponse> RenameSiteAsync(JsonObject? payload, BridgePrincipal actor, CancellationToken ct)
     {
+        if (!CatalogMutationPolicy.Allows(actor.Role))
+            return Fail("لا تملك صلاحية تعديل المواقع أو الحالات.", BridgeErrorCodes.Unauthorized);
         string id=Read(payload,"siteId"), name=Read(payload,"name");
         long version=ReadVersion(payload);
         if(id.Length==0 || name.Length is <2 or >100 || version<1)
@@ -160,6 +165,8 @@ public sealed class AdminConfigurationService
     public async Task<BridgeResponse> RemoveSiteAndReassignCurrentPersonsAsync(
         JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
     {
+        if (!CatalogMutationPolicy.Allows(actor.Role))
+            return Fail("لا تملك صلاحية تعديل المواقع أو الحالات.", BridgeErrorCodes.Unauthorized);
         string siteId=Read(payload,"siteId");
         long version=ReadVersion(payload);
         long expectedCount;
@@ -343,6 +350,8 @@ public sealed class AdminConfigurationService
 
     public async Task<BridgeResponse> CreateStatusAsync(JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
     {
+        if (!CatalogMutationPolicy.Allows(actor.Role))
+            return Fail("لا تملك صلاحية تعديل المواقع أو الحالات.", BridgeErrorCodes.Unauthorized);
         string name=Read(payload,"name"),symbol=Read(payload,"symbol"),color=Read(payload,"color");
         if(name.Length is <2 or >75 || symbol.Length is <1 or >5 || !ColorValid(color))
             return Fail("اسم الحالة (2–75) والرمز (1–5) ولون HEX (#RRGGBB) مطلوبة.");
@@ -381,6 +390,8 @@ public sealed class AdminConfigurationService
 
     public async Task<BridgeResponse> UpdateStatusAsync(JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
     {
+        if (!CatalogMutationPolicy.Allows(actor.Role))
+            return Fail("لا تملك صلاحية تعديل المواقع أو الحالات.", BridgeErrorCodes.Unauthorized);
         string id=Read(payload,"statusId"),name=Read(payload,"name"),symbol=Read(payload,"symbol"),
                color=Read(payload,"color");
         long ver=ReadVersion(payload);
@@ -441,6 +452,8 @@ public sealed class AdminConfigurationService
 
     public async Task<BridgeResponse> DeactivateStatusAsync(JsonObject? payload,BridgePrincipal actor,CancellationToken ct)
     {
+        if (!CatalogMutationPolicy.Allows(actor.Role))
+            return Fail("لا تملك صلاحية تعديل المواقع أو الحالات.", BridgeErrorCodes.Unauthorized);
         string id=Read(payload,"statusId");long ver=ReadVersion(payload);
         if(id.Length==0||ver<1)return Fail("معرّف الحالة وإصدارها مطلوبان.");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>{

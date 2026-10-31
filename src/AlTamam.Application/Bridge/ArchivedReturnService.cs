@@ -54,10 +54,14 @@ public sealed class ArchivedReturnService
         }
         using(var check=c.CreateCommand())
         {
-            check.CommandText="SELECT EXISTS(SELECT 1 FROM Persons WHERE ActiveFlag=1 AND NormalizedServiceNumberA=$num);";
+            check.CommandText="""
+                SELECT PersonId,CurrentVisibleName FROM Persons
+                WHERE ActiveFlag=1 AND NormalizedServiceNumberA=$num LIMIT 1;
+                """;
             check.Parameters.AddWithValue("$num",number);
-            if(Convert.ToInt32(await check.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
-                return Fail("«الرقم (ع)» مستخدم لفرد نشط. لا يمكن إنشاء فرد جديد أو استعادة مؤرشف بنفس الرقم.",
+            using var conflict=await check.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if(await conflict.ReadAsync(ct).ConfigureAwait(false))
+                return Fail($"«الرقم (ع)» مستخدم بالفعل للفرد النشط «{conflict.GetString(1)}» (PersonId: {conflict.GetString(0)}). لا يمكن إنشاء فرد جديد أو استعادة مؤرشف بهذا الرقم.",
                     BridgeErrorCodes.DuplicateServiceNumber);
         }
 

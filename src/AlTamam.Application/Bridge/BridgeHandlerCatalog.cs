@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using AlTamam.Application.Roster;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Contracts.Events;
 using AlTamam.Domain.Enums;
@@ -436,21 +437,20 @@ public static class BridgeHandlerCatalog
         },
         "PreviewArchivedIdentity" => async (req,principal,ct) =>
         {
-            var service=new ArchivedReturnService(services.Db,services.Time);
-            var result=await service.PreviewAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            var service=new RosterAuthorizedCommands(services.Db,services.Time);
+            var result=await service.PreviewReturnAsync(principal,req.Payload,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
         "CommitArchivedReturn" => async (req,principal,ct) =>
         {
-            var service=new ArchivedReturnService(services.Db,services.Time);
-            var result=await service.CommitReturnAsync(req.Payload,principal!,ct).ConfigureAwait(false);
+            var service=new RosterAuthorizedCommands(services.Db,services.Time);
+            var result=await service.CommitReturnAsync(principal,req.Payload,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
         "CreatePerson" => async (req, principal, ct) =>
         {
-            var svc = new PersonRosterService(services.Db);
-            BridgeResponse inner = await svc.CreatePersonAsync(principal!.UserId,
-                principal.Username, req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            var svc = new RosterAuthorizedCommands(services.Db,services.Time);
+            BridgeResponse inner = await svc.CreateAsync(principal,req.Payload,ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
         "GetPersonSummary" => async (req, principal, ct) =>
@@ -461,28 +461,26 @@ public static class BridgeHandlerCatalog
         },
         "PreviewPersonIdentityUpdate" => async (req, principal, ct) =>
         {
-            var svc = new PersonRosterService(services.Db);
-            BridgeResponse inner = await svc.PreviewPersonIdentityUpdateAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            var svc = new RosterAuthorizedCommands(services.Db,services.Time);
+            BridgeResponse inner = await svc.PreviewEditAsync(principal,req.Payload,ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
         "UpdatePersonIdentity" => async (req, principal, ct) =>
         {
-            var svc = new PersonRosterService(services.Db);
-            BridgeResponse inner = await svc.UpdatePersonIdentityAsync(principal!.UserId, principal.Username,
-                req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            var svc = new RosterAuthorizedCommands(services.Db,services.Time);
+            BridgeResponse inner = await svc.EditAsync(principal,req.Payload,ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
         "PreviewArchivePersons" => async (req, principal, ct) =>
         {
-            var svc = new PersonRosterService(services.Db);
-            BridgeResponse inner = await svc.PreviewArchivePersonsAsync(req.Payload ?? new JsonObject(), principal!.UserId, ct).ConfigureAwait(false);
+            var svc = new RosterAuthorizedCommands(services.Db,services.Time);
+            BridgeResponse inner = await svc.PreviewRemovalAsync(principal,req.Payload,ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
         "ArchivePersons" => async (req, principal, ct) =>
         {
-            var svc = new PersonRosterService(services.Db);
-            BridgeResponse inner = await svc.ArchivePersonsAsync(principal!.UserId, principal.Username,
-                req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            var svc = new RosterAuthorizedCommands(services.Db,services.Time);
+            BridgeResponse inner = await svc.RemoveAsync(principal,req.Payload,ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
         // Configuration writes are registered with server-side role checks and
