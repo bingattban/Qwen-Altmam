@@ -31,5 +31,8 @@ for(const action of ["AuthenticateLocalUser","CreatePerson","PreviewArchivedIden
   assert.ok(Object.keys(payload.properties).some(x=>x!=="operationId"),
     action+" must declare real action fields");
 }
+const validDate=new RegExp(schema.$defs.payload_BuildPersonLifetimeReport.properties.dateFrom.pattern);
+assert.ok(validDate.test("2026-11-01"),"ISO date pattern must accept yyyy-MM-dd");
+assert.equal(validDate.test("20261101"),false,"date pattern must reject non-ISO dates");
 assert.ok(!JSON.stringify(schema).includes("unsafe-inline"));
 console.log("PHASE04 VERSIONED TYPED BRIDGE SCHEMA PASS — "+actions.length+" actions");
