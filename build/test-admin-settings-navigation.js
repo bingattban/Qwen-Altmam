@@ -218,6 +218,16 @@ async function run() {
   assert.equal(controller.openOwnedRoute("PersonnelManagement"),true);
   assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="attendance"));
   controller.renderAdmin(admin);
+  assert.equal(controller.openOwnedRoute("AddPerson"),true);
+  const embeddedAdd=visible().find(x=>x.tag==="details" &&
+    x.className.includes("admin-create-person"));
+  assert.ok(embeddedAdd && embeddedAdd.open===true,
+    "screen_070 must open the real Add Person form without a duplicate route");
+  assert.equal(document.activeElement?.tag,"input",
+    "Add Person deep link must focus the first editable field");
+  assert.equal(calls.filter(x=>x.name==="CreatePerson").length,0,
+    "opening Add Person must not commit a person or fake success");
+  controller.renderAdmin(admin);
   assert.equal(controller.openOwnedRoute("StatusesAndSites"),true);
   assert.deepEqual(byDataset("adminScreen").map(x=>x.dataset.adminScreen),
     ["sites","statuses"]);

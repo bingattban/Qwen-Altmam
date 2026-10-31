@@ -293,4 +293,21 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         Assert.Equal("1",Scalar("SELECT ActiveFlag FROM Users WHERE Role=1;"));
         Assert.Equal("",Scalar("SELECT LinkedPersonId FROM Users WHERE Role=1;"));
     }
+    [Fact]
+    public async Task FoundingAuditEvidence_BlocksReprovisioningAfterLegacyUserRowDeletion()
+    {
+        var first = await _service.ProvisionFirstAdministratorAsync(
+            "founder-proof", "test-password-123", CancellationToken.None);
+        Assert.True(first.Success, first.UserMessage);
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='FOUNDING_ADMIN_CREATED';"));
+        // Deliberately simulate a legacy/manual database change, not application logout.
+        Exec("DELETE FROM Users WHERE Role=1;");
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+        Assert.True(await _service.IsProvisionedAsync());
+        var second = await _service.ProvisionFirstAdministratorAsync(
+            "second-founder", "test-password-123", CancellationToken.None);
+        Assert.False(second.Success);
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Users;"));
+    }
+
 }

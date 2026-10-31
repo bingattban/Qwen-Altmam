@@ -8,5 +8,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AlTamam.Tests/AlTamam.Tests.csproj" />
+    <Project Path="tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj" />
+    <Project Path="tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj" />
   </Folder>
 </Solution>

@@ -1,4 +1,14 @@
-# Phase 01 — SQLCipher provider upgrade evaluation (owner decision 2026-10-31)
+> **Binding owner decision, 2026-10-31 — NO PROVIDER REPLACEMENT.**
+> The earlier conditional authorization to investigate and then replace SQLCipher
+> has been withdrawn for now. Keep the existing native provider
+> `SQLitePCLRaw.bundle_e_sqlcipher 2.1.10` and all working key, database, WAL,
+> encrypted-backup and recovery formats unchanged. Nothing in this historical
+> evaluation authorizes a dependency upgrade, rekey, or data migration in
+> Phase 02 or any later phase. Any reconsideration needs a NEW explicit owner
+> instruction and independent compatibility proof. This file is retained
+> solely to preserve the historical technical assessment; it is NOT a work order.
+>
+# Historical reference — SQLCipher provider upgrade evaluation (withdrawn / deferred 2026-10-31)
 
 ## Exact current baseline
 - Infrastructure: `Microsoft.Data.Sqlite.Core 9.0.2` plus
@@ -64,8 +74,7 @@
 
 ## Present decision / gate
 
-**Candidate switch: BLOCKED / NOT PROVEN.** The owner authorized studying
-and switching only after evidence. No Zetetic commercial entitlement, pinned
+**Candidate switch: CANCELLED / NOT AUTHORIZED (owner's updated Phase 02 decision, 2026-10-31).** The owner explicitly withdrew the earlier conditional authorization to switch providers. Do not implement a provider replacement in Phase 02 or in subsequent phases without a new explicit owner instruction. The historical evaluation above is retained for audit context, not an active implementation plan. No Zetetic commercial entitlement, pinned
 supported x86/x64 native candidate, cross-provider compatibility evidence or
 clean-machine acceptance has been supplied. Retain the existing tested
 SQLCipher provider without changing database format, key derivation, recovery
@@ -75,3 +84,7 @@ has been modernized; it is a recorded conditional follow-up.
 **Phase 01 PR boundary:** no rename of `DesktopHost` or duplicate WebUI
 project. No unrelated business/UI changes. A successful PR CI run validates
 only the unchanged current provider and candidate application build.
+
+## Phase 02 decision: retain SQLCipher unchanged
+
+The existing SQLCipher encryption implementation and pinned `SQLitePCLRaw.bundle_e_sqlcipher 2.1.10` remain the production baseline. No new provider, migration of encryption format, rekeying, DPAPI changes, native binary substitution, or changes to encrypted backup/restore behavior are authorized. Phase 02's encryption acceptance must be verified using the current provider and synthetic data. This decision supersedes the previous conditional upgrade proposal, without deleting its historical documentation.

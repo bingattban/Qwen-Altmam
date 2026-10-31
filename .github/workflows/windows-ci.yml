@@ -38,6 +38,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows real WebView2 smoke-test contract failed' }
+          node build/test-phase04-bridge-schema.js
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 04 typed request/response schema drift failed' }
           foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
             node --check "src/AlTamam.WebUI/assets/js/$file"
             if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax failed: $file" }
@@ -102,6 +104,32 @@ jobs:
           dotnet --version
       - name: Compile production and test projects once
         run: dotnet build AlTamam.slnx --configuration Release --no-restore
+      - name: Phase 02 actual SQLCipher integration tests (independent project)
+        run: >
+          dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=phase02-integration.trx"
+          --results-directory TestResults
+      - name: Guard Phase 02 tests against zero execution
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/phase02-integration.trx)) { throw 'Phase 02 integration TRX is missing' }
+          $xml = [xml](Get-Content TestResults/phase02-integration.trx)
+          $phase02Count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Phase 02 independent integration tests executed: $phase02Count"
+          if ($phase02Count -lt 8) { throw 'Phase 02 integration suite missing or did not fully execute' }
+      - name: Phase 03 independent unit tests
+        run: >
+          dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=phase03-unit.trx"
+          --results-directory TestResults
+      - name: Require nonzero Phase 03 unit test count
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/phase03-unit.trx)) { throw 'Phase 03 unit TRX missing' }
+          $xml = [xml](Get-Content TestResults/phase03-unit.trx)
+          $count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Phase 03 unit tests executed: $count"
+          if ($count -lt 4) { throw 'Phase 03 unit tests did not fully execute' }
       - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
@@ -146,5 +174,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: core-test-results-windows
-          path: TestResults/core-tests.trx
+          path: TestResults/*.trx
           if-no-files-found: error

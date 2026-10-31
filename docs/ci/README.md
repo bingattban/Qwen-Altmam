@@ -73,9 +73,8 @@ in **both** Windows preflights. It is not a replacement for human secret review.
   https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions
 - The pinned `SQLitePCLRaw.bundle_e_sqlcipher` **2.1.10** provider has been
   deprecated by its maintainer (2026). It is retained for now to preserve
-  existing encrypted databases; the owner conditionally approved a supported
-  alternative, **only after** x86/x64 cross-provider compatibility, recovery
-  and redistribution-license checks have actually passed.
+  existing encrypted databases. Any previous conditional approval to replace it
+  has since been **withdrawn by the owner**; no provider upgrade is authorized.
   See https://github.com/ericsink/SQLitePCL.raw/wiki/SQLite-encryption-options-for-use-with-SQLitePCLRaw
 - Excel import/export uses built-in `System.Xml` and `System.IO.Compression`
   for OOXML, not a third-party Excel runtime. Cairo and Tajawal fonts and their
@@ -94,12 +93,10 @@ remain partitioned; introducing duplicate C# wrappers or renaming the
 executable would risk packaging, installation and existing user data with no
 approved benefit. No other routes, users, screens or features change here.
 
-The owner also authorized **investigating** a supported SQLCipher upgrade and
-implementing it **only after** complete compatibility with existing encrypted
-databases and backups is proven. The current native SQLCipher bundle is
-therefore deliberately unchanged in this Phase 01 PR: no alternative provider
-and licensed native binaries are provisioned, and no cross-provider read,
-write, restore and on-disk compatibility suite has run. See
+For historical context, the owner initially allowed evaluation of a supported
+SQLCipher alternative only after full compatibility proof. That conditional
+approval was **subsequently withdrawn** in the Phase 02 decision below.
+The current native SQLCipher bundle has not been replaced. See
 [`SQLCIPHER_UPGRADE_EVALUATION.md`](SQLCIPHER_UPGRADE_EVALUATION.md) for
 authoritative sources, compatibility requirements and outstanding evidence.
 A green build with the *old* provider cannot be counted as proof that a
@@ -107,3 +104,18 @@ A green build with the *old* provider cannot be counted as proof that a
 
 This approval reconciles the naming conflict; it is **not** permission to
 silently change the database encryption provider in later phases.
+
+
+## Owner decision for Phase 02 (2026-10-31): keep SQLCipher unchanged
+
+No SQLCipher provider replacement, native-version change, schema rekey or database
+migration to a different encryption engine is authorized. The current
+`SQLitePCLRaw.bundle_e_sqlcipher 2.1.10` is intentionally preserved.
+The historical evaluation document is **not** a pending implementation action.
+Phase 02 adds an independent `tests/AlTamam.IntegrationTests` project to
+verify the existing provider against encrypted-reopen, wrong-key/unencrypted
+rejection, temporal snapshots, half-open assignment intervals, concurrent
+writes, immutable audit and transactional rollback on actual Windows runners.
+Both Windows CI workflows execute it after one solution build and before any
+Release package is generated, failing if the dedicated TRX reports fewer than
+eight real tests. No personnel data or production secrets are used.

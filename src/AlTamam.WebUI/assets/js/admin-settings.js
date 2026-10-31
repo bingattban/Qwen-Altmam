@@ -322,7 +322,7 @@
     if(screen==="sites")return sites();
     if(screen==="statuses")return statuses();
     if(screen==="layout")return rosterLayout();
-    if(screen==="persons")return persons();
+    if(screen==="persons")return persons(sourceRoute);
     if(screen==="log")return audit(sourceRoute==="ModifiedDeletedAuditEntries");
     if(screen==="transfers")return renderNested(screen,"التنقلات");
 
@@ -1324,7 +1324,7 @@
     }catch(e){errors(output,e);}
   }
 
-  async function persons() {
+  async function persons(sourceRoute=null) {
     const page=start("الإدارة / إدارة القوة / تعديل الأسماء"), box=card("الأفراد المسجلون");
     // A simple number beside the screen title; keep the old table/pager layout.
     const activeTotalNumber=node("span","admin-force-inline-count","…");
@@ -1510,6 +1510,13 @@
     creationActions.append(saveNew,cancelCreation);
     creation.append(toggle,creationFields,inputHint,creationActions,addMessage);
     page.append(creation,box);
+    // screen_070 is an embedded Add Person action owned by this ONE
+    // personnel editor. Deep-linking to it must open the REAL creation form,
+    // rather than silently returning to the surrounding list.
+    if(sourceRoute==="AddPerson"){
+      creation.open=true;
+      nameField.input.focus?.();
+    }
     const controls=node("div","functional-toolbar"),search=field("بحث بالاسم أو الرقم (ع)",state.term);
     const filter=node("select","form-select");
     filter.appendChild(node("option","","جميع المواقع"));filter.firstChild.value="";
@@ -1758,8 +1765,7 @@
           errors(historyContent,e);
       }
     }
-    // Table-only UTC formatting: retain complete original timestamps in
-    // GetAuditEntryDetails and never alter stored audit evidence.
+    // Table presentation only: SQLCipher and full historical detail remain unchanged.
     function compactAuditUtc(value) {
       if(!value)return "—";
       const instant=new Date(value);
