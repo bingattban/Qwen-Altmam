@@ -24,6 +24,19 @@ check(/--bg-main:\s*#0B1524/i,css,"new dark palette");
 check(/--accent-teal:\s*#0D9488/i,css,"new action accent");
 assert.ok(!css.includes("170px!important"),"search must never be capped at 170px");
 check(/input\.app-unified-search/,css,"unified search remains accessible");
+check(/\.app-search-control\{/,css,
+  "shared search sizing is separately scoped from tall data-entry forms");
+check(/#appViewport\.daily-dashboard>\.functional-toolbar/,css,
+  "dashboard has its own compact toolbar rules");
+check(/#appViewport\.monthly-dashboard>\.functional-toolbar/,css,
+  "monthly attendance has its own compact toolbar rules");
+check(/\.separation-tabs\{/,css,"separation and archival content share one tab strip");
+assert.ok(!admin.includes("عرض الشاشة وتنفيذ عملياتها المتاحة"),
+  "developer guidance is not displayed on navigation tiles");
+check(/\["separation","الفصل"\]/,admin,
+  "separation remains in the force-management route list");
+assert.ok(!/\["separatedArchive","الأرشيف"\]/.test(admin),
+  "archive no longer appears as a separate administrative choice");
 check(/\.app-operational-modal:not\(\[hidden\]\)/,css,"action forms are true overlays");
 check(/\.app-popup-on-content:not\(:empty\)/,css,"outcome dialogs float above tables");
 check(/\.attendance-drafts-modal:not\(\[hidden\]\)/,css,"saved drafts appear in dialog");

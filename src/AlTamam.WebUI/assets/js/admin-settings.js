@@ -16,7 +16,7 @@
   const sections = [
     {key:"force",title:"إدارة القوة",children:[
       ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
-      ["separation","الفصل"],["separatedArchive","الأرشيف"],["personReport","التقرير"],
+      ["separation","الفصل"],["personReport","التقرير"],
       ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]]},
     {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
@@ -194,15 +194,12 @@
       ["transferExternal","نقل خارجي"],
       ["archiveInternal","أرشيف النقل الداخلي"],
       ["archiveExternal","أرشيف النقل الخارجي"]
-    ],
-    separation: [
-      ["separatePerson","فصل فرد"]
     ]
   });
   const nestedParents = Object.freeze({
     transferInternal:"transfers",transferExternal:"transfers",
     archiveInternal:"transfers",archiveExternal:"transfers",
-    separatePerson:"separation"
+    separatePerson:"separation",separatedArchive:"separation"
   });
   function parentOf(screen) {
     return sections.find(section => section.children.some(child => child[0] === screen));
@@ -284,7 +281,6 @@
     for(const [key,title] of section.children) {
       if(key==="closedCorrection" && !["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role))continue;
       const item=btn(title,()=>navigate(key),"admin-subsection-tile");
-      item.appendChild(node("span","admin-tile-subtitle","عرض الشاشة وتنفيذ عملياتها المتاحة"));
       item.dataset.adminScreen=key;
       item.setAttribute("aria-label","فتح شاشة "+title);
       grid.appendChild(item);
@@ -310,10 +306,9 @@
       const page=start("الإدارة / التنقلات");
       return window.AltamamMovements.render(page,screen);
     }
-    if(["separatePerson","separatedArchive"].includes(screen) && window.AltamamSeparation){
-      const page=start(screen==="separatedArchive"
-        ?"الإدارة / إدارة القوة / الأرشيف"
-        :"الإدارة / إدارة القوة / الفصل");
+    if(["separation","separatePerson","separatedArchive"].includes(screen) &&
+        window.AltamamSeparation){
+      const page=start("الإدارة / إدارة القوة / الفصل");
       return window.AltamamSeparation.render(page,screen);
     }
     if(screen==="personReport" && window.AltamamReports)
@@ -329,7 +324,6 @@
     if(screen==="persons")return persons();
     if(screen==="log")return audit(sourceRoute==="ModifiedDeletedAuditEntries");
     if(screen==="transfers")return renderNested(screen,"التنقلات");
-     if(screen==="separation")return renderNested(screen,"الفصل");
 
     const labels={
       attendance:"التمام",transferInternal:"النقل الداخلي",

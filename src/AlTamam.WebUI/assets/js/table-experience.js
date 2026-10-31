@@ -171,8 +171,10 @@
       /بحث/.test([existingHint,input.getAttribute?.("aria-label")||"",captionText].join(" "));
     if(!genericSearch||!["text","search"].includes(input.type))return;
     input.classList.add("app-unified-search");
-    if(isPerson)input.placeholder=personSearchPlaceholder;
-    else if(!existingHint)input.placeholder=captionText||"بحث";
+    input.classList.add("app-search-control");
+    // The search hint belongs to its screen (month, archive, audit, etc.).
+    if(!existingHint)input.placeholder=captionText||
+      (isPerson?personSearchPlaceholder:"بحث");
     if(label && label.classList && !label.classList.contains("table-local-search")){
       label.classList.add("app-unified-search-wrap");
       // Keep the accessible label, but put its visible prompt INSIDE the field.
