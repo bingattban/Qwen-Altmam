@@ -143,18 +143,27 @@ jobs:
       # files declare any Trait/Category today, so those filters matched nothing while
       # `dotnet test` still exited 0 — exactly the false-green this contract forbids.
       # Until categories are declared on the tests themselves, run the FULL suite.
+      - name: Phase 02 SQLCipher and temporal-history integration suite (mandatory before packaging)
+        run: >
+          dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj -c $env:CONFIGURATION --no-build --no-restore
+          --logger "trx;LogFileName=phase02-integration.trx" --results-directory TestResults
       - name: Full deterministic test suite (all authored tests; unit+persistence+security+bridge+performance)
         run: >
-          dotnet test AlTamam.slnx -c $env:CONFIGURATION --no-build --no-restore
+          dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=full-suite.trx" --results-directory TestResults
-      - name: Guard against zero-tests-executed (fail if trx reports 0 tests)
+      - name: Guard both test projects against zero-tests-executed
         shell: pwsh
         run: |
-          $trx = Get-ChildItem TestResults/full-suite.trx
-          $xml = [xml](Get-Content $trx)
-          $count = [int]$xml.TestRun.ResultSummary.Counters.total
-          Write-Host "Tests executed: $count"
-          if ($count -lt 1) { throw 'TEST SUITE RAN 0 TESTS — filter/project drift detected' }
+          foreach ($file in @('TestResults/full-suite.trx', 'TestResults/phase02-integration.trx')) {
+            if (-not (Test-Path -LiteralPath $file)) { throw "Required test report missing: $file" }
+            $xml = [xml](Get-Content -LiteralPath $file)
+            $count = [int]$xml.TestRun.ResultSummary.Counters.total
+            Write-Host "Tests executed ($file): $count"
+            if ($count -lt 1) { throw "TEST SUITE RAN 0 TESTS: $file" }
+            if ($file -like '*phase02*' -and $count -lt 8) {
+              throw 'Phase 02 integration suite is incomplete'
+            }
+          }
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
         run: |

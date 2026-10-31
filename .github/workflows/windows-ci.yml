@@ -102,6 +102,19 @@ jobs:
           dotnet --version
       - name: Compile production and test projects once
         run: dotnet build AlTamam.slnx --configuration Release --no-restore
+      - name: Phase 02 actual SQLCipher integration tests (independent project)
+        run: >
+          dotnet test tests/AlTamam.IntegrationTests/AlTamam.IntegrationTests.csproj
+          --configuration Release --no-build --no-restore --logger "trx;LogFileName=phase02-integration.trx"
+          --results-directory TestResults
+      - name: Guard Phase 02 tests against zero execution
+        shell: pwsh
+        run: |
+          if (-not (Test-Path TestResults/phase02-integration.trx)) { throw 'Phase 02 integration TRX is missing' }
+          $xml = [xml](Get-Content TestResults/phase02-integration.trx)
+          $phase02Count = [int]$xml.TestRun.ResultSummary.Counters.total
+          Write-Host "Phase 02 independent integration tests executed: $phase02Count"
+          if ($phase02Count -lt 8) { throw 'Phase 02 integration suite missing or did not fully execute' }
       - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
@@ -146,5 +159,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: core-test-results-windows
-          path: TestResults/core-tests.trx
+          path: TestResults/*.trx
           if-no-files-found: error
