@@ -43,8 +43,8 @@ internal static class ExcelWorksheetResolver
                     target.TrimStart('/'): "xl/"+target;
                 if(entryPath.Contains("..",StringComparison.Ordinal) ||
                    entryPath.Contains('\\') || entryPath.Contains(':') ||
-                   entryPath.Contains('?',StringComparison.Ordinal) ||
-                   entryPath.Contains('#',StringComparison.Ordinal))
+                   entryPath.Contains('?') ||
+                   entryPath.Contains('#'))
                     throw new InvalidDataException("رابط ورقة Excel غير آمن.");
                 var entry=zip.GetEntry(entryPath) ??
                     throw new InvalidDataException("ورقة Excel المشار إليها غير موجودة.");
