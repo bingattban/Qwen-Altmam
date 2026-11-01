@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using AlTamam.Application.Attendance.ClosedDayCorrections;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Contracts.Events;
 using AlTamam.Domain.Enums;
@@ -30,11 +31,9 @@ public sealed class ClosedDayCorrectionService
     }
     private static BridgeResponse Deny(string code, string message) => BridgeHelpers.Error(code, message);
     private bool Historical(string date) =>
-        DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out var parsed) &&
-        parsed < DateOnly.FromDateTime(_time.GetLocalNow().DateTime);
+        ClosedDayCorrectionEligibilityPolicy.IsHistorical(date,_time.GetLocalNow());
     private static bool CanCorrectClosedDay(BridgePrincipal actor) =>
-        actor.Role is UserRole.GeneralAdministration or UserRole.OrdinaryAdministration;
+        ClosedDayCorrectionEligibilityPolicy.AuthorizedRole(actor.Role);
     private static bool ValidReason(string reason) =>
         reason.Length is >= 10 and <= 400 && !reason.Any(char.IsControl);
 
