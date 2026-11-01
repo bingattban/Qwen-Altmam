@@ -1,0 +1,14 @@
+"use strict";
+const assert=require("node:assert/strict");
+const fs=require("node:fs");
+const path=require("node:path");
+const root=path.resolve(__dirname,"..");
+const service=fs.readFileSync(path.join(root,"src/AlTamam.Application/Bridge/PersonnelMovementService.cs"),"utf8");
+const ui=fs.readFileSync(path.join(root,"src/AlTamam.WebUI/assets/js/personnel-movements.js"),"utf8");
+const admin=fs.readFileSync(path.join(root,"src/AlTamam.WebUI/assets/js/admin-settings.js"),"utf8");
+assert.ok(service.includes('type=="return"?4:0'));
+assert.ok(service.includes('MovementType IN (1,2,4)'));
+assert.ok(ui.includes('screen==="archiveReturn"?archive(host,false,true)'));
+assert.ok(admin.includes('["archiveReturn","أرشيف العودة"]'));
+assert.ok(!admin.includes('["transferReturn",'));
+console.log("Phase 08 return archive contract: PASS");

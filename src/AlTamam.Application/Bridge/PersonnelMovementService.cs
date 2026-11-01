@@ -279,17 +279,17 @@ public sealed class PersonnelMovementService
         int page=Math.Clamp(Num(payload,"page",1),1,100000),size=Math.Clamp(Num(payload,"pageSize",50),1,100);
         string type=Get(payload,"type"),term=Get(payload,"term"),
             siteId=Get(payload,"siteId"),dateFrom=Get(payload,"dateFrom"),dateTo=Get(payload,"dateTo");
-        if (type.Length>0 && type!="internal" && type!="external")
+        if (type.Length>0 && type!="internal" && type!="external" && type!="return")
             return Reject(BridgeErrorCodes.ValidationError,"نوع النقل غير صالح.");
         if ((dateFrom.Length>0 && (!DateOnly.TryParseExact(dateFrom,"yyyy-MM-dd",out _) || dateFrom.Length!=10)) ||
             (dateTo.Length>0 && (!DateOnly.TryParseExact(dateTo,"yyyy-MM-dd",out _) || dateTo.Length!=10)) ||
             (dateFrom.Length>0 && dateTo.Length>0 && string.CompareOrdinal(dateFrom,dateTo)>0))
             return Reject(BridgeErrorCodes.ValidationError,
                 "نطاق التاريخ غير صالح؛ يجب أن يكون تاريخ البداية قبل النهاية.");
-        int filter=type=="internal"?1:type=="external"?2:0;
+        int filter=type=="internal"?1:type=="external"?2:type=="return"?4:0;
         string like="%"+term.Replace("\\","\\\\").Replace("%","\\%").Replace("_","\\_")+"%";
         const string where="""
-            WHERE m.MovementType IN (1,2) AND ($type=0 OR m.MovementType=$type)
+            WHERE m.MovementType IN (1,2,4) AND ($type=0 OR m.MovementType=$type)
               AND (m.PersonNameSnapshot LIKE $term ESCAPE '\'
                OR m.ServiceNumberASnapshot LIKE $term ESCAPE '\')
               AND ($site='' OR m.SourceSiteId=$site OR m.DestinationSiteId=$site)
@@ -330,7 +330,7 @@ public sealed class PersonnelMovementService
             {
                 ["movementId"]=reader.GetString(0),["personId"]=reader.GetString(1),
                 ["name"]=reader.GetString(2),["serviceNumberA"]=reader.GetString(3),
-                ["type"]=reader.GetInt32(4)==1?"داخلي":"خارجي",
+                ["type"]=reader.GetInt32(4)==1?"داخلي":reader.GetInt32(4)==2?"خارجي":"عودة",
                 ["sourceSite"]=reader.GetString(5),["destination"]=reader.GetString(6),
                 ["date"]=reader.GetString(7),["committedAtUtc"]=reader.GetString(8)
             });
@@ -359,7 +359,7 @@ public sealed class PersonnelMovementService
                    m.EffectiveLocalDate,m.CommittedAtUtc,m.ActorUserId,u.Username
             FROM PersonnelMovements m
             LEFT JOIN Users u ON u.UserId=m.ActorUserId
-            WHERE m.MovementId=$id AND m.MovementType IN (1,2);
+            WHERE m.MovementId=$id AND m.MovementType IN (1,2,4);
             """;
         q.Parameters.AddWithValue("$id",movementId);
         using var r=await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -371,7 +371,7 @@ public sealed class PersonnelMovementService
         {
             ["movementId"]=r.GetString(0),["personId"]=r.GetString(1),
             ["name"]=r.GetString(2),["serviceNumberA"]=r.GetString(3),
-            ["type"]=r.GetInt32(4)==1?"داخلي":"خارجي",
+            ["type"]=r.GetInt32(4)==1?"داخلي":r.GetInt32(4)==2?"خارجي":"عودة",
             ["sourceSiteId"]=r.IsDBNull(5)?null:r.GetString(5),
             ["sourceSite"]=r.GetString(6),
             ["destinationSiteId"]=r.IsDBNull(7)?null:r.GetString(7),

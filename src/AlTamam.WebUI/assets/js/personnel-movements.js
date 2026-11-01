@@ -111,7 +111,7 @@ async function transfer(host,external){
   });
   card.appendChild(previewButton);
 }
-async function archive(host,external){
+async function archive(host,external,returns=false){
  const card=el("section",undefined,"card"),bar=el("div",undefined,"functional-toolbar");
  const site=el("select"),search=el("input"),
     dateFrom=el("input"),dateTo=el("input"),result=el("div"),notice=el("div");
@@ -121,15 +121,15 @@ async function archive(host,external){
   site.setAttribute("aria-label","فلتر الموقع");
   site.appendChild(opt("","جميع المواقع"));
  search.type="search";search.placeholder="بحث بالاسم أو الرقم (ع)";
- const archiveType=external?"external":"internal";
- const title=external?"أرشيف النقل الخارجي":"أرشيف النقل الداخلي";
+ const archiveType=returns?"return":external?"external":"internal";
+ const title=returns?"أرشيف العودة":external?"أرشيف النقل الخارجي":"أرشيف النقل الداخلي";
  card.appendChild(el("h2",title,"section-title"));
- card.appendChild(el("p",external?
+ card.appendChild(el("p",returns?"حركات العودة المؤرشفة للقراءة فقط، دون نموذج عودة إضافي.":external?
    "يعرض النقل الخارجي فقط ويحتفظ بتاريخ كل فرد مستقلاً.":
    "يعرض النقل الداخلي فقط مع الموقع السابق والوجهة والتاريخ.","section-description"));
  let page=1,archiveRequest=0;
  bar.append(site,dateFrom,dateTo,search,btn("بحث",()=>{page=1;load();}));
- bar.appendChild(btn("تصدير "+title+" إلى Excel",async()=>{
+ if(!returns)bar.appendChild(btn("تصدير "+title+" إلى Excel",async()=>{
    const payload={mode:"movementArchive",type:archiveType,
      term:search.value.trim(),siteId:site.value,
      dateFrom:dateFrom.value,dateTo:dateTo.value};
@@ -195,6 +195,7 @@ async function archive(host,external){
  }await load();
 }
 window.AltamamMovements=Object.freeze({render:(host,screen)=>
+  screen==="archiveReturn"?archive(host,false,true):
   screen==="archiveInternal"?archive(host,false):
   screen==="archiveExternal"?archive(host,true):
   screen==="transferInternal"?transfer(host,false):
