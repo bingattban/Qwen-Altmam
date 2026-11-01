@@ -2,9 +2,11 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using AlTamam.Application.Audit;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Domain.Policies;
+using AlTamam.Infrastructure.Audit;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -363,21 +365,16 @@ public sealed class AuditOverlayService
                 tombstone ? "DeleteAuditPresentation" : "UpdateAuditPresentation",
                 principal.UserId, payload, ct).ConfigureAwait(false);
             if (replay is not null) return replay;
-            using var check = connection.CreateCommand();
-            check.Transaction = transaction;
-            check.CommandText = "SELECT 1 FROM AuditEvents WHERE AuditEventId = $id;";
-            check.Parameters.AddWithValue("$id", auditEventId);
-            if (await check.ExecuteScalarAsync(ct).ConfigureAwait(false) is null)
-                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "القيد غير موجود.");
-
-            using var verCmd = connection.CreateCommand();
-            verCmd.Transaction = transaction;
-            verCmd.CommandText = "SELECT COALESCE(MAX(OverlayVersion), 0) FROM AuditLogPresentationEdits WHERE AuditEventId = $id;";
-            verCmd.Parameters.AddWithValue("$id", auditEventId);
-            long currentVersion = Convert.ToInt64(await verCmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
-            if (currentVersion != expectedVersion)
+            var evidence=await AuditPresentationEvidenceReader.ReadAsync(
+                connection,transaction,auditEventId,ct).ConfigureAwait(false);
+            if(evidence is null)
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"القيد غير موجود.");
+            var before=AuditPresentationState.From(evidence);
+            long currentVersion=before.OverlayVersion;
+            if(currentVersion!=expectedVersion)
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
                     $"تم تعديل القيد من مستخدم آخر (الإصدار الحالي {currentVersion}). حدّث الشاشة وأعد المحاولة.");
+            var after=AuditPresentationState.Next(before,tombstone,corrected);
 
             // Meta-audit: the overlay action itself is immutable evidence (atomic in same tx).
             await BridgeAuditWriter.WriteAsync(connection, transaction, _time,
@@ -385,9 +382,8 @@ public sealed class AuditOverlayService
                 tombstone ? "إخفاء قيد في سجل العمليات" : "تعديل الوصف الظاهر لقيد في سجل العمليات",
                 principal.UserId, principal.Username, actorDisplayName: null,
                 "AuditEvent", auditEventId, auditEventId,
-                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion }),
-                BridgeAuditWriter.Json(new JsonObject { ["overlayVersion"] = currentVersion + 1,
-                                                        ["tombstoned"] = tombstone, ["correctedDescription"] = corrected }),
+                BridgeAuditWriter.Json(before.ToJson()),
+                BridgeAuditWriter.Json(after.ToJson()),
                 tombstone
                     ? $"أُخفي القيد {auditEventId} ظاهرياً بواسطة {principal.Username}."
                     : $"عُدّل الوصف الظاهر للقيد {auditEventId} بواسطة {principal.Username}.",
@@ -444,6 +440,8 @@ public sealed class AuditOverlayService
                 ["auditEventId"] = auditEventId,
                 ["overlayVersion"] = currentVersion + 1,
                 ["isTombstoned"] = tombstone,
+                ["beforeState"] = before.ToJson(),
+                ["afterState"] = after.ToJson(),
                 ["rawEvidenceUntouched"] = true
             };
             await MutationIdempotency.StoreAsync(connection, transaction,
