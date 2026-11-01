@@ -134,6 +134,22 @@ async function run(){
   const before=calls.length;
   await button("تحليل الملف").handlers.click();
   assert.equal(calls.length,before,"oversize file must never enter the bridge");
+  // Rejected-only XLSX is analyzable and may be archived with explicit
+  // approval, without creating or returning any person in SQLCipher.
+  responses.AnalyzeImport={totalRows:2,newCount:0,issueCount:2,
+    issues:[{row:2,name:"مرفوض",serviceNumberA:"12",reason:"رقم غير صالح"}],
+    acceptedPreview:[],newSites:[],similarNames:[]};
+  responses.PreviewImportPlan={previewToken:"C".repeat(64),newCount:0,
+    issueCount:2,requiresExplicitConfirmation:true,newSites:[],
+    issues:responses.AnalyzeImport.issues,acceptedPreview:[]};
+  responses.CommitImport={createdCount:0,rejectedCount:2,importBatchId:"IMP-REJECT-ONLY"};
+  picker.files=[{name:"مرفوض_كله.xlsx",size:80,base64:"UEsDBBQ"}];
+  await button("تحليل الملف").handlers.click();
+  assert.ok(button("معاينة اعتماد صفوف الرفض فقط"));
+  await button("معاينة اعتماد صفوف الرفض فقط").handlers.click();
+  assert.equal(calls.filter(x=>x.name==="CommitImport").at(-1).body.previewToken,
+    "C".repeat(64));
+  assert.ok(all().some(x=>x.textContent.includes("تم حفظ صفوف الرفض فقط")));
   console.log("EXCEL IMPORT UI PASS: safe batch history, report XLSX, no implicit write, server token and size guard");
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});
