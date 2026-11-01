@@ -17,7 +17,10 @@ public sealed record AutoAttendanceRunResult(
     int SkippedManualCount,
     int UnrecoverableMissedCount,
     string SummaryArabic,
-    bool IsCatchUpRun = false);
+    bool IsCatchUpRun = false,
+    int DefaultedCount = 0,
+    int FailedCount = 0,
+    bool HasDetailedCounts = false);
 
 /// <summary>
 /// Durable, database-authoritative implementation of the canonical 08:00 carry-forward rule
@@ -125,7 +128,8 @@ public sealed class AutoAttendanceService
             prior.Transaction = tx;
             prior.CommandText = """
                 SELECT JobKey,IsCatchUpRun,CopiedCount,SkippedNoYesterdayCount,
-                       SkippedTransferExemptCount,SummaryArabic
+                       SkippedTransferExemptCount,SummaryArabic,
+                       DefaultedCount,SkippedManualCount,FailedCount
                 FROM AutoAttendanceRuns WHERE BusinessDate=$date LIMIT 1;
                 """;
             prior.Parameters.AddWithValue("$date", Iso(businessDate));
@@ -133,7 +137,11 @@ public sealed class AutoAttendanceService
             if (await reader.ReadAsync(ct).ConfigureAwait(false))
                 return new AutoAttendanceRunResult(reader.GetString(0), businessDate,
                     true, false, reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4),
-                    0, 0, reader.GetString(5), reader.GetInt32(1) == 1);
+                    reader.IsDBNull(7) ? 0 : reader.GetInt32(7), 0,
+                    reader.GetString(5), reader.GetInt32(1) == 1,
+                    reader.IsDBNull(6) ? 0 : reader.GetInt32(6),
+                    reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
+                    !reader.IsDBNull(6));
         }
         string source = administrator is null ? (isCatchUp ? "08h-catchup" : "08h-auto")
             : "08h-admin-catchup";
@@ -371,8 +379,10 @@ public sealed class AutoAttendanceService
                 ledger.Transaction = tx;
                 ledger.CommandText = @"INSERT INTO AutoAttendanceRuns
                     (JobKey, BusinessDate, DueTimeLocal, StartedAtUtc, CompletedAtUtc, IsCatchUpRun,
-                     CopiedCount, SkippedNoYesterdayCount, SkippedTransferExemptCount, SummaryArabic)
-                    VALUES ($job, $date, $due, $start, $end, $catch, $copied, $noY, $transfer, $summary);";
+                     CopiedCount, SkippedNoYesterdayCount, SkippedTransferExemptCount, SummaryArabic,
+                     DefaultedCount, SkippedManualCount, FailedCount)
+                    VALUES ($job, $date, $due, $start, $end, $catch, $copied, $noY, $transfer, $summary,
+                            $defaulted, $manual, 0);";
                 ledger.Parameters.AddWithValue("$job", jobKey);
                 ledger.Parameters.AddWithValue("$date", Iso(businessDate));
                 ledger.Parameters.AddWithValue("$due", dueLocal);
@@ -383,11 +393,14 @@ public sealed class AutoAttendanceService
                 ledger.Parameters.AddWithValue("$noY", skipNoYesterday);
                 ledger.Parameters.AddWithValue("$transfer", skipTransfer);
                 ledger.Parameters.AddWithValue("$summary", summary);
+                ledger.Parameters.AddWithValue("$defaulted", defaulted);
+                ledger.Parameters.AddWithValue("$manual", skipManual);
                 await ledger.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
 
             return new AutoAttendanceRunResult(jobKey, businessDate, false, false,
-                copied, skipNoYesterday, skipTransfer, skipManual, 0, summary, isCatchUp);
+                copied, skipNoYesterday, skipTransfer, skipManual, 0, summary, isCatchUp,
+                defaulted, 0, true);
     }
 
     /// <summary>Reads the scheduling diagnostics: last ledger rows plus next scheduled due time.</summary>
@@ -404,7 +417,8 @@ public sealed class AutoAttendanceService
         using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = @"SELECT JobKey, BusinessDate, IsCatchUpRun, CopiedCount, SkippedNoYesterdayCount,
-                                       SkippedTransferExemptCount, SummaryArabic
+                                       SkippedTransferExemptCount, SummaryArabic,
+                                       DefaultedCount, SkippedManualCount, FailedCount
                                 FROM AutoAttendanceRuns ORDER BY BusinessDate DESC LIMIT $take;";
             cmd.Parameters.AddWithValue("$take", Math.Clamp(take, 1, 60));
             using SqliteDataReader reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -412,8 +426,12 @@ public sealed class AutoAttendanceService
             {
                 DateOnly d = DateOnly.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
                 runs.Add(new AutoAttendanceRunResult(reader.GetString(0), d, true, false,
-                    reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0,
-                    reader.GetString(6), reader.GetInt32(2) == 1));
+                    reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
+                    reader.IsDBNull(8) ? 0 : reader.GetInt32(8), 0,
+                    reader.GetString(6), reader.GetInt32(2) == 1,
+                    reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
+                    reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
+                    !reader.IsDBNull(7)));
             }
         }
 
@@ -476,7 +494,8 @@ public sealed class AutoAttendanceService
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = @"SELECT JobKey, BusinessDate, IsCatchUpRun, CopiedCount, SkippedNoYesterdayCount,
-                                   SkippedTransferExemptCount, SummaryArabic
+                                   SkippedTransferExemptCount, SummaryArabic,
+                                   DefaultedCount, SkippedManualCount, FailedCount
                             FROM AutoAttendanceRuns WHERE BusinessDate = $date
                             ORDER BY CASE WHEN JobKey=$job THEN 0 ELSE 1 END LIMIT 1;";
         cmd.Parameters.AddWithValue("$job", jobKey);
@@ -485,8 +504,12 @@ public sealed class AutoAttendanceService
         if (!await reader.ReadAsync(ct).ConfigureAwait(false)) return null;
         var date = DateOnly.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
         return new AutoAttendanceRunResult(reader.GetString(0), date, true, false,
-            reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0,
-            reader.GetString(6), reader.GetInt32(2) == 1);
+            reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
+            reader.IsDBNull(8) ? 0 : reader.GetInt32(8), 0,
+            reader.GetString(6), reader.GetInt32(2) == 1,
+            reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
+            reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
+            !reader.IsDBNull(7));
     }
 
     private async Task<DateOnly?> GetLastCompletedBusinessDateAsync(CancellationToken ct)

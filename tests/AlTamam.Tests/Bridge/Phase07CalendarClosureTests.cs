@@ -100,11 +100,66 @@ public sealed class Phase07CalendarClosureTests : IAsyncLifetime, IDisposable
         var outcomes = await Task.WhenAll(
             scheduler.RunForDateAsync(new DateOnly(2026, 10, 15), false),
             scheduler.RunForDateAsync(new DateOnly(2026, 10, 15), false));
-        Assert.Single(outcomes.Where(x => !x.WasAlreadyCompleted));
-        Assert.Single(outcomes.Where(x => x.WasAlreadyCompleted));
+        Assert.Single(outcomes, x => !x.WasAlreadyCompleted);
+        Assert.Single(outcomes, x => x.WasAlreadyCompleted);
         Assert.Equal(1, Count("AutoAttendanceRuns"));
         Assert.Equal(1, Count("AttendanceRecords", "AttendanceLocalDate='2026-10-15'"));
         Assert.Equal(1, Count("AttendanceRecords", "AttendanceLocalDate='2026-10-14'"));
+    }
+
+
+    [Fact]
+    public async Task ExistingHumanAttendance_IsNeverOverwritten_AndSkipIsDurable()
+    {
+        using (var c = _db.CreateOpenConnection())
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
+                  StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                  AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                  Source,CreatedByUserId,CommittedAtUtc,RevisionNumber,IdempotencyKey)
+                VALUES ('TST-PH7-P1','2026-10-15','STS-PRESENT','موجود','م','#38BDF8',
+                  'TST-PH7-A1','SITE-UNSPECIFIED','غير محدد','manual',
+                  'TST-PH7-ADMIN','2026-10-15T07:30:00Z',1,'TST-PH7-MANUAL');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var scheduler = new AutoAttendanceService(_db, _time);
+        var result = await scheduler.RunForDateAsync(new DateOnly(2026, 10, 15), false);
+        Assert.Equal(0, result.CopiedCount);
+        Assert.Equal(1, result.SkippedManualCount);
+        var replay = await new AutoAttendanceService(_db, _time)
+            .RunForDateAsync(new DateOnly(2026, 10, 15), false);
+        Assert.True(replay.WasAlreadyCompleted);
+        Assert.Equal(1, replay.SkippedManualCount);
+        Assert.True(replay.HasDetailedCounts);
+        Assert.Equal(1L, Count("AutoAttendanceRuns", "SkippedManualCount=1 AND FailedCount=0"));
+        Assert.Equal(1L, Count("AttendanceRecords",
+            "AttendanceLocalDate='2026-10-15' AND Source='manual'"));
+    }
+
+    [Fact]
+    public async Task RetiredYesterdayStatus_UsesOnlyConfiguredActiveFallback()
+    {
+        using (var c = _db.CreateOpenConnection())
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = """
+                UPDATE AttendanceStatusDefinitions SET ActiveFlag=0 WHERE StatusId='STS-ABSENT';
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('AutoAttendanceDefaultStatusId','STS-PERMISSION','2026-10-14T00:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var r = await new AutoAttendanceService(_db, _time)
+            .RunForDateAsync(new DateOnly(2026, 10, 15), false);
+        Assert.Equal(1, r.CopiedCount);
+        Assert.Equal(1, r.DefaultedCount);
+        Assert.Equal(1L, Count("AttendanceRecords",
+            "AttendanceLocalDate='2026-10-14' AND StatusId='STS-ABSENT'"));
+        Assert.Equal(1L, Count("AttendanceRecords",
+            "AttendanceLocalDate='2026-10-15' AND StatusId='STS-PERMISSION'"));
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

@@ -131,6 +131,9 @@ public static class BridgeHandlerCatalog
                     ["completed"] = true,
                     ["isCatchUpRun"] = run.IsCatchUpRun,
                     ["copiedCount"] = run.CopiedCount,
+                    ["defaultedCount"] = run.HasDetailedCounts ? run.DefaultedCount : null,
+                    ["skippedManualCount"] = run.HasDetailedCounts ? run.SkippedManualCount : null,
+                    ["failedCount"] = run.HasDetailedCounts ? run.FailedCount : null,
                     ["skippedNoYesterdayCount"] = run.SkippedNoYesterdayCount,
                     ["skippedTransferExemptCount"] = run.SkippedTransferExemptCount,
                     ["summaryArabic"] = run.SummaryArabic
