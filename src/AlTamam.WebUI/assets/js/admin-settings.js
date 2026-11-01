@@ -519,11 +519,44 @@
         for(const [key,value] of [["إجمالي الصفوف",report.totalRows],
           ["أفراد جدد",report.newCount],["صفوف متعارضة أو غير صالحة",report.issueCount]])
           summary.appendChild(settingsValue(key,value));
+        const acceptedRows=Array.isArray(report.acceptedPreview)?report.acceptedPreview:[];
+        if(acceptedRows.length){
+          const acceptedTable=table(["الورقة","الصف","الاسم","الرقم (ع)","الموقع"]);
+          for(const item of acceptedRows.slice(0,50))
+            addRow(acceptedTable.body,[item.worksheet||"—",item.row||"—",
+              item.name,item.serviceNumberA,item.siteName||"غير محدد"]);
+          summary.append(node("h3","section-title",
+            "الأفراد المقبولون — عرض "+Math.min(50,acceptedRows.length)+" من "+report.newCount),
+            acceptedTable.wrap);
+        }
+        const proposedSites=Array.isArray(report.newSites)?report.newSites:[];
+        if(proposedSites.length){
+          const siteTable=table(["الموقع المقترح","عدد الأفراد"]);
+          for(const item of proposedSites)
+            addRow(siteTable.body,[item.name,item.personCount]);
+          summary.append(node("h3","section-title",
+            "مواقع جديدة لن تُنشأ إلا بموافقة مستقلة"),siteTable.wrap);
+        }
+        const nameHints=Array.isArray(report.similarNames)?report.similarNames:[];
+        if(nameHints.length){
+          const hintTable=table(["الورقة","الصف","الاسم الجديد","الرقم (ع) الجديد","أسماء محفوظة مشابهة"]);
+          for(const item of nameHints)
+            addRow(hintTable.body,[item.worksheet,item.row,item.name,item.serviceNumberA,
+              (item.matches||[]).map(p=>p.name+" (ع: "+p.serviceNumberA+
+                (p.active?"، موجود":"، مؤرشف")+")").join("؛ ")]);
+          summary.append(node("h3","section-title",
+            "تنبيه: تشابه أسماء مع هويات محفوظة — لا يُعتبر تطابق هوية"),
+            hintTable.wrap);
+        }
         const issues=table(["الورقة","الصف","الاسم","الرقم (ع)","سبب الاستبعاد"]);
         for(const item of (report.issues||[]).slice(0,500))
           addRow(issues.body,[item.worksheet||"—",item.row,item.name,item.serviceNumberA,item.reason]);
         if((report.issues||[]).length)
           summary.append(node("h3","section-title","الصفوف المستبعدة"),issues.wrap);
+        if((report.issues||[]).some(item=>
+          String(item.reason||"").includes("هوية مؤرشفة")))
+          summary.append(btn("معالجة هويات الأرشيف عبر إضافة فرد",()=>
+            navigate("persons","AddPerson"),"btn btn-outline"));
         const preview=btn("معاينة خطة الإضافة",async()=>{
           preview.disabled=true;confirmBox.replaceChildren();previewToken="";
           try{
@@ -553,9 +586,11 @@
             }
             const details={rows:[
               ["أفراد جدد",plan.newCount],["صفوف مستبعدة",plan.issueCount],
+              ["أسماء مشابهة تستدعي مراجعة بشرية",(plan.similarNames||[]).length],
               ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
-            ],columns:["الاسم الجديد","الرقم (ع)"],
-              items:(plan.acceptedPreview||[]).map(p=>[p.name,p.serviceNumberA])};
+            ],columns:["الورقة","الصف","الاسم الجديد","الرقم (ع)","الموقع"],
+              items:(plan.acceptedPreview||[]).map(p=>
+                [p.worksheet||"—",p.row||"—",p.name,p.serviceNumberA,p.siteName||"غير محدد"])};
             const accepted=await detailsReview(details,{
               title:"معاينة خطة إضافة الأفراد",
               message:"راجع الأسماء والأرقام (ع) والتعارضات قبل الاعتماد.",
