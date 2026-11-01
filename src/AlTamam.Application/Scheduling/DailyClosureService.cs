@@ -31,6 +31,19 @@ public sealed class DailyClosureService
         string stamped = _time.GetUtcNow().ToString("O", CultureInfo.InvariantCulture);
         await _db.ExecuteInWriteTransactionAsync(async (connection, tx) =>
         {
+            // Only run the potentially broad historical closure sweep once per
+            // observed local date; the checkpoint is committed with its closures.
+            // This avoids rescanning the entire roster every minute of the day.
+            using (var previous = connection.CreateCommand())
+            {
+                previous.Transaction = tx;
+                previous.CommandText = """
+                    SELECT SettingValue FROM AppSettings
+                    WHERE SettingKey='LastDailyClosureSweepLocalDate';
+                    """;
+                string? swept = await previous.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+                if (swept == day) return 0;
+            }
             // Close at least yesterday; recover older recorded days after downtime.
             // Dates without historical events are NOT fabricated as attendance runs.
             using (var days = connection.CreateCommand())
@@ -69,6 +82,19 @@ public sealed class DailyClosureService
                 months.Parameters.AddWithValue("$lastMonth", lastMonth);
                 months.Parameters.AddWithValue("$now", stamped);
                 await months.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+            using (var checkpoint = connection.CreateCommand())
+            {
+                checkpoint.Transaction = tx;
+                checkpoint.CommandText = """
+                    INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                    VALUES('LastDailyClosureSweepLocalDate',$day,$now)
+                    ON CONFLICT(SettingKey) DO UPDATE SET
+                        SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                    """;
+                checkpoint.Parameters.AddWithValue("$day", day);
+                checkpoint.Parameters.AddWithValue("$now", stamped);
+                await checkpoint.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
             return 0;
         }, ct).ConfigureAwait(false);

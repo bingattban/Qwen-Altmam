@@ -111,7 +111,8 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
     {
         using (var valid = _database.CreateOpenConnection())
         {
-            Assert.Equal("11", Value(valid, "SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion.ToString(),
+                Value(valid, "SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
             Assert.NotEmpty(Value(valid, "PRAGMA cipher_version;"));
         }
         byte[] header = ReadHeader(DatabasePath);
