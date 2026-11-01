@@ -127,11 +127,10 @@
     list.setAttribute("role","list");
     list.setAttribute("aria-label","متطلبات كلمة المرور");
     const checks=[
-      ["8 أحرف فأكثر",v=>v.length>=8],
+      ["6 خانات فأكثر",v=>v.length>=6],
       ["3 أحرف إنجليزية",v=>(v.match(/[A-Za-z]/g)||[]).length>=3],
       ["3 أرقام",v=>(v.match(/[0-9]/g)||[]).length>=3],
-      ["رمز خاص",v=>/[^A-Za-z0-9\s]/.test(v)],
-      ["دون مسافات",v=>v.length>0&&!/\s/.test(v)]
+      ["دون مسافات أو محارف تحكم",v=>v.length>0&&!/[\s\x00-\x1f\x7f-\x9f]/.test(v)]
     ];
     if(confirmation)checks.push(["تطابق كلمتي المرور",
       v=>v.length>0&&v===confirmation.value]);
@@ -816,9 +815,11 @@
       const username=field("اسم المستخدم");
       const password=field("كلمة المرور الجديدة","","password");
       password.input.autocomplete="new-password";
+      password.input.minLength=6;
       attachSecretReveal(password);
       const passwordConfirm=field("تأكيد كلمة المرور","","password");
       passwordConfirm.input.autocomplete="new-password";
+      passwordConfirm.input.minLength=6;
       attachSecretReveal(passwordConfirm);
       const passwordHints=livePasswordPolicy(password.input,passwordConfirm.input);
       const role=node("select","form-control");
@@ -962,6 +963,7 @@
       operationalModal(wrapper,"modal-sm");
       const pwd=field("كلمة المرور الجديدة","","password");
       pwd.input.autocomplete="new-password";
+      pwd.input.minLength=6;
       attachSecretReveal(pwd);
       const requirements=livePasswordPolicy(pwd.input);
       const result=node("div","admin-note");
