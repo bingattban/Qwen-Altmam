@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Xml;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Infrastructure.Persistence;
+using AlTamam.Infrastructure.Excel.Reports;
 using Microsoft.Data.Sqlite;
 
 namespace AlTamam.Application.Bridge;
@@ -200,13 +201,15 @@ public sealed class ExcelImportOutcomeService
                     w.WriteEndElement();
                 });
             }
-            File.Move(partial, destination, overwrite: false);
+            ReportWorkbookCommit.VerifyFlushAndMove(partial,destination,ct);
             return BridgeHelpers.Ok(new JsonObject {
                 ["filePath"] = destination, ["fileName"] = filename,
                 ["importBatchId"] = batchId, ["issueCount"] = issues.Count,
                 ["format"] = "xlsx" });
         }
         catch (OperationCanceledException) { throw; }
+        catch (InvalidDataException)
+        { return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed, "تقرير أخطاء الاستيراد غير مكتمل، ولم يُنشر."); }
         catch (IOException)
         { return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed, "تعذر حفظ التقرير؛ تحقق من مساحة القرص."); }
         catch (UnauthorizedAccessException)

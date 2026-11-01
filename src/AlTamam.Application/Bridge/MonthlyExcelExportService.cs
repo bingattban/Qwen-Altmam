@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Xml;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Infrastructure.Persistence;
+using AlTamam.Infrastructure.Excel.Reports;
 
 namespace AlTamam.Application.Bridge;
 
@@ -230,7 +231,7 @@ public sealed class MonthlyExcelExportService
             }
             // Never overwrite a previous export. Atomic same-directory rename avoids partial .xlsx.
             ct.ThrowIfCancellationRequested();
-            File.Move(partial, destination, overwrite: false);
+            ReportWorkbookCommit.VerifyFlushAndMove(partial,destination,ct);
             return BridgeHelpers.Ok(new JsonObject
             {
                 ["filePath"] = destination, ["fileName"] = basename,
@@ -239,6 +240,7 @@ public sealed class MonthlyExcelExportService
             });
         }
         catch (OperationCanceledException) { throw; }
+        catch (InvalidDataException) { return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed, "ملف الكشف الشهري لم يجتز فحص سلامة XLSX؛ لم يُنشر الملف."); }
         catch (IOException) { return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed, "تعذر كتابة ملف Excel؛ تحقق من مساحة التخزين وصلاحيات المجلد."); }
         catch (UnauthorizedAccessException) { return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed, "لا توجد صلاحية كتابة في مجلد التقارير."); }
         finally

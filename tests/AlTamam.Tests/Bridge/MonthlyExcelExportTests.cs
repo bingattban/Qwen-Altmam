@@ -257,6 +257,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         _exports.Add(file);
         Assert.Equal(Path.Combine(_output,"كشف الشهر المعتمد.xlsx"),file);
         Assert.True(File.Exists(file));
+        Assert.False(File.Exists(file+".part"),"No unfinished XLSX part may remain after success.");
         var repeated=await service.ExportAsync(request,CancellationToken.None);
         Assert.False(repeated.Success); // an existing workbook is never overwritten
         Assert.True(File.Exists(file));
