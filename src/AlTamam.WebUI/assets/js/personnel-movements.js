@@ -121,16 +121,22 @@ async function archive(host,external){
   site.setAttribute("aria-label","فلتر الموقع");
   site.appendChild(opt("","جميع المواقع"));
  search.type="search";search.placeholder="بحث بالاسم أو الرقم (ع)";
- const archiveType=external?"external":"internal";
- const title=external?"أرشيف النقل الخارجي":"أرشيف النقل الداخلي";
+ const types=el("select");
+ types.setAttribute("aria-label","نوع السجل");
+ types.append(opt("internal","النقل الداخلي"),opt("return","عودة إلى القوة"));
+ types.value="internal";
+ const archiveType=()=>external?"external":types.value;
+ const title=external?"أرشيف النقل الخارجي":"أرشيف النقل الداخلي والعودة";
  card.appendChild(el("h2",title,"section-title"));
  card.appendChild(el("p",external?
    "يعرض النقل الخارجي فقط ويحتفظ بتاريخ كل فرد مستقلاً.":
-   "يعرض النقل الداخلي فقط مع الموقع السابق والوجهة والتاريخ.","section-description"));
+   "يعرض النقل الداخلي وحركات العودة المسجلة بواسطة إضافة فرد، كل نوع في أرشيف مستقل للقراءة فقط. لا يوجد نموذج عودة ثانٍ.","section-description"));
  let page=1,archiveRequest=0;
- bar.append(site,dateFrom,dateTo,search,btn("بحث",()=>{page=1;load();}));
+ bar.append(site);
+ if(!external)bar.append(types);
+ bar.append(dateFrom,dateTo,search,btn("بحث",()=>{page=1;load();}));
  bar.appendChild(btn("تصدير "+title+" إلى Excel",async()=>{
-   const payload={mode:"movementArchive",type:archiveType,
+   const payload={mode:"movementArchive",type:archiveType(),
      term:search.value.trim(),siteId:site.value,
      dateFrom:dateFrom.value,dateTo:dateTo.value};
    if(!await modalConfirm("تصدير "+title+" حسب البحث والفلاتر المعروضة؟ "+
@@ -146,14 +152,14 @@ async function archive(host,external){
     const response=await api().invoke("QuerySites",{});
     for(const entry of response.data||[])site.appendChild(opt(entry.siteId,entry.name));
   }catch(e){err(result,e);}
- for(const selector of [site,dateFrom,dateTo])
+ for(const selector of [site,dateFrom,dateTo,...(external?[]:[types])])
     selector.addEventListener("change",()=>{page=1;load();});
  card.append(bar,notice,result);host.appendChild(card);
  async function load(){
    const request=++archiveRequest;
    try{
      const data=(await api().invoke("QueryMovementArchive",{page,pageSize:100,
-       type:archiveType,term:search.value.trim(),siteId:site.value,
+       type:archiveType(),term:search.value.trim(),siteId:site.value,
         dateFrom:dateFrom.value,dateTo:dateTo.value})).data||{};
      if(request!==archiveRequest||!card.isConnected)return;
      const t=table(["الرقم (ع)","الاسم","النوع","الموقع السابق","الجهة الجديدة","التاريخ","التفاصيل"]);
@@ -173,7 +179,7 @@ async function archive(host,external){
            await show({rows:[
              ["الاسم وقت النقل",detail.name],
              ["الرقم (ع) وقت النقل",detail.serviceNumberA],
-             ["نوع النقل",detail.type],
+             ["نوع الحركة",detail.type],
              ["الموقع السابق",detail.sourceSite],
              ["الجهة الجديدة",detail.destination],
              ["تاريخ النقل",detail.date],

@@ -278,9 +278,10 @@ public sealed class PersonnelExcelExportService
         bool dismissal,CancellationToken ct)
     {
         string type=Read(payload,"type");
-        if(!dismissal && type is not ("internal" or "external"))
-            throw new ArgumentException("اختر أرشيف النقل الداخلي أو الخارجي.");
-        var title=dismissal?"أرشيف الفصل":type=="internal"?"نقل داخلي":"نقل خارجي";
+        if(!dismissal && type is not ("internal" or "external" or "return"))
+            throw new ArgumentException("اختر أرشيف النقل الداخلي أو الخارجي أو العودة.");
+        var title=dismissal?"أرشيف الفصل":type=="internal"?"نقل داخلي":
+            type=="external"?"نقل خارجي":"عودة إلى القوة";
         var sheet=dismissal
             ? Start(title,"رقم الفرد في التقرير","الرقم (ع)","اسم الفرد",
                 "الموقع","سبب الفصل","تاريخ الفصل","زمن الاعتماد","منفذ العملية")
@@ -352,9 +353,9 @@ public sealed class PersonnelExcelExportService
         else if(mode=="movementArchive")
         {
             string type=Read(payload,"type");
-            if(type is not ("internal" or "external"))
-                return Invalid("اختر نوع النقل المسموح للتصدير.");
-            label=type=="internal"?"نقل داخلي":"نقل خارجي";
+            if(type is not ("internal" or "external" or "return"))
+                return Invalid("اختر نوع سجل التنقل المسموح للتصدير.");
+            label=type=="internal"?"نقل داخلي":type=="external"?"نقل خارجي":"عودة إلى القوة";
         }
         else if(mode=="separationArchive")label="أرشيف الفصل";
         else return Invalid("نوع تقرير Excel غير معروف.");
