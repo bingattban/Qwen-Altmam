@@ -40,16 +40,7 @@ try {
     $phase13 = [Environment]::GetEnvironmentVariable("ALTAMAM_PHASE13_EVIDENCE_PATH")
     if (-not [string]::IsNullOrWhiteSpace($phase13)) {
         $checkoutSha = (& git -C $repository rev-parse HEAD | Select-Object -First 1).Trim()
-        if ($LASTEXITCODE -ne 0 -or $checkoutSha -notmatch '^[a-fA-F0-9]{40}
-}
-finally {
-    [Environment]::SetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE", $previousTrace)
-    if ($process -and -not $process.HasExited) {
-        try { $process.Kill($true) } catch { }
-    }
-    Remove-Item -LiteralPath $trace -Force -ErrorAction SilentlyContinue
-}
-) {
+        if ($LASTEXITCODE -ne 0 -or $checkoutSha -notmatch '^[a-fA-F0-9]{40}$') {
             throw "UI-E2E evidence: cannot identify tested checkout commit"
         }
         $sourceSha = [Environment]::GetEnvironmentVariable("ALTAMAM_SOURCE_HEAD_SHA")
