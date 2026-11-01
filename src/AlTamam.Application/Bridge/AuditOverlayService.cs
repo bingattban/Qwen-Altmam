@@ -198,7 +198,8 @@ public sealed class AuditOverlayService
                 ["executedAtUtc"] = reader.GetString(11),
                 ["eventHash"] = reader.GetString(12),
                 ["isTombstoned"] = reader.GetInt32(14) == 1,
-                ["overlayVersion"] = reader.GetInt32(15)
+                ["overlayVersion"] = reader.GetInt32(15),
+                ["foundingAccountProvenance"] = founder
             });
         }
 
@@ -250,6 +251,7 @@ public sealed class AuditOverlayService
             ["operationCode"] = reader.GetString(0),
             ["operationArabicName"] = reader.GetString(1),
             ["actorUserId"] = reader.GetString(2),
+            ["foundingAccountProvenance"] = reader.GetInt32(17)==1,
             ["actorUsername"] = reader.GetString(3),
             ["actorRosterFullName"] = reader.IsDBNull(4) ? null : reader.GetString(4),
             ["actorDisplay"] = reader.GetInt32(17)==1
@@ -276,6 +278,9 @@ public sealed class AuditOverlayService
         reader.Close();
 
         var overlays = new JsonArray();
+        string previousDisplay=entry["rawDescription"]!.GetValue<string>();
+        bool previousHidden=false;
+        int previousVersion=0;
         using var ovCmd = connection.CreateCommand();
         ovCmd.CommandText = """
             SELECT OverlayVersion, IsTombstoned, CorrectedDescription, Reason, EditedByUserId,
@@ -286,16 +291,26 @@ public sealed class AuditOverlayService
         using var ovReader = await ovCmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await ovReader.ReadAsync(ct).ConfigureAwait(false))
         {
+            int version=ovReader.GetInt32(0);
+            bool hidden=ovReader.GetInt32(1)==1;
+            string? corrected=ovReader.IsDBNull(2)?null:ovReader.GetString(2);
+            string display=string.IsNullOrWhiteSpace(corrected)?previousDisplay:corrected;
             overlays.Add(new JsonObject
             {
-                ["overlayVersion"] = ovReader.GetInt32(0),
-                ["isTombstoned"] = ovReader.GetInt32(1) == 1,
-                ["correctedDescription"] = ovReader.IsDBNull(2) ? null : ovReader.GetString(2),
-                ["reason"] = ovReader.GetString(3),
-                ["editedByUserId"] = ovReader.GetString(4),
-                ["editedByDisplay"] = ovReader.GetString(5),
-                ["editedAtUtc"] = ovReader.GetString(6)
+                ["overlayVersion"]=version,
+                ["isTombstoned"]=hidden,
+                ["correctedDescription"]=corrected,
+                ["reason"]=ovReader.GetString(3),
+                ["editedByUserId"]=ovReader.GetString(4),
+                ["editedByDisplay"]=ovReader.GetString(5),
+                ["editedAtUtc"]=ovReader.GetString(6),
+                ["beforeState"]=new AuditPresentationState(previousVersion,
+                    previousHidden,previousDisplay).ToJson(),
+                ["afterState"]=new AuditPresentationState(version,hidden,display).ToJson()
             });
+            previousVersion=version;
+            previousHidden=hidden;
+            previousDisplay=display;
         }
         ovReader.Close();
 
@@ -453,8 +468,13 @@ public sealed class AuditOverlayService
     // ------------------------------- QueryAuditPresentationChanges (11.04 overlay history)
 
     /// <summary>All overlay versions across all entries — the «القيود المعدلة والمحذوفة» screen feed.</summary>
-    public async Task<BridgeResponse> QueryAuditPresentationChangesAsync(JsonObject payload, CancellationToken ct)
+    public async Task<BridgeResponse> QueryAuditPresentationChangesAsync(
+        JsonObject payload,CancellationToken ct,BridgePrincipal? principal=null)
     {
+        if(principal is null ||
+            !RoleAuthorizationPolicy.CanReviewAuditOverlayHistory(principal.Role))
+            return BridgeHelpers.Error(BridgeErrorCodes.Unauthorized,
+                "تاريخ التعديلات والإخفاء محصور بالإدارة العامة والإدارة العادية.");
         string auditEventId = ReadString(payload, "auditEventId");
         int page = Math.Max(ReadInt(payload, "page", 1), 1);
         int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, MaxPageSize);
@@ -466,7 +486,19 @@ public sealed class AuditOverlayService
         cmd.CommandText = $"""
             SELECT o.AuditEventId, o.OverlayVersion, o.IsTombstoned, o.CorrectedDescription, o.Reason,
                    o.EditedByUserId, o.EditedByDisplaySnapshot, o.EditedAtUtc,
-                   e.OperationCode, e.DefaultArabicDescription
+                   e.OperationCode, e.DefaultArabicDescription,
+                   COALESCE((SELECT p.IsTombstoned FROM AuditLogPresentationEdits p
+                       WHERE p.AuditEventId=o.AuditEventId
+                         AND p.OverlayVersion=o.OverlayVersion-1),0),
+                   COALESCE((SELECT p.CorrectedDescription FROM AuditLogPresentationEdits p
+                       WHERE p.AuditEventId=o.AuditEventId AND p.OverlayVersion<o.OverlayVersion
+                         AND p.CorrectedDescription IS NOT NULL
+                       ORDER BY p.OverlayVersion DESC LIMIT 1),e.DefaultArabicDescription),
+                   COALESCE(o.CorrectedDescription,
+                       (SELECT p.CorrectedDescription FROM AuditLogPresentationEdits p
+                        WHERE p.AuditEventId=o.AuditEventId AND p.OverlayVersion<o.OverlayVersion
+                          AND p.CorrectedDescription IS NOT NULL
+                        ORDER BY p.OverlayVersion DESC LIMIT 1),e.DefaultArabicDescription)
             FROM AuditLogPresentationEdits o
             JOIN AuditEvents e ON e.AuditEventId = o.AuditEventId
             {filter}
@@ -491,7 +523,11 @@ public sealed class AuditOverlayService
                 ["editedByDisplay"] = reader.GetString(6),
                 ["editedAtUtc"] = reader.GetString(7),
                 ["operationCode"] = reader.GetString(8),
-                ["rawDescription"] = reader.GetString(9)
+                ["rawDescription"] = reader.GetString(9),
+                ["beforeState"] = new AuditPresentationState(
+                    reader.GetInt32(1)-1,reader.GetInt32(10)==1,reader.GetString(11)).ToJson(),
+                ["afterState"] = new AuditPresentationState(
+                    reader.GetInt32(1),reader.GetInt32(2)==1,reader.GetString(12)).ToJson()
             });
         }
         return BridgeHelpers.Ok(new JsonObject { ["items"] = items, ["count"] = items.Count, ["page"] = page });
