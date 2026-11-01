@@ -105,10 +105,12 @@
            const info=(await api().invoke("GetExportProgress",{},
              {timeoutMs:10000})).data||{};
            if(!monitoring||popup.hidden)return;
-           const percentage=Number(info.percentage);
-           const ratio=Number.isInteger(percentage)?" — "+percentage+"%":"";
-           if(Number.isInteger(percentage)&&percentage>=0&&percentage<=100)
-             progress.value=percentage;
+           // Only the verified final workbook may be reported as 100% complete.
+           const rawPercentage=Number(info.percentage);
+           const percentage=Number.isInteger(rawPercentage)&&rawPercentage>=0?
+             Math.min(99,rawPercentage):null;
+           const ratio=percentage!==null?" — "+percentage+"%":"";
+           if(percentage!==null)progress.value=percentage;
            const rows=info.total?" ("+info.processed+" من "+info.total+" صف)":"";
            progressText.textContent=info.cancelRequested?
              "جارٍ إيقاف التصدير والتحقق من حذف الملف المؤقت...":

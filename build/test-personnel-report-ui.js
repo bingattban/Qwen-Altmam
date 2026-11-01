@@ -175,6 +175,12 @@ async function main(){
   delayExport=false;
   buttons("إغلاق التقرير")[0].handlers.click();
   assert.equal(popup.hidden,true,"close returns to existing multi-selection");
+  // The native export can finish all rows before the ZIP is durable. The
+  // browser must not display a premature 100% while the job is still running.
+  const reportSource=fs.readFileSync(path.join(__dirname,
+    "../src/AlTamam.WebUI/assets/js/personnel-report.js"),"utf8");
+  assert.match(reportSource,/Math\.min\(99,rawPercentage\)/,
+    "live Excel progress is capped at 99 until the final workbook is verified");
   console.log("UNIFIED REPORT UI PASS: person/group, historical vs new identity, exact PersonIds, date filter, drilldown");
 }
 main().catch(err=>{console.error(err);process.exitCode=1;});
