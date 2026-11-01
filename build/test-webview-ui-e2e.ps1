@@ -31,10 +31,59 @@ try {
     if ($evidence -notmatch 'UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus' -or
         $evidence -notmatch 'PASS bundled offline WebUI title verified' -or
         $evidence -notmatch 'PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests' -or
-        $evidence -notmatch 'PASS all 69 manifest routes opened in real Windows WebView2') {
+        $evidence -notmatch 'PASS all 69 manifest routes opened in real Windows WebView2' -or
+        $evidence -notmatch 'PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations') {
         throw "UI-E2E FAIL: modal interaction or offline navigation evidence missing; $evidence"
     }
-    Write-Host "UI-E2E PASS: real Windows WPF/WebView2 + synthetic SQLCipher bridge roundtrip and forbidden requests"
+    # An evidence file is written only AFTER the native process exits 0 and all
+    # mandatory real-WebView2 trace markers are verified. Never predeclare success.
+    $phase13 = [Environment]::GetEnvironmentVariable("ALTAMAM_PHASE13_EVIDENCE_PATH")
+    if (-not [string]::IsNullOrWhiteSpace($phase13)) {
+        $checkoutSha = (& git -C $repository rev-parse HEAD | Select-Object -First 1).Trim()
+        if ($LASTEXITCODE -ne 0 -or $checkoutSha -notmatch '^[a-fA-F0-9]{40}
+}
+finally {
+    [Environment]::SetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE", $previousTrace)
+    if ($process -and -not $process.HasExited) {
+        try { $process.Kill($true) } catch { }
+    }
+    Remove-Item -LiteralPath $trace -Force -ErrorAction SilentlyContinue
+}
+) {
+            throw "UI-E2E evidence: cannot identify tested checkout commit"
+        }
+        $sourceSha = [Environment]::GetEnvironmentVariable("ALTAMAM_SOURCE_HEAD_SHA")
+        if ([string]::IsNullOrWhiteSpace($sourceSha)) { $sourceSha = $checkoutSha }
+        $record = [ordered]@{
+            schema = "AlTamam.Phase13.RealWindowsE2E.v1"
+            sourceHeadSha = $sourceSha
+            actualCheckoutSha = $checkoutSha
+            githubRunId = [Environment]::GetEnvironmentVariable("GITHUB_RUN_ID")
+            githubWorkflow = [Environment]::GetEnvironmentVariable("GITHUB_WORKFLOW")
+            checkedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
+            operatingSystem = [Environment]::OSVersion.VersionString
+            realWpfWebView2ProcessExitedZero = $true
+            traceAttestedChecks = [ordered]@{
+                arabicRtlModalFormValidationEscapeFocus = $true
+                bundledOfflineUiTitle = $true
+                sqlCipherBridgeRoundtripAndForbiddenRequests = $true
+                all69CanonicalManifestRoutesOpened = $true
+                generalAdminAdminSupervisorBridgeRoleProbes = $true
+            }
+            notExecutedByThisProbe = @(
+                "Every role exercising every nested screen business control",
+                "1024x768 / 1366x768 / high-DPI screen reader visual acceptance",
+                "10,000-row 31-day visible grid end-to-end latency",
+                "Real physical power interruption and cross-machine restore"
+            )
+        }
+        $directory = Split-Path -Parent $phase13
+        if (-not [string]::IsNullOrWhiteSpace($directory)) {
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        }
+        $record | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $phase13 -Encoding utf8
+    }
+    Write-Host "UI-E2E PASS: real Windows WPF/WebView2 + synthetic SQLCipher bridge roundtrip and all three roles"
 }
 finally {
     [Environment]::SetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE", $previousTrace)
