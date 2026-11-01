@@ -351,9 +351,20 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         Assert.Empty(Assert.IsType<JsonArray>(data["acceptedPreview"]));
         var cannotCommit=await Service.PreviewAsync(
             new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
-        Assert.False(cannotCommit.Success,"No approved writes without valid people.");
+        Assert.True(cannotCommit.Success,cannotCommit.UserMessage);
+        var plan=Assert.IsType<JsonObject>(cannotCommit.Data);
+        Assert.Equal(0,plan["newCount"]!.GetValue<int>());
+        Assert.Equal(2,plan["issueCount"]!.GetValue<int>());
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
-        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM ImportBatches"));
+        var outcome=await Service.CommitAsync(new JsonObject {
+            ["previewToken"]=plan["previewToken"]!.GetValue<string>()
+        },Owner,"owner",CancellationToken.None);
+        Assert.True(outcome.Success,outcome.UserMessage);
+        Assert.Equal(0,Assert.IsType<JsonObject>(outcome.Data)["createdCount"]!.GetValue<int>());
+        Assert.Equal(2,Assert.IsType<JsonObject>(outcome.Data)["rejectedCount"]!.GetValue<int>());
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM ImportBatches"));
+        Assert.Equal("2",Scalar("SELECT COUNT(*) FROM ImportIssues"));
     }
 
     [Fact]
@@ -495,8 +506,10 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         var issue=Assert.IsType<JsonObject>(Assert.Single(
             Assert.IsType<JsonArray>(data["issues"])));
         Assert.Contains("هوية مؤرشفة",issue["reason"]!.GetValue<string>());
-        Assert.False((await Service.PreviewAsync(
-            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None)).Success);
+        var rejectionPlan=await Service.PreviewAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(rejectionPlan.Success,rejectionPlan.UserMessage);
+        Assert.Equal(0,Assert.IsType<JsonObject>(rejectionPlan.Data)["newCount"]!.GetValue<int>());
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons"));
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons WHERE ActiveFlag=1"));
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM ImportBatches"));
