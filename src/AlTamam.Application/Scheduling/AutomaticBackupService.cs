@@ -123,20 +123,22 @@ public sealed class AutomaticBackupService
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,tx,"UpdateBackupSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
             if(replay is not null)return replay;
-            string previousEnabled="false",previousTime="16:00";
+            string previousEnabled="false",previousTime="16:00",previousRetention="0";
             using(var prior=c.CreateCommand())
             {
                 prior.Transaction=tx;
                 prior.CommandText="""
                     SELECT SettingKey,SettingValue FROM AppSettings
-                    WHERE SettingKey IN ('AutoBackupEnabled','AutoBackupTimeLocal');
+                    WHERE SettingKey IN ('AutoBackupEnabled','AutoBackupTimeLocal','AutoBackupRetentionDays');
                     """;
                 using var reader=await prior.ExecuteReaderAsync(ct).ConfigureAwait(false);
                 while(await reader.ReadAsync(ct).ConfigureAwait(false))
                 {
                     if(reader.GetString(0)=="AutoBackupEnabled")
                         previousEnabled=reader.GetString(1);
-                    else previousTime=reader.GetString(1);
+                    else if(reader.GetString(0)=="AutoBackupTimeLocal")
+                        previousTime=reader.GetString(1);
+                    else previousRetention=reader.GetString(1);
                 }
             }
             using var cmd=c.CreateCommand();
@@ -150,21 +152,29 @@ public sealed class AutomaticBackupService
                 VALUES ('AutoBackupTimeLocal',$time,$now)
                 ON CONFLICT(SettingKey) DO UPDATE SET
                   SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES ('AutoBackupRetentionDays',$retention,$now)
+                ON CONFLICT(SettingKey) DO UPDATE SET
+                  SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
                 """;
             cmd.Parameters.AddWithValue("$enabled",enabled?"true":"false");
             cmd.Parameters.AddWithValue("$time",time);
+            cmd.Parameters.AddWithValue("$retention",retentionDays.ToString(CultureInfo.InvariantCulture));
             cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             await BridgeAuditWriter.WriteAsync(c,tx,_time,
                 "AUTO_BACKUP_SCHEDULE_CHANGED","تعديل جدولة النسخ الاحتياطي",
                 actor.UserId,actor.Username,null,"AppSettings","AutoBackupTimeLocal",
                 "النسخ التلقائي",
-                new JsonObject{["enabled"]=previousEnabled=="true",["time"]=previousTime}.ToJsonString(),
-                new JsonObject{["enabled"]=enabled,["time"]=time}.ToJsonString(),
+                new JsonObject{["enabled"]=previousEnabled=="true",["time"]=previousTime,
+                    ["retentionDays"]=previousRetention}.ToJsonString(),
+                new JsonObject{["enabled"]=enabled,["time"]=time,
+                    ["retentionDays"]=retentionDays}.ToJsonString(),
                 "حفظ وقت النسخ التلقائي وتفعيل الجدولة أو إيقافها",
                 null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
                 .ConfigureAwait(false);
-            var result=new JsonObject{["enabled"]=enabled,["backupTime"]=time};
+            var result=new JsonObject{["enabled"]=enabled,["backupTime"]=time,
+                ["retentionDays"]=retentionDays};
             await MutationIdempotency.StoreAsync(c,tx,receipt,result,_time,ct)
                 .ConfigureAwait(false);
             return BridgeHelpers.Ok(result);
