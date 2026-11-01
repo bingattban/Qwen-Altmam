@@ -402,6 +402,84 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         Assert.Equal(BridgeErrorCodes.ValidationError, invalid.Response.ErrorCode);
     }
 
+
+    [Fact]
+    public async Task Phase09_GroupDailyStatusSummary_PreservesSeparatePeopleAndActualDates()
+    {
+        var result=await new PersonnelReportService(_db).ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
+            ["dateFrom"]="2026-01-15",["dateTo"]="2026-01-16"
+        },CancellationToken.None);
+        Assert.True(result.Success,result.UserMessage);
+        var data=Assert.IsType<JsonObject>(result.Data);
+        var daily=Assert.IsType<JsonArray>(data["dailyStatusTotals"]);
+        Assert.Equal(3,daily.Count);
+        Assert.Equal(3L,data["attendanceTotal"]!.GetValue<long>());
+        Assert.Equal(3L,daily.Sum(x=>x!["count"]!.GetValue<long>()));
+        Assert.Contains(daily,x=>x!["date"]!.GetValue<string>()=="2026-01-15" &&
+            x["statusName"]!.GetValue<string>()=="موجود" && x["count"]!.GetValue<long>()==1);
+        Assert.Contains(daily,x=>x!["date"]!.GetValue<string>()=="2026-01-16" &&
+            x["statusName"]!.GetValue<string>()=="غياب" && x["count"]!.GetValue<long>()==1);
+        Assert.Contains(daily,x=>x!["date"]!.GetValue<string>()=="2026-01-16" &&
+            x["statusName"]!.GetValue<string>()=="موجود" && x["count"]!.GetValue<long>()==1);
+        Assert.False(data["dailyStatusHasNext"]!.GetValue<bool>());
+        var second=await new PersonnelReportService(_db).ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
+            ["dateFrom"]="2026-01-16",["dateTo"]="2026-01-16"
+        },CancellationToken.None);
+        Assert.True(second.Success,second.UserMessage);
+        var selected=Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(second.Data)["dailyStatusTotals"]);
+        Assert.All(selected,x=>Assert.Equal("2026-01-16",x!["date"]!.GetValue<string>()));
+    }
+
+    [Fact]
+    public async Task Phase09_GroupDailyStatusSummary_PaginatesWithoutLosingFacts()
+    {
+        using(var conn=_db.CreateOpenConnection())
+        using(var transaction=conn.BeginTransaction())
+        {
+            using var add=conn.CreateCommand(); add.Transaction=transaction;
+            add.CommandText="""
+                INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
+                    StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                    AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                    Source,CreatedByUserId,CommittedAtUtc,IdempotencyKey)
+                VALUES('TST-REPORT-1',$date,'STS-PRESENT','موجود','م','#38BDF8',
+                    'TST-R-A1','SITE-UNSPECIFIED','غير محدد','manual','TEST',
+                    $created,$key);
+                """;
+            for(int i=0;i<120;i++)
+            {
+                var date=new DateOnly(2026,3,1).AddDays(i).ToString("yyyy-MM-dd");
+                add.Parameters.Clear();
+                add.Parameters.AddWithValue("$date",date);
+                add.Parameters.AddWithValue("$created",date+"T08:00:00Z");
+                add.Parameters.AddWithValue("$key","P09-PAGED-"+i);
+                await add.ExecuteNonQueryAsync();
+            }
+            transaction.Commit();
+        }
+        var svc=new PersonnelReportService(_db);
+        long total=0;int pages=0;
+        for(int page=1;page<=5;page++)
+        {
+            var response=await svc.ReportAsync(new JsonObject
+            {
+                ["personIds"]=new JsonArray("TST-REPORT-1","TST-REPORT-2"),
+                ["summaryPage"]=page
+            },CancellationToken.None);
+            Assert.True(response.Success,response.UserMessage);
+            var data=Assert.IsType<JsonObject>(response.Data);
+            total+=Assert.IsType<JsonArray>(data["dailyStatusTotals"]).Sum(x=>x!["count"]!.GetValue<long>());
+            pages++;
+            if(!data["dailyStatusHasNext"]!.GetValue<bool>())break;
+        }
+        Assert.True(pages>=2);
+        Assert.Equal(123L,total);
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
