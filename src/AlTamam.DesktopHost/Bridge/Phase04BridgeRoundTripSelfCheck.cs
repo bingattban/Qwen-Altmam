@@ -236,7 +236,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     if (string.IsNullOrWhiteSpace(cipher.ExecuteScalar()?.ToString()))
                         throw new InvalidOperationException("Phase 04 did not use SQLCipher");
                     using var roles = connection.CreateCommand();
-                    roles.CommandText = "SELECT COUNT(*) FROM Users WHERE Role IN (1,3);";
+                    roles.CommandText = "SELECT COUNT(*) FROM Users WHERE Role IN (1,2,3);";
                     if (Convert.ToInt64(roles.ExecuteScalar()) != 3)
                         throw new InvalidOperationException("Founder/Admin/Supervisor fixture accounts missing");
                     using var founder = connection.CreateCommand();
