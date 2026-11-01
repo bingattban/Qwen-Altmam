@@ -98,9 +98,16 @@ async function main(){
   const dayHeaders=viewport.all().filter(x=>x.tag==="th" &&
     x.className.split(/\s+/).includes("day-column"));
   const numberOfDays=new Date(year,month,0).getDate();
-  assert.equal(dayHeaders.length,numberOfDays);
-  dayHeaders.forEach((head,i)=>assert.equal(parseInt(head.textContent,10),i+1,
-    "day columns must stay in actual chronological order"));
+  const firstVisible=today.getDate();
+  assert.equal(dayHeaders.length,Math.min(12,numberOfDays-firstVisible+1),
+    "the visible month is bounded to twelve day columns");
+  dayHeaders.forEach((head,i)=>assert.equal(parseInt(head.textContent,10),firstVisible+i,
+    "day-window columns must retain real chronological dates"));
+  const visibleQuery=calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1);
+  assert.equal(visibleQuery.payload.dayFrom,firstVisible);
+  assert.equal(visibleQuery.payload.dayTo,firstVisible+dayHeaders.length-1);
+  assert.ok(viewport.all().some(x=>x.className.includes("monthly-day-window-nav")),
+    "independent day navigation must remain outside the calendar scroller");
   const marked=dayHeaders.filter(x=>x.className.includes("current-day-column"));
   assert.equal(marked.length,1,"exactly one column marks today");
   assert.equal(parseInt(marked[0].textContent,10),today.getDate());
@@ -120,6 +127,10 @@ async function main(){
     "readable calendar headers preserve weekday/newline layout");
   assert.match(monthlyCss,/#appViewport\.monthly-dashboard \.monthly-scroll \.functional-table thead th\.pinned\s*\{/,
     "fixed identity headers keep strong contrast and color");
+  assert.match(monthlyCss,/#appViewport\.monthly-dashboard>\.monthly-grid-panel>\.monthly-day-window-nav\s*\{/,
+    "calendar window controls remain outside the scrolling table on 1366x768");
+  assert.match(monthlyCss,/@media\(max-width:1100px\)\{/,
+    "1024x768 calendar controls retain a compact responsive presentation");
   const activeCount=viewport.all().find(x=>x.textContent==="إجمالي القوة النشطة: 7");
   const monthCount=viewport.all().find(x=>x.textContent==="أفراد كشف الشهر الظاهرون: 1");
   assert.ok(activeCount&&monthCount,
@@ -202,7 +213,23 @@ async function main(){
   assert.equal(earlierCall.payload.page,1);
   const earlierDays=viewport.all().filter(x=>x.tag==="th"&&
     x.className.split(/\s+/).includes("day-column"));
-  assert.equal(earlierDays.length,new Date(oldYear,oldMonth,0).getDate());
+  assert.equal(earlierDays.length,Math.min(12,new Date(oldYear,oldMonth,0).getDate()));
+  earlierDays.forEach((head,i)=>assert.equal(parseInt(head.textContent,10),i+1));
+  assert.equal(earlierCall.payload.dayFrom,1);
+  assert.equal(earlierCall.payload.dayTo,earlierDays.length);
+
+  const dateNavigation=viewport.all().find(x=>x.className.includes("monthly-day-window-nav"));
+  const nextDays=dateNavigation.all().find(x=>x.tag==="button"&&x.textContent==="الأيام التالية");
+  assert.ok(nextDays&&!nextDays.disabled,"an archived month exposes later calendar days");
+  nextDays.handlers.click();await tick();await tick();
+  const shifted=calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1);
+  assert.equal(shifted.payload.dayFrom,13,"next month window fetches only days 13 onward");
+  assert.equal(shifted.payload.dayTo,Math.min(24,new Date(oldYear,oldMonth,0).getDate()));
+  const prevWindow=viewport.all().find(x=>x.tag==="button"&&x.textContent==="الأيام السابقة");
+  assert.ok(prevWindow&&!prevWindow.disabled);
+  prevWindow.handlers.click();await tick();await tick();
+  assert.equal(calls.filter(x=>x.action==="QueryMonthlyGrid").at(-1).payload.dayFrom,1,
+    "earlier calendar days remain reachable without month-wide DOM creation");
   assert.equal(earlierDays.filter(x=>x.className.includes("current-day-column")).length,0,
     "historic calendar must not mark a fake current day");
   const visiblePager=viewport.all().find(x=>x.className.includes("functional-pager"));

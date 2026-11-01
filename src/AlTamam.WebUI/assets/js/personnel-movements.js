@@ -111,7 +111,7 @@ async function transfer(host,external){
   });
   card.appendChild(previewButton);
 }
-async function archive(host,external){
+async function archive(host,mode){
  const card=el("section",undefined,"card"),bar=el("div",undefined,"functional-toolbar");
  const site=el("select"),search=el("input"),
     dateFrom=el("input"),dateTo=el("input"),result=el("div"),notice=el("div");
@@ -121,15 +121,18 @@ async function archive(host,external){
   site.setAttribute("aria-label","فلتر الموقع");
   site.appendChild(opt("","جميع المواقع"));
  search.type="search";search.placeholder="بحث بالاسم أو الرقم (ع)";
- const archiveType=external?"external":"internal";
- const title=external?"أرشيف النقل الخارجي":"أرشيف النقل الداخلي";
+ const archiveType=mode==="all"?"all":mode==="external"?"external":"internal";
+ const allMovements=archiveType==="all";
+ const title=allMovements?"سجل التنقلات والعودة":
+   archiveType==="external"?"أرشيف النقل الخارجي":"أرشيف النقل الداخلي";
  card.appendChild(el("h2",title,"section-title"));
- card.appendChild(el("p",external?
-   "يعرض النقل الخارجي فقط ويحتفظ بتاريخ كل فرد مستقلاً.":
+ card.appendChild(el("p",allMovements?
+   "سجل للقراءة فقط: النقل الداخلي والخارجي وحركات العودة المعتمدة من إضافة فرد. الفصل في أرشيف الفصل المستقل، ولا توجد استمارة عودة هنا.":
+   archiveType==="external"?"يعرض النقل الخارجي فقط ويحتفظ بتاريخ كل فرد مستقلاً.":
    "يعرض النقل الداخلي فقط مع الموقع السابق والوجهة والتاريخ.","section-description"));
  let page=1,archiveRequest=0;
  bar.append(site,dateFrom,dateTo,search,btn("بحث",()=>{page=1;load();}));
- bar.appendChild(btn("تصدير "+title+" إلى Excel",async()=>{
+ if(!allMovements)bar.appendChild(btn("تصدير "+title+" إلى Excel",async()=>{
    const payload={mode:"movementArchive",type:archiveType,
      term:search.value.trim(),siteId:site.value,
      dateFrom:dateFrom.value,dateTo:dateTo.value};
@@ -176,7 +179,7 @@ async function archive(host,external){
              ["نوع النقل",detail.type],
              ["الموقع السابق",detail.sourceSite],
              ["الجهة الجديدة",detail.destination],
-             ["تاريخ النقل",detail.date],
+             [detail.type==="عودة"?"تاريخ العودة":"تاريخ النقل",detail.date],
              ["وقت تسجيل العملية",detail.committedAtUtc],
              ["منفذ العملية",detail.actorUsername]
            ]},{title:"تفاصيل النقل المحفوظة في الأرشيف",
@@ -195,8 +198,9 @@ async function archive(host,external){
  }await load();
 }
 window.AltamamMovements=Object.freeze({render:(host,screen)=>
-  screen==="archiveInternal"?archive(host,false):
-  screen==="archiveExternal"?archive(host,true):
+  screen==="archiveInternal"?archive(host,"internal"):
+  screen==="archiveExternal"?archive(host,"external"):
+  screen==="archiveAll"?archive(host,"all"):
   screen==="transferInternal"?transfer(host,false):
   screen==="transferExternal"?transfer(host,true):
   host.appendChild(el("p","شاشة النقل غير معروفة.","admin-warning"))});

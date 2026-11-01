@@ -216,16 +216,17 @@
           term:query.value.trim(),siteId:sites.value,page,pageSize:100
         });
         if(request!==sequence||!root.isConnected)return;
-        const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","تاريخ الفصل","التفاصيل"]);
+        const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","تاريخ الفصل واليوم","سبب الفصل","التفاصيل"]);
         for(const entry of data.items||[]){
-          const tr=row(t.body,[entry.serviceNumberA,entry.name,entry.siteName,fullDate(entry.date)]);
+          const tr=row(t.body,[entry.serviceNumberA,entry.name,entry.siteName,
+            fullDate(entry.date),entry.reason]);
           const td=el("td");
           td.appendChild(button("عرض",()=>details(entry.movementId)));
           tr.appendChild(td);
         }
         if(!t.body.children.length){
           const tr=el("tr"),td=el("td","لا توجد حالات فصل مسجلة مطابقة.");
-          td.colSpan=5;tr.appendChild(td);t.body.appendChild(tr);
+          td.colSpan=6;tr.appendChild(td);t.body.appendChild(tr);
         }
         const paginator=el("div",undefined,"functional-pager");
         const prev=button("السابق",()=>{page--;load();});

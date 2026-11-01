@@ -72,10 +72,15 @@ async function main(){
   const headers=viewport.all().filter(x=>x.tag==="th");
   assert.ok(headers.length>5,"monthly roster has fixed columns and calendar days");
   const dayCount=new Date(year,month,0).getDate();
-  assert.equal(headers.length,4+dayCount,"four identity columns and all natural calendar days");
-  for(let day=1;day<=dayCount;day++)
-    assert.equal(Number.parseInt(String(headers[3+day].textContent),10),day,
-      "day cells preserve chronological month order");
+  const firstVisible=today.getDate();
+  const visibleCount=Math.min(12,dayCount-firstVisible+1);
+  assert.equal(headers.length,4+visibleCount,
+    "four identity columns and only the requested bounded calendar day window");
+  for(let index=0;index<visibleCount;index++)
+    assert.equal(Number.parseInt(String(headers[4+index].textContent),10),firstVisible+index,
+      "day cells preserve chronological order inside the visible window");
+  assert.ok(viewport.all().some(x=>x.className.includes("monthly-day-window-nav")),
+    "other days are reachable without requesting or painting the full month");
   assert.ok(viewport.all().some(x=>x.className.includes("functional-paged-area")),
     "pager lives in fixed table panel rather than below the whole screen");
   const monthPanel=viewport.all().find(x=>x.className.includes("monthly-grid-panel"));
