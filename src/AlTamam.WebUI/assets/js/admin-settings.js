@@ -192,12 +192,13 @@
       ["transferInternal","نقل داخلي"],
       ["transferExternal","نقل خارجي"],
       ["archiveInternal","أرشيف النقل الداخلي"],
-      ["archiveExternal","أرشيف النقل الخارجي"]
+      ["archiveExternal","أرشيف النقل الخارجي"],
+      ["archiveAll","سجل التنقلات والعودة"]
     ]
   });
   const nestedParents = Object.freeze({
     transferInternal:"transfers",transferExternal:"transfers",
-    archiveInternal:"transfers",archiveExternal:"transfers",
+    archiveInternal:"transfers",archiveExternal:"transfers",archiveAll:"transfers",
     separatePerson:"separation",separatedArchive:"separation"
   });
   function parentOf(screen) {
@@ -301,7 +302,7 @@
   function renderDetail(screen,sourceRoute=null) {
     if(screen==="attendance" && window.AltamamAttendance)
       return window.AltamamAttendance.render(target());
-    if(["transferInternal","transferExternal","archiveInternal","archiveExternal"].includes(screen) && window.AltamamMovements){
+    if(["transferInternal","transferExternal","archiveInternal","archiveExternal","archiveAll"].includes(screen) && window.AltamamMovements){
       const page=start("الإدارة / التنقلات");
       return window.AltamamMovements.render(page,screen);
     }
@@ -328,7 +329,7 @@
     const labels={
       attendance:"التمام",transferInternal:"النقل الداخلي",
       transferExternal:"النقل الخارجي",archiveInternal:"أرشيف النقل الداخلي",
-      archiveExternal:"أرشيف النقل الخارجي",personReport:"التقرير",
+      archiveExternal:"أرشيف النقل الخارجي",archiveAll:"سجل التنقلات والعودة",personReport:"التقرير",
       separatePerson:"فصل فرد",separatedArchive:"أرشيف الفصل",
       import:"استيراد Excel",export:"تصدير Excel",
       layout:"تعديل هيكل الكشف"

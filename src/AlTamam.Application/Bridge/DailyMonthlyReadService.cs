@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AlTamam.Domain.Policies;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Application.MonthlyGrid;
 using AlTamam.Application.Dashboard;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -293,7 +294,13 @@ public sealed class DailyMonthlyReadService
         int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, 100);
         var start = new DateOnly(year, month, 1);
         var next = start.AddMonths(1);
+        int firstDay=ReadInt(payload,"dayFrom",1);
+        int lastDay=ReadInt(payload,"dayTo",DateTime.DaysInMonth(year,month));
+        if(!MonthlyDayWindow.TryCreate(year,month,firstDay,lastDay,out var window))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "نطاق أيام الشهر غير صالح.");
         string startIso = Iso(start), nextIso = Iso(next), endIso = Iso(next.AddDays(-1));
+        string visibleFrom=Iso(window.From),visibleNext=Iso(window.UntilExclusive);
         // Current-month operational view follows today's active roster. Internal
         // transfers remain visible under their CURRENT site, including their
         // date-bound movement, while external exits/separations are excluded.
@@ -424,11 +431,13 @@ public sealed class DailyMonthlyReadService
                         ORDER BY h.ValidFromLocalDate DESC LIMIT 1),
                        ar.SiteNameSnapshot
                 FROM AttendanceRecords ar
-                WHERE ar.AttendanceLocalDate >= $start AND ar.AttendanceLocalDate < $next
+                WHERE ar.AttendanceLocalDate >= $visibleFrom
+                  AND ar.AttendanceLocalDate < $visibleNext
+                """ + MonthlyAttendanceCellPolicy.TemporalMembershipSql + """
                   AND ar.PersonId IN (
                 """ + string.Join(",", holders) + ") ORDER BY ar.AttendanceLocalDate;";
-            cells.Parameters.AddWithValue("$start", startIso);
-            cells.Parameters.AddWithValue("$next", nextIso);
+            cells.Parameters.AddWithValue("$visibleFrom", visibleFrom);
+            cells.Parameters.AddWithValue("$visibleNext", visibleNext);
             using var reader = await cells.ExecuteReaderAsync(ct).ConfigureAwait(false);
             while (await reader.ReadAsync(ct).ConfigureAwait(false))
             {
@@ -456,11 +465,11 @@ public sealed class DailyMonthlyReadService
                        COALESCE(DestinationSiteNameSnapshot,DestinationExternalName,''),
                        PersonNameSnapshot,ServiceNumberASnapshot
                 FROM PersonnelMovements
-                WHERE EffectiveLocalDate >= $start AND EffectiveLocalDate < $next
+                WHERE EffectiveLocalDate >= $visibleFrom AND EffectiveLocalDate < $visibleNext
                   AND PersonId IN (
                 """ + string.Join(",",holders) + ") ORDER BY EffectiveLocalDate;";
-            movements.Parameters.AddWithValue("$start",startIso);
-            movements.Parameters.AddWithValue("$next",nextIso);
+            movements.Parameters.AddWithValue("$visibleFrom",visibleFrom);
+            movements.Parameters.AddWithValue("$visibleNext",visibleNext);
             for(int i=0;i<people.Count;i++)
                 movements.Parameters.AddWithValue("$p"+i,people[i].Id);
             using var movementReader=await movements.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -512,6 +521,7 @@ public sealed class DailyMonthlyReadService
         {
             ["year"] = year, ["month"] = month,
             ["daysInMonth"] = DateTime.DaysInMonth(year, month),
+            ["dayFrom"]=window.FirstDay,["dayTo"]=window.LastDay,
             ["items"] = rows, ["total"] = total, ["page"] = page,
             ["hasNext"] = (long)page * pageSize < total
         });

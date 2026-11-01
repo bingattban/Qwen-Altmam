@@ -4,7 +4,8 @@
 (function () {
   const sections = new Set(["dashboard", "monthly", "admin", "settings"]);
   const STATE = { session: null, siteId: "", statusId: "", dayTerm: "", date: "", dayPage: 1,
-    monthPage: 1, monthPageSize: 100, monthTerm: "", chosenYear: null, chosenMonth: null, archivePeriods: [] };
+    monthPage: 1, monthPageSize: 100, monthTerm: "", chosenYear: null, chosenMonth: null, archivePeriods: [],
+    monthDayPeriod: "", monthDayStart: 1 };
   const ar = new Intl.DateTimeFormat("ar", { month: "long" });
   const weekday = new Intl.DateTimeFormat("ar", { weekday: "short" });
   const DAILY_PAGE_SIZE=100;
@@ -1154,10 +1155,21 @@
       }
       const isArchive=STATE.chosenYear!==null||STATE.chosenMonth!==null;
       const liveCurrent=period===current&&!isArchive;
+      // Bound both data transfer and DOM nodes to the visible twelve-day window.
+      // Row paging remains server-side; earlier/later dates stay reachable.
+      const dayCount=monthDays(year,month),dayWindowSize=12;
+      if(STATE.monthDayPeriod!==period){
+        STATE.monthDayPeriod=period;
+        STATE.monthDayStart=period===current
+          ?Math.min(now.getDate(),Math.max(1,dayCount-dayWindowSize+1)):1;
+      }
+      const visibleStart=Math.min(Math.max(1,STATE.monthDayStart),dayCount);
+      const visibleEnd=Math.min(dayCount,visibleStart+dayWindowSize-1);
       const [gridReply,forceReply]=await Promise.all([
         bridge().invoke("QueryMonthlyGrid",{
           year,month,siteId:STATE.siteId,term:STATE.monthTerm,
-          page:STATE.monthPage,pageSize:STATE.monthPageSize,archiveMode:isArchive
+          page:STATE.monthPage,pageSize:STATE.monthPageSize,archiveMode:isArchive,
+          dayFrom:visibleStart,dayTo:visibleEnd
         }),
         liveCurrent
           ? bridge().invoke("GetDashboardSummary",{
@@ -1183,7 +1195,6 @@
           el("span","","هذا سجل تاريخي للشهر المحدد، وليس عداد القوة النشطة اليوم.")
         );
       }
-      const dayCount=monthDays(year,month);
       const cols=[{label:"الرقم",cls:"pinned fixed-one"},
         {label:"الرقم (ع)",cls:"pinned fixed-two"},
         {label:"الاسم",cls:"pinned fixed-three"},
@@ -1191,7 +1202,7 @@
       const currentDay=period===current?now.getDate():null;
       // Always keep real calendar order. A highlighted current day is NOT sticky:
       // it scrolls naturally between earlier and later days.
-      const days=Array.from({length:dayCount},(_,i)=>i+1);
+      const days=Array.from({length:visibleEnd-visibleStart+1},(_,i)=>visibleStart+i);
       for(const day of days)cols.push({
         label:day+"\n"+weekdayLabel(year,month,day)+(day===currentDay?"\nاليوم":""),
         cls:day===currentDay?"day-column current-day-column":"day-column"
@@ -1199,6 +1210,22 @@
       const tb=createTable(cols);
       tb.wrap.classList.add("monthly-scroll");
       tableHost.replaceChildren(tb.wrap);
+      const dayNav=el("div","monthly-day-window-nav");
+      dayNav.setAttribute("role","group");
+      dayNav.setAttribute("aria-label","التنقل بين أيام الشهر");
+      const earlierDays=button("الأيام السابقة",()=>{
+        STATE.monthDayStart=Math.max(1,visibleStart-dayWindowSize);
+        void renderMonthly();
+      },"btn btn-outline");
+      const laterDays=button("الأيام التالية",()=>{
+        STATE.monthDayStart=Math.min(dayCount,visibleEnd+1);
+        void renderMonthly();
+      },"btn btn-outline");
+      earlierDays.disabled=visibleStart===1;
+      laterDays.disabled=visibleEnd===dayCount;
+      append(dayNav,earlierDays,el("span","","الأيام "+visibleStart+"–"+visibleEnd+
+        " من "+dayCount),laterDays);
+      tableHost.appendChild(dayNav);
       // The first four identity/site columns are sticky at the RIGHT edge.
       // Initial position: today's date immediately LEFT of the last pinned
       // identity/site column, without reordering the chronological dates.

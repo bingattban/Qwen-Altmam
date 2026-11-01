@@ -99,6 +99,34 @@ async function run(){
  assert.equal(archiveRequests.at(-1).payload.type,"external",
    "external archive MUST bind SQL type=external");
  assert.ok(externalRoot.all().some(x=>x.textContent==="أرشيف النقل الخارجي"));
+
+ // Return is read-only historical movement under Transfers, not a second Return form.
+ const earlierArchive=responses.QueryMovementArchive;
+ const earlierDetails=responses.GetMovementDetails;
+ responses.QueryMovementArchive={total:1,hasNext:false,items:[{
+   movementId:"MOV-RETURN",serviceNumberA:"002",name:"عاد للخدمة",type:"عودة",
+   sourceSite:"الموقع الأول",destination:"الموقع الثاني",date:"2026-10-27"
+ }]};
+ responses.GetMovementDetails={movementId:"MOV-RETURN",serviceNumberA:"002",
+   name:"عاد للخدمة",type:"عودة",sourceSite:"الموقع الأول",
+   destination:"الموقع الثاني",date:"2026-10-27",
+   committedAtUtc:"2026-10-27T08:00:00Z",actorUsername:"test-admin"};
+ const allHistory=new Element("div");
+ await ctx.window.AltamamMovements.render(allHistory,"archiveAll");
+ assert.equal(archiveRequests.at(-1).payload.type,"all",
+   "combined movement history must ask C# for Return alongside transfers");
+ assert.ok(allHistory.all().some(x=>x.textContent==="عودة"),
+   "a dated Return must have its own saved-history label");
+ assert.ok(!allHistory.all().some(x=>x.textContent==="معاينة النقل والتأكيد"),
+   "the combined archive cannot create another Return or Transfer operation");
+ const returnDetails=allHistory.all().find(x=>x.tag==="button"&&x.textContent==="تفاصيل");
+ await returnDetails.handlers.click();
+ assert.ok(detailReviews.at(-1).rows.some(([label,value])=>
+   label==="تاريخ العودة"&&value==="2026-10-27"),
+   "Return details retain their own effective date");
+ responses.QueryMovementArchive=earlierArchive;
+ responses.GetMovementDetails=earlierDetails;
+
  // A slow first archive query must not overwrite a newer site/date-filtered result.
  const raceRoot=new Element("div");
  deferredArchive=[];

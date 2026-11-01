@@ -2340,3 +2340,31 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
   border-radius:8px;color:var(--text-main);font-weight:700}
 .attendance-status-pill{display:inline-block;border:1px solid var(--border-color);
   border-radius:10px;padding:3px 9px}
+
+
+/* Phase 08: 12-day calendar window. The toolbar never scrolls away with
+   day cells; existing four sticky identity columns retain their colors. */
+#appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-day-window-nav{
+  flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  gap:10px;min-height:39px;padding:4px 10px;background:var(--bg-surface);
+  border-top:1px solid var(--border-color);font-size:13px;font-weight:700
+}
+#appViewport.monthly-dashboard .monthly-day-window-nav .btn{
+  min-height:29px;padding:4px 12px;font-size:13px
+}
+#appViewport.monthly-dashboard .monthly-day-window-nav .btn:disabled{
+  opacity:.45;cursor:not-allowed
+}
+@media(max-width:1100px){
+  #appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-day-window-nav{
+    min-height:36px;gap:6px;padding:3px 6px
+  }
+  #appViewport.monthly-dashboard .monthly-day-window-nav .btn{
+    min-height:28px;padding:3px 8px;font-size:12px
+  }
+}
+@media(max-width:760px){
+  #appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-day-window-nav{
+    justify-content:space-between;flex-wrap:wrap
+  }
+}

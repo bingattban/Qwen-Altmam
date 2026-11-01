@@ -131,6 +131,45 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         Assert.Equal("SITE-RETURN",Value("SELECT SiteId FROM PersonAssignments WHERE PersonId='TST-RETURN-EXT' AND ValidToLocalDate IS NULL"));
         Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId='TST-RETURN-EXT' AND MovementType=4"));
         Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_RETURN'"));
+
+        // The Return event belongs in the dated, read-only combined movement
+        // history, not the Internal or External Transfer-specific archives.
+        var archive=new PersonnelMovementService(_db);
+        var returns=Require(await archive.ArchiveAsync(new JsonObject
+        {
+            ["type"]="return",["siteId"]="SITE-RETURN",
+            ["page"]=1,["pageSize"]=10
+        },default));
+        Assert.Equal(1L,returns["total"]!.GetValue<long>());
+        var returnRow=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(returns["items"])));
+        Assert.Equal("عودة",returnRow["type"]!.GetValue<string>());
+        Assert.Equal(Today,returnRow["date"]!.GetValue<string>());
+        Assert.Equal("موقع العودة",returnRow["destination"]!.GetValue<string>());
+        var details=Require(await archive.DetailsAsync(new JsonObject
+        {
+            ["movementId"]=returnRow["movementId"]!.GetValue<string>()
+        },default));
+        Assert.Equal("عودة",details["type"]!.GetValue<string>());
+        Assert.Equal("TST-RETURN-EXT",details["personId"]!.GetValue<string>());
+
+        var combined=Require(await archive.ArchiveAsync(new JsonObject
+        {
+            ["type"]="all",["page"]=1,["pageSize"]=20
+        },default));
+        Assert.Equal(2L,combined["total"]!.GetValue<long>()); // prior exit + Return
+        var internalOnly=Require(await archive.ArchiveAsync(new JsonObject
+        {
+            ["type"]="internal",["page"]=1,["pageSize"]=20
+        },default));
+        Assert.Equal(0L,internalOnly["total"]!.GetValue<long>());
+        var externalOnly=Require(await archive.ArchiveAsync(new JsonObject
+        {
+            ["type"]="external",["page"]=1,["pageSize"]=20
+        },default));
+        Assert.Equal(1L,externalOnly["total"]!.GetValue<long>());
+        Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_RETURN'"));
+
         Assert.Equal(2L,Scalar("SELECT COUNT(*) FROM PersonIdentityHistory WHERE PersonId='TST-RETURN-EXT'"));
         Assert.Equal(ExitDay,Value("SELECT ValidToLocalDate FROM PersonAssignments WHERE AssignmentId='ASG-TST-RETURN-EXT'"));
         Assert.Equal(Today,Value("SELECT ValidToLocalDate FROM PersonIdentityHistory WHERE PersonId='TST-RETURN-EXT' ORDER BY HistoryId LIMIT 1"));

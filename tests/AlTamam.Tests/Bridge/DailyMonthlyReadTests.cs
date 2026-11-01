@@ -312,6 +312,95 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
         Assert.Equal(1L,Convert.ToInt64(await check.ExecuteScalarAsync()));
     }
 
+    [Theory]
+    [InlineData(2025,2,28)]
+    [InlineData(2024,2,29)]
+    [InlineData(2026,4,30)]
+    [InlineData(2026,10,31)]
+    public async Task Monthly_DayWindow_RespectsCalendarLengthsAndRejectsInvalidBounds(
+        int year,int month,int lastDay)
+    {
+        var read=new DailyMonthlyReadService(_db);
+        var valid=await read.MonthlyGridAsync(new JsonObject
+        {
+            ["year"]=year,["month"]=month,["dayFrom"]=lastDay,
+            ["dayTo"]=lastDay,["page"]=1,["pageSize"]=10,
+            ["archiveMode"]=true
+        },default);
+        Assert.True(valid.Success,valid.UserMessage);
+        var data=Assert.IsType<JsonObject>(valid.Data);
+        Assert.Equal(lastDay,data["daysInMonth"]!.GetValue<int>());
+        Assert.Equal(lastDay,data["dayFrom"]!.GetValue<int>());
+        Assert.Equal(lastDay,data["dayTo"]!.GetValue<int>());
+
+        var invalid=await read.MonthlyGridAsync(new JsonObject
+        {
+            ["year"]=year,["month"]=month,
+            ["dayFrom"]=lastDay,["dayTo"]=lastDay+1
+        },default);
+        Assert.False(invalid.Success);
+    }
+
+    [Fact]
+    public async Task Monthly_DestinationBeforeMembershipIsBlank_AndWindowDoesNotFetchOtherDays()
+    {
+        using(var connection=_db.CreateOpenConnection())
+        using(var cmd=connection.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,
+                    ActiveFlag,CreatedAtUtc,RowVersion)
+                VALUES('SITE-08-DEST','وجهة المرحلة 08','وجهة المرحلة 08',0,1,
+                    '2026-10-01T00:00:00Z',1);
+                UPDATE PersonAssignments SET ValidToLocalDate='2026-10-20'
+                    WHERE AssignmentId='TST-A-1';
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-A-08-DEST','TST-P-1','SITE-08-DEST','2026-10-20',
+                    NULL,'TST-M-08','2026-10-20T10:00:00Z');
+                INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
+                    ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                    DestinationSiteId,DestinationSiteNameSnapshot,EffectiveLocalDate,
+                    CommittedAtUtc,ActorUserId,IdempotencyKey)
+                VALUES('TST-M-08','TST-P-1','شخص اختباري','930001',1,
+                    'SITE-UNSPECIFIED','غير محدد','SITE-08-DEST','وجهة المرحلة 08',
+                    '2026-10-20','2026-10-20T10:00:00Z','TST-U','TST-M-08-KEY');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var read=new DailyMonthlyReadService(_db);
+        async Task<JsonObject> Month(string site,int first,int last)
+        {
+            var response=await read.MonthlyGridAsync(new JsonObject
+            {
+                ["year"]=2026,["month"]=10,["siteId"]=site,["archiveMode"]=true,
+                ["dayFrom"]=first,["dayTo"]=last,["page"]=1,["pageSize"]=10
+            },default);
+            Assert.True(response.Success,response.UserMessage);
+            return Assert.IsType<JsonObject>(Assert.Single(
+                Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(response.Data)["items"])));
+        }
+        var before=await Month("SITE-08-DEST",1,19);
+        Assert.Empty(Assert.IsType<JsonObject>(before["days"]));
+        var after=await Month("SITE-08-DEST",20,21);
+        var afterDays=Assert.IsType<JsonObject>(after["days"]);
+        Assert.Null(afterDays["2026-10-19"]);
+        Assert.Equal("نقل (د)",afterDays["2026-10-20"]!["symbol"]!.GetValue<string>());
+        Assert.Null(afterDays["2026-10-21"]); // attendance begins only when really saved
+
+        var origin=await Month("SITE-UNSPECIFIED",19,20);
+        var originalDays=Assert.IsType<JsonObject>(origin["days"]);
+        Assert.Equal("غياب",originalDays["2026-10-19"]!["name"]!.GetValue<string>());
+        Assert.Contains("تم نقله إلى",
+            originalDays["2026-10-20"]!["name"]!.GetValue<string>());
+        Assert.Equal("غياب",Assert.IsType<JsonObject>(
+            (await Month("",19,19))["days"])["2026-10-19"]!["name"]!.GetValue<string>());
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId='TST-P-1';";
+        Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+    }
+
     [Fact]
     public async Task Monthly_IsReadOnlyAndRetainsSavedDailySnapshot()
     {
