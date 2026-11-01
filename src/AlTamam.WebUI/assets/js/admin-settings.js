@@ -562,7 +562,7 @@
           String(item.reason||"").includes("هوية مؤرشفة")))
           summary.append(btn("معالجة هويات الأرشيف عبر إضافة فرد",()=>
             navigate("persons","AddPerson"),"btn btn-outline"));
-        const preview=btn("معاينة خطة الإضافة",async()=>{
+        const preview=btn(Number(report.newCount)>0?"معاينة خطة الإضافة":"معاينة اعتماد صفوف الرفض فقط",async()=>{
           preview.disabled=true;confirmBox.replaceChildren();previewToken="";
           try{
             const result=await api().invoke("PreviewImportPlan",{workbookToken});
@@ -597,9 +597,11 @@
               items:(plan.acceptedPreview||[]).map(p=>
                 [p.worksheet||"—",p.row||"—",p.name,p.serviceNumberA,p.siteName||"غير محدد"])};
             const accepted=await detailsReview(details,{
-              title:"معاينة خطة إضافة الأفراد",
-              message:"راجع الأسماء والأرقام (ع) والتعارضات قبل الاعتماد.",
-              confirmLabel:"تأكيد استيراد الأفراد الجدد"
+              title:Number(plan.newCount)>0?"معاينة خطة إضافة الأفراد":"معاينة أرشفة أخطاء الاستيراد",
+              message:Number(plan.newCount)>0?
+                "راجع الأسماء والأرقام (ع) والتعارضات قبل الاعتماد.":
+                "لن يُضاف أي فرد؛ يُحفظ فقط سجل الصفوف المرفوضة مع أسبابها لتتمكن من تصدير Excel.",
+              confirmLabel:Number(plan.newCount)>0?"تأكيد استيراد الأفراد الجدد":"تأكيد حفظ سجل الأخطاء"
             });
             if(!accepted){previewToken="";return;}
             const token=previewToken;
@@ -614,7 +616,9 @@
                 previewToken="";
                 analysis.replaceChildren();
                 confirmBox.replaceChildren(node("p","settings-success",
-                  "تم إنشاء "+done.data.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق."+
+                  (done.data.createdCount===0?
+                    "تم حفظ صفوف الرفض فقط دون إضافة أي فرد.":
+                    "تم إنشاء "+done.data.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق.")+
                   " معرف الدفعة: "+(done.data.importBatchId||"—")));
                 workbookToken="";
                 await loadHistory();
@@ -637,7 +641,8 @@
           examine.focus?.();
         },"btn btn-outline app-modal-close");
         analysis.replaceChildren(closeAnalysis,summary);
-        if(Number(report.newCount)>0)analysis.appendChild(preview);
+        if(Number(report.newCount)>0 || Number(report.issueCount)>0)
+          analysis.appendChild(preview);
         closeAnalysis.focus?.();
         status.replaceChildren(node("p","settings-success","اكتمل التحليل؛ راجع الصفوف قبل اعتماد الخطة."));
       }catch(e){errors(status,e);}
