@@ -17,7 +17,10 @@ public sealed record AutoAttendanceRunResult(
     int SkippedManualCount,
     int UnrecoverableMissedCount,
     string SummaryArabic,
-    bool IsCatchUpRun = false);
+    bool IsCatchUpRun = false,
+    int DefaultedCount = 0,
+    int FailedCount = 0,
+    bool HasDetailedCounts = false);
 
 /// <summary>
 /// Durable, database-authoritative implementation of the canonical 08:00 carry-forward rule
@@ -69,6 +72,11 @@ public sealed class AutoAttendanceService
             throw new BridgeProtocolException(BridgeErrorCodes.ClockRollbackSuspected,
                 "رُصد ارتداد في ساعة النظام؛ أُوقف التحضير التلقائي حتى تصحيح الساعة.");
 
+        // Calendar closures are made durable at startup/resume and at every scheduler tick.
+        // This is an in-process operation: no claim is made about app-closed execution.
+        await new DailyClosureService(_db, _time).CloseExpiredPeriodsAsync(ct)
+            .ConfigureAwait(false);
+
         // The configured 24-hour local schedule is read from persisted settings.
         // The 08:00 default remains only when no administrator value exists.
         // Owner policy: unattended recovery may reach yesterday only. Older missing
@@ -78,6 +86,9 @@ public sealed class AutoAttendanceService
 
         List<DateOnly> pending = EnumeratePendingDates(today, dayDue, catchUpDays,
             await GetLastCompletedBusinessDateAsync(ct).ConfigureAwait(false), out int unrecoverable);
+        // Months already archived at midnight never receive an unattended backfill,
+        // including when yesterday happens to be the final day of a prior month.
+        pending.RemoveAll(d => d < today && (d.Year != today.Year || d.Month != today.Month));
 
         var results = new List<AutoAttendanceRunResult>();
         foreach (DateOnly date in pending)
@@ -110,6 +121,28 @@ public sealed class AutoAttendanceService
         CancellationToken ct, AlTamam.Application.Bridge.BridgePrincipal? administrator = null)
     {
         string jobKey = JobKey(businessDate);
+        // Re-check the canonical ledger UNDER the database write transaction.
+        // An independent process can have committed after RunForDateAsync's fast read.
+        using (var prior = connection.CreateCommand())
+        {
+            prior.Transaction = tx;
+            prior.CommandText = """
+                SELECT JobKey,IsCatchUpRun,CopiedCount,SkippedNoYesterdayCount,
+                       SkippedTransferExemptCount,SummaryArabic,
+                       DefaultedCount,SkippedManualCount,FailedCount
+                FROM AutoAttendanceRuns WHERE BusinessDate=$date LIMIT 1;
+                """;
+            prior.Parameters.AddWithValue("$date", Iso(businessDate));
+            using var reader = await prior.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await reader.ReadAsync(ct).ConfigureAwait(false))
+                return new AutoAttendanceRunResult(reader.GetString(0), businessDate,
+                    true, false, reader.GetInt32(2), reader.GetInt32(3), reader.GetInt32(4),
+                    reader.IsDBNull(7) ? 0 : reader.GetInt32(7), 0,
+                    reader.GetString(5), reader.GetInt32(1) == 1,
+                    reader.IsDBNull(6) ? 0 : reader.GetInt32(6),
+                    reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
+                    !reader.IsDBNull(6));
+        }
         string source = administrator is null ? (isCatchUp ? "08h-catchup" : "08h-auto")
             : "08h-admin-catchup";
         DateTimeOffset startedUtc = _time.GetUtcNow();
@@ -125,19 +158,34 @@ public sealed class AutoAttendanceService
         }
         string dueLocal = Iso(businessDate) + "T" + configuredDue + ":00";
 
-            // Closed-date lock enforced by the database authority (DAY or MONTH closure).
+            // Monthly archives are immutable for scheduled execution. A daily
+            // midnight closure permits only the explicitly approved one-day
+            // automatic catch-up; it never permits a chained historic backfill.
             using (var closed = connection.CreateCommand())
             {
                 closed.Transaction = tx;
-                closed.CommandText = @"SELECT EXISTS(SELECT 1 FROM PeriodClosures
-                                        WHERE IsClosed = 1 AND PeriodKey IN ($day, $month));";
+                closed.CommandText = """
+                    SELECT PeriodType FROM PeriodClosures
+                    WHERE IsClosed=1 AND
+                      ((PeriodType='DAY' AND PeriodKey=$day)
+                        OR (PeriodType='MONTH' AND PeriodKey=$month));
+                    """;
                 closed.Parameters.AddWithValue("$day", Iso(businessDate));
                 closed.Parameters.AddWithValue("$month", businessDate.ToString("yyyy-MM", CultureInfo.InvariantCulture));
-                if (administrator is null && Convert.ToInt32(await closed.ExecuteScalarAsync(ct).ConfigureAwait(false)) == 1)
-                {
-                    return new AutoAttendanceRunResult(jobKey, businessDate, false, true, 0, 0, 0, 0, 0,
-                        $"التحضير التلقائي مرفوض: تاريخ الأعمال {Iso(businessDate)} مغلق إدارياً.");
-                }
+                bool dayClosed = false, monthClosed = false;
+                using (var reader = await closed.ExecuteReaderAsync(ct).ConfigureAwait(false))
+                    while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        if (reader.GetString(0) == "MONTH") monthClosed = true;
+                        else dayClosed = true;
+                    }
+                DateOnly today = DateOnly.FromDateTime(LocalNow());
+                bool approvedYesterdayCatchUp = administrator is null && isCatchUp
+                    && businessDate == today.AddDays(-1)
+                    && businessDate.Year == today.Year && businessDate.Month == today.Month;
+                if (administrator is null && (monthClosed || (dayClosed && !approvedYesterdayCatchUp)))
+                    return new AutoAttendanceRunResult(jobKey, businessDate, false, true,
+                        0, 0, 0, 0, 0, $"التحضير التلقائي مرفوض: تاريخ الأعمال {Iso(businessDate)} مغلق.");
             }
 
             // Resolve the administrator's active fallback StatusId inside the SAME
@@ -220,9 +268,11 @@ public sealed class AutoAttendanceService
             {
                 previous.Transaction = tx;
                 previous.CommandText = """
-                    SELECT PersonId, StatusId, StatusNameSnapshot,
-                           StatusSymbolSnapshot, StatusColorSnapshot
-                    FROM AttendanceRecords WHERE AttendanceLocalDate=$yday;
+                    SELECT ar.PersonId, ar.StatusId, ar.StatusNameSnapshot,
+                           ar.StatusSymbolSnapshot, ar.StatusColorSnapshot
+                    FROM AttendanceRecords ar
+                    JOIN AttendanceStatusDefinitions s ON s.StatusId=ar.StatusId AND s.ActiveFlag=1
+                    WHERE ar.AttendanceLocalDate=$yday;
                     """;
                 previous.Parameters.AddWithValue("$yday", Iso(businessDate.AddDays(-1)));
                 using var reader = await previous.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -329,8 +379,10 @@ public sealed class AutoAttendanceService
                 ledger.Transaction = tx;
                 ledger.CommandText = @"INSERT INTO AutoAttendanceRuns
                     (JobKey, BusinessDate, DueTimeLocal, StartedAtUtc, CompletedAtUtc, IsCatchUpRun,
-                     CopiedCount, SkippedNoYesterdayCount, SkippedTransferExemptCount, SummaryArabic)
-                    VALUES ($job, $date, $due, $start, $end, $catch, $copied, $noY, $transfer, $summary);";
+                     CopiedCount, SkippedNoYesterdayCount, SkippedTransferExemptCount, SummaryArabic,
+                     DefaultedCount, SkippedManualCount, FailedCount)
+                    VALUES ($job, $date, $due, $start, $end, $catch, $copied, $noY, $transfer, $summary,
+                            $defaulted, $manual, 0);";
                 ledger.Parameters.AddWithValue("$job", jobKey);
                 ledger.Parameters.AddWithValue("$date", Iso(businessDate));
                 ledger.Parameters.AddWithValue("$due", dueLocal);
@@ -341,11 +393,14 @@ public sealed class AutoAttendanceService
                 ledger.Parameters.AddWithValue("$noY", skipNoYesterday);
                 ledger.Parameters.AddWithValue("$transfer", skipTransfer);
                 ledger.Parameters.AddWithValue("$summary", summary);
+                ledger.Parameters.AddWithValue("$defaulted", defaulted);
+                ledger.Parameters.AddWithValue("$manual", skipManual);
                 await ledger.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
 
             return new AutoAttendanceRunResult(jobKey, businessDate, false, false,
-                copied, skipNoYesterday, skipTransfer, skipManual, 0, summary, isCatchUp);
+                copied, skipNoYesterday, skipTransfer, skipManual, 0, summary, isCatchUp,
+                defaulted, 0, true);
     }
 
     /// <summary>Reads the scheduling diagnostics: last ledger rows plus next scheduled due time.</summary>
@@ -362,7 +417,8 @@ public sealed class AutoAttendanceService
         using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = @"SELECT JobKey, BusinessDate, IsCatchUpRun, CopiedCount, SkippedNoYesterdayCount,
-                                       SkippedTransferExemptCount, SummaryArabic
+                                       SkippedTransferExemptCount, SummaryArabic,
+                                       DefaultedCount, SkippedManualCount, FailedCount
                                 FROM AutoAttendanceRuns ORDER BY BusinessDate DESC LIMIT $take;";
             cmd.Parameters.AddWithValue("$take", Math.Clamp(take, 1, 60));
             using SqliteDataReader reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -370,8 +426,12 @@ public sealed class AutoAttendanceService
             {
                 DateOnly d = DateOnly.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
                 runs.Add(new AutoAttendanceRunResult(reader.GetString(0), d, true, false,
-                    reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0,
-                    reader.GetString(6), reader.GetInt32(2) == 1));
+                    reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
+                    reader.IsDBNull(8) ? 0 : reader.GetInt32(8), 0,
+                    reader.GetString(6), reader.GetInt32(2) == 1,
+                    reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
+                    reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
+                    !reader.IsDBNull(7)));
             }
         }
 
@@ -434,7 +494,8 @@ public sealed class AutoAttendanceService
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = @"SELECT JobKey, BusinessDate, IsCatchUpRun, CopiedCount, SkippedNoYesterdayCount,
-                                   SkippedTransferExemptCount, SummaryArabic
+                                   SkippedTransferExemptCount, SummaryArabic,
+                                   DefaultedCount, SkippedManualCount, FailedCount
                             FROM AutoAttendanceRuns WHERE BusinessDate = $date
                             ORDER BY CASE WHEN JobKey=$job THEN 0 ELSE 1 END LIMIT 1;";
         cmd.Parameters.AddWithValue("$job", jobKey);
@@ -443,8 +504,12 @@ public sealed class AutoAttendanceService
         if (!await reader.ReadAsync(ct).ConfigureAwait(false)) return null;
         var date = DateOnly.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
         return new AutoAttendanceRunResult(reader.GetString(0), date, true, false,
-            reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), 0, 0,
-            reader.GetString(6), reader.GetInt32(2) == 1);
+            reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5),
+            reader.IsDBNull(8) ? 0 : reader.GetInt32(8), 0,
+            reader.GetString(6), reader.GetInt32(2) == 1,
+            reader.IsDBNull(7) ? 0 : reader.GetInt32(7),
+            reader.IsDBNull(9) ? 0 : reader.GetInt32(9),
+            !reader.IsDBNull(7));
     }
 
     private async Task<DateOnly?> GetLastCompletedBusinessDateAsync(CancellationToken ct)
