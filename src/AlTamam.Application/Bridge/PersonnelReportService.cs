@@ -345,7 +345,7 @@ public sealed class PersonnelReportService
         using var histories=conn.CreateCommand();
         histories.CommandText="""
             SELECT NameSnapshot,ServiceNumberASnapshot,ValidFromLocalDate,
-                   ValidToLocalDate,ChangedByUserId,Reason
+                   ValidToLocalDate,ChangedByUserId,Reason,RecordedAtUtc
             FROM PersonIdentityHistory WHERE PersonId=$id
             ORDER BY ValidFromLocalDate DESC,HistoryId DESC LIMIT $size OFFSET $offset;
             """;
@@ -359,7 +359,8 @@ public sealed class PersonnelReportService
                 {
                     ["name"]=r.GetString(0),["serviceNumberA"]=r.GetString(1),
                     ["from"]=r.GetString(2),["to"]=r.IsDBNull(3)?null:r.GetString(3),
-                    ["actorUserId"]=r.GetString(4),["reason"]=r.GetString(5)
+                    ["actorUserId"]=r.GetString(4),["reason"]=r.GetString(5),
+                    ["recordedAtUtc"]=r.GetString(6)
                 });
 
         using var movementCount=conn.CreateCommand();
@@ -532,7 +533,8 @@ public sealed class PersonnelReportService
                         AND (n.ValidToLocalDate IS NULL OR n.ValidToLocalDate>a.ValidFromLocalDate)
                       ORDER BY n.ValidFromLocalDate DESC LIMIT 1),
                       CASE WHEN a.SiteId='SITE-UNSPECIFIED' THEN 'غير محدد'
-                           ELSE 'غير موثق تاريخياً' END)
+                           ELSE 'غير موثق تاريخياً' END),
+                   a.CreatedAtUtc
             FROM PersonAssignments a WHERE a.PersonId=$id
             ORDER BY a.ValidFromLocalDate DESC,a.AssignmentId DESC
             LIMIT $size OFFSET $offset;
@@ -546,7 +548,8 @@ public sealed class PersonnelReportService
                 sites.Add(new JsonObject{
                     ["siteId"]=r.GetString(0),["from"]=r.GetString(1),
                     ["to"]=r.IsDBNull(2)?null:r.GetString(2),
-                    ["siteName"]=r.GetString(3)
+                    ["siteName"]=r.GetString(3),
+                    ["createdAtUtc"]=r.GetString(4)
                 });
         return BridgeHelpers.Ok(new JsonObject
         {

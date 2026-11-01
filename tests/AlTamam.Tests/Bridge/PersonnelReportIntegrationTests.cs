@@ -480,6 +480,73 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         Assert.Equal(123L,total);
     }
 
+
+    [Fact]
+    public async Task Phase09_FiftyDistinctPeopleAndThousandsOfEncryptedEvents_HaveExactTotals()
+    {
+        var selected=new List<string>{"TST-REPORT-1","TST-REPORT-2"};
+        using(var conn=_db.CreateOpenConnection())
+        using(var tx=conn.BeginTransaction())
+        {
+            using var cmd=conn.CreateCommand();
+            cmd.Transaction=tx;
+            cmd.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                    CurrentServiceNumberA,NormalizedServiceNumberA,
+                    FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES($person,$name,$name,$number,$number,'2026-01-01',
+                    '2026-01-01T08:00:00Z',1,1,1);
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                    ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES($assignment,$person,'SITE-UNSPECIFIED','2026-01-01',NULL,
+                    NULL,'2026-01-01T08:00:00Z');
+                WITH RECURSIVE days(day) AS (
+                    SELECT '2026-01-01'
+                    UNION ALL SELECT date(day,'+1 day') FROM days WHERE day<'2026-03-10'
+                )
+                INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
+                    StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                    AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                    Source,CreatedByUserId,CommittedAtUtc,IdempotencyKey)
+                SELECT $person,day,'STS-PRESENT','موجود','م','#38BDF8',
+                    $assignment,'SITE-UNSPECIFIED','غير محدد','manual','TEST',
+                    day||'T08:00:00Z',$person||':'||day FROM days;
+                """;
+            for(int i=3;i<=50;i++)
+            {
+                string person="TST-P09-"+i.ToString("D2");
+                selected.Add(person);
+                cmd.Parameters.Clear();
+                cmd.Parameters.AddWithValue("$person",person);
+                cmd.Parameters.AddWithValue("$assignment","TST-P09-ASSIGN-"+i.ToString("D2"));
+                cmd.Parameters.AddWithValue("$name","فرد تجريبي "+i);
+                cmd.Parameters.AddWithValue("$number",(960000+i).ToString());
+                await cmd.ExecuteNonQueryAsync();
+            }
+            tx.Commit();
+        }
+
+        var response=await new PersonnelReportService(_db).ReportAsync(new JsonObject
+        {
+            ["personIds"]=new JsonArray(selected.Select(id=>(JsonNode?)JsonValue.Create(id)).ToArray())
+        },CancellationToken.None);
+        Assert.True(response.Success,response.UserMessage);
+        var data=Assert.IsType<JsonObject>(response.Data);
+        Assert.Equal(50,data["personCount"]!.GetValue<int>());
+        Assert.Equal(48*69+3,data["attendanceTotal"]!.GetValue<long>());
+        var people=Assert.IsType<JsonArray>(data["persons"]);
+        Assert.Equal(50,people.Count);
+        Assert.Equal(50,people.Select(p=>p!["personId"]!.GetValue<string>()).Distinct().Count());
+        var dates=Assert.IsType<JsonArray>(data["dailyStatusTotals"]);
+        Assert.Equal(data["attendanceTotal"]!.GetValue<long>(),
+            dates.Sum(x=>x!["count"]!.GetValue<long>()));
+        Assert.All(dates,x=>Assert.Equal(x!["count"]!.GetValue<long>(),
+            x["personCount"]!.GetValue<long>()));
+        Assert.Contains(dates,x=>x!["date"]!.GetValue<string>()=="2026-01-16" &&
+            x["statusName"]!.GetValue<string>()=="موجود" &&
+            x["count"]!.GetValue<long>()==49);
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {

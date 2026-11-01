@@ -112,7 +112,8 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
     {
         XNamespace ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
         return row.Elements(ns+"c").Select(c=>
-            c.Element(ns+"is")?.Element(ns+"t")?.Value??"").ToArray();
+            c.Element(ns+"is")?.Element(ns+"t")?.Value??
+            c.Element(ns+"v")?.Value??"").ToArray();
     }
 
     [Fact]
@@ -139,7 +140,7 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
         Assert.True(System.IO.File.Exists(file));
         using(var zip=ZipFile.OpenRead(file))
         {
-            Assert.Equal(8,zip.Entries.Count(e=>e.FullName.StartsWith("xl/worksheets/sheet")&&
+            Assert.Equal(9,zip.Entries.Count(e=>e.FullName.StartsWith("xl/worksheets/sheet")&&
                 e.FullName.EndsWith(".xml")));
             var people=Rows(zip,1).Select(Text).ToArray();
             Assert.Equal(4,people.Length);
@@ -147,7 +148,7 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             Assert.Equal("2",people[2][0]);
             Assert.Equal("3333",people[1][1]);
             Assert.Equal("3333",people[2][1]);
-            Assert.All(Enumerable.Range(1,8),index=>{
+            Assert.All(Enumerable.Range(1,9),index=>{
                 foreach(var cell in Rows(zip,index).SelectMany(Text))
                 {
                     Assert.DoesNotContain("TST-XLSX-OLD",cell);
@@ -163,10 +164,27 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             Assert.Contains("موجود (1)",people[3][9]);
             var history=Rows(zip,2).Select(Text).ToArray();
             Assert.Equal(3,history.Length);
+            XNamespace spreadsheet="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            var dateCell=Rows(zip,2).Skip(1).First()
+                .Elements(spreadsheet+"c").ElementAt(3);
+            Assert.Equal("n",(string?)dateCell.Attribute("t"));
+            Assert.Equal("1",(string?)dateCell.Attribute("s"));
+            var dateSerial=double.Parse(dateCell.Element(spreadsheet+"v")!.Value,
+                System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Equal("2026-10-04",DateTime.FromOADate(dateSerial).ToString("yyyy-MM-dd"));
+            Assert.NotNull(zip.GetEntry("xl/styles.xml"));
             Assert.Equal("1",history[1][0]);
             Assert.Equal("2",history[2][0]);
             Assert.Equal("غياب",history[1][4]);
             Assert.Equal("موجود",history[2][4]);
+            var combined=Rows(zip,9).Select(Text).ToArray();
+            Assert.Equal(3,combined.Length);
+            Assert.Equal("تاريخ التحضير",combined[0][0]);
+            Assert.Equal("عدد الوقائع",combined[0][2]);
+            Assert.Equal(2,combined.Skip(1).Sum(row=>int.Parse(row[2])));
+            Assert.Equal(2,combined.Skip(1).Sum(row=>int.Parse(row[3])));
+            Assert.Contains(combined,row=>row.Contains("غياب"));
+            Assert.Contains(combined,row=>row.Contains("موجود"));
             var movements=Rows(zip,3).Select(Text).ToArray();
             Assert.Equal(4,movements.Length);
             Assert.All(movements.Skip(1),x=>Assert.Equal("1",x[0]));
@@ -244,6 +262,22 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
         Assert.False((await svc.ExportAsync(new JsonObject{
             ["mode"]="movementArchive",["type"]="both"
         },Actor,CancellationToken.None)).Success);
+    }
+
+
+    [Fact]
+    public async Task Phase09_ExportCancellationNeverLeavesPublishedOrPartialWorkbook()
+    {
+        var payload=new JsonObject{
+            ["mode"]="report",["exportId"]=Guid.NewGuid().ToString("N"),
+            ["personIds"]=new JsonArray("TST-XLSX-OLD","TST-XLSX-NEW")
+        };
+        using var canceled=new CancellationTokenSource();
+        canceled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>
+            new PersonnelExcelExportService(_db).ExportAsync(payload,Actor,canceled.Token));
+        Assert.Empty(Directory.GetFiles(_folder,"*.part"));
+        Assert.Empty(Directory.GetFiles(_folder,"*.xlsx"));
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;
