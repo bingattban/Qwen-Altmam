@@ -26,6 +26,18 @@ public sealed class Phase07CalendarClosureTests : IAsyncLifetime, IDisposable
         _db = new AlTamamDbContext(_path, SyntheticFixtures.TestKeyHex);
         await _db.InitializeAsync();
         using var c = _db.CreateOpenConnection();
+        // V001 seeds the clock watermark using wall time. Align the isolated
+        // synthetic fixture to its injected 2026-10-15 clock, without changing
+        // production clock-rollback protection or historic migrations.
+        using (var watermark = c.CreateCommand())
+        {
+            watermark.CommandText = """
+                UPDATE AppSettings SET SettingValue=$utc,UpdatedAtUtc=$utc
+                WHERE SettingKey='LastObservedUtcTimestamp';
+                """;
+            watermark.Parameters.AddWithValue("$utc", _time.GetUtcNow().ToString("O"));
+            await watermark.ExecuteNonQueryAsync();
+        }
         using var q = c.CreateCommand();
         q.CommandText = """
             INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,

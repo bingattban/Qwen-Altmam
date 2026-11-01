@@ -268,8 +268,8 @@ public sealed class AutoAttendanceService
             {
                 previous.Transaction = tx;
                 previous.CommandText = """
-                    SELECT PersonId, StatusId, StatusNameSnapshot,
-                           StatusSymbolSnapshot, StatusColorSnapshot
+                    SELECT ar.PersonId, ar.StatusId, ar.StatusNameSnapshot,
+                           ar.StatusSymbolSnapshot, ar.StatusColorSnapshot
                     FROM AttendanceRecords ar
                     JOIN AttendanceStatusDefinitions s ON s.StatusId=ar.StatusId AND s.ActiveFlag=1
                     WHERE ar.AttendanceLocalDate=$yday;
