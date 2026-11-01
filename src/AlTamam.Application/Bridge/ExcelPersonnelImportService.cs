@@ -105,10 +105,11 @@ public sealed class ExcelPersonnelImportService
         catch (System.Text.Json.JsonException) { return null; }
     }
 
-    private static List<PersonInput> Rows(JsonObject staged)
+    private static List<PersonInput> Rows(JsonObject staged,bool allowEmpty=false)
     {
         var items = staged["rows"] as JsonArray ?? throw new InvalidDataException("غياب بيانات المعاينة.");
-        if (items.Count is < 1 or > MaxRecords) throw new InvalidDataException("عدد صفوف الاستيراد غير آمن.");
+        if (items.Count > MaxRecords || (!allowEmpty && items.Count==0))
+            throw new InvalidDataException("عدد صفوف الاستيراد غير آمن.");
         return items.Select(n =>
         {
             var obj = n as JsonObject ?? throw new InvalidDataException("صف غير صالح.");
@@ -231,8 +232,8 @@ public sealed class ExcelPersonnelImportService
         var staged = await ReadStagedAsync(ticket, WorkbookOperation, actor, connection, null, ct).ConfigureAwait(false);
         if (staged is null) return Stale();
         var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
-        if (accepted.Count == 0)
-            return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد أسماء جديدة صالحة للاستيراد.");
+        if (accepted.Count == 0 && issues.Count == 0)
+            return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد بيانات تحليل قابلة للحفظ.");
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
         var similarNameMatches=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
         // Only approved, conflict-free new rows are carried forward to the signed, one-use plan.
@@ -277,7 +278,7 @@ public sealed class ExcelPersonnelImportService
             if (replay is not null) return replay;
             var plan = await ReadStagedAsync(token, PlanOperation, actor, connection, tx, ct).ConfigureAwait(false);
             if (plan is null) return Stale();
-            var rows = Rows(plan);
+            var rows = Rows(plan,allowEmpty:true);
             var (accepted, issues) = await InspectAsync(connection, tx, rows, ct).ConfigureAwait(false);
             if (issues.Count > 0 || accepted.Count != rows.Count)
                 return Stale();
