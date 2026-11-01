@@ -98,7 +98,7 @@ async function main(){
   const dayHeaders=viewport.all().filter(x=>x.tag==="th" &&
     x.className.split(/\s+/).includes("day-column"));
   const numberOfDays=new Date(year,month,0).getDate();
-  const firstVisible=Math.min(today.getDate(),Math.max(1,numberOfDays-12+1));
+  const firstVisible=today.getDate();
   assert.equal(dayHeaders.length,Math.min(12,numberOfDays-firstVisible+1),
     "the visible month is bounded to twelve day columns");
   dayHeaders.forEach((head,i)=>assert.equal(parseInt(head.textContent,10),firstVisible+i,

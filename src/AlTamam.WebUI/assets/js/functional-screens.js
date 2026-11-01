@@ -1160,8 +1160,9 @@
       const dayCount=monthDays(year,month),dayWindowSize=12;
       if(STATE.monthDayPeriod!==period){
         STATE.monthDayPeriod=period;
-        STATE.monthDayStart=period===current
-          ?Math.min(now.getDate(),Math.max(1,dayCount-dayWindowSize+1)):1;
+        // Keep today as the first day beside the frozen identity columns.
+        // Previous days remain available through the independent day navigator.
+        STATE.monthDayStart=period===current?now.getDate():1;
       }
       const visibleStart=Math.min(Math.max(1,STATE.monthDayStart),dayCount);
       const visibleEnd=Math.min(dayCount,visibleStart+dayWindowSize-1);

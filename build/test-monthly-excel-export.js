@@ -72,7 +72,7 @@ async function main(){
   const headers=viewport.all().filter(x=>x.tag==="th");
   assert.ok(headers.length>5,"monthly roster has fixed columns and calendar days");
   const dayCount=new Date(year,month,0).getDate();
-  const firstVisible=Math.min(today.getDate(),Math.max(1,dayCount-12+1));
+  const firstVisible=today.getDate();
   const visibleCount=Math.min(12,dayCount-firstVisible+1);
   assert.equal(headers.length,4+visibleCount,
     "four identity columns and only the requested bounded calendar day window");
