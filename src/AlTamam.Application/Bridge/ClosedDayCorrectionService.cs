@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using AlTamam.Application.Attendance.ClosedDayCorrections;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Contracts.Events;
 using AlTamam.Domain.Enums;
@@ -30,11 +31,9 @@ public sealed class ClosedDayCorrectionService
     }
     private static BridgeResponse Deny(string code, string message) => BridgeHelpers.Error(code, message);
     private bool Historical(string date) =>
-        DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out var parsed) &&
-        parsed < DateOnly.FromDateTime(_time.GetLocalNow().DateTime);
+        ClosedDayCorrectionEligibilityPolicy.IsHistorical(date,_time.GetLocalNow());
     private static bool CanCorrectClosedDay(BridgePrincipal actor) =>
-        actor.Role is UserRole.GeneralAdministration or UserRole.OrdinaryAdministration;
+        ClosedDayCorrectionEligibilityPolicy.AuthorizedRole(actor.Role);
     private static bool ValidReason(string reason) =>
         reason.Length is >= 10 and <= 400 && !reason.Any(char.IsControl);
 
@@ -90,6 +89,12 @@ public sealed class ClosedDayCorrectionService
                 AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate>$day)
             WHERE ar.PersonId=$person AND ar.AttendanceLocalDate=$day
               AND ar.StatusId<>$status
+              AND ar.AttendanceLocalDate>=p.FirstRecordedLocalDate
+              AND EXISTS(SELECT 1 FROM PersonAssignments a
+                  WHERE a.PersonId=ar.PersonId
+                    AND a.SiteId=ar.SiteIdAtEffectiveDate
+                    AND a.ValidFromLocalDate<=ar.AttendanceLocalDate
+                    AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate>ar.AttendanceLocalDate))
               AND NOT EXISTS(SELECT 1 FROM PersonnelMovements m
                   WHERE m.PersonId=ar.PersonId AND m.EffectiveLocalDate=$day);
             """;
