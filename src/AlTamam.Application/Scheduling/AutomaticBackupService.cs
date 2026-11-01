@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Application.Bridge;
+using AlTamam.Application.Backup;
+using AlTamam.Infrastructure.Backup;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 
@@ -54,6 +56,18 @@ public sealed class AutomaticBackupService
         return (enabled.Value,time);
     }
 
+    /// <summary>0 means preserve all existing backups; only explicit nonzero
+    /// operator retention allows pruning of registered automatic copies.</summary>
+    public async Task<int> ReadRetentionDaysAsync(CancellationToken ct=default)
+    {
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey='AutoBackupRetentionDays';";
+        string? saved=(await q.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
+        return int.TryParse(saved,NumberStyles.None,CultureInfo.InvariantCulture,out int days)
+            && AutoBackupRetentionPolicy.ValidDays(days)?days:0;
+    }
+
     public async Task<string?> LastSuccessfulDateAsync(CancellationToken ct=default)
     {
         using var c=_db.CreateOpenConnection();
@@ -87,6 +101,16 @@ public sealed class AutomaticBackupService
                 DateTimeStyles.None,out _))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "وقت النسخ التلقائي يجب أن يكون بصيغة 24 ساعة، مثل 16:00.");
+        int retentionDays=await ReadRetentionDaysAsync(ct).ConfigureAwait(false);
+        if(payload?["retentionDays"] is not null)
+        {
+            try{retentionDays=payload["retentionDays"]!.GetValue<int>();}
+            catch{return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "عدد أيام الاحتفاظ غير صالح (0 إلى 3650).");}
+        }
+        if(!AutoBackupRetentionPolicy.ValidDays(retentionDays))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "عدد أيام الاحتفاظ غير صالح (0 إلى 3650).");
         if(enabled)
         {
             string folder=await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
