@@ -759,6 +759,9 @@
   function weekdayLabel(y,m,d) { return weekday.format(new Date(y,m-1,d)); }
 
   async function renderMonthly() {
+    // Release the previous read-only month's lazy cell observer before replacing its DOM.
+    STATE.monthCellObserver?.disconnect();
+    STATE.monthCellObserver=null;
     const container=view();
     // Month roster owns the available desktop height, like the daily roster.
     // All calendar days and the fixed identity columns retain their order.
@@ -1221,8 +1224,30 @@
       };
       if(currentDay && typeof window.requestAnimationFrame==="function")
         window.requestAnimationFrame(revealCurrentDay);
-      for(const [index,person] of (grid.items||[]).entries()){
-        const tr=el("tr");
+      const monthRows=grid.items||[];
+      // Window PERSON rows on large pages, retaining real chronological day
+      // headers, stable sticky identity columns and fixed footer pagination.
+      // Browser-only virtualization falls back to the full DOM for tiny pages
+      // or accessibility/embedded hosts without usable scroll measurements.
+      const rowWindow=monthRows.length>40 && typeof tb.wrap.scrollTop==="number" &&
+        Number.isFinite(tb.wrap.clientHeight) && tb.wrap.clientHeight>=150;
+      const lazyCells=monthRows.length>24 &&
+        typeof window.IntersectionObserver==="function";
+      const pendingCells=new WeakMap();
+      let cellObserver=null;
+      if(lazyCells){
+        cellObserver=new window.IntersectionObserver(entries=>{
+          for(const entry of entries){
+            if(!entry.isIntersecting)continue;
+            const fill=pendingCells.get(entry.target);
+            if(fill){fill();pendingCells.delete(entry.target);}
+            cellObserver.unobserve(entry.target);
+          }
+        },{root:tb.wrap,rootMargin:"100px 180px",threshold:0});
+        STATE.monthCellObserver=cellObserver;
+      }
+      function personRow(index){
+        const person=monthRows[index],tr=el("tr","monthly-virtual-row");
         [(STATE.monthPage-1)*STATE.monthPageSize+index+1,person.serviceNumberA,person.name,person.siteName]
           .forEach((v,j)=>{
             const td=el("td","pinned fixed-"+["one","two","three","four"][j],v);
@@ -1234,8 +1259,10 @@
           const info=(person.days||{})[date];
           const cell=el("td",day===currentDay?
             "day-cell current-day-column":"day-cell");
-          cell.title=info?(info.name+(info.movementNote?" — "+info.movementNote:"")):"لا يوجد تحضير مسجل";
-          if(info){
+          cell.title=info?(info.name+(info.movementNote?" — "+info.movementNote:"")):
+            "لا يوجد تحضير مسجل";
+          const fillCell=()=>{
+            if(!info)return;
             const movementMark=info.movementKind==="return"?" ↩":
               info.movementKind==="internal-transfer"?" ↔":
               info.movementKind==="external-transfer"?" ↗":
@@ -1244,18 +1271,61 @@
               ()=>showCellDetails(person.personId,date),"monthly-day-detail");
             open.setAttribute("aria-label","عرض تفاصيل "+person.name+" في "+date);
             cell.appendChild(open);
-          }
-          if(info && /^#[0-9a-fA-F]{6}$/.test(info.color||"")){
-            cell.style.backgroundColor=info.color;
-            // Choose contrasting ink over colored status backgrounds.
-            const rgb=[1,3,5].map(i=>parseInt(info.color.slice(i,i+2),16)/255)
-              .map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);
-            const brightness=rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
-            cell.style.color=brightness>0.179?"#000000":"#FFFFFF";
-          }
+            if(/^#[0-9a-fA-F]{6}$/.test(info.color||"")){
+              cell.style.backgroundColor=info.color;
+              const rgb=[1,3,5].map(i=>parseInt(info.color.slice(i,i+2),16)/255)
+                .map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);
+              const brightness=rgb[0]*0.2126+rgb[1]*0.7152+rgb[2]*0.0722;
+              cell.style.color=brightness>0.179?"#000000":"#FFFFFF";
+            }
+          };
+          if(lazyCells&&info){
+            pendingCells.set(cell,fillCell);
+            cellObserver.observe(cell);
+          }else fillCell();
           tr.appendChild(cell);
         }
-        tb.body.appendChild(tr);
+        return tr;
+      }
+      if(rowWindow){
+        tb.wrap.classList.add("monthly-virtualized");
+        const rowHeight=64,overscan=6;
+        let currentStart=-1,currentEnd=-1;
+        const spacer=height=>{
+          const tr=el("tr","monthly-virtual-spacer");
+          const td=el("td","monthly-virtual-spacer-cell");
+          td.colSpan=cols.length;
+          td.style.height=height+"px";
+          tr.appendChild(td);
+          return tr;
+        };
+        const paintWindow=()=>{
+          if(STATE.monthEpoch!==epoch||!tb.wrap.isConnected)return;
+          const visible=Math.ceil(tb.wrap.clientHeight/rowHeight)+2*overscan;
+          const start=Math.min(Math.max(0,monthRows.length-visible),
+            Math.max(0,Math.floor(tb.wrap.scrollTop/rowHeight)-overscan));
+          const end=Math.min(monthRows.length,start+visible);
+          if(start===currentStart&&end===currentEnd)return;
+          currentStart=start;currentEnd=end;
+          cellObserver?.disconnect();
+          const subset=[];
+          if(start>0)subset.push(spacer(start*rowHeight));
+          for(let n=start;n<end;n++)subset.push(personRow(n));
+          if(end<monthRows.length)subset.push(spacer((monthRows.length-end)*rowHeight));
+          tb.body.replaceChildren(...subset);
+        };
+        let scrollScheduled=false;
+        tb.wrap.addEventListener("scroll",()=>{
+          if(scrollScheduled)return;
+          scrollScheduled=true;
+          window.requestAnimationFrame(()=>{
+            scrollScheduled=false;
+            paintWindow();
+          });
+        },{passive:true});
+        paintWindow();
+      }else{
+        for(let n=0;n<monthRows.length;n++)tb.body.appendChild(personRow(n));
       }
       if(!(grid.items||[]).length)tableHost.replaceChildren(message(
         STATE.monthTerm?"لا يوجد فرد مطابق للبحث في هذا الشهر والموقع":

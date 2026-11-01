@@ -1,5 +1,6 @@
 "use strict";
 const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
+let simulatedViewportWidth=1180;
 class El{
   constructor(tag){this.tag=tag;this.children=[];this.handlers={};this.attrs={};
     this.className="";this.textContent="";this.style={};this.value="";this.hidden=false;
@@ -8,8 +9,11 @@ class El{
     toggle:(name,on)=>{const parts=this.className.split(/\s+/).filter(Boolean).filter(x=>x!==name);
       if(on)parts.push(name);this.className=parts.join(" ");}};}
   get tBodies(){return this.children.filter(x=>x.tag==="tbody");}
+  get clientHeight(){return this.className.includes("monthly-scroll")?480:0;}
+  get scrollTop(){return this._scrollTop||0;}
+  set scrollTop(value){this._scrollTop=value;}
   getBoundingClientRect(){
-    if(this.className.includes("monthly-scroll"))return{left:0,right:1180,width:1180};
+    if(this.className.includes("monthly-scroll"))return{left:0,right:simulatedViewportWidth,width:simulatedViewportWidth};
     if(this.className.includes("pinned"))return{left:0,right:0,width:120};
     if(this.className.includes("current-day-column"))return{left:140,right:200,width:60};
     return{left:0,right:60,width:60};
@@ -36,7 +40,15 @@ class El{
 }
 const viewport=new El("main"),logoutAction=new El("button"),sidebar=new El("aside"),
   badge=new El("span"),events={},calls=[];
-let deferCellDetails=false,resolveCellDetails=null;
+let deferCellDetails=false,resolveCellDetails=null,largeMonth=false;
+const observers=[];
+class TestIntersectionObserver{
+  constructor(callback){this.callback=callback;this.nodes=new Set();observers.push(this);}
+  observe(node){this.nodes.add(node);}
+  unobserve(node){this.nodes.delete(node);}
+  disconnect(){this.nodes.clear();}
+  reveal(node){this.callback([{target:node,isIntersecting:true}]);}
+}
 const today=new Date(),year=today.getFullYear(),month=today.getMonth()+1;
 const firstDay=year+"-"+String(month).padStart(2,"0")+"-01";
 const older=new Date(year,month-2,1),oldYear=older.getFullYear(),
@@ -51,6 +63,15 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
     if(action==="GetDashboardSummary")return{data:{totalForce:7}};
     if(action==="QueryMonthlyGrid"){
       const chosen=payload.year+"-"+String(payload.month).padStart(2,"0")+"-01";
+      if(largeMonth){
+        const rows=Array.from({length:100},(_,index)=>({
+          personId:"TST-VIRTUAL-"+index,
+          serviceNumberA:String(10000+index),
+          name:"فرد في نافذة التمرير "+index,siteName:"غير محدد",
+          days:{[chosen]:{symbol:"غ",name:"غياب",color:"#EF4444"}}
+        }));
+        return {data:{total:100,page:payload.page,items:rows}};
+      }
       return{data:{total:1,page:payload.page,items:[
         {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
          days:{[chosen]:{symbol:"غ",name:"غياب",color:"#EF4444"},
@@ -76,7 +97,7 @@ const document={activeElement:null,createElement:tag=>new El(tag),
   querySelector:selector=>selector===".app-sidebar"?sidebar:null,
   addEventListener:(name,fn)=>{events[name]=fn;}};
 const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
-  requestAnimationFrame:fn=>fn()},
+  requestAnimationFrame:fn=>fn(),IntersectionObserver:TestIntersectionObserver},
   document,location:{hash:"#monthly"},history:{replaceState:()=>{}},Date,Intl,console};
 vm.runInNewContext(fs.readFileSync(path.join(__dirname,
   "../src/AlTamam.WebUI/assets/js/functional-screens.js"),"utf8"),context);
@@ -235,6 +256,49 @@ async function main(){
   assert.equal(calls.filter(x=>!["GetCurrentSession","QuerySites","GetAvailableArchivePeriods",
     "QueryMonthlyGrid","GetMonthlyCellDetails","GetDashboardSummary"].includes(x.action)).length,0,
     "read-only navigation must never commit attendance or modify history");
+  // Large monthly pages must mount only the visible PERSON window, with
+  // sparse day-cell buttons materialized when a day is onscreen.
+  const resetSize=viewport.all().find(x=>x.tag==="select"&&
+    x.attrs["aria-label"]==="عدد الأفراد في الصفحة");
+  resetSize.value="100";resetSize.handlers.change();await tick();await tick();
+  largeMonth=true;
+  const refresh=viewport.all().find(x=>x.tag==="button"&&x.textContent==="تحديث");
+  await refresh.handlers.click();await tick();await tick();
+  const bigScroller=viewport.all().find(x=>x.className.includes("monthly-scroll"));
+  assert.ok(bigScroller.className.includes("monthly-virtualized"),
+    "100-row month activates vertical windowing");
+  const mountedRows=()=>bigScroller.all().filter(x=>x.tag==="tr"&&
+    x.className.includes("monthly-virtual-row"));
+  assert.ok(mountedRows().length>0&&mountedRows().length<100,
+    "only a bounded number of monthly rows is in the DOM");
+  assert.ok(bigScroller.all().some(x=>x.className.includes("monthly-virtual-spacer")),
+    "spacer rows retain full virtual scroll height and day-column alignment");
+  const dayWithStatus=bigScroller.all().find(x=>x.tag==="td"&&x.className.includes("day-cell")&&
+    x.title==="غياب");
+  assert.ok(dayWithStatus,"virtual day has immutable title before content is materialized");
+  assert.equal(dayWithStatus.all().filter(x=>x.tag==="button").length,0,
+    "offscreen day status content is lazily virtualized");
+  observers.at(-1).reveal(dayWithStatus);
+  assert.equal(dayWithStatus.all().filter(x=>x.tag==="button").length,1,
+    "the intersecting day becomes keyboard-operable without changing its status");
+  const initialTop=mountedRows()[0].children[0].textContent;
+  bigScroller.scrollTop=3200;bigScroller.handlers.scroll();await tick();
+  assert.ok(mountedRows().length<100,"scrolling retains a bounded rendered row window");
+  assert.notEqual(mountedRows()[0].children[0].textContent,initialTop,
+    "the visible row window advances after vertical scroll");
+  assert.equal(viewport.all().filter(x=>x.tag==="th"&&
+    x.className.includes("day-column")).length,numberOfDays,
+    "all real chronological day headers remain available during virtualization");
+  for(const width of [1024,1366]){
+    simulatedViewportWidth=width;
+    const reload=viewport.all().find(x=>x.tag==="button"&&x.textContent==="تحديث");
+    await reload.handlers.click();await tick();await tick();
+    const resized=viewport.all().find(x=>x.className.includes("monthly-scroll"));
+    assert.ok(resized.lastScroll&&Number.isFinite(resized.lastScroll.left),
+      "current day must align beside frozen columns at "+width+"px without changing chronological order");
+    assert.ok(resized.all().some(x=>x.className.includes("monthly-virtual-row")),
+      "row virtualization must survive the "+width+"px viewport");
+  }
   console.log("MONTHLY CELL DETAILS UI PASS: date-bound click, saved snapshot and revision, close, read-only");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

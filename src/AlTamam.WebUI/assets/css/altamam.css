@@ -1287,6 +1287,17 @@ body{min-width:0}
   min-height:28px;padding:3px 5px;font-size:14px;
   font-weight:800;line-height:1.25
 }
+/* Phase 08: virtual row windows keep a fixed estimated height and table width.
+   Day cells are populated on intersection; real calendar headings stay intact. */
+#appViewport.monthly-dashboard .monthly-scroll.monthly-virtualized .functional-table tbody tr.monthly-virtual-row{
+  height:64px
+}
+#appViewport.monthly-dashboard .monthly-scroll.monthly-virtualized .functional-table tbody tr.monthly-virtual-spacer{
+  height:auto
+}
+#appViewport.monthly-dashboard .monthly-scroll.monthly-virtualized .functional-table tbody tr.monthly-virtual-spacer td{
+  padding:0;border:0;line-height:0;pointer-events:none
+}
 #appViewport.monthly-dashboard .monthly-scroll td.current-day-column .monthly-day-detail{
   font-size:16px;font-weight:900
 }

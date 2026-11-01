@@ -224,6 +224,71 @@ public sealed class ArchivedIdentityReturnIntegrationTests : IAsyncLifetime, IDi
         Assert.Equal(1L,Scalar("SELECT COUNT(*) FROM PersonnelMovements WHERE PersonId='TST-RETURN-EXT' AND MovementType=4"));
     }
 
+    private sealed class OnDateClock(DateTimeOffset date) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => date;
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+    }
+
+    [Fact]
+    public async Task DismissedReturnInLaterMonth_LeavesGapBlankAndOldExitInOriginalArchive()
+    {
+        var originalExit = DateOnly.Parse(ExitDay);
+        var returnDate = new DateOnly(originalExit.Year, originalExit.Month, 1)
+            .AddMonths(2).AddDays(9);
+        var clock = new OnDateClock(new DateTimeOffset(
+            returnDate.Year, returnDate.Month, returnDate.Day, 12, 0, 0, TimeSpan.Zero));
+        var restore = new ArchivedReturnService(_db, clock);
+        var preview = Require(await restore.PreviewAsync(
+            Input("شخص سابق مفصول", "5151"), Actor, default));
+        var created = Require(await restore.CommitReturnAsync(new JsonObject
+        {
+            ["previewToken"] = preview["previewToken"]!.GetValue<string>(),
+            ["personId"] = "TST-RETURN-SEP", ["decision"] = "same"
+        }, Actor, default));
+        Assert.True(created["returned"]!.GetValue<bool>());
+        var newDate = returnDate.ToString("yyyy-MM-dd");
+        Assert.Equal(newDate, Value("""
+            SELECT EffectiveLocalDate FROM PersonnelMovements
+            WHERE PersonId='TST-RETURN-SEP' AND MovementType=4;
+            """));
+        Assert.Equal(1L, Scalar("""
+            SELECT COUNT(*) FROM PersonAssignments WHERE PersonId='TST-RETURN-SEP'
+            AND ValidToLocalDate IS NULL;
+            """));
+
+        var monthBeforeReturn = returnDate.AddMonths(-1);
+        var grid = new DailyMonthlyReadService(_db);
+        var gap = Require(await grid.MonthlyGridAsync(new JsonObject
+        {
+            ["year"] = monthBeforeReturn.Year, ["month"] = monthBeforeReturn.Month,
+            ["archiveMode"] = true, ["page"] = 1
+        }, default));
+        Assert.Empty(Assert.IsType<JsonArray>(gap["items"]));
+
+        var later = Require(await grid.MonthlyGridAsync(new JsonObject
+        {
+            ["year"] = returnDate.Year, ["month"] = returnDate.Month,
+            ["siteId"] = "SITE-RETURN", ["archiveMode"] = true, ["page"] = 1
+        }, default));
+        var returned = Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(later["items"])));
+        var days = Assert.IsType<JsonObject>(returned["days"]);
+        Assert.Null(days[new DateOnly(returnDate.Year, returnDate.Month, 1)
+            .ToString("yyyy-MM-dd")]);
+        Assert.Equal("return", days[newDate]!["kind"]!.GetValue<string>());
+
+        var archived = Require(await grid.MonthlyGridAsync(new JsonObject
+        {
+            ["year"] = originalExit.Year, ["month"] = originalExit.Month,
+            ["siteId"] = "SITE-UNSPECIFIED", ["archiveMode"] = true, ["page"] = 1
+        }, default));
+        var old = Assert.Single(Assert.IsType<JsonArray>(archived["items"]).OfType<JsonObject>(),
+            p => p["personId"]!.GetValue<string>() == "TST-RETURN-SEP");
+        Assert.Equal("separation",
+            old["days"]![ExitDay]!["kind"]!.GetValue<string>());
+    }
+
     [Fact]
     public async Task SeparationReturn_WithNewNumber_KeepsOldPeriodAndChangesIdentityOnlyFromToday()
     {
