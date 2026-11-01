@@ -1875,17 +1875,19 @@
           {page:pageNumber,pageSize:50});
         if(request!==historySerial||historyPanel.hidden||state.active!=="log")return;
         const data=reply.data||{};
-        const revised=table(["رقم القيد","الإصدار","العملية","الوصف الأصلي",
-          "الوصف بعد التعديل","الحالة","السبب","المنفّذ وقت الحدث","التاريخ"]);
+        const revised=table(["رقم القيد","الإصدار","العملية","الوصف قبل التعديل",
+          "الوصف بعد التعديل","الحالة السابقة","الحالة الجديدة","السبب",
+          "المنفّذ وقت الحدث","التاريخ"]);
         for(const item of data.items||[])
           addRow(revised.body,[item.auditEventId,item.overlayVersion,
-            item.operationCode,item.rawDescription,
-            item.correctedDescription||item.rawDescription,
-            item.isTombstoned?"مخفي ظاهرياً":"معدل",
+            item.operationCode,item.beforeState?.displayDescription||item.rawDescription,
+            item.afterState?.displayDescription||item.correctedDescription||item.rawDescription,
+            item.beforeState?.isTombstoned?"مخفي":"ظاهر",
+            item.afterState?.isTombstoned?"مخفي":"ظاهر",
             item.reason,item.editedByDisplay,item.editedAtUtc],
             "عرض القيد الأصلي وكل التعديلات",
             ()=>showAuditDetails(item.auditEventId));
-        empty(revised.body,9,"لا توجد قيود معدلة أو مخفية.");
+        empty(revised.body,10,"لا توجد قيود معدلة أو مخفية.");
         const nav=node("div","functional-pager");
         const prev=btn("السابق",()=>void loadEdits(pageNumber-1)),
           next=btn("التالي",()=>void loadEdits(pageNumber+1));
@@ -2022,7 +2024,11 @@
               "الإصدار "+entry.overlayVersion+" — "+
               (entry.isTombstoned?"إخفاء":"تعديل ظاهر")+
               " — "+entry.editedByDisplay+" — "+entry.editedAtUtc+
-              " — السبب: "+entry.reason));
+              " — السبب: "+entry.reason+
+              " — قبل: "+(entry.beforeState?.isTombstoned?"مخفي":"ظاهر")+
+              " ("+(entry.beforeState?.displayDescription||item.rawDescription)+")"+
+              " — بعد: "+(entry.afterState?.isTombstoned?"مخفي":"ظاهر")+
+              " ("+(entry.afterState?.displayDescription||item.rawDescription)+")"));
           }
           content.appendChild(history);
         }
