@@ -127,7 +127,7 @@ public sealed class FullDataResetService
             ["backupFileNamesTruncated"]=backups>30,
             ["countdownSeconds"]=5,
             ["requiredConfirmation"]=Phrase,
-            ["warning"]="سيُحذف جميع الأفراد والتحضير والحسابات والسجلات والعمليات نهائياً، وتعود شاشة التهيئة الأولى. العملية غير قابلة للتراجع."
+            ["warning"]="سيُحذف الأفراد والتحضير والحسابات والسجلات والعمليات من قاعدة البيانات الحالية، وتعود شاشة التهيئة الأولى. لن يبدأ التصفير دون نسخة إنقاذ مشفرة، ولن تُحذف النسخ الخارجية المستقلة."
         });
     }
 
@@ -317,26 +317,39 @@ public sealed class FullDataResetService
         // Never remove unrelated files: delete ONLY named files in the verified
         // backup registry whose hash still matches; report any unsafe/failed cleanup.
         int removed=0;int retained=0;
+        string internalFolder=Path.Combine(Path.GetDirectoryName(
+            Path.GetFullPath(_db.DatabasePath))!,"backups");
         foreach(var backup in backups)
         {
             try
             {
-                string name=Path.GetFileName(backup.Path);
+                string fullPath=Path.GetFullPath(backup.Path);
+                // Independently saved external backups are NEVER part of
+                // application-local reset cleanup even after explicit reset.
+                if(!string.Equals(Path.GetDirectoryName(fullPath),internalFolder,
+                     StringComparison.OrdinalIgnoreCase) ||
+                   !Directory.Exists(internalFolder) ||
+                   (File.GetAttributes(internalFolder)&FileAttributes.ReparsePoint)!=0)
+                {retained++;continue;}
+                string name=Path.GetFileName(fullPath);
                 if(!name.StartsWith("AlTamam-",StringComparison.Ordinal)
                    || !name.EndsWith(".dbbackup",StringComparison.OrdinalIgnoreCase)
                    || !name.Contains("-BKP-",StringComparison.Ordinal)) {retained++;continue;}
-                if(!File.Exists(backup.Path))continue;
-                using var stream=File.OpenRead(backup.Path);
+                if(!File.Exists(fullPath))continue;
+                if((File.GetAttributes(fullPath)&FileAttributes.ReparsePoint)!=0)
+                {retained++;continue;}
+                using var stream=File.OpenRead(fullPath);
                 string hash=Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
                 if(!string.Equals(hash,backup.Sha256,StringComparison.OrdinalIgnoreCase)){retained++;continue;}
-                stream.Close();File.Delete(backup.Path);removed++;
+                stream.Close();File.Delete(fullPath);removed++;
             }
             catch(IOException){retained++;}
             catch(UnauthorizedAccessException){retained++;}
+            catch(ArgumentException){retained++;}
         }
         return BridgeHelpers.Ok(new JsonObject{
             ["reset"]=true,["requiresFirstSetup"]=true,["backupsDeleted"]=removed,
-            ["backupFilesNotDeleted"]=retained
+            ["backupFilesNotDeleted"]=retained,["rescueFilePath"]=rescuePath
         });
     }
 
