@@ -10,17 +10,19 @@ namespace AlTamam.Application.Imports;
 /// </summary>
 internal static class ImportNameCollisionHints
 {
-    internal static async Task<JsonArray> QueryAsync(SqliteConnection connection,
+    internal sealed record Result(JsonArray Items,int Total);
+    internal static async Task<Result> QueryAsync(SqliteConnection connection,
         JsonArray accepted,CancellationToken ct)
     {
         var hints=new JsonArray();
+        int total=0;
         using var lookup=connection.CreateCommand();
         lookup.CommandText="""
             SELECT PersonId,CurrentVisibleName,CurrentServiceNumberA,ActiveFlag
             FROM Persons
             WHERE NormalizedName=$name
             ORDER BY ActiveFlag DESC,PersonId
-            LIMIT 6;
+            LIMIT 4;
             """;
         var nameParameter=lookup.Parameters.Add("$name",SqliteType.Text);
         foreach(var node in accepted)
@@ -38,6 +40,8 @@ internal static class ImportNameCollisionHints
                         ["active"]=reader.GetInt64(3)==1
                     });
             if(matched.Count==0)continue;
+            total++;
+            if(hints.Count>=40)continue; // bounded response; total still counts all matches
             hints.Add(new JsonObject {
                 ["worksheet"]=row["worksheet"]?.GetValue<string>()??"الورقة الأولى",
                 ["row"]=row["row"]!.GetValue<int>(),
@@ -47,6 +51,6 @@ internal static class ImportNameCollisionHints
                 ["advisoryOnly"]=true
             });
         }
-        return hints;
+        return new Result(hints,total);
     }
 }

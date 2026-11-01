@@ -545,8 +545,13 @@
               (item.matches||[]).map(p=>p.name+" (ع: "+p.serviceNumberA+
                 (p.active?"، موجود":"، مؤرشف")+")").join("؛ ")]);
           summary.append(node("h3","section-title",
-            "تنبيه: تشابه أسماء مع هويات محفوظة — لا يُعتبر تطابق هوية"),
+            "تنبيه: تشابه أسماء مع هويات محفوظة — لا يُعتبر تطابق هوية ("+
+            (report.similarNameCount??nameHints.length)+" صف)"),
             hintTable.wrap);
+          if(Number(report.similarNameCount)>nameHints.length)
+            summary.append(warning("يُعرض أول "+nameHints.length+
+              " تنبيه فقط من أصل "+report.similarNameCount+
+              "، ويجب مراجعة جميع حالات تشابه الهوية قبل اعتماد الملف."));
         }
         const issues=table(["الورقة","الصف","الاسم","الرقم (ع)","سبب الاستبعاد"]);
         for(const item of (report.issues||[]).slice(0,500))
@@ -586,7 +591,7 @@
             }
             const details={rows:[
               ["أفراد جدد",plan.newCount],["صفوف مستبعدة",plan.issueCount],
-              ["أسماء مشابهة تستدعي مراجعة بشرية",(plan.similarNames||[]).length],
+              ["أسماء مشابهة تستدعي مراجعة بشرية",plan.similarNameCount??(plan.similarNames||[]).length],
               ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
             ],columns:["الورقة","الصف","الاسم الجديد","الرقم (ع)","الموقع"],
               items:(plan.acceptedPreview||[]).map(p=>
