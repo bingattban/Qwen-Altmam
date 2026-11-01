@@ -2317,19 +2317,32 @@
         label.append(node("span","","تفعيل النسخ التلقائي اليومي"),checkbox);
         const timeLabel=node("label","admin-input");
         timeLabel.append(node("span","","ساعة النسخ بتوقيت Windows المحلي"),dailyTime);
+        const retention=node("input","form-control");
+        retention.type="number";retention.min="0";retention.max="365";
+        retention.step="1";
+        retention.value=String(info.automaticBackupRetentionCount??0);
+        retention.setAttribute("aria-label","عدد النسخ التلقائية المحتفظ بها");
+        const retentionLabel=node("label","admin-input");
+        retentionLabel.append(node("span","","الاحتفاظ بآخر عدد من النسخ الآلية (0 = الكل، 2 إلى 365)"),retention);
         const scheduleFeedback=node("div","settings-feedback");
         const apply=btn("حفظ جدول النسخ التلقائي",async()=>{
+          const count=Number(retention.value);
+          if(!Number.isInteger(count) || !(count===0 || count>=2 && count<=365)){
+            scheduleFeedback.replaceChildren(warning("عدد النسخ يجب أن يكون 0 أو من 2 إلى 365."));
+            return;
+          }
           if(!await dialogs.confirm("هل تؤكد "+(checkbox.checked?"تفعيل":"إيقاف")+
             " النسخ التلقائي في الساعة "+dailyTime.value+"؟"))return;
           apply.disabled=true;
           try{
             const answer=await api().invoke("UpdateBackupSchedule",{
-              backupTime:dailyTime.value,enabled:checkbox.checked,
+              backupTime:dailyTime.value,enabled:checkbox.checked,retentionCount:count,
               operationId:makeOperationId()
             });
             if(token!==currentRequest)return;
             info.backupTime=answer.data.backupTime;
             info.automaticBackupEnabled=answer.data.enabled;
+            info.automaticBackupRetentionCount=answer.data.retentionCount;
             scheduleInfo.textContent=answer.data.enabled
               ?"جدولة النسخ التلقائي مفعلة الساعة "+answer.data.backupTime+
                 " أثناء تشغيل البرنامج، بعد التحقق من المجلد وسلامة النسخة."
@@ -2338,7 +2351,7 @@
           }catch(e){if(token===currentRequest)errors(scheduleFeedback,e);}
           finally{apply.disabled=false;}
         },"btn btn-primary settings-action");
-        scheduleControls.append(label,timeLabel,apply);
+        scheduleControls.append(label,timeLabel,retentionLabel,apply);
         backup.append(scheduleControls,scheduleFeedback);
       }
       const backupResult=node("div","settings-feedback");

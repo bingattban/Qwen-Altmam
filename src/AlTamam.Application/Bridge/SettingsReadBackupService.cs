@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using AlTamam.Application.Scheduling;
+using AlTamam.Application.Backup;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
@@ -32,6 +33,8 @@ public sealed class SettingsReadBackupService
         string backupPath=await new OutputDirectorySettings(_db).GetAsync(ct);
         var backup=new AutomaticBackupService(_db,_time);
         var (enabled,schedule)=await backup.ReadSettingsAsync(ct).ConfigureAwait(false);
+        int retentionCount=await new BackupRetentionService(_db,_time)
+            .ReadCountAsync(ct).ConfigureAwait(false);
         string? lastDate=await backup.LastSuccessfulDateAsync(ct).ConfigureAwait(false);
         string theme=await Setting("Theme","light",ct);
         string lastBackupFailure=await Setting("AutoBackupLastFailure","",ct);
@@ -41,6 +44,7 @@ public sealed class SettingsReadBackupService
             ["roleLabelAr"]=person.Role.ToArabicLabel(),
             ["backupDirectory"]=backupPath,["defaultDriveAvailable"]=OutputDirectorySettings.IsUsableDirectory(backupPath,_db.DatabasePath),
             ["backupTime"]=schedule,
+            ["automaticBackupRetentionCount"]=retentionCount,
             ["automaticBackupOperational"]=enabled,
             ["automaticBackupEnabled"]=enabled,
             ["lastAutoBackupDate"]=lastDate,
@@ -102,9 +106,12 @@ public sealed class SettingsReadBackupService
     {
         var scheduler=new AutomaticBackupService(_db,_time);
         var (enabled,time)=await scheduler.ReadSettingsAsync(ct).ConfigureAwait(false);
+        int retention=await new BackupRetentionService(_db,_time).ReadCountAsync(ct)
+            .ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
             ["backupTime"]=time,["enabled"]=enabled,
+            ["retentionCount"]=retention,
             ["lastAutoBackupDate"]=await scheduler.LastSuccessfulDateAsync(ct).ConfigureAwait(false),
             ["operational"]=enabled,
             ["message"]=enabled?"الجدولة تعمل محلياً أثناء تشغيل البرنامج.":"الجدولة متوقفة."

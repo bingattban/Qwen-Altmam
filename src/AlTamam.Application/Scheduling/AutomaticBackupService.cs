@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Application.Bridge;
+using AlTamam.Application.Backup;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 
@@ -75,11 +76,14 @@ public sealed class AutomaticBackupService
                 "تغيير جدول النسخ الاحتياطي متاح للإدارة فقط.");
         bool enabled;
         string time;
+        int? requestedRetention=null;
         try
         {
             enabled=payload?["enabled"]?.GetValue<bool>()
                 ?? throw new ArgumentException("Missing enabled");
             time=payload?["backupTime"]?.GetValue<string>()??"";
+            if(payload?["retentionCount"] is not null)
+                requestedRetention=payload["retentionCount"]!.GetValue<int>();
         }
         catch{return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
             "أدخل وقت النسخ وحدد تفعيل الجدولة أو إيقافها.");}
@@ -87,6 +91,10 @@ public sealed class AutomaticBackupService
                 DateTimeStyles.None,out _))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "وقت النسخ التلقائي يجب أن يكون بصيغة 24 ساعة، مثل 16:00.");
+        if(requestedRetention.HasValue &&
+           !BackupRetentionService.IsValidCount(requestedRetention.Value))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "عدد النسخ الآلية المحتفظ بها يجب أن يكون صفراً للاحتفاظ بالجميع، أو من 2 إلى 365.");
         if(enabled)
         {
             string folder=await new OutputDirectorySettings(_db).GetAsync(ct).ConfigureAwait(false);
@@ -100,21 +108,27 @@ public sealed class AutomaticBackupService
                 c,tx,"UpdateBackupSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
             if(replay is not null)return replay;
             string previousEnabled="false",previousTime="16:00";
+            int previousRetention=0;
             using(var prior=c.CreateCommand())
             {
                 prior.Transaction=tx;
                 prior.CommandText="""
                     SELECT SettingKey,SettingValue FROM AppSettings
-                    WHERE SettingKey IN ('AutoBackupEnabled','AutoBackupTimeLocal');
+                    WHERE SettingKey IN ('AutoBackupEnabled','AutoBackupTimeLocal','AutoBackupRetentionCount');
                     """;
                 using var reader=await prior.ExecuteReaderAsync(ct).ConfigureAwait(false);
                 while(await reader.ReadAsync(ct).ConfigureAwait(false))
                 {
                     if(reader.GetString(0)=="AutoBackupEnabled")
                         previousEnabled=reader.GetString(1);
-                    else previousTime=reader.GetString(1);
+                    else if(reader.GetString(0)=="AutoBackupTimeLocal")
+                        previousTime=reader.GetString(1);
+                    else if(int.TryParse(reader.GetString(1),out int stored) &&
+                            BackupRetentionService.IsValidCount(stored))
+                        previousRetention=stored;
                 }
             }
+            int retention=requestedRetention??previousRetention;
             using var cmd=c.CreateCommand();
             cmd.Transaction=tx;
             cmd.CommandText="""
@@ -126,21 +140,29 @@ public sealed class AutomaticBackupService
                 VALUES ('AutoBackupTimeLocal',$time,$now)
                 ON CONFLICT(SettingKey) DO UPDATE SET
                   SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES ('AutoBackupRetentionCount',$retention,$now)
+                ON CONFLICT(SettingKey) DO UPDATE SET
+                  SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
                 """;
             cmd.Parameters.AddWithValue("$enabled",enabled?"true":"false");
             cmd.Parameters.AddWithValue("$time",time);
+            cmd.Parameters.AddWithValue("$retention",retention.ToString(System.Globalization.CultureInfo.InvariantCulture));
             cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             await BridgeAuditWriter.WriteAsync(c,tx,_time,
                 "AUTO_BACKUP_SCHEDULE_CHANGED","تعديل جدولة النسخ الاحتياطي",
                 actor.UserId,actor.Username,null,"AppSettings","AutoBackupTimeLocal",
                 "النسخ التلقائي",
-                new JsonObject{["enabled"]=previousEnabled=="true",["time"]=previousTime}.ToJsonString(),
-                new JsonObject{["enabled"]=enabled,["time"]=time}.ToJsonString(),
+                new JsonObject{["enabled"]=previousEnabled=="true",["time"]=previousTime,
+                    ["retentionCount"]=previousRetention}.ToJsonString(),
+                new JsonObject{["enabled"]=enabled,["time"]=time,
+                    ["retentionCount"]=retention}.ToJsonString(),
                 "حفظ وقت النسخ التلقائي وتفعيل الجدولة أو إيقافها",
                 null,_time.GetLocalNow().ToString("yyyy-MM-dd"),Guid.NewGuid().ToString("N"),ct)
                 .ConfigureAwait(false);
-            var result=new JsonObject{["enabled"]=enabled,["backupTime"]=time};
+            var result=new JsonObject{["enabled"]=enabled,["backupTime"]=time,
+                ["retentionCount"]=retention};
             await MutationIdempotency.StoreAsync(c,tx,receipt,result,_time,ct)
                 .ConfigureAwait(false);
             return BridgeHelpers.Ok(result);
@@ -259,6 +281,23 @@ public sealed class AutomaticBackupService
                         Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
                     return 0;
                 },ct).ConfigureAwait(false);
+                // A successful backup stays successful if retention cleanup is
+                // interrupted or unavailable. Pruning is best-effort and never
+                // runs before the new verified copy has been durably registered.
+                if(!ct.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await new BackupRetentionService(_db,_time)
+                            .PruneAfterVerifiedAutomaticBackupAsync(ct).ConfigureAwait(false);
+                    }
+                    catch(Exception)
+                    {
+                        // The backup has ALREADY committed. Even a cancellation
+                        // or unexpected retention error must never cause the
+                        // outer catch to delete its valid, registered file.
+                    }
+                }
                 return true;
             }
             catch

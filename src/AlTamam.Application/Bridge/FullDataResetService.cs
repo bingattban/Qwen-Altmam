@@ -6,6 +6,7 @@ using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Security;
+using AlTamam.Application.Backup;
 using Microsoft.Data.Sqlite;
 
 namespace AlTamam.Application.Bridge;
@@ -154,6 +155,55 @@ public sealed class FullDataResetService
             return Refuse(BridgeErrorCodes.ValidationError,
                 "التصفير يتطلب كلمة المرور وعبارة التأكيد والموافقة الصريحة مرتين على حذف البيانات والنسخ المسجلة.");
 
+        // A failed/early/stale confirmation must never create an unnecessary
+        // rescue. These checks are repeated INSIDE the final transaction.
+        using(var connection=_db.CreateOpenConnection())
+        {
+            using(var check=connection.CreateCommand())
+            {
+                check.CommandText="SELECT CredentialHash,PasswordSalt,Role FROM Users WHERE UserId=$id AND ActiveFlag=1;";
+                check.Parameters.AddWithValue("$id",actor.UserId);
+                using var auth=await check.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if(!await auth.ReadAsync(ct).ConfigureAwait(false) ||
+                   auth.GetInt32(2)!=(int)UserRole.GeneralAdministration ||
+                   !PasswordSecurity.VerifyPassword(password,auth.GetString(0),auth.GetString(1)))
+                    return Refuse(BridgeErrorCodes.Unauthorized,"كلمة المرور الحالية غير صحيحة.");
+            }
+            if(await Revision(connection,null,ct).ConfigureAwait(false)!=expected)
+                return Refuse(BridgeErrorCodes.ConflictStale,"تغيرت البيانات بعد المعاينة؛ أعد المعاينة.");
+            using var issued=connection.CreateCommand();
+            issued.CommandText="""
+                SELECT IssuedAtUtc FROM PreviewTokens
+                WHERE Token=$token AND Operation=$operation AND ActorUserId=$actor
+                  AND ConsumedFlag=0 AND ExpiresAtUtc>$now;
+                """;
+            issued.Parameters.AddWithValue("$token",token);
+            issued.Parameters.AddWithValue("$operation",Operation);
+            issued.Parameters.AddWithValue("$actor",actor.UserId);
+            issued.Parameters.AddWithValue("$now",_clock.GetUtcNow().ToString("O"));
+            string? at=(await issued.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString();
+            if(!DateTimeOffset.TryParse(at,out var issuedAt) ||
+               _clock.GetUtcNow()-issuedAt<TimeSpan.FromSeconds(5))
+                return Refuse(BridgeErrorCodes.ValidationError,
+                    "لم تنتهِ مهلة الخمس ثوانٍ اللازمة قبل تصفير البيانات.");
+        }
+        string rescuePath;
+        try
+        {
+            // No external E: fallback, no plaintext, no file from another app.
+            // If disk space or SQLCipher verification fails, DO NOT reset data.
+            rescuePath=await new ResetRescueService(_db).CreateAsync(ct)
+                .ConfigureAwait(false);
+        }
+        catch(OperationCanceledException){throw;}
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or
+            InvalidDataException or Microsoft.Data.Sqlite.SqliteException or
+            InvalidOperationException)
+        {
+            return Refuse(BridgeErrorCodes.BackupIntegrityFailed,
+                "تعذر إنشاء نسخة إنقاذ داخلية مشفرة ومتحقق منها؛ أُلغي التصفير دون حذف البيانات.");
+        }
+
         var backups=new List<BackupFile>();
         BridgeResponse result=await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
@@ -285,7 +335,7 @@ public sealed class FullDataResetService
         }
         return BridgeHelpers.Ok(new JsonObject{
             ["reset"]=true,["requiresFirstSetup"]=true,["backupsDeleted"]=removed,
-            ["backupFilesNotDeleted"]=retained
+            ["rescuePath"]=rescuePath,["backupFilesNotDeleted"]=retained
         });
     }
 
