@@ -55,6 +55,11 @@ jobs:
         run: |
           pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
+      - name: Phase 13 evidence contract guard before lengthy Windows tests
+        shell: pwsh
+        run: |
+          python build/test-phase13-qa-evidence-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 evidence source or order regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
@@ -202,6 +207,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
       - name: Phase 13 runner hardware evidence
         shell: pwsh
+        env:
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json
           if ($LASTEXITCODE -ne 0) { throw 'Phase 13 Windows hardware evidence failed' }
