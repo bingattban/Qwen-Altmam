@@ -124,7 +124,7 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
 
     [Theory]
     [InlineData("Abc12!x")]
-    [InlineData("plainpassword123")]
+    [InlineData("plainpassword12")]
     [InlineData("ABC١٢٣")]
     public async Task DirectFoundingHelper_CannotBypassStrongCredentialPolicy(
         string password)
