@@ -26,7 +26,8 @@ const data={
  CommitSeparation:{movementId:"MOV-1",separated:true},
  QuerySites:[],
  QuerySeparationArchive:{items:[{movementId:"MOV-1",serviceNumberA:"999",
-    name:"فرد مفصول",siteName:"موقع مختبر",date:"2026-10-23"}],total:1,hasNext:false},
+    name:"فرد مفصول",siteName:"موقع مختبر",date:"2026-10-23",
+    reason:"سبب فصل مسجل"}],total:1,hasNext:false},
  GetSeparationDetails:{name:"فرد مفصول",serviceNumberA:"999",siteName:"موقع مختبر",
    reason:"سبب فصل مسجل",date:"2026-10-23",actorUserId:"USR-1"}
 };
@@ -75,6 +76,10 @@ async function run(){
  await ui.render(archive,"separatedArchive");
  assert.ok(archive.all().some(x=>x.textContent.includes("فرد مفصول")));
  assert.ok(calls.includes("QuerySeparationArchive"));
+ assert.ok(archive.all().some(x=>x.tag==="td"&&x.textContent==="سبب فصل مسجل"),
+   "the dismissal reason is visible in the archive list, not only a details popup");
+ assert.ok(archive.all().some(x=>x.tag==="td"&&/الأحد|الاثنين|الثلاثاء|الأربعاء|الخميس|الجمعة|السبت/.test(x.textContent)),
+   "the archive list shows the actual day of week for the dismissal date");
  assert.ok(calls.includes("CommitSeparation"));
  const view=archive.all().find(x=>x.tag==="button"&&x.textContent==="عرض");
  assert.ok(view,"separated archive entry must expose a details action");
