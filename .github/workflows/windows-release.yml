@@ -50,6 +50,11 @@ jobs:
         with: { python-version: '3.12' }
       - name: Action-manifest security guard (CSP, RBAC drift)
         run: python build/manifest-guard.py
+      - name: Phase 13 PowerShell self-check scripts pass native parser before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
