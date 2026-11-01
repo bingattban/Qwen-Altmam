@@ -377,8 +377,19 @@ public sealed class PersonnelExcelExportService
             progress?.Invoke(0,totalRows);
             Directory.CreateDirectory(directory);
             using(var stream=new FileStream(partial,FileMode.CreateNew,FileAccess.Write,FileShare.None))
-            using(var zip=new ZipArchive(stream,ZipArchiveMode.Create,leaveOpen:false,Encoding.UTF8))
-                NativeWorkbook(zip,sheets,ct,progress);
+            {
+                using(var zip=new ZipArchive(stream,ZipArchiveMode.Create,leaveOpen:true,Encoding.UTF8))
+                    NativeWorkbook(zip,sheets,ct,progress);
+                // Ensure the completed ZIP is flushed before the atomic rename.
+                stream.Flush(flushToDisk:true);
+            }
+            ct.ThrowIfCancellationRequested();
+            using(var check=ZipFile.OpenRead(partial))
+            {
+                if(!check.Entries.Any(e=>e.FullName=="[Content_Types].xml") ||
+                   !check.Entries.Any(e=>e.FullName=="xl/workbook.xml"))
+                    throw new InvalidDataException("ملف Excel المؤقت غير مكتمل؛ لم يُعتمد التصدير.");
+            }
             ct.ThrowIfCancellationRequested();
             File.Move(partial,destination,false);
             try
