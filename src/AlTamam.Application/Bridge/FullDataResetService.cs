@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using AlTamam.Application.Backup;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
@@ -153,6 +154,56 @@ public sealed class FullDataResetService
            !confirmRecords || !confirmBackups)
             return Refuse(BridgeErrorCodes.ValidationError,
                 "التصفير يتطلب كلمة المرور وعبارة التأكيد والموافقة الصريحة مرتين على حذف البيانات والنسخ المسجلة.");
+
+        // Verify password, one-use preview, countdown and current data BEFORE
+        // creating the durable rescue; validate them again in the write transaction.
+        using(var verify=_db.CreateOpenConnection())
+        {
+            using(var credentials=verify.CreateCommand())
+            {
+                credentials.CommandText="SELECT CredentialHash,PasswordSalt,Role FROM Users WHERE UserId=$id AND ActiveFlag=1;";
+                credentials.Parameters.AddWithValue("$id",actor.UserId);
+                using var row=await credentials.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if(!await row.ReadAsync(ct).ConfigureAwait(false) ||
+                   row.GetInt32(2)!=(int)UserRole.GeneralAdministration ||
+                   !PasswordSecurity.VerifyPassword(password,row.GetString(0),row.GetString(1)))
+                    return Refuse(BridgeErrorCodes.Unauthorized,"كلمة المرور الحالية غير صحيحة.");
+            }
+            using(var preview=verify.CreateCommand())
+            {
+                preview.CommandText="""
+                    SELECT IssuedAtUtc,BaseRevision FROM PreviewTokens
+                    WHERE Token=$token AND Operation=$op AND ActorUserId=$actor
+                      AND ConsumedFlag=0 AND ExpiresAtUtc>$now;
+                    """;
+                preview.Parameters.AddWithValue("$token",token);
+                preview.Parameters.AddWithValue("$op",Operation);
+                preview.Parameters.AddWithValue("$actor",actor.UserId);
+                preview.Parameters.AddWithValue("$now",_clock.GetUtcNow().ToString("O"));
+                using var row=await preview.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if(!await row.ReadAsync(ct).ConfigureAwait(false))
+                    return Refuse(BridgeErrorCodes.ConflictStale,"معاينة التصفير منتهية أو مستعملة.");
+                if(!DateTimeOffset.TryParse(row.GetString(0),out var issuedAt) ||
+                   _clock.GetUtcNow()-issuedAt<TimeSpan.FromSeconds(5))
+                    return Refuse(BridgeErrorCodes.ValidationError,"لم تنتهِ مهلة الخمس ثوانٍ اللازمة.");
+                if(row.GetInt64(1)!=expected)
+                    return Refuse(BridgeErrorCodes.ConflictStale,"تغيّر إصدار المعاينة.");
+            }
+            if(await Revision(verify,null,ct).ConfigureAwait(false)!=expected)
+                return Refuse(BridgeErrorCodes.ConflictStale,"تغيرت البيانات؛ أعد المعاينة.");
+        }
+        string rescuePath;
+        try
+        {
+            rescuePath=await new FullResetRescueService(_db).CreateAsync(ct).ConfigureAwait(false);
+        }
+        catch(OperationCanceledException){throw;}
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or
+            InvalidDataException or InvalidOperationException or SqliteException)
+        {
+            return Refuse(BridgeErrorCodes.BackupIntegrityFailed,
+                "تعذر إنشاء نسخة إنقاذ مشفرة سليمة؛ أُلغي التصفير ولم تتغير البيانات.");
+        }
 
         var backups=new List<BackupFile>();
         BridgeResponse result=await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
