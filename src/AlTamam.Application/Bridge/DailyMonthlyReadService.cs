@@ -433,7 +433,7 @@ public sealed class DailyMonthlyReadService
                 FROM AttendanceRecords ar
                 WHERE ar.AttendanceLocalDate >= $visibleFrom
                   AND ar.AttendanceLocalDate < $visibleNext
-                """ + MonthlyAttendanceCellPolicy.TemporalMembershipSql + """
+                """ + "\n" + MonthlyAttendanceCellPolicy.TemporalMembershipSql + "\n" + """
                   AND ar.PersonId IN (
                 """ + string.Join(",", holders) + ") ORDER BY ar.AttendanceLocalDate;";
             cells.Parameters.AddWithValue("$visibleFrom", visibleFrom);
