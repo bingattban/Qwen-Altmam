@@ -90,6 +90,12 @@ public sealed class ClosedDayCorrectionService
                 AND (h.ValidToLocalDate IS NULL OR h.ValidToLocalDate>$day)
             WHERE ar.PersonId=$person AND ar.AttendanceLocalDate=$day
               AND ar.StatusId<>$status
+              AND ar.AttendanceLocalDate>=p.FirstRecordedLocalDate
+              AND EXISTS(SELECT 1 FROM PersonAssignments a
+                  WHERE a.PersonId=ar.PersonId
+                    AND a.SiteId=ar.SiteIdAtEffectiveDate
+                    AND a.ValidFromLocalDate<=ar.AttendanceLocalDate
+                    AND (a.ValidToLocalDate IS NULL OR a.ValidToLocalDate>ar.AttendanceLocalDate))
               AND NOT EXISTS(SELECT 1 FROM PersonnelMovements m
                   WHERE m.PersonId=ar.PersonId AND m.EffectiveLocalDate=$day);
             """;
