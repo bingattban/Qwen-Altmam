@@ -24,7 +24,10 @@ const responses={
   SelectImportWorkbook:{workbookToken:"A".repeat(64),rowCount:3,maxRows:500},
   AnalyzeImport:{totalRows:3,newCount:2,issueCount:1,
     issues:[{row:4,name:"مكرر",serviceNumberA:"001",reason:"الرقم موجود"}],
-    acceptedPreview:[{name:"أحمد صالح",serviceNumberA:"002"}]},
+    acceptedPreview:[{worksheet:"الورقة الأولى",row:2,name:"أحمد صالح",serviceNumberA:"002",siteName:"غير محدد"}],
+    newSites:[{name:"موقع مستورد جديد",personCount:1}],
+    similarNames:[{worksheet:"الورقة الأولى",row:2,name:"أحمد صالح",serviceNumberA:"002",
+      matches:[{personId:"OLD-ID",name:"أحمد صالح",serviceNumberA:"0001",active:false}]}]},
   PreviewImportPlan:{previewToken:"B".repeat(64),newCount:2,issueCount:1,
     requiresExplicitConfirmation:true,issues:[],
     acceptedPreview:[{name:"أحمد صالح",serviceNumberA:"002"},
@@ -84,6 +87,9 @@ async function run(){
   assert.deepEqual(calls.filter(c=>c.name!=="QueryImportOutcome").map(x=>x.name),
     ["SelectImportWorkbook","AnalyzeImport"]);
   assert.ok(all().some(x=>x.textContent.includes("الصفوف المستبعدة")));
+  assert.ok(all().some(x=>x.textContent.includes("مواقع جديدة")));
+  assert.ok(all().some(x=>x.textContent.includes("تشابه أسماء")));
+  assert.ok(all().some(x=>x.textContent.includes("الأفراد المقبولون")));
   await button("معاينة خطة الإضافة").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,0,
     "server-side preview must not persist rows");
