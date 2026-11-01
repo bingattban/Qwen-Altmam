@@ -463,6 +463,45 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
     }
 
+
+    [Theory]
+    [InlineData("فرد مفصول سابق")]
+    [InlineData("شخص جديد مختلف")]
+    public async Task ArchivedDismissedNumber_NeverSilentlyReturnsOrCreatesNewIdentityViaExcel(
+        string requestedName)
+    {
+        using(var conn=_db.CreateOpenConnection())
+        using(var insert=conn.CreateCommand())
+        {
+            insert.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                  CurrentServiceNumberA,NormalizedServiceNumberA,FirstRecordedLocalDate,
+                  FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('TST-IM-ARCH','فرد مفصول سابق','فرد مفصول سابق',
+                  '004441','004441','2026-01-01','2026-01-01T07:00:00Z',3,0,1);
+                """;
+            await insert.ExecuteNonQueryAsync();
+        }
+        var selected=await Service.SelectAsync(
+            FilePayload(Workbook((requestedName,"004441"))),Owner,CancellationToken.None);
+        Assert.True(selected.Success,selected.UserMessage);
+        string ticket=Assert.IsType<JsonObject>(selected.Data)["workbookToken"]!.GetValue<string>();
+        var analysis=await Service.AnalyzeAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(analysis.Success,analysis.UserMessage);
+        var data=Assert.IsType<JsonObject>(analysis.Data);
+        Assert.Equal(0,data["newCount"]!.GetValue<int>());
+        Assert.Equal(1,data["issueCount"]!.GetValue<int>());
+        var issue=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(data["issues"])));
+        Assert.Contains("هوية مؤرشفة",issue["reason"]!.GetValue<string>());
+        Assert.False((await Service.PreviewAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None)).Success);
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons WHERE ActiveFlag=1"));
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM ImportBatches"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
