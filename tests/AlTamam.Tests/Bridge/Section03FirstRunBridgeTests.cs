@@ -70,6 +70,9 @@ public sealed class Section03FirstRunBridgeTests : IAsyncLifetime, IDisposable
         });
         Assert.True(setup.Response.Success, setup.Response.UserMessage);
         Assert.Equal(1L, Convert.ToInt64(Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;")));
+        string nonce = Assert.IsType<JsonObject>(setup.Response.Data)["sessionNonce"]!.GetValue<string>();
+        var logout = await SendAsync("Logout", new JsonObject(), nonce);
+        Assert.True(logout.Response.Success, logout.Response.UserMessage);
         var laterLogin = await SendAsync("AuthenticateLocalUser", new JsonObject
         {
             ["username"] = "minimum-founder",

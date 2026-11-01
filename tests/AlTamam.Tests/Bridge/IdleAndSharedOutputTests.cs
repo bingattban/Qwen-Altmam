@@ -176,16 +176,17 @@ public sealed class IdleAndSharedOutputTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
-    public void SubsequentPasswordsAcceptExactEightCharacterMinimumWithArgon2id()
+    public void SubsequentPasswordsAcceptExactSixCharacterMinimumWithArgon2id()
     {
-        Assert.True(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc123!z").IsValid);
-        Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc123!").IsValid);
+        const string minimumPassword = "Abc123";
+        Assert.True(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate(minimumPassword).IsValid);
+        Assert.True(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc123!").IsValid);
         Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Ab123!!?").IsValid);
         Assert.False(AlTamam.Domain.Policies.PasswordPolicyValidator.Validate("Abc12!!z").IsValid);
-        var (digest,salt)=AlTamam.Infrastructure.Security.PasswordSecurity.HashPassword("Abc123!z");
-        Assert.True(AlTamam.Infrastructure.Security.PasswordSecurity.VerifyPassword("Abc123!z",digest,salt));
-        Assert.False(AlTamam.Infrastructure.Security.PasswordSecurity.VerifyPassword("Abc123!x",digest,salt));
-        Assert.DoesNotContain("Abc123!z",digest);
+        var (digest,salt)=AlTamam.Infrastructure.Security.PasswordSecurity.HashPassword(minimumPassword);
+        Assert.True(AlTamam.Infrastructure.Security.PasswordSecurity.VerifyPassword(minimumPassword,digest,salt));
+        Assert.False(AlTamam.Infrastructure.Security.PasswordSecurity.VerifyPassword("Abc124",digest,salt));
+        Assert.DoesNotContain(minimumPassword,digest);
     }
 
     [Fact]
