@@ -75,6 +75,78 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task MidMonthMove_DestinationHistoryStartsOnMovementDay_AndSourceAttendanceStaysSource()
+    {
+        using(var connection = _db.CreateOpenConnection())
+        using(var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,
+                    ActiveFlag,CreatedAtUtc,RowVersion)
+                VALUES('SITE-MID-DEST','الوجهة الوسطية','الوجهة الوسطية',0,1,
+                    '2026-10-01T00:00:00Z',1);
+                UPDATE PersonAssignments SET ValidToLocalDate='2026-10-20'
+                WHERE AssignmentId='TST-A-1';
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                    ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-MID-ASSIGN','TST-P-1','SITE-MID-DEST',
+                    '2026-10-20',NULL,'TST-MID-MOVE','2026-10-20T09:00:00Z');
+                INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
+                    ServiceNumberASnapshot,MovementType,SourceSiteId,
+                    SourceSiteNameSnapshot,DestinationSiteId,
+                    DestinationSiteNameSnapshot,EffectiveLocalDate,
+                    CommittedAtUtc,ActorUserId,IdempotencyKey)
+                VALUES('TST-MID-MOVE','TST-P-1','شخص اختباري','930001',1,
+                    'SITE-UNSPECIFIED','غير محدد','SITE-MID-DEST',
+                    'الوجهة الوسطية','2026-10-20','2026-10-20T09:00:00Z',
+                    'TST-U','TST-MID-MOVE-KEY');
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+        var read = new DailyMonthlyReadService(_db);
+        async Task<JsonObject> AtSite(string site) =>
+            Assert.IsType<JsonObject>((await read.MonthlyGridAsync(new JsonObject
+            {
+                ["year"]=2026,["month"]=10,["archiveMode"]=true,
+                ["siteId"]=site,["page"]=1,["pageSize"]=20
+            },default)).Data);
+
+        var dest = Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>((await AtSite("SITE-MID-DEST"))["items"])));
+        var destDays = Assert.IsType<JsonObject>(dest["days"]);
+        Assert.Null(destDays["2026-10-19"]); // No source-site status at destination.
+        Assert.Equal("نقل (د)", destDays["2026-10-20"]!["symbol"]!.GetValue<string>());
+        Assert.Contains("تم نقله من غير محدد",
+            destDays["2026-10-20"]!["name"]!.GetValue<string>());
+        Assert.Null(destDays["2026-10-21"]);
+
+        var source = Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>((await AtSite("SITE-UNSPECIFIED"))["items"])));
+        var sourceDays = Assert.IsType<JsonObject>(source["days"]);
+        Assert.Equal("غياب", sourceDays["2026-10-19"]!["name"]!.GetValue<string>());
+        Assert.Equal("نقل (د)", sourceDays["2026-10-20"]!["symbol"]!.GetValue<string>());
+        Assert.Contains("تم نقله إلى الوجهة الوسطية",
+            sourceDays["2026-10-20"]!["name"]!.GetValue<string>());
+
+        using var verify = _db.CreateOpenConnection();
+        using var count = verify.CreateCommand();
+        count.CommandText = """
+            SELECT COUNT(*) FROM AttendanceRecords
+            WHERE PersonId='TST-P-1' AND AttendanceLocalDate='2026-10-20';
+            """;
+        Assert.Equal(0L, Convert.ToInt64(await count.ExecuteScalarAsync()));
+        using var overlapping = verify.CreateCommand();
+        overlapping.CommandText = """
+            INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+            VALUES('TST-MID-OVERLAP','TST-P-1','SITE-UNSPECIFIED',
+                '2026-10-20',NULL,NULL,'2026-10-20T12:00:00Z');
+            """;
+        Assert.Throws<Microsoft.Data.Sqlite.SqliteException>(
+            () => overlapping.ExecuteNonQuery());
+    }
+
+    [Fact]
     public async Task Dashboard_UsesSavedStatusAndSiteFilter()
     {
         var svc = new DailyMonthlyReadService(_db);
