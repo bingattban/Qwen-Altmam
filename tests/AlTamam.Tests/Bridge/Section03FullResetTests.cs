@@ -91,6 +91,12 @@ public sealed class Section03FullResetTests : IAsyncLifetime, IDisposable
         await Task.Delay(TimeSpan.FromMilliseconds(5150));
         var response=await svc.CommitAsync(args,_admin,default);
         Assert.True(response.Success,response.UserMessage);
+        string rescue=Assert.IsType<JsonObject>(response.Data)["rescuePath"]!.GetValue<string>();
+        Assert.True(File.Exists(rescue));
+        var rescueEvidence=await _db.InspectEncryptedBackupAsync(rescue);
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,rescueEvidence.SchemaVersion);
+        Assert.Equal(1L,rescueEvidence.UserCount);
+        Assert.True(rescueEvidence.AuditCount>=1);
         Assert.Equal(0,Count("Users"));
         Assert.Equal(0,Count("AuditEvents"));
         Assert.Equal(0,Count("UserSessions"));
