@@ -323,6 +323,21 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
     }
 
 
+
+    [Fact]
+    public async Task UnavailableEDriveOutput_ReportsFailureWithoutSavingElsewhere()
+    {
+        var request=Period("SITE-UNSPECIFIED");
+        request["directory"]=@"E:\AlTamamAlYawmi\Missing-"+Guid.NewGuid().ToString("N");
+        request["fileName"]="كشف_مسار_مفقود.xlsx";
+        var result=await new MonthlyExcelExportService(_db).ExportAsync(request,
+            CancellationToken.None);
+        Assert.False(result.Success,"An unavailable E: directory is not a license to use a fallback.");
+        Assert.Equal("0",Convert.ToString(Directory.GetFiles(_output,
+            "كشف_مسار_مفقود.xlsx").Length));
+        Assert.Empty(Directory.GetFiles(_output,"*.part"));
+    }
+
     [Fact]
     public void SharedXlsxPublisher_RejectsCorruptPartAndRespectsPrePublishCancellation()
     {
