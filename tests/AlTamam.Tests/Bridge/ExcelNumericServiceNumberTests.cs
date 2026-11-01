@@ -122,16 +122,60 @@ public sealed class ExcelNumericServiceNumberTests : IAsyncLifetime, IDisposable
     [InlineData("1E+16", "", "")]
     [InlineData("2", "n", "1+1")]
     [InlineData("1", "b", "")]
-    public async Task UnsafeExcelNumberTypes_AreRejected(string raw, string kind, string formula)
+    public async Task UnsafeExcelNumberTypes_AppearAsRejectedPreviewIssues_WithoutCreatingPeople(
+        string raw, string kind, string formula)
     {
         var service = new ExcelPersonnelImportService(_db);
+        // Import selection is intentionally read-only and keeps rejected rows
+        // for user-visible validation reports; it must never accept them as people.
         var selected = await service.SelectAsync(Workbook(
             ("محمد خالد سالم", raw, kind, formula)), Actor, CancellationToken.None);
-        Assert.False(selected.Success);
+        Assert.True(selected.Success, selected.UserMessage);
+        var workbookToken = ((JsonObject)selected.Data!)["workbookToken"]!.GetValue<string>();
+
+        var analyzed = await service.AnalyzeAsync(
+            new JsonObject { ["workbookToken"] = workbookToken },
+            Actor, CancellationToken.None);
+        Assert.True(analyzed.Success, analyzed.UserMessage);
+        var analysis = (JsonObject)analyzed.Data!;
+        Assert.Equal(0, analysis["newCount"]!.GetValue<int>());
+        Assert.Equal(1, analysis["issueCount"]!.GetValue<int>());
+        var issue = Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(analysis["issues"])));
+        Assert.False(string.IsNullOrWhiteSpace(issue["reason"]!.GetValue<string>()));
+
+        var preview = await service.PreviewAsync(
+            new JsonObject { ["workbookToken"] = workbookToken },
+            Actor, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        var plan = (JsonObject)preview.Data!;
+        Assert.Equal(0, plan["newCount"]!.GetValue<int>());
+        Assert.Equal(1, plan["issueCount"]!.GetValue<int>());
+
+        // Confirming a rejected-only workbook persists the error receipt,
+        // not a person, a site, an identity version or an attendance record.
+        var committed = await service.CommitAsync(
+            new JsonObject { ["previewToken"] = plan["previewToken"]!.GetValue<string>() },
+            Actor, "numeric-import-test", CancellationToken.None);
+        Assert.True(committed.Success, committed.UserMessage);
+        var outcome = (JsonObject)committed.Data!;
+        Assert.Equal(0, outcome["createdCount"]!.GetValue<int>());
+        Assert.Equal(1, outcome["rejectedCount"]!.GetValue<int>());
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM Persons;";
-        Assert.Equal(0L, Convert.ToInt64(await cmd.ExecuteScalarAsync()));
+        cmd.CommandText = """
+            SELECT
+              (SELECT COUNT(*) FROM Persons),
+              (SELECT COUNT(*) FROM PersonIdentityHistory),
+              (SELECT COUNT(*) FROM PersonAssignments),
+              (SELECT COUNT(*) FROM ImportIssues);
+            """;
+        using var reader = await cmd.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(0L, reader.GetInt64(0));
+        Assert.Equal(0L, reader.GetInt64(1));
+        Assert.Equal(0L, reader.GetInt64(2));
+        Assert.Equal(1L, reader.GetInt64(3));
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

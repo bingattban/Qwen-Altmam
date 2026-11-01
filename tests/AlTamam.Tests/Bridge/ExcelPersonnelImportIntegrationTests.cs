@@ -334,6 +334,187 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
     }
 
+    [Fact]
+    public async Task RejectedOnlyWorkbook_StillExposesAllIssues_WithoutAnyDatabaseMutation()
+    {
+        var selected=await Service.SelectAsync(FilePayload(Workbook(
+            ("اسم صالح","12"),("اسم ثان","خطأ"))),Owner,CancellationToken.None);
+        Assert.True(selected.Success,selected.UserMessage);
+        var ticket=Assert.IsType<JsonObject>(selected.Data)["workbookToken"]!.GetValue<string>();
+        var analysis=await Service.AnalyzeAsync(new JsonObject{["workbookToken"]=ticket},
+            Owner,CancellationToken.None);
+        Assert.True(analysis.Success,analysis.UserMessage);
+        var data=Assert.IsType<JsonObject>(analysis.Data);
+        Assert.Equal(0,data["newCount"]!.GetValue<int>());
+        Assert.Equal(2,data["issueCount"]!.GetValue<int>());
+        Assert.Equal(2,Assert.IsType<JsonArray>(data["issues"]).Count);
+        Assert.Empty(Assert.IsType<JsonArray>(data["acceptedPreview"]));
+        var cannotCommit=await Service.PreviewAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(cannotCommit.Success,cannotCommit.UserMessage);
+        var plan=Assert.IsType<JsonObject>(cannotCommit.Data);
+        Assert.Equal(0,plan["newCount"]!.GetValue<int>());
+        Assert.Equal(2,plan["issueCount"]!.GetValue<int>());
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
+        var outcome=await Service.CommitAsync(new JsonObject {
+            ["previewToken"]=plan["previewToken"]!.GetValue<string>()
+        },Owner,"owner",CancellationToken.None);
+        Assert.True(outcome.Success,outcome.UserMessage);
+        Assert.Equal(0,Assert.IsType<JsonObject>(outcome.Data)["createdCount"]!.GetValue<int>());
+        Assert.Equal(2,Assert.IsType<JsonObject>(outcome.Data)["rejectedCount"]!.GetValue<int>());
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM ImportBatches"));
+        Assert.Equal("2",Scalar("SELECT COUNT(*) FROM ImportIssues"));
+    }
+
+    [Fact]
+    public async Task NameCollisionAdvisory_IsNotAnIdentityDecisionOrAutomaticMerge()
+    {
+        var first=await Service.SelectAsync(FilePayload(Workbook(
+            ("أحمد سالم محمد","009911"))),Owner,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var firstToken=Assert.IsType<JsonObject>(first.Data)["workbookToken"]!.GetValue<string>();
+        var firstPlan=await Service.PreviewAsync(new JsonObject{["workbookToken"]=firstToken},
+            Owner,CancellationToken.None);
+        Assert.True(firstPlan.Success,firstPlan.UserMessage);
+        var firstSaved=await Service.CommitAsync(new JsonObject {
+            ["previewToken"]=Assert.IsType<JsonObject>(firstPlan.Data)["previewToken"]!.GetValue<string>()
+        },Owner,"owner",CancellationToken.None);
+        Assert.True(firstSaved.Success,firstSaved.UserMessage);
+
+        var second=await Service.SelectAsync(FilePayload(Workbook(
+            ("أحمد سالم محمد","009912"))),Owner,CancellationToken.None);
+        Assert.True(second.Success,second.UserMessage);
+        string ticket=Assert.IsType<JsonObject>(second.Data)["workbookToken"]!.GetValue<string>();
+        var analysis=await Service.AnalyzeAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(analysis.Success,analysis.UserMessage);
+        var data=Assert.IsType<JsonObject>(analysis.Data);
+        Assert.Equal(1,data["newCount"]!.GetValue<int>());
+        var hint=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(data["similarNames"])));
+        Assert.Equal("009912",hint["serviceNumberA"]!.GetValue<string>());
+        Assert.True(hint["advisoryOnly"]!.GetValue<bool>());
+        Assert.Equal("009911",Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(hint["matches"])))["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons"));
+        var preview=await Service.PreviewAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        Assert.Single(Assert.IsType<JsonArray>(
+            Assert.IsType<JsonObject>(preview.Data)["similarNames"]));
+        var saved=await Service.CommitAsync(new JsonObject {
+            ["previewToken"]=Assert.IsType<JsonObject>(preview.Data)["previewToken"]!.GetValue<string>()
+        },Owner,"owner",CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        Assert.Equal("2",Scalar("SELECT COUNT(DISTINCT PersonId) FROM Persons"));
+        Assert.Equal("2",Scalar("SELECT COUNT(DISTINCT CurrentServiceNumberA) FROM Persons"));
+    }
+
+
+    [Fact]
+    public async Task WorkbookRelationshipOrder_OverridesPhysicalSheetNumbering()
+    {
+        using var stream=new MemoryStream();
+        stream.Write(MultiSheetWorkbook());
+        stream.Position=0;
+        using(var zip=new ZipArchive(stream,ZipArchiveMode.Update,leaveOpen:true))
+        {
+            zip.GetEntry("xl/workbook.xml")!.Delete();
+            const string workbook="""
+                <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                  <sheets>
+                    <sheet name="الورقة الثانية أولاً" sheetId="8" r:id="rIdB"/>
+                    <sheet name="الورقة الأولى ثانياً" sheetId="3" r:id="rIdA"/>
+                  </sheets>
+                </workbook>
+                """;
+            using(var w=zip.CreateEntry("xl/workbook.xml").Open())
+            {
+                byte[] bytes=Encoding.UTF8.GetBytes(workbook);
+                w.Write(bytes);
+            }
+            const string rels="""
+                <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                  <Relationship Id="rIdB"
+                    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
+                    Target="worksheets/sheet2.xml"/>
+                  <Relationship Id="rIdA"
+                    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
+                    Target="worksheets/sheet1.xml"/>
+                </Relationships>
+                """;
+            using(var w=zip.CreateEntry("xl/_rels/workbook.xml.rels").Open())
+            {
+                byte[] bytes=Encoding.UTF8.GetBytes(rels);
+                w.Write(bytes);
+            }
+        }
+        var payload=FilePayload(stream.ToArray());
+        payload["sheetIndexes"]=new JsonArray(1);
+        payload["nameHeading"]="الاسم الثلاثي";
+        payload["numberHeading"]="رقم الموظف";
+        var selected=await Service.SelectAsync(payload,Owner,CancellationToken.None);
+        Assert.True(selected.Success,selected.UserMessage);
+        var chosen=Assert.IsType<JsonObject>(selected.Data);
+        Assert.Equal("الورقة الثانية أولاً",
+            Assert.Single(Assert.IsType<JsonArray>(chosen["selectedWorksheets"]))!.GetValue<string>());
+        var analyzed=await Service.AnalyzeAsync(new JsonObject {
+            ["workbookToken"]=chosen["workbookToken"]!.GetValue<string>()
+        },Owner,CancellationToken.None);
+        Assert.True(analyzed.Success,analyzed.UserMessage);
+        var report=Assert.IsType<JsonObject>(analyzed.Data);
+        Assert.Equal(1,report["newCount"]!.GetValue<int>());
+        Assert.Equal(1,report["issueCount"]!.GetValue<int>());
+        var accepted=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(report["acceptedPreview"])));
+        Assert.Equal("00802",accepted["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("الورقة الثانية أولاً",accepted["worksheet"]!.GetValue<string>());
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
+    }
+
+
+    [Theory]
+    [InlineData("فرد مفصول سابق")]
+    [InlineData("شخص جديد مختلف")]
+    public async Task ArchivedDismissedNumber_NeverSilentlyReturnsOrCreatesNewIdentityViaExcel(
+        string requestedName)
+    {
+        using(var conn=_db.CreateOpenConnection())
+        using(var insert=conn.CreateCommand())
+        {
+            insert.CommandText="""
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                  CurrentServiceNumberA,NormalizedServiceNumberA,FirstRecordedLocalDate,
+                  FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('TST-IM-ARCH','فرد مفصول سابق','فرد مفصول سابق',
+                  '004441','004441','2026-01-01','2026-01-01T07:00:00Z',3,0,1);
+                """;
+            await insert.ExecuteNonQueryAsync();
+        }
+        var selected=await Service.SelectAsync(
+            FilePayload(Workbook((requestedName,"004441"))),Owner,CancellationToken.None);
+        Assert.True(selected.Success,selected.UserMessage);
+        string ticket=Assert.IsType<JsonObject>(selected.Data)["workbookToken"]!.GetValue<string>();
+        var analysis=await Service.AnalyzeAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(analysis.Success,analysis.UserMessage);
+        var data=Assert.IsType<JsonObject>(analysis.Data);
+        Assert.Equal(0,data["newCount"]!.GetValue<int>());
+        Assert.Equal(1,data["issueCount"]!.GetValue<int>());
+        var issue=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(data["issues"])));
+        Assert.Contains("هوية مؤرشفة",issue["reason"]!.GetValue<string>());
+        var rejectionPlan=await Service.PreviewAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(rejectionPlan.Success,rejectionPlan.UserMessage);
+        Assert.Equal(0,Assert.IsType<JsonObject>(rejectionPlan.Data)["newCount"]!.GetValue<int>());
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons WHERE ActiveFlag=1"));
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM ImportBatches"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {

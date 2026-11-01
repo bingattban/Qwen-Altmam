@@ -519,12 +519,50 @@
         for(const [key,value] of [["إجمالي الصفوف",report.totalRows],
           ["أفراد جدد",report.newCount],["صفوف متعارضة أو غير صالحة",report.issueCount]])
           summary.appendChild(settingsValue(key,value));
+        const acceptedRows=Array.isArray(report.acceptedPreview)?report.acceptedPreview:[];
+        if(acceptedRows.length){
+          const acceptedTable=table(["الورقة","الصف","الاسم","الرقم (ع)","الموقع"]);
+          for(const item of acceptedRows.slice(0,50))
+            addRow(acceptedTable.body,[item.worksheet||"—",item.row||"—",
+              item.name,item.serviceNumberA,item.siteName||"غير محدد"]);
+          summary.append(node("h3","section-title",
+            "الأفراد المقبولون — عرض "+Math.min(50,acceptedRows.length)+" من "+report.newCount),
+            acceptedTable.wrap);
+        }
+        const proposedSites=Array.isArray(report.newSites)?report.newSites:[];
+        if(proposedSites.length){
+          const siteTable=table(["الموقع المقترح","عدد الأفراد"]);
+          for(const item of proposedSites)
+            addRow(siteTable.body,[item.name,item.personCount]);
+          summary.append(node("h3","section-title",
+            "مواقع جديدة لن تُنشأ إلا بموافقة مستقلة"),siteTable.wrap);
+        }
+        const nameHints=Array.isArray(report.similarNames)?report.similarNames:[];
+        if(nameHints.length){
+          const hintTable=table(["الورقة","الصف","الاسم الجديد","الرقم (ع) الجديد","أسماء محفوظة مشابهة"]);
+          for(const item of nameHints)
+            addRow(hintTable.body,[item.worksheet,item.row,item.name,item.serviceNumberA,
+              (item.matches||[]).map(p=>p.name+" (ع: "+p.serviceNumberA+
+                (p.active?"، موجود":"، مؤرشف")+")").join("؛ ")]);
+          summary.append(node("h3","section-title",
+            "تنبيه: تشابه أسماء مع هويات محفوظة — لا يُعتبر تطابق هوية ("+
+            (report.similarNameCount??nameHints.length)+" صف)"),
+            hintTable.wrap);
+          if(Number(report.similarNameCount)>nameHints.length)
+            summary.append(warning("يُعرض أول "+nameHints.length+
+              " تنبيه فقط من أصل "+report.similarNameCount+
+              "، ويجب مراجعة جميع حالات تشابه الهوية قبل اعتماد الملف."));
+        }
         const issues=table(["الورقة","الصف","الاسم","الرقم (ع)","سبب الاستبعاد"]);
         for(const item of (report.issues||[]).slice(0,500))
           addRow(issues.body,[item.worksheet||"—",item.row,item.name,item.serviceNumberA,item.reason]);
         if((report.issues||[]).length)
           summary.append(node("h3","section-title","الصفوف المستبعدة"),issues.wrap);
-        const preview=btn("معاينة خطة الإضافة",async()=>{
+        if((report.issues||[]).some(item=>
+          String(item.reason||"").includes("هوية مؤرشفة")))
+          summary.append(btn("معالجة هويات الأرشيف عبر إضافة فرد",()=>
+            navigate("persons","AddPerson"),"btn btn-outline"));
+        const preview=btn(Number(report.newCount)>0?"معاينة خطة الإضافة":"معاينة اعتماد صفوف الرفض فقط",async()=>{
           preview.disabled=true;confirmBox.replaceChildren();previewToken="";
           try{
             const result=await api().invoke("PreviewImportPlan",{workbookToken});
@@ -553,13 +591,17 @@
             }
             const details={rows:[
               ["أفراد جدد",plan.newCount],["صفوف مستبعدة",plan.issueCount],
+              ["أسماء مشابهة تستدعي مراجعة بشرية",plan.similarNameCount??(plan.similarNames||[]).length],
               ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
-            ],columns:["الاسم الجديد","الرقم (ع)"],
-              items:(plan.acceptedPreview||[]).map(p=>[p.name,p.serviceNumberA])};
+            ],columns:["الورقة","الصف","الاسم الجديد","الرقم (ع)","الموقع"],
+              items:(plan.acceptedPreview||[]).map(p=>
+                [p.worksheet||"—",p.row||"—",p.name,p.serviceNumberA,p.siteName||"غير محدد"])};
             const accepted=await detailsReview(details,{
-              title:"معاينة خطة إضافة الأفراد",
-              message:"راجع الأسماء والأرقام (ع) والتعارضات قبل الاعتماد.",
-              confirmLabel:"تأكيد استيراد الأفراد الجدد"
+              title:Number(plan.newCount)>0?"معاينة خطة إضافة الأفراد":"معاينة أرشفة أخطاء الاستيراد",
+              message:Number(plan.newCount)>0?
+                "راجع الأسماء والأرقام (ع) والتعارضات قبل الاعتماد.":
+                "لن يُضاف أي فرد؛ يُحفظ فقط سجل الصفوف المرفوضة مع أسبابها لتتمكن من تصدير Excel.",
+              confirmLabel:Number(plan.newCount)>0?"تأكيد استيراد الأفراد الجدد":"تأكيد حفظ سجل الأخطاء"
             });
             if(!accepted){previewToken="";return;}
             const token=previewToken;
@@ -574,7 +616,9 @@
                 previewToken="";
                 analysis.replaceChildren();
                 confirmBox.replaceChildren(node("p","settings-success",
-                  "تم إنشاء "+done.data.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق."+
+                  (done.data.createdCount===0?
+                    "تم حفظ صفوف الرفض فقط دون إضافة أي فرد.":
+                    "تم إنشاء "+done.data.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق.")+
                   " معرف الدفعة: "+(done.data.importBatchId||"—")));
                 workbookToken="";
                 await loadHistory();
@@ -597,7 +641,8 @@
           examine.focus?.();
         },"btn btn-outline app-modal-close");
         analysis.replaceChildren(closeAnalysis,summary);
-        if(Number(report.newCount)>0)analysis.appendChild(preview);
+        if(Number(report.newCount)>0 || Number(report.issueCount)>0)
+          analysis.appendChild(preview);
         closeAnalysis.focus?.();
         status.replaceChildren(node("p","settings-success","اكتمل التحليل؛ راجع الصفوف قبل اعتماد الخطة."));
       }catch(e){errors(status,e);}

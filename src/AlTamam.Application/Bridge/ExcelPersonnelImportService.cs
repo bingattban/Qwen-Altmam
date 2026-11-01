@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Xml;
 using System.Xml.Linq;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Application.Imports;
 using AlTamam.Contracts.Events;
 using AlTamam.Domain.Policies;
 using AlTamam.Infrastructure.Persistence;
@@ -54,9 +55,10 @@ public sealed class ExcelPersonnelImportService
         {
             if (bytes.Length > MaxWorkbookBytes) return Invalid("ملف Excel كبير جداً (الحد 160 كيلوبايت).");
             var rows = ParseWorkbook(bytes, payload);
-            if (rows.Count == 0 || rows.All(row=>row.Issue is not null ||
-                !ServiceNumberPolicy.TryCanonicalize(row.Number,out _)))
-                return Invalid("الكشف لا يحتوي على أرقام (ع) صالحة للاستيراد؛ لم تُقبل أي صفوف.");
+            // Even entirely rejected worksheets must reach analysis so users can
+            // inspect every validation error without changing the database.
+            if (rows.Count == 0)
+                return Invalid("ملف Excel لا يحتوي على صفوف أفراد قابلة للتحليل.");
             var data = new JsonArray();
             foreach (var row in rows)
                 data.Add(new JsonObject
@@ -103,10 +105,11 @@ public sealed class ExcelPersonnelImportService
         catch (System.Text.Json.JsonException) { return null; }
     }
 
-    private static List<PersonInput> Rows(JsonObject staged)
+    private static List<PersonInput> Rows(JsonObject staged,bool allowEmpty=false)
     {
         var items = staged["rows"] as JsonArray ?? throw new InvalidDataException("غياب بيانات المعاينة.");
-        if (items.Count is < 1 or > MaxRecords) throw new InvalidDataException("عدد صفوف الاستيراد غير آمن.");
+        if (items.Count > MaxRecords || (!allowEmpty && items.Count==0))
+            throw new InvalidDataException("عدد صفوف الاستيراد غير آمن.");
         return items.Select(n =>
         {
             var obj = n as JsonObject ?? throw new InvalidDataException("صف غير صالح.");
@@ -212,9 +215,10 @@ public sealed class ExcelPersonnelImportService
         if (staged is null) return Stale();
         var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
+        var similarNameMatches=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["newSites"]=newSites,
+            ["newSites"]=newSites,["similarNames"]=similarNameMatches.Items,["similarNameCount"]=similarNameMatches.Total,
             ["totalRows"] = accepted.Count + issues.Count, ["newCount"] = accepted.Count,
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted)
@@ -228,9 +232,10 @@ public sealed class ExcelPersonnelImportService
         var staged = await ReadStagedAsync(ticket, WorkbookOperation, actor, connection, null, ct).ConfigureAwait(false);
         if (staged is null) return Stale();
         var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
-        if (accepted.Count == 0)
-            return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد أسماء جديدة صالحة للاستيراد.");
+        if (accepted.Count == 0 && issues.Count == 0)
+            return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد بيانات تحليل قابلة للحفظ.");
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
+        var similarNameMatches=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
         // Only approved, conflict-free new rows are carried forward to the signed, one-use plan.
         string token = BridgePreviewTokens.Issue(_db, _time, PlanOperation, actor,
             new JsonObject { ["fileName"] = Read(staged, "fileName"),
@@ -253,6 +258,8 @@ public sealed class ExcelPersonnelImportService
         return BridgeHelpers.Ok(new JsonObject
         {
             ["previewToken"] = token, ["newSites"] = newSites.DeepClone(),
+            ["similarNames"] = similarNameMatches.Items,
+            ["similarNameCount"] = similarNameMatches.Total,
             ["newCount"] = accepted.Count,
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted),
@@ -271,7 +278,7 @@ public sealed class ExcelPersonnelImportService
             if (replay is not null) return replay;
             var plan = await ReadStagedAsync(token, PlanOperation, actor, connection, tx, ct).ConfigureAwait(false);
             if (plan is null) return Stale();
-            var rows = Rows(plan);
+            var rows = Rows(plan,allowEmpty:true);
             var (accepted, issues) = await InspectAsync(connection, tx, rows, ct).ConfigureAwait(false);
             if (issues.Count > 0 || accepted.Count != rows.Count)
                 return Stale();
@@ -443,11 +450,16 @@ public sealed class ExcelPersonnelImportService
     private static JsonArray PreviewNames(JsonArray accepted)
     {
         var preview = new JsonArray();
-        foreach (var row in accepted.Take(20))
+        foreach (var row in accepted.Take(100))
         {
             var x = (JsonObject)row!;
-            preview.Add(new JsonObject { ["name"] = x["name"]!.GetValue<string>(),
-                ["serviceNumberA"] = x["serviceNumberA"]!.GetValue<string>() });
+            preview.Add(new JsonObject {
+                ["worksheet"] = x["worksheet"]?.GetValue<string>() ?? "الورقة الأولى",
+                ["row"] = x["row"]!.GetValue<int>(),
+                ["name"] = x["name"]!.GetValue<string>(),
+                ["serviceNumberA"] = x["serviceNumberA"]!.GetValue<string>(),
+                ["siteName"] = x["siteName"]!.GetValue<string>()
+            });
         }
         return preview;
     }
@@ -475,17 +487,9 @@ public sealed class ExcelPersonnelImportService
             if (zip.GetEntry("[Content_Types].xml") is null ||
                 zip.GetEntry("xl/workbook.xml") is null)
                 throw new InvalidDataException("هذا ليس ملف Excel بصيغة xlsx.");
-            var sheets=new List<ZipArchiveEntry>();
-            for(int i=1;i<=50;i++)
-            {
-                var found=zip.GetEntry($"xl/worksheets/sheet{i}.xml");
-                if(found is not null)sheets.Add(found);
-            }
-            if(sheets.Count==0)
-                throw new InvalidDataException("ملف Excel لا يحتوي على أوراق أفراد متاحة.");
-            var sheetNames=SafeXml(zip.GetEntry("xl/workbook.xml")!)
-                .Descendants(Ns+"sheet")
-                .Select(x=>(string?)x.Attribute("name")??"").ToArray();
+            // Match selected worksheet index to the workbook's declared order,
+            // not an assumed sheet1.xml/sheet2.xml physical filename sequence.
+            var sheets=ExcelWorksheetResolver.Resolve(zip,SafeXml);
             var picked=options?["sheetIndexes"] as JsonArray;
             var indices=new List<int>();
             bool allSheets=false;
@@ -554,12 +558,11 @@ public sealed class ExcelPersonnelImportService
             }
             foreach(int sheetIndex in indices)
             {
-            XDocument document=SafeXml(sheets[sheetIndex-1]);
+            XDocument document=SafeXml(sheets[sheetIndex-1].Entry);
             var rows=document.Descendants(Ns+"sheetData").Elements(Ns+"row").ToList();
             if(rows.Count is <2 or >MaxRecords+6)
                 throw new InvalidDataException("ورقة Excel لا تحتوي على صفوف وأعمدة صالحة.");
-            string worksheet=sheetIndex<=sheetNames.Length && sheetNames[sheetIndex-1].Length>0
-                ?sheetNames[sheetIndex-1]:("الورقة "+sheetIndex.ToString(CultureInfo.InvariantCulture));
+            string worksheet=sheets[sheetIndex-1].Name;
             // Some official monthly workbooks put a report title and period above the header.
             // Locate the first valid header within five rows, never interpret title rows as persons.
             int headerIndex = -1, nameCol = 0, numberCol = 0, siteCol = 0;

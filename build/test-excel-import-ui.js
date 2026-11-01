@@ -24,7 +24,10 @@ const responses={
   SelectImportWorkbook:{workbookToken:"A".repeat(64),rowCount:3,maxRows:500},
   AnalyzeImport:{totalRows:3,newCount:2,issueCount:1,
     issues:[{row:4,name:"مكرر",serviceNumberA:"001",reason:"الرقم موجود"}],
-    acceptedPreview:[{name:"أحمد صالح",serviceNumberA:"002"}]},
+    acceptedPreview:[{worksheet:"الورقة الأولى",row:2,name:"أحمد صالح",serviceNumberA:"002",siteName:"غير محدد"}],
+    newSites:[{name:"موقع مستورد جديد",personCount:1}],
+    similarNames:[{worksheet:"الورقة الأولى",row:2,name:"أحمد صالح",serviceNumberA:"002",
+      matches:[{personId:"OLD-ID",name:"أحمد صالح",serviceNumberA:"0001",active:false}]}]},
   PreviewImportPlan:{previewToken:"B".repeat(64),newCount:2,issueCount:1,
     requiresExplicitConfirmation:true,issues:[],
     acceptedPreview:[{name:"أحمد صالح",serviceNumberA:"002"},
@@ -84,6 +87,9 @@ async function run(){
   assert.deepEqual(calls.filter(c=>c.name!=="QueryImportOutcome").map(x=>x.name),
     ["SelectImportWorkbook","AnalyzeImport"]);
   assert.ok(all().some(x=>x.textContent.includes("الصفوف المستبعدة")));
+  assert.ok(all().some(x=>x.textContent.includes("مواقع جديدة")));
+  assert.ok(all().some(x=>x.textContent.includes("تشابه أسماء")));
+  assert.ok(all().some(x=>x.textContent.includes("الأفراد المقبولون")));
   await button("معاينة خطة الإضافة").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,0,
     "server-side preview must not persist rows");
@@ -128,6 +134,22 @@ async function run(){
   const before=calls.length;
   await button("تحليل الملف").handlers.click();
   assert.equal(calls.length,before,"oversize file must never enter the bridge");
+  // Rejected-only XLSX is analyzable and may be archived with explicit
+  // approval, without creating or returning any person in SQLCipher.
+  responses.AnalyzeImport={totalRows:2,newCount:0,issueCount:2,
+    issues:[{row:2,name:"مرفوض",serviceNumberA:"12",reason:"رقم غير صالح"}],
+    acceptedPreview:[],newSites:[],similarNames:[]};
+  responses.PreviewImportPlan={previewToken:"C".repeat(64),newCount:0,
+    issueCount:2,requiresExplicitConfirmation:true,newSites:[],
+    issues:responses.AnalyzeImport.issues,acceptedPreview:[]};
+  responses.CommitImport={createdCount:0,rejectedCount:2,importBatchId:"IMP-REJECT-ONLY"};
+  picker.files=[{name:"مرفوض_كله.xlsx",size:80,base64:"UEsDBBQ"}];
+  await button("تحليل الملف").handlers.click();
+  assert.ok(button("معاينة اعتماد صفوف الرفض فقط"));
+  await button("معاينة اعتماد صفوف الرفض فقط").handlers.click();
+  assert.equal(calls.filter(x=>x.name==="CommitImport").at(-1).body.previewToken,
+    "C".repeat(64));
+  assert.ok(all().some(x=>x.textContent.includes("تم حفظ صفوف الرفض فقط")));
   console.log("EXCEL IMPORT UI PASS: safe batch history, report XLSX, no implicit write, server token and size guard");
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});

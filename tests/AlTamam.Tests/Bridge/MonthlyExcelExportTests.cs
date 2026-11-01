@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using AlTamam.Application.Bridge;
 using AlTamam.Infrastructure.Persistence;
+using AlTamam.Infrastructure.Excel.Reports;
 using AlTamam.Tests.Fixtures;
 using Xunit;
 
@@ -257,6 +258,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         _exports.Add(file);
         Assert.Equal(Path.Combine(_output,"كشف الشهر المعتمد.xlsx"),file);
         Assert.True(File.Exists(file));
+        Assert.False(File.Exists(file+".part"),"No unfinished XLSX part may remain after success.");
         var repeated=await service.ExportAsync(request,CancellationToken.None);
         Assert.False(repeated.Success); // an existing workbook is never overwritten
         Assert.True(File.Exists(file));
@@ -318,6 +320,118 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         Assert.NotEqual(name, second);
         Assert.True(File.Exists(name));
         Assert.True(File.Exists(second));
+    }
+
+
+
+    [Fact]
+    public async Task UnavailableEDriveOutput_ReportsFailureWithoutSavingElsewhere()
+    {
+        var request=Period("SITE-UNSPECIFIED");
+        request["directory"]=@"E:\AlTamamAlYawmi\Missing-"+Guid.NewGuid().ToString("N");
+        request["fileName"]="كشف_مسار_مفقود.xlsx";
+        var result=await new MonthlyExcelExportService(_db).ExportAsync(request,
+            CancellationToken.None);
+        Assert.False(result.Success,"An unavailable E: directory is not a license to use a fallback.");
+        Assert.Equal("0",Convert.ToString(Directory.GetFiles(_output,
+            "كشف_مسار_مفقود.xlsx").Length));
+        Assert.Empty(Directory.GetFiles(_output,"*.part"));
+    }
+
+    [Fact]
+    public void SharedXlsxPublisher_RejectsCorruptPartAndRespectsPrePublishCancellation()
+    {
+        var broken=Path.Combine(_output,"phase10-corrupt.xlsx.part");
+        var destination=Path.Combine(_output,"phase10-corrupt.xlsx");
+        File.WriteAllText(broken,"not a valid XLSX");
+        try
+        {
+            Assert.Throws<InvalidDataException>(()=>
+                ReportWorkbookCommit.VerifyFlushAndMove(broken,destination,CancellationToken.None));
+            Assert.False(File.Exists(destination),"Corrupted temporary ZIP must not be published.");
+        }
+        finally { File.Delete(broken); }
+
+        var good=Path.Combine(_output,"phase10-cancel.xlsx.part");
+        var canceled=Path.Combine(_output,"phase10-cancel.xlsx");
+        using(var zip=ZipFile.Open(good,ZipArchiveMode.Create))
+        {
+            zip.CreateEntry("[Content_Types].xml");
+            zip.CreateEntry("xl/workbook.xml");
+            zip.CreateEntry("xl/worksheets/sheet1.xml");
+        }
+        using var source=new CancellationTokenSource();
+        source.Cancel();
+        try
+        {
+            Assert.Throws<OperationCanceledException>(()=>
+                ReportWorkbookCommit.VerifyFlushAndMove(good,canceled,source.Token));
+            Assert.False(File.Exists(canceled),"Cancellation cannot publish a final workbook.");
+        }
+        finally { File.Delete(good); }
+    }
+
+
+    [Fact]
+    public async Task TenThousandPersonMonthlyWorkbook_StreamsAllRowsWithNoPartialPublish()
+    {
+        // Insert 10,000 effective-dated people in three bounded set-based SQL
+        // statements. A full workbook must stream every roster row, not just page 1.
+        using(var connection=_db.CreateOpenConnection())
+        using(var transaction=connection.BeginTransaction())
+        using(var cmd=connection.CreateCommand())
+        {
+            cmd.Transaction=transaction;
+            cmd.CommandText="""
+                WITH RECURSIVE seq(i) AS (
+                  SELECT 0 UNION ALL SELECT i+1 FROM seq WHERE i < 9999)
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                  CurrentServiceNumberA,NormalizedServiceNumberA,FirstRecordedLocalDate,
+                  FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+                SELECT 'TST-10K-'||i,'فرد تصدير '||i,'فرد تصدير '||i,
+                  printf('%06d',200000+i),printf('%06d',200000+i),
+                  '2026-10-01','2026-10-01T07:00:00Z',1,1,1 FROM seq;
+
+                WITH RECURSIVE seq(i) AS (
+                  SELECT 0 UNION ALL SELECT i+1 FROM seq WHERE i < 9999)
+                INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,
+                  ServiceNumberASnapshot,ValidFromLocalDate,ValidToLocalDate,
+                  ChangedByUserId,RecordedAtUtc,Reason)
+                SELECT 'TST-10K-'||i,'فرد تصدير '||i,
+                  printf('%06d',200000+i),'2026-10-01',NULL,
+                  'TST-U','2026-10-01T07:00:00Z','تجربة عشرة آلاف فرد' FROM seq;
+
+                WITH RECURSIVE seq(i) AS (
+                  SELECT 0 UNION ALL SELECT i+1 FROM seq WHERE i < 9999)
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
+                  ValidFromLocalDate,ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                SELECT 'TST-10K-ASG-'||i,'TST-10K-'||i,'SITE-UNSPECIFIED',
+                  '2026-10-01',NULL,NULL,'2026-10-01T07:00:00Z' FROM seq;
+                """;
+            await cmd.ExecuteNonQueryAsync();
+            transaction.Commit();
+        }
+        var exporter=new MonthlyExcelExportService(_db);
+        var request=Period("SITE-UNSPECIFIED");
+        var preview=await exporter.PreviewAsync(request,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        const long expected=10102;
+        Assert.Equal(expected,Assert.IsType<JsonObject>(preview.Data)["personCount"]!.GetValue<long>());
+        var exported=await exporter.ExportAsync(request,CancellationToken.None);
+        Assert.True(exported.Success,exported.UserMessage);
+        var info=Assert.IsType<JsonObject>(exported.Data);
+        Assert.Equal(expected,info["personCount"]!.GetValue<long>());
+        string file=info["filePath"]!.GetValue<string>();
+        _exports.Add(file);
+        Assert.False(File.Exists(file+".part"));
+        using var zip=ZipFile.OpenRead(file);
+        using var stream=zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+        using var reader=System.Xml.XmlReader.Create(stream);
+        int physicalRows=0;
+        while(reader.Read())
+            if(reader.NodeType==System.Xml.XmlNodeType.Element && reader.LocalName=="row")
+                physicalRows++;
+        Assert.Equal((int)expected+3,physicalRows);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
