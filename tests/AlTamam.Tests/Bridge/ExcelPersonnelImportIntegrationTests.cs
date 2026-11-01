@@ -334,6 +334,72 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
     }
 
+    [Fact]
+    public async Task RejectedOnlyWorkbook_StillExposesAllIssues_WithoutAnyDatabaseMutation()
+    {
+        var selected=await Service.SelectAsync(FilePayload(Workbook(
+            ("اسم صالح","12"),("اسم ثان","خطأ"))),Owner,CancellationToken.None);
+        Assert.True(selected.Success,selected.UserMessage);
+        var ticket=Assert.IsType<JsonObject>(selected.Data)["workbookToken"]!.GetValue<string>();
+        var analysis=await Service.AnalyzeAsync(new JsonObject{["workbookToken"]=ticket},
+            Owner,CancellationToken.None);
+        Assert.True(analysis.Success,analysis.UserMessage);
+        var data=Assert.IsType<JsonObject>(analysis.Data);
+        Assert.Equal(0,data["newCount"]!.GetValue<int>());
+        Assert.Equal(2,data["issueCount"]!.GetValue<int>());
+        Assert.Equal(2,Assert.IsType<JsonArray>(data["issues"]).Count);
+        Assert.Empty(Assert.IsType<JsonArray>(data["acceptedPreview"]));
+        var cannotCommit=await Service.PreviewAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.False(cannotCommit.Success,"No approved writes without valid people.");
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM ImportBatches"));
+    }
+
+    [Fact]
+    public async Task NameCollisionAdvisory_IsNotAnIdentityDecisionOrAutomaticMerge()
+    {
+        var first=await Service.SelectAsync(FilePayload(Workbook(
+            ("أحمد سالم محمد","009911"))),Owner,CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        var firstToken=Assert.IsType<JsonObject>(first.Data)["workbookToken"]!.GetValue<string>();
+        var firstPlan=await Service.PreviewAsync(new JsonObject{["workbookToken"]=firstToken},
+            Owner,CancellationToken.None);
+        Assert.True(firstPlan.Success,firstPlan.UserMessage);
+        var firstSaved=await Service.CommitAsync(new JsonObject {
+            ["previewToken"]=Assert.IsType<JsonObject>(firstPlan.Data)["previewToken"]!.GetValue<string>()
+        },Owner,"owner",CancellationToken.None);
+        Assert.True(firstSaved.Success,firstSaved.UserMessage);
+
+        var second=await Service.SelectAsync(FilePayload(Workbook(
+            ("أحمد سالم محمد","009912"))),Owner,CancellationToken.None);
+        Assert.True(second.Success,second.UserMessage);
+        string ticket=Assert.IsType<JsonObject>(second.Data)["workbookToken"]!.GetValue<string>();
+        var analysis=await Service.AnalyzeAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(analysis.Success,analysis.UserMessage);
+        var data=Assert.IsType<JsonObject>(analysis.Data);
+        Assert.Equal(1,data["newCount"]!.GetValue<int>());
+        var hint=Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(data["similarNames"])));
+        Assert.Equal("009912",hint["serviceNumberA"]!.GetValue<string>());
+        Assert.True(hint["advisoryOnly"]!.GetValue<bool>());
+        Assert.Equal("009911",Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(hint["matches"])))["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Persons"));
+        var preview=await Service.PreviewAsync(
+            new JsonObject{["workbookToken"]=ticket},Owner,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        Assert.Single(Assert.IsType<JsonArray>(
+            Assert.IsType<JsonObject>(preview.Data)["similarNames"]));
+        var saved=await Service.CommitAsync(new JsonObject {
+            ["previewToken"]=Assert.IsType<JsonObject>(preview.Data)["previewToken"]!.GetValue<string>()
+        },Owner,"owner",CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        Assert.Equal("2",Scalar("SELECT COUNT(DISTINCT PersonId) FROM Persons"));
+        Assert.Equal("2",Scalar("SELECT COUNT(DISTINCT CurrentServiceNumberA) FROM Persons"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
