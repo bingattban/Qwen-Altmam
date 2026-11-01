@@ -218,6 +218,31 @@ public sealed class AutomaticBackupService
         },ct).ConfigureAwait(false);
     }
 
+    private async Task RecordRetentionFailureAsync(string failure)
+    {
+        string description="تعذر تطبيق الاحتفاظ بالنسخ القديمة: "+failure;
+        await _db.ExecuteInWriteTransactionAsync(async(c,tx)=>{
+            using var cmd=c.CreateCommand();cmd.Transaction=tx;
+            cmd.CommandText="""
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('AutoBackupRetentionLastFailure',$message,$now)
+                ON CONFLICT(SettingKey) DO UPDATE SET
+                    SettingValue=excluded.SettingValue,UpdatedAtUtc=excluded.UpdatedAtUtc;
+                """;
+            cmd.Parameters.AddWithValue("$message",description);
+            cmd.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
+            await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
+            await BridgeAuditWriter.WriteAsync(c,tx,_time,
+                "AUTO_BACKUP_RETENTION_FAILED","فشل تنظيف النسخ القديمة",
+                "USR-SYSTEM","النظام",null,"Backup","RETENTION","سياسة الاحتفاظ",
+                null,new JsonObject{["failureType"]=failure}.ToJsonString(),
+                "بقيت النسخة الجديدة ناجحة؛ تعذر تنظيف بعض النسخ القديمة",
+                null,_time.GetLocalNow().ToString("yyyy-MM-dd"),
+                Guid.NewGuid().ToString("N"),CancellationToken.None).ConfigureAwait(false);
+            return 0;
+        },CancellationToken.None).ConfigureAwait(false);
+    }
+
     /// <returns>True only after the encrypted file and durable database audit
     /// record both committed. Runs once per date, including a same-day startup
     /// catch-up after the scheduled time; never invents backups for past dates.</returns>
@@ -293,6 +318,24 @@ public sealed class AutomaticBackupService
                         Guid.NewGuid().ToString("N"),ct).ConfigureAwait(false);
                     return 0;
                 },ct).ConfigureAwait(false);
+                // The new backup is already DURABLY committed. A failed/aborted
+                // retention pass must never delete it or turn success into a
+                // false negative that invites another backup of this occurrence.
+                try
+                {
+                    await new AutomaticBackupRetentionService(_db,_time).ApplyAsync(
+                        path,hash,await ReadRetentionDaysAsync(ct).ConfigureAwait(false),ct)
+                        .ConfigureAwait(false);
+                }
+                catch(Exception ex)
+                {
+                    if(ex is not OperationCanceledException)
+                    {
+                        try{await RecordRetentionFailureAsync(ex.GetType().Name)
+                            .ConfigureAwait(false);}
+                        catch(Exception){ /* backup stays valid; no false retry */ }
+                    }
+                }
                 return true;
             }
             catch
