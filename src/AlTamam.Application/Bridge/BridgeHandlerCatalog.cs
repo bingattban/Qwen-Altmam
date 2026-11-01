@@ -816,7 +816,7 @@ public static class BridgeHandlerCatalog
         "QueryAuditPresentationChanges" => async (req, principal, ct) =>
         {
             var svc = new AuditOverlayService(services.Db, services.Time);
-            BridgeResponse inner = await svc.QueryAuditPresentationChangesAsync(req.Payload ?? new JsonObject(), ct).ConfigureAwait(false);
+            BridgeResponse inner = await svc.QueryAuditPresentationChangesAsync(req.Payload ?? new JsonObject(), ct, principal).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
         _ => (req, principal, ct) => Task.FromResult(Fail(req, BridgeSharedServices.Error(
