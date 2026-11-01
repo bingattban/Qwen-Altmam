@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Xml;
 using System.Xml.Linq;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Application.Imports;
 using AlTamam.Contracts.Events;
 using AlTamam.Domain.Policies;
 using AlTamam.Infrastructure.Persistence;
@@ -54,9 +55,10 @@ public sealed class ExcelPersonnelImportService
         {
             if (bytes.Length > MaxWorkbookBytes) return Invalid("ملف Excel كبير جداً (الحد 160 كيلوبايت).");
             var rows = ParseWorkbook(bytes, payload);
-            if (rows.Count == 0 || rows.All(row=>row.Issue is not null ||
-                !ServiceNumberPolicy.TryCanonicalize(row.Number,out _)))
-                return Invalid("الكشف لا يحتوي على أرقام (ع) صالحة للاستيراد؛ لم تُقبل أي صفوف.");
+            // Even entirely rejected worksheets must reach analysis so users can
+            // inspect every validation error without changing the database.
+            if (rows.Count == 0)
+                return Invalid("ملف Excel لا يحتوي على صفوف أفراد قابلة للتحليل.");
             var data = new JsonArray();
             foreach (var row in rows)
                 data.Add(new JsonObject
@@ -212,9 +214,10 @@ public sealed class ExcelPersonnelImportService
         if (staged is null) return Stale();
         var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
+        var similarNames=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["newSites"]=newSites,
+            ["newSites"]=newSites,["similarNames"]=similarNames,
             ["totalRows"] = accepted.Count + issues.Count, ["newCount"] = accepted.Count,
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted)
@@ -231,6 +234,7 @@ public sealed class ExcelPersonnelImportService
         if (accepted.Count == 0)
             return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد أسماء جديدة صالحة للاستيراد.");
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
+        var similarNames=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
         // Only approved, conflict-free new rows are carried forward to the signed, one-use plan.
         string token = BridgePreviewTokens.Issue(_db, _time, PlanOperation, actor,
             new JsonObject { ["fileName"] = Read(staged, "fileName"),
@@ -253,6 +257,7 @@ public sealed class ExcelPersonnelImportService
         return BridgeHelpers.Ok(new JsonObject
         {
             ["previewToken"] = token, ["newSites"] = newSites.DeepClone(),
+            ["similarNames"] = similarNames,
             ["newCount"] = accepted.Count,
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted),
@@ -443,11 +448,16 @@ public sealed class ExcelPersonnelImportService
     private static JsonArray PreviewNames(JsonArray accepted)
     {
         var preview = new JsonArray();
-        foreach (var row in accepted.Take(20))
+        foreach (var row in accepted.Take(MaxRecords))
         {
             var x = (JsonObject)row!;
-            preview.Add(new JsonObject { ["name"] = x["name"]!.GetValue<string>(),
-                ["serviceNumberA"] = x["serviceNumberA"]!.GetValue<string>() });
+            preview.Add(new JsonObject {
+                ["worksheet"] = x["worksheet"]?.GetValue<string>() ?? "الورقة الأولى",
+                ["row"] = x["row"]!.GetValue<int>(),
+                ["name"] = x["name"]!.GetValue<string>(),
+                ["serviceNumberA"] = x["serviceNumberA"]!.GetValue<string>(),
+                ["siteName"] = x["siteName"]!.GetValue<string>()
+            });
         }
         return preview;
     }
