@@ -341,6 +341,30 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
         Assert.Equal("0",Stored("SELECT COUNT(*) FROM AttendanceRevisions"));
     }
 
+    [Fact]
+    public async Task BeforeAdmissionOrOutsideHistoricalSiteMembershipCannotBeCorrected()
+    {
+        await Enable();
+        var service=new ClosedDayCorrectionService(_db);
+        using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            // Synthetic inconsistent historical evidence: a legacy attendance
+            // row predates the person's true admission to the current site.
+            // A closed-day override must not manufacture eligibility.
+            cmd.CommandText="""
+                UPDATE PersonAssignments SET ValidFromLocalDate='2026-10-11'
+                WHERE AssignmentId='TST-CLOSED-A1';
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var denied=await service.PreviewAsync(Request(),Ga,CancellationToken.None);
+        Assert.False(denied.Success);
+        Assert.Equal(BridgeErrorCodes.MissingData,denied.ErrorCode);
+        Assert.Equal("0",Stored("SELECT COUNT(*) FROM AttendanceRevisions"));
+        Assert.Equal("موجود",Stored("SELECT StatusNameSnapshot FROM AttendanceRecords"));
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {
