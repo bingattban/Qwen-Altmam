@@ -185,6 +185,43 @@ public sealed class PersonnelReportService
                 allMovements+=count;
             }
         }
+        // Read the actual committed attendance days per immutable PersonId,
+        // aggregate by historic status snapshot, and page to bound UI memory.
+        int summaryPage=Page(payload,"summaryPage");
+        const int summarySize=100;
+        var dailySummary=new JsonArray();
+        bool summaryHasNext;
+        using(var dates=connection.CreateCommand())
+        {
+            dates.CommandText=$"""
+                SELECT AttendanceLocalDate,StatusId,StatusNameSnapshot,
+                       COUNT(*),COUNT(DISTINCT PersonId)
+                FROM AttendanceRecords
+                WHERE PersonId IN ({placeholders})
+                  AND ($from='' OR AttendanceLocalDate >= $from)
+                  AND ($to='' OR AttendanceLocalDate <= $to)
+                  AND ($site='' OR SiteIdAtEffectiveDate=$site)
+                  AND ($status='' OR StatusId=$status)
+                GROUP BY AttendanceLocalDate,StatusId,StatusNameSnapshot
+                ORDER BY AttendanceLocalDate DESC,StatusNameSnapshot,StatusId
+                LIMIT $summaryLimit OFFSET $summaryOffset;
+                """;
+            BindRange(dates);
+            dates.Parameters.AddWithValue("$summaryLimit",summarySize+1);
+            dates.Parameters.AddWithValue("$summaryOffset",(long)(summaryPage-1)*summarySize);
+            using var reader=await dates.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+                dailySummary.Add(new JsonObject
+                {
+                    ["date"]=reader.GetString(0),
+                    ["statusId"]=reader.GetString(1),
+                    ["statusName"]=reader.GetString(2),
+                    ["count"]=reader.GetInt64(3),
+                    ["personCount"]=reader.GetInt64(4)
+                });
+            summaryHasNext=dailySummary.Count>summarySize;
+            if(summaryHasNext)dailySummary.RemoveAt(dailySummary.Count-1);
+        }
         var statusTotals=new JsonArray();
         foreach(var entry in totals.OrderBy(x=>x.Key.Snapshot,StringComparer.Ordinal)
                                    .ThenBy(x=>x.Key.StatusId,StringComparer.Ordinal))
@@ -201,7 +238,10 @@ public sealed class PersonnelReportService
             ["persons"]=new JsonArray(ids.Select(id=>(JsonNode?)people[id]).ToArray()),
             ["attendanceTotal"]=allAttendance,
             ["movementTotal"]=allMovements,
-            ["statusTotals"]=statusTotals
+            ["statusTotals"]=statusTotals,
+            ["dailyStatusTotals"]=dailySummary,
+            ["dailyStatusPage"]=summaryPage,
+            ["dailyStatusHasNext"]=summaryHasNext
         });
     }
 
@@ -345,7 +385,7 @@ public sealed class PersonnelReportService
         using var histories=conn.CreateCommand();
         histories.CommandText="""
             SELECT NameSnapshot,ServiceNumberASnapshot,ValidFromLocalDate,
-                   ValidToLocalDate,ChangedByUserId,Reason
+                   ValidToLocalDate,ChangedByUserId,Reason,RecordedAtUtc
             FROM PersonIdentityHistory WHERE PersonId=$id
             ORDER BY ValidFromLocalDate DESC,HistoryId DESC LIMIT $size OFFSET $offset;
             """;
@@ -359,7 +399,8 @@ public sealed class PersonnelReportService
                 {
                     ["name"]=r.GetString(0),["serviceNumberA"]=r.GetString(1),
                     ["from"]=r.GetString(2),["to"]=r.IsDBNull(3)?null:r.GetString(3),
-                    ["actorUserId"]=r.GetString(4),["reason"]=r.GetString(5)
+                    ["actorUserId"]=r.GetString(4),["reason"]=r.GetString(5),
+                    ["recordedAtUtc"]=r.GetString(6)
                 });
 
         using var movementCount=conn.CreateCommand();
@@ -532,7 +573,8 @@ public sealed class PersonnelReportService
                         AND (n.ValidToLocalDate IS NULL OR n.ValidToLocalDate>a.ValidFromLocalDate)
                       ORDER BY n.ValidFromLocalDate DESC LIMIT 1),
                       CASE WHEN a.SiteId='SITE-UNSPECIFIED' THEN 'غير محدد'
-                           ELSE 'غير موثق تاريخياً' END)
+                           ELSE 'غير موثق تاريخياً' END),
+                   a.CreatedAtUtc
             FROM PersonAssignments a WHERE a.PersonId=$id
             ORDER BY a.ValidFromLocalDate DESC,a.AssignmentId DESC
             LIMIT $size OFFSET $offset;
@@ -546,7 +588,8 @@ public sealed class PersonnelReportService
                 sites.Add(new JsonObject{
                     ["siteId"]=r.GetString(0),["from"]=r.GetString(1),
                     ["to"]=r.IsDBNull(2)?null:r.GetString(2),
-                    ["siteName"]=r.GetString(3)
+                    ["siteName"]=r.GetString(3),
+                    ["createdAtUtc"]=r.GetString(4)
                 });
         return BridgeHelpers.Ok(new JsonObject
         {

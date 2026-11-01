@@ -105,10 +105,12 @@
            const info=(await api().invoke("GetExportProgress",{},
              {timeoutMs:10000})).data||{};
            if(!monitoring||popup.hidden)return;
-           const percentage=Number(info.percentage);
-           const ratio=Number.isInteger(percentage)?" — "+percentage+"%":"";
-           if(Number.isInteger(percentage)&&percentage>=0&&percentage<=100)
-             progress.value=percentage;
+           // Only the verified final workbook may be reported as 100% complete.
+           const rawPercentage=Number(info.percentage);
+           const percentage=Number.isInteger(rawPercentage)&&rawPercentage>=0?
+             Math.min(99,rawPercentage):null;
+           const ratio=percentage!==null?" — "+percentage+"%":"";
+           if(percentage!==null)progress.value=percentage;
            const rows=info.total?" ("+info.processed+" من "+info.total+" صف)":"";
            progressText.textContent=info.cancelRequested?
              "جارٍ إيقاف التصدير والتحقق من حذف الملف المؤقت...":
@@ -196,7 +198,7 @@
      selectedPanel,fromLabel,toLabel,siteLabel,statusLabel,movementLabel,status,results);
    root.append(searchCard,popup);
    void loadHistoricalFilters();
-   let chosen=null,serial=0,attendancePage=1,auditPage=1,identityPage=1,
+   let chosen=null,serial=0,summaryPage=1,attendancePage=1,auditPage=1,identityPage=1,
      movementPage=1,sitePage=1,revisionPage=1;
    function renderSelected(){
      const box=card("الأفراد المحددون للمجموعة: "+selected.size+" من 100");
@@ -215,6 +217,7 @@
    renderSelected();
    async function loadGroupReport(){
      if(!selected.size)return alert(status,new Error("حدد فرداً أو مجموعة من نتائج البحث أولاً."));
+     if(!validDateRange())return;
      const ids=Array.from(selected.keys());
      const ticket=++serial;
      showPopup("group");
@@ -222,7 +225,7 @@
      report.replaceChildren(el("p","جارٍ إعداد التقرير الجماعي من السجلات المعتمدة..."));
      try{
        const reply=await api().invoke("BuildPersonLifetimeReport",{
-         personIds:ids,...filters()
+         personIds:ids,summaryPage,...filters()
        });
        if(ticket!==serial||!root.isConnected)return;
        const data=reply.data||{};
@@ -237,6 +240,20 @@
        rows(summary,["الحالة","عدد الأيام المعتمدة"],data.statusTotals,
          x=>[x.statusName,x.count],"لا توجد حالات تحضير معتمدة في هذه الفترة.");
        report.appendChild(summary);
+       const calendar=card("ملخص المجموعة حسب اليوم والحالة");
+       rows(calendar,["تاريخ التحضير","الحالة المحفوظة","عدد الوقائع","عدد الأفراد"],
+         data.dailyStatusTotals,x=>[x.date,x.statusName,x.count,x.personCount],
+         "لا توجد أيام تحضير ضمن الفترة المطلوبة.");
+       const pager=el("div",undefined,"functional-pager");
+       const previous=btn("الصفحة السابقة من الأيام",()=>{
+         if(summaryPage>1){summaryPage--;void loadGroupReport();}
+       });
+       const following=btn("الصفحة التالية من الأيام",()=>{
+         summaryPage++;void loadGroupReport();
+       });
+       previous.disabled=summaryPage<=1;following.disabled=!data.dailyStatusHasNext;
+       pager.append(el("span","صفحة الملخص اليومي: "+summaryPage),previous,following);
+       calendar.appendChild(pager);report.appendChild(calendar);
        const perPerson=card("تفصيل كل فرد في المجموعة — دون دمج السجلات المتشابهة");
        const t=table(["الرقم (ع)","اسم الفرد","نوع السجل","أيام التحضير","التنقلات","الحالات","التفاصيل"]);
        for(const person of data.persons){
@@ -305,6 +322,20 @@
        results.replaceChildren(t.wrap);
      }catch(e){if(ticket===serial&&root.isConnected)alert(results,e);}
    }
+   let searchTimer=null;
+   term.addEventListener("input",()=>{
+     if(searchTimer!==null&&typeof clearTimeout==="function")clearTimeout(searchTimer);
+     if(term.value.trim().length<2)return;
+     if(typeof setTimeout==="function")
+       searchTimer=setTimeout(()=>{searchTimer=null;void search();},250);
+   });
+   function validDateRange(){
+     if(dateFrom.value&&dateTo.value&&dateFrom.value>dateTo.value){
+       alert(status,new Error("بداية الفترة يجب أن تكون قبل النهاية أو مساوية لها."));
+       return false;
+     }
+     return true;
+   }
    function pageBar(box,label,pageNo,total,hasNext,change){
      const bar=el("div",undefined,"functional-pager");
      const previous=btn("السابق",()=>change(pageNo-1));
@@ -314,7 +345,7 @@
        previous,next);box.appendChild(bar);
    }
    async function loadReport(){
-     if(!chosen)return;
+     if(!chosen||!validDateRange())return;
      const ticket=++serial;
      showPopup("person");
      status.replaceChildren();
@@ -351,21 +382,24 @@
          p=>{attendancePage=p;void loadReport();});
        report.appendChild(daily);
        const memberships=card("تاريخ المواقع والفترات الفعلية");
-       rows(memberships,["الموقع التاريخي","بداية الانتساب","نهاية الانتساب"],
-         d.siteHistory,x=>[x.siteName,x.from,x.to]);
+       rows(memberships,["الموقع التاريخي","بداية الانتساب","نهاية الانتساب",
+         "وقت تسجيل الانتساب UTC"],
+         d.siteHistory,x=>[x.siteName,x.from,x.to,x.createdAtUtc]);
        pageBar(memberships,"فترات المواقع",d.sitePage||1,d.siteTotal||0,d.siteHasNext,
          p=>{sitePage=p;void loadReport();});
        report.appendChild(memberships);
        const history=card("تاريخ الاسم والرقم (ع)");
        rows(history,["الاسم السابق أو الحالي","الرقم (ع)","بداية النفاذ","نهاية النفاذ",
-         "سبب التعديل"],d.identityHistory,
-         x=>[x.name,x.serviceNumberA,x.from,x.to,x.reason]);
+         "سبب التعديل","وقت تسجيل الهوية UTC"],d.identityHistory,
+         x=>[x.name,x.serviceNumberA,x.from,x.to,x.reason,x.recordedAtUtc]);
        pageBar(history,"تغييرات الهوية",d.identityPage,d.identityTotal,d.identityHasNext,
          p=>{identityPage=p;void loadReport();});
        report.appendChild(history);
        const moves=card("التنقلات والفصل");
-       rows(moves,["النوع","الموقع السابق","الجهة الجديدة","التاريخ","سبب الفصل"],
-         d.movements,x=>[x.type,x.source,x.destination,x.date,x.reason]);
+       rows(moves,["النوع","الموقع السابق","الجهة الجديدة","تاريخ النفاذ",
+         "وقت تسجيل الحركة UTC","السبب","المنفذ المحفوظ"],
+         d.movements,x=>[x.type,x.source,x.destination,x.date,
+           x.committedAtUtc,x.reason,x.executor]);
        pageBar(moves,"التنقلات والفصل",d.movementPage,d.movementTotal,d.movementHasNext,
          p=>{movementPage=p;void loadReport();});
        report.appendChild(moves);
@@ -377,10 +411,11 @@
          d.revisionHasNext,p=>{revisionPage=p;void loadReport();});
        report.appendChild(revisions);
        const audit=card("سجل العمليات المرتبطة بالفرد");
-       rows(audit,["العملية","المنفّذ (المستخدم - الاسم المحفوظ)","التاريخ",
-          "الوصف","القيمة السابقة","القيمة الجديدة","السبب"],
+       rows(audit,["العملية","المنفّذ (المستخدم - الاسم المحفوظ)","تاريخ النفاذ",
+          "وقت تسجيل العملية UTC","الوصف","القيمة السابقة","القيمة الجديدة","السبب"],
          d.audit,x=>[x.operation,x.executor||x.username+" - "+x.fullName,
-           x.executedAtUtc,x.description,x.oldValueJson,x.newValueJson,x.reason]);
+           x.effectiveDate,x.executedAtUtc,x.description,
+           x.oldValueJson,x.newValueJson,x.reason]);
        pageBar(audit,"سجل العمليات",d.auditPage,d.auditTotal,d.auditHasNext,
          p=>{auditPage=p;void loadReport();});
        report.appendChild(audit);

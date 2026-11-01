@@ -45,6 +45,8 @@ const bridge={
         mode:"group",personCount:2,dateFrom:payload.dateFrom,dateTo:payload.dateTo,
         attendanceTotal:2,movementTotal:1,
         statusTotals:[{statusId:"STS-ABSENT",statusName:"غياب",count:2}],
+        dailyStatusTotals:[{date:"2026-10-20",statusName:"غياب",count:2,personCount:1}],
+        dailyStatusHasNext:false,
         persons:[
           {personId:"OLD-ID",serviceNumberA:"5151",name:"مفصول سابق",
             organizationalStatus:3,active:false,attendanceTotal:2,movementTotal:1,
@@ -74,6 +76,17 @@ vm.runInNewContext(fs.readFileSync(path.join(__dirname,
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 const buttons=label=>viewport.all().filter(x=>x.tag==="button"&&x.textContent===label);
 async function main(){
+  const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,
+    "../src/AlTamam.WebUI/screen-manifest.json"),"utf8"));
+  const reports=manifest.screens.filter(x=>x.screenId==="screen_025");
+  assert.equal(reports.length,1,"screen_025 must be the only canonical Report screen");
+  assert.equal(reports[0].titleAr,"التقرير");
+  assert.ok(!manifest.screens.some(x=>x.screenId==="screen_020"),
+    "retired duplicate screen_020 must never be routable");
+  const nav=fs.readFileSync(path.join(__dirname,
+    "../src/AlTamam.WebUI/assets/js/admin-settings.js"),"utf8");
+  assert.equal((nav.match(/\["personReport","التقرير"\]/g)||[]).length,1,
+    "Administration owns exactly one report navigation tile");
   context.window.AltamamReports.render(viewport,()=>{});
   await settle();await settle();
   const dropdowns=viewport.all().filter(x=>x.tag==="select");
@@ -86,6 +99,8 @@ async function main(){
   dropdowns[2].value="3";
   const term=viewport.all().find(x=>x.tag==="input"&&x.type==="search");
   assert.ok(term,"search must be present in the ONE report screen");
+  assert.equal(typeof term.handlers.input,"function",
+    "the unified person picker must support live search");
   term.value="5151";
   assert.equal(buttons("بحث").length,1);
   buttons("بحث")[0].handlers.click();await settle();await settle();
@@ -113,6 +128,9 @@ async function main(){
   assert.ok(viewport.all().some(x=>x.textContent==="فرد جديد مستقل"));
   assert.ok(viewport.all().some(x=>x.textContent==="مفصول سابق"));
   assert.ok(viewport.all().some(x=>x.textContent==="إجمالي التحضيرات المعتمدة: 2 — إجمالي الحركات: 1"));
+  assert.ok(viewport.all().some(x=>x.textContent==="ملخص المجموعة حسب اليوم والحالة"));
+  assert.ok(viewport.all().some(x=>x.textContent==="2026-10-20"));
+  assert.ok(viewport.all().some(x=>x.textContent==="صفحة الملخص اليومي: 1"));
   assert.equal(buttons("عرض سجل الفرد").length,2);
   buttons("عرض سجل الفرد")[1].handlers.click();
   await settle();await settle();
@@ -157,6 +175,12 @@ async function main(){
   delayExport=false;
   buttons("إغلاق التقرير")[0].handlers.click();
   assert.equal(popup.hidden,true,"close returns to existing multi-selection");
+  // The native export can finish all rows before the ZIP is durable. The
+  // browser must not display a premature 100% while the job is still running.
+  const reportSource=fs.readFileSync(path.join(__dirname,
+    "../src/AlTamam.WebUI/assets/js/personnel-report.js"),"utf8");
+  assert.match(reportSource,/Math\.min\(99,rawPercentage\)/,
+    "live Excel progress is capped at 99 until the final workbook is verified");
   console.log("UNIFIED REPORT UI PASS: person/group, historical vs new identity, exact PersonIds, date filter, drilldown");
 }
 main().catch(err=>{console.error(err);process.exitCode=1;});
