@@ -43,6 +43,37 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
         await cmd.ExecuteNonQueryAsync();
     }
 
+    [Theory]
+    [InlineData(2025, 2, 28)]
+    [InlineData(2024, 2, 29)]
+    [InlineData(2026, 4, 30)]
+    [InlineData(2026, 10, 31)]
+    public async Task MonthlyGrid_UsesExactCalendarLengthAndOnlyRequestedMonth(
+        int year, int month, int expectedDays)
+    {
+        var read = new DailyMonthlyReadService(_db);
+        var response = await read.MonthlyGridAsync(new JsonObject
+        {
+            ["year"] = year, ["month"] = month, ["archiveMode"] = true,
+            ["page"] = 1, ["pageSize"] = 50
+        }, CancellationToken.None);
+        Assert.True(response.Success, response.UserMessage);
+        var data = Assert.IsType<JsonObject>(response.Data);
+        Assert.Equal(expectedDays, data["daysInMonth"]!.GetValue<int>());
+        var items = Assert.IsType<JsonArray>(data["items"]);
+        if (year == 2026 && month == 10)
+        {
+            var row = Assert.IsType<JsonObject>(Assert.Single(items));
+            var days = Assert.IsType<JsonObject>(row["days"]);
+            Assert.Null(days["2026-10-01"]);
+            Assert.Equal("غياب", days["2026-10-19"]!["name"]!.GetValue<string>());
+        }
+        else
+        {
+            Assert.Empty(items); // no unrelated historical years or pre-admission rows
+        }
+    }
+
     [Fact]
     public async Task Dashboard_UsesSavedStatusAndSiteFilter()
     {

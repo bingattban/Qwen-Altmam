@@ -94,6 +94,18 @@ async function run(){
  await internalExport.handlers.click();await flush();
  assert.equal(archiveRequests.at(-1).payload.mode,"movementArchive");
  assert.equal(archiveRequests.at(-1).payload.type,"internal");
+ const movementType=archiveRoot.all().find(x=>x.tag==="select"&&
+  x.attrs["aria-label"]==="نوع السجل");
+ assert.ok(movementType,"return history is selectable within the existing read-only archive");
+ movementType.value="return";
+ movementType.handlers.change();await flush();
+ assert.equal(archiveRequests.at(-1).payload.type,"return",
+  "return archive must query genuine immutable movement type 4");
+ await internalExport.handlers.click();await flush();
+ assert.equal(archiveRequests.at(-1).payload.type,"return",
+  "Excel export must preserve the return archive filter");
+ assert.ok(!archiveRoot.all().some(x=>x.textContent==="إضافة عودة"),
+  "no second Return form may be added under transfers");
  const externalRoot=new Element("div");
  await ctx.window.AltamamMovements.render(externalRoot,"archiveExternal");
  assert.equal(archiveRequests.at(-1).payload.type,"external",
