@@ -485,17 +485,9 @@ public sealed class ExcelPersonnelImportService
             if (zip.GetEntry("[Content_Types].xml") is null ||
                 zip.GetEntry("xl/workbook.xml") is null)
                 throw new InvalidDataException("هذا ليس ملف Excel بصيغة xlsx.");
-            var sheets=new List<ZipArchiveEntry>();
-            for(int i=1;i<=50;i++)
-            {
-                var found=zip.GetEntry($"xl/worksheets/sheet{i}.xml");
-                if(found is not null)sheets.Add(found);
-            }
-            if(sheets.Count==0)
-                throw new InvalidDataException("ملف Excel لا يحتوي على أوراق أفراد متاحة.");
-            var sheetNames=SafeXml(zip.GetEntry("xl/workbook.xml")!)
-                .Descendants(Ns+"sheet")
-                .Select(x=>(string?)x.Attribute("name")??"").ToArray();
+            // Match selected worksheet index to the workbook's declared order,
+            // not an assumed sheet1.xml/sheet2.xml physical filename sequence.
+            var sheets=ExcelWorksheetResolver.Resolve(zip,SafeXml);
             var picked=options?["sheetIndexes"] as JsonArray;
             var indices=new List<int>();
             bool allSheets=false;
@@ -564,12 +556,11 @@ public sealed class ExcelPersonnelImportService
             }
             foreach(int sheetIndex in indices)
             {
-            XDocument document=SafeXml(sheets[sheetIndex-1]);
+            XDocument document=SafeXml(sheets[sheetIndex-1].Entry);
             var rows=document.Descendants(Ns+"sheetData").Elements(Ns+"row").ToList();
             if(rows.Count is <2 or >MaxRecords+6)
                 throw new InvalidDataException("ورقة Excel لا تحتوي على صفوف وأعمدة صالحة.");
-            string worksheet=sheetIndex<=sheetNames.Length && sheetNames[sheetIndex-1].Length>0
-                ?sheetNames[sheetIndex-1]:("الورقة "+sheetIndex.ToString(CultureInfo.InvariantCulture));
+            string worksheet=sheets[sheetIndex-1].Name;
             // Some official monthly workbooks put a report title and period above the header.
             // Locate the first valid header within five rows, never interpret title rows as persons.
             int headerIndex = -1, nameCol = 0, numberCol = 0, siteCol = 0;
