@@ -263,11 +263,11 @@ async function run() {
   byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="transfers").handlers.click();
   assert.deepEqual(byDataset("adminNested").map(x=>x.dataset.adminNested),
-    ["transferInternal","transferExternal","archiveInternal","archiveExternal"]);
+    ["transferInternal","transferExternal","archiveInternal","archiveExternal","archiveAll"]);
   byDataset("adminNested")[0].handlers.click();
   assert.equal(byDataset("adminNested").length,0,"nested cards hidden after opening a leaf");
   buttonNamed("العودة إلى التنقلات").handlers.click();
-  assert.equal(byDataset("adminNested").length,4,"back restores transfer and both archive choices");
+  assert.equal(byDataset("adminNested").length,5,"back restores transfer, archives and Return history");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
   byDataset("adminScreen").find(x=>x.dataset.adminScreen==="separation").handlers.click();
   assert.equal(byDataset("adminNested").length,0,
