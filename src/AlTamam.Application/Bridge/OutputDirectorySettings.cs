@@ -37,7 +37,7 @@ public sealed class OutputDirectorySettings
             file.WriteByte(1);
             return true;
         }
-        catch (Exception ex) when(ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when(ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         { return false; }
     }
 
