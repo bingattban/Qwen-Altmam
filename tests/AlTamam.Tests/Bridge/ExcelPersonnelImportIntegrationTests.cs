@@ -400,6 +400,69 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         Assert.Equal("2",Scalar("SELECT COUNT(DISTINCT CurrentServiceNumberA) FROM Persons"));
     }
 
+
+    [Fact]
+    public async Task WorkbookRelationshipOrder_OverridesPhysicalSheetNumbering()
+    {
+        using var stream=new MemoryStream();
+        stream.Write(MultiSheetWorkbook());
+        stream.Position=0;
+        using(var zip=new ZipArchive(stream,ZipArchiveMode.Update,leaveOpen:true))
+        {
+            zip.GetEntry("xl/workbook.xml")!.Delete();
+            const string workbook="""
+                <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+                  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                  <sheets>
+                    <sheet name="الورقة الثانية أولاً" sheetId="8" r:id="rIdB"/>
+                    <sheet name="الورقة الأولى ثانياً" sheetId="3" r:id="rIdA"/>
+                  </sheets>
+                </workbook>
+                """;
+            using(var w=zip.CreateEntry("xl/workbook.xml").Open())
+            {
+                byte[] bytes=Encoding.UTF8.GetBytes(workbook);
+                w.Write(bytes);
+            }
+            const string rels="""
+                <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                  <Relationship Id="rIdB"
+                    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
+                    Target="worksheets/sheet2.xml"/>
+                  <Relationship Id="rIdA"
+                    Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
+                    Target="worksheets/sheet1.xml"/>
+                </Relationships>
+                """;
+            using(var w=zip.CreateEntry("xl/_rels/workbook.xml.rels").Open())
+            {
+                byte[] bytes=Encoding.UTF8.GetBytes(rels);
+                w.Write(bytes);
+            }
+        }
+        var payload=FilePayload(stream.ToArray());
+        payload["sheetIndexes"]=new JsonArray(1);
+        payload["nameHeading"]="الاسم الثلاثي";
+        payload["numberHeading"]="رقم الموظف";
+        var selected=await Service.SelectAsync(payload,Owner,CancellationToken.None);
+        Assert.True(selected.Success,selected.UserMessage);
+        var chosen=Assert.IsType<JsonObject>(selected.Data);
+        Assert.Equal("الورقة الثانية أولاً",
+            Assert.Single(Assert.IsType<JsonArray>(chosen["selectedWorksheets"]))!.GetValue<string>());
+        var analyzed=await Service.AnalyzeAsync(new JsonObject {
+            ["workbookToken"]=chosen["workbookToken"]!.GetValue<string>()
+        },Owner,CancellationToken.None);
+        Assert.True(analyzed.Success,analyzed.UserMessage);
+        var report=Assert.IsType<JsonObject>(analyzed.Data);
+        Assert.Equal(1,report["newCount"]!.GetValue<int>());
+        Assert.Equal(1,report["issueCount"]!.GetValue<int>());
+        var accepted=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(report["acceptedPreview"])));
+        Assert.Equal("00802",accepted["serviceNumberA"]!.GetValue<string>());
+        Assert.Equal("الورقة الثانية أولاً",accepted["worksheet"]!.GetValue<string>());
+        Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {
