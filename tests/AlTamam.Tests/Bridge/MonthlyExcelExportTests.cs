@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using AlTamam.Application.Bridge;
 using AlTamam.Infrastructure.Persistence;
+using AlTamam.Infrastructure.Excel.Reports;
 using AlTamam.Tests.Fixtures;
 using Xunit;
 
@@ -319,6 +320,40 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         Assert.NotEqual(name, second);
         Assert.True(File.Exists(name));
         Assert.True(File.Exists(second));
+    }
+
+
+    [Fact]
+    public void SharedXlsxPublisher_RejectsCorruptPartAndRespectsPrePublishCancellation()
+    {
+        var broken=Path.Combine(_output,"phase10-corrupt.xlsx.part");
+        var destination=Path.Combine(_output,"phase10-corrupt.xlsx");
+        File.WriteAllText(broken,"not a valid XLSX");
+        try
+        {
+            Assert.Throws<InvalidDataException>(()=>
+                ReportWorkbookCommit.VerifyFlushAndMove(broken,destination,CancellationToken.None));
+            Assert.False(File.Exists(destination),"Corrupted temporary ZIP must not be published.");
+        }
+        finally { File.Delete(broken); }
+
+        var good=Path.Combine(_output,"phase10-cancel.xlsx.part");
+        var canceled=Path.Combine(_output,"phase10-cancel.xlsx");
+        using(var zip=ZipFile.Open(good,ZipArchiveMode.Create))
+        {
+            zip.CreateEntry("[Content_Types].xml");
+            zip.CreateEntry("xl/workbook.xml");
+            zip.CreateEntry("xl/worksheets/sheet1.xml");
+        }
+        using var source=new CancellationTokenSource();
+        source.Cancel();
+        try
+        {
+            Assert.Throws<OperationCanceledException>(()=>
+                ReportWorkbookCommit.VerifyFlushAndMove(good,canceled,source.Token));
+            Assert.False(File.Exists(canceled),"Cancellation cannot publish a final workbook.");
+        }
+        finally { File.Delete(good); }
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
