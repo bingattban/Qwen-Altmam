@@ -196,11 +196,11 @@
         container.replaceChildren(heading,form);
         note.classList.add("auth-info-box");
         note.setAttribute("role","note");
-        note.textContent="أنشئ اسم المستخدم وكلمة مرور قوية مع تأكيدها. الاسم الكامل اختياري؛ سيظهر الحساب «الإدارة العامة - اسم المستخدم» ويُضاف الاسم إن أدخلته. لا توجد بيانات دخول افتراضية.";
+        note.textContent="اختر كلمة مرور تضم 3 أحرف إنجليزية و3 أرقام على الأقل (6 خانات كحد أدنى)، دون اشتراط رمز خاص، وأعد كتابتها للتأكيد. الاسم الكامل اختياري؛ سيظهر الحساب «الإدارة العامة - اسم المستخدم» ويُضاف الاسم إن أدخلته. لا توجد بيانات دخول افتراضية.";
         submit.textContent="إنشاء الإدارة العامة والدخول";
-        pass.input.minLength=10;
+        pass.input.minLength=6;
         pass.input.autocomplete="new-password";
-        confirmation.input.minLength=10;
+        confirmation.input.minLength=6;
         confirmation.input.autocomplete="new-password";
         foundingName.input.maxLength=200;
         form.classList.add("auth-first-run");
@@ -208,11 +208,10 @@
         policy.setAttribute("role","list");
         policy.setAttribute("aria-label","متطلبات كلمة المرور");
         const checks=[
-          ["10 أحرف فأكثر",v=>v.length>=10],
+          ["6 خانات فأكثر",v=>v.length>=6],
           ["3 أحرف إنجليزية",v=>(v.match(/[A-Za-z]/g)||[]).length>=3],
           ["3 أرقام",v=>(v.match(/[0-9]/g)||[]).length>=3],
-          ["رمز خاص",v=>/[^A-Za-z0-9\s]/.test(v)],
-          ["دون مسافات",v=>v.length>0&&!/\s/.test(v)],
+          ["دون مسافات أو محارف تحكم",v=>v.length>0&&!/[\s\x00-\x1f\x7f-\x9f]/.test(v)],
           ["تطابق كلمتي المرور",v=>v.length>0&&v===confirmation.input.value]
         ];
         const chips=checks.map(([label])=>{

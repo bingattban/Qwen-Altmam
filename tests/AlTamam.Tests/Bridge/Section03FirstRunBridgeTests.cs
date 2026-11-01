@@ -57,6 +57,30 @@ public sealed class Section03FirstRunBridgeTests : IAsyncLifetime, IDisposable
         return command.ExecuteScalar();
     }
 
+    [Fact]
+    public async Task FirstRunBridge_ExactlySixCharactersWithoutSpecialSymbol_Works()
+    {
+        const string minimumPassword = "Abc123";
+        var setup = await SendAsync("AuthenticateLocalUser", new JsonObject
+        {
+            ["username"] = "minimum-founder",
+            ["password"] = minimumPassword,
+            ["passwordConfirmation"] = minimumPassword,
+            ["setupIntent"] = "firstTimeSetup"
+        });
+        Assert.True(setup.Response.Success, setup.Response.UserMessage);
+        Assert.Equal(1L, Convert.ToInt64(Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;")));
+        string nonce = Assert.IsType<JsonObject>(setup.Response.Data)["sessionNonce"]!.GetValue<string>();
+        var logout = await SendAsync("Logout", new JsonObject(), nonce);
+        Assert.True(logout.Response.Success, logout.Response.UserMessage);
+        var laterLogin = await SendAsync("AuthenticateLocalUser", new JsonObject
+        {
+            ["username"] = "minimum-founder",
+            ["password"] = minimumPassword
+        });
+        Assert.True(laterLogin.Response.Success, laterLogin.Response.UserMessage);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

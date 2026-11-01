@@ -41,12 +41,58 @@ public sealed class UserAccountManagementIntegrationTests : IAsyncLifetime, IDis
     }
 
     [Fact]
-    public void SubsequentUserPasswordRequiresRealSpecialCharacter()
+    public void SubsequentUserPasswordRequiresThreeEnglishLettersAndThreeAsciiDigits_NotASymbol()
     {
-        Assert.False(PasswordPolicyValidator.Validate("Abc123عربي").IsValid);
-        Assert.False(PasswordPolicyValidator.Validate("Abc123٤").IsValid);
-        Assert.True(PasswordPolicyValidator.Validate("Abc123!x").IsValid);
-        Assert.False(PasswordPolicyValidator.Validate("Abc123!").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123عربي").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123٤").IsValid);
+        Assert.True(PasswordPolicyValidator.Validate("Abc123!").IsValid);
+        Assert.False(PasswordPolicyValidator.Validate("Abc12٤").IsValid);
+        Assert.False(PasswordPolicyValidator.Validate("Ab12!").IsValid);
+    }
+
+    [Fact]
+    public async Task AccountCreationAndPasswordChange_AcceptExactlySixCharactersWithoutSymbols()
+    {
+        var svc = new UserAccountManagementService(_db);
+        var created = await svc.CreateAsync(new JsonObject
+        {
+            ["username"] = "minimum-credential-user",
+            ["password"] = "Abc123",
+            ["passwordConfirmation"] = "Abc123",
+            ["personId"] = "TST-ACTIVE-1",
+            ["role"] = "Supervisor"
+        }, _general, default);
+        Assert.True(created.Success, created.UserMessage);
+
+        using var conn = _db.CreateOpenConnection();
+        using var query = conn.CreateCommand();
+        query.CommandText = """
+            SELECT UserId, CredentialHash, PasswordSalt
+            FROM Users WHERE Username='minimum-credential-user';
+            """;
+        string id;
+        using (var reader = await query.ExecuteReaderAsync())
+        {
+            Assert.True(await reader.ReadAsync());
+            id = reader.GetString(0);
+            Assert.True(PasswordSecurity.VerifyPassword("Abc123", reader.GetString(1), reader.GetString(2)));
+        }
+        var changed = await svc.ChangePasswordAsync(new JsonObject
+        {
+            ["userId"] = id,
+            ["expectedRevision"] = 1L,
+            ["password"] = "XYZ789"
+        }, _general, default);
+        Assert.True(changed.Success, changed.UserMessage);
+
+        using var check = conn.CreateCommand();
+        check.CommandText = "SELECT CredentialHash, PasswordSalt FROM Users WHERE UserId=$id;";
+        check.Parameters.AddWithValue("$id", id);
+        using var updated = await check.ExecuteReaderAsync();
+        Assert.True(await updated.ReadAsync());
+        Assert.True(PasswordSecurity.VerifyPassword("XYZ789", updated.GetString(0), updated.GetString(1)));
+        Assert.False(PasswordSecurity.VerifyPassword("Abc123", updated.GetString(0), updated.GetString(1)));
     }
 
     [Fact]

@@ -51,9 +51,8 @@ public sealed class BridgeSharedServices
         if (string.IsNullOrWhiteSpace(username) || username.Length is < 3 or > 64
             || username.Any(char.IsWhiteSpace))
             return Error(BridgeErrorCodes.ValidationError, "اسم المستخدم من 3 إلى 64 حرفاً بلا مسافات.");
-        if (password is null || password.Length < 10)
-            return Error(BridgeErrorCodes.ValidationError,
-                "كلمة مرور حساب الإدارة العامة المؤسس لا تقل عن 10 خانات.");
+        // Founding and later accounts now share the same owner-approved policy.
+
         var strength = PasswordPolicyValidator.Validate(password);
         if (!strength.IsValid)
             return Error(BridgeErrorCodes.ValidationError,

@@ -567,13 +567,13 @@ async function run() {
   assert.equal(reveals.length,2,"each credential field has a keyboard-operable eye toggle");
   assert.equal(reveals[0].attrs["aria-label"],"إظهار كلمة المرور");
   const passwordRules=addUserForm.all().filter(x=>x.className.split(/\s+/).includes("admin-password-rule"));
-  assert.equal(passwordRules.length,6,"live account rules include password confirmation");
+  assert.equal(passwordRules.length,5,"live account rules include minimum and password confirmation");
   assert.ok(passwordRules.every(x=>!x.className.includes("valid")));
   usernameField.children.find(x=>x.tag==="input").value="tester-user";
-  secrets[0].value="Abc123!secure";secrets[1].value="Abc123!secure";
+  secrets[0].value="Abc123";secrets[1].value="Abc123";
   secrets[0].handlers.input();
   assert.ok(passwordRules.every(x=>x.className.includes("valid")),
-    "typing valid credentials lights all six live indicators");
+    "typing valid minimum credentials lights all five live indicators");
   reveals[0].handlers.click();
   assert.equal(secrets[0].type,"text","eye reveals the existing password without changing its value");
   assert.equal(reveals[0].attrs["aria-pressed"],"true");

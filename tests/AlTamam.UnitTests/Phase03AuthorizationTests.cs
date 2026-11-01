@@ -67,10 +67,16 @@ public sealed class Phase03AuthorizationTests
 
     [Theory]
     [InlineData("Abc123!secure", true)]
-    [InlineData("Abc123", false)]
-    [InlineData("Abc123456", false)]
+    [InlineData("Abc123", true)]
+    [InlineData("XYZ789", true)]
+    [InlineData("Abc123456", true)]
+    [InlineData("Abc123!", true)]
+    [InlineData("Ab1234", false)]
+    [InlineData("Abcd12", false)]
+    [InlineData("Abc12", false)]
     [InlineData("A b c 123!", false)]
     [InlineData("Abc١٢٣!secure", false)]
+    [InlineData("Abc12٣", false)]
     public void PasswordStrength_IsEnforcedByDomainPolicy(string password, bool expected)
         => Assert.Equal(expected, PasswordPolicyValidator.Validate(password).IsValid);
 }

@@ -146,8 +146,8 @@ check(/pass\.input\.addEventListener\("input",refreshPolicy\)/,functional,
   "password requirements refresh on input");
 check(/confirmation\.input\.addEventListener\("input",refreshPolicy\)/,functional,
   "password matching refreshes when confirmation changes");
-check(/v=>v.length>0&&!\/\\s\/\.test\(v\)/,functional,
-  "an empty password must not show a green no-spaces check");
+check(/v=>v.length>0&&!\/\[\\s\\x00-\\x1f\\x7f-\\x9f\]\/\.test\(v\)/,functional,
+  "an empty or control-character password must not satisfy the no-whitespace/no-control rule");
 check(/if\(optionalFullName\) payload\.fullName=optionalFullName/,functional,
   "founder full name stays optional");
 check(/bridge\(\)\.invoke\("AuthenticateLocalUser",payload\)/,functional,

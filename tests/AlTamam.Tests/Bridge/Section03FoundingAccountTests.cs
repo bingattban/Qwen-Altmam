@@ -51,10 +51,9 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
         Assert.False(weak.Success);
         Assert.False(await _service.IsProvisionedAsync());
 
-        // Subsequent users allow 8, but the founding administrator keeps
-        // the previously owner-approved stronger 10-character minimum.
+        // Founder and later users share the three-English/three-digit minimum.
         Assert.False((await _service.ProvisionFirstAdministratorAsync(
-            "chosenOwner","Abc123!z",CancellationToken.None)).Success);
+            "chosenOwner","Abc12",CancellationToken.None)).Success);
         var setup = await _service.ProvisionFirstAdministratorAsync(
             "chosenOwner", "test-password-123", CancellationToken.None, "صاحب البرنامج");
         Assert.True(setup.Success, setup.UserMessage);
@@ -109,9 +108,24 @@ public sealed class Section03FoundingAccountTests : IAsyncLifetime, IDisposable
             """));
     }
 
+    [Fact]
+    public async Task FirstRun_AcceptsExactlyThreeEnglishLettersAndThreeAsciiDigits_WithoutSymbol()
+    {
+        const string password = "Abc123";
+        var result = await _service.ProvisionFirstAdministratorAsync(
+            "minimum-owner", password, CancellationToken.None);
+        Assert.True(result.Success, result.UserMessage);
+        var (principal, error) = await _service.AuthenticateAsync(
+            "minimum-owner", password, CancellationToken.None);
+        Assert.NotNull(principal);
+        Assert.Null(error);
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM Users WHERE Role=1;"));
+    }
+
     [Theory]
-    [InlineData("Abc123!x")]
-    [InlineData("plainpassword123")]
+    [InlineData("Abc12!x")]
+    [InlineData("plainpassword12")]
+    [InlineData("ABC١٢٣")]
     public async Task DirectFoundingHelper_CannotBypassStrongCredentialPolicy(
         string password)
     {
