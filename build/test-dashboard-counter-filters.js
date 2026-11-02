@@ -32,6 +32,8 @@ for(const name of ["dashboard","monthly","admin","settings"])nav["navBtn-"+name]
 let transferCount=0,expandedRoster=false,approveReview=true;
 let discardApproved=false,discardPrompts=0;
 let deferAutoReview=false,releaseAutoReview=null;
+let approveStatusForm=true;
+const statusForms=[];
 let autoPeople=[{personId:"P3",name:"P3",serviceNumberA:"12345",
   siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
   savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 08:00"}];
@@ -91,7 +93,10 @@ const document={activeElement:null,createElement:tag=>new El(tag),
  addEventListener:(name,fn)=>{events[name]=fn;}};
 const reviews=[];
 const context={window:{AltamamBridge:bridge,AltamamNavigation:{navigateTop:()=>{}},
- AltamamDialog:{attendanceReview:async(data,opts)=>{
+ AltamamDialog:{form:async(fields,opts)=>{
+     statusForms.push({fields,opts});
+     return approveStatusForm?{statusId:"STS-PRESENT"}:null;
+   },attendanceReview:async(data,opts)=>{
      reviews.push({data,opts});
      if(deferAutoReview)return new Promise(resolve=>{releaseAutoReview=resolve;});
      return approveReview;
@@ -202,14 +207,20 @@ async function main(){
  assert.ok(selectedCheck,"each automatic record allows individual selection");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
    "opening register and selecting entries must not save attendance");
- const dropdown=readOnly.all().find(x=>x.tag==="select"&&
-   x.attrs["aria-label"]==="الحالة الجديدة لـ P3");
- assert.ok(dropdown,"restore per-person inline status selector");
- dropdown.value="STS-PRESENT";
- const edit=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="معاينة التعديل");
- approveReview=false;
+ assert.ok(!readOnly.all().some(x=>x.tag==="select"),
+   "status changes must be selected in a separate modal, not inline in the read-only register");
+ const edit=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="اختيار الحالة والمعاينة");
+ approveStatusForm=false;
+ const priorPreviews=calls.filter(x=>x.action==="PreviewAttendanceChange").length;
+ await edit.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="PreviewAttendanceChange").length,priorPreviews,
+   "canceled status modal must not issue a bridge preview or persist");
+ approveStatusForm=true;approveReview=false;
  await edit.handlers.click();await settle();
  assert.equal(reviews.length,1,"single-person change opens native verified preview");
+ assert.equal(statusForms.length,2,"each status choice starts with a standalone modal");
+ assert.equal(statusForms[0].fields[0].name,"statusId");
+ assert.equal(statusForms[0].fields[0].required,true);
  assert.equal(reviews[0].data.persons[0].previousStatusName,"غياب");
  assert.equal(reviews[0].data.persons[0].proposedStatusName,"موجود");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
@@ -224,7 +235,7 @@ async function main(){
  // Multi-selection with one common new state must use ONE server transaction.
  autoPeople.push({personId:"P5",name:"P5",serviceNumberA:"12346",
    siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
-   savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 20:00"});
+   savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 08:00"});
  const searchAuto=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="بحث");
  searchAuto.handlers.click();await settle();
  const selectPage=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="تحديد الصفحة");
@@ -232,10 +243,8 @@ async function main(){
  selectPage.handlers.click();await settle();
  const counterAuto=readOnly.all().find(x=>x.className==="auto-attendance-selection-info");
  assert.ok(counterAuto.textContent.includes("2"),"both visible records are selected");
- const commonState=readOnly.all().find(x=>x.tag==="select"&&
-   x.attrs["aria-label"]==="الحالة الجديدة للمحددين");
- assert.ok(commonState,"bulk common-status selector exists");
- commonState.value="STS-PRESENT";
+ assert.ok(!readOnly.all().some(x=>x.tag==="select"),
+   "group status selection also belongs in the separate modal");
  const bulk=readOnly.all().find(x=>x.tag==="button"&&x.textContent==="معاينة تغيير المحددين");
  approveReview=false;
  const priorCommits=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
@@ -308,12 +317,10 @@ async function main(){
  counter("__AUTO_PREPARED__").handlers.click();await settle();
  const abandoned=viewport.all().find(x=>x.className.includes("auto-attendance-overlay"));
  assert.ok(abandoned,"fresh automatic register can reopen after a prior close");
- const individualStatus=abandoned.all().find(x=>x.tag==="select"&&
-   x.attrs["aria-label"]==="الحالة الجديدة لـ P3");
- individualStatus.value="STS-PRESENT";
+ assert.ok(!abandoned.all().some(x=>x.tag==="select"));
  deferAutoReview=true;
  const writesBeforeNavigation=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
- const startReview=abandoned.all().find(x=>x.tag==="button"&&x.textContent==="معاينة التعديل");
+ const startReview=abandoned.all().find(x=>x.tag==="button"&&x.textContent==="اختيار الحالة والمعاينة");
  startReview.handlers.click();await settle();
  assert.equal(typeof releaseAutoReview,"function",
    "a real attendanceReview must remain pending for the race regression");

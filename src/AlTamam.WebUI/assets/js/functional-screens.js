@@ -370,16 +370,12 @@
     search.input.maxLength=100;
     const searchButton=button("بحث",()=>{term=search.input.value.trim();page=1;void load();});
     const actions=el("div","functional-toolbar");
-    const batchStatus=el("select","form-select auto-attendance-status-select");
-    batchStatus.setAttribute("aria-label","الحالة الجديدة للمحددين");
-    const batchPlaceholder=el("option","","الحالة الجديدة للمحددين");
-    batchPlaceholder.value="";batchStatus.appendChild(batchPlaceholder);
     const selectPageButton=button("تحديد الصفحة",()=>selectVisiblePage());
     const clearButton=button("إلغاء التحديد",()=>clearSelections());
     const previewSelected=button("معاينة تغيير المحددين",()=>void previewSelectedChanges());
     previewSelected.disabled=true;
     const selectedInfo=el("span","auto-attendance-selection-info","المحددون: 0 من 100");
-    append(actions,search.wrapper,searchButton,batchStatus,
+    append(actions,search.wrapper,searchButton,
       selectPageButton,clearButton,previewSelected,selectedInfo);
     const notice=el("div","auto-attendance-feedback");
     const content=el("div","auto-attendance-results");
@@ -398,10 +394,6 @@
       disposed=true;generation++;selectionVersion++;
       selected.clear();
     };
-    batchStatus.addEventListener("change",()=>{
-      selectionVersion++;
-      notice.replaceChildren();
-    });
     function updateSelected(){
       selectedInfo.textContent="المحددون: "+selected.size+" من 100";
       previewSelected.disabled=busy||selected.size===0;
@@ -441,31 +433,44 @@
       selectionVersion++;notice.replaceChildren();updateSelected();void load();
     }
     async function previewSelectedChanges(){
-      if(!batchStatus.value){
-        showError(notice,new Error("اختر الحالة الجديدة للمحددين قبل المعاينة."));return;
-      }
-      await editAutoStatuses(Array.from(selected.values()),batchStatus.value,true);
+      await editAutoStatuses(Array.from(selected.values()),null,true);
     }
     async function editAutoStatuses(persons,statusId,bulk=false){
       if(busy||disposed)return;
-      const chosen=choices.find(item=>item.statusId===statusId);
-      if(!chosen){
-        showError(notice,new Error("اختر الحالة الجديدة من القائمة المنسدلة."));return;
-      }
       if(!persons.length||persons.length>100){
         showError(notice,new Error("حدد فرداً واحداً على الأقل، وبحد أقصى 100 فرد."));return;
-      }
-      const unchanged=persons.find(person=>person.statusId===statusId);
-      if(unchanged){
-        showError(notice,new Error("لا يمكن تغيير حالة "+unchanged.name+
-          " ("+unchanged.serviceNumberA+"): الحالة الجديدة هي نفسها الحالة المحفوظة."));return;
       }
       const expectedVersion=selectionVersion;
       const ids=persons.map(person=>person.personId).sort();
       busy=true;updateSelected();notice.replaceChildren();
       try{
-        // ONE status and ONE C# transaction for the entire selection: never
-        // commit separate per-person changes with partial success.
+        // Keep the register read-only. Select the proposed state in a
+        // separate cancellable modal, then obtain a verified C# preview.
+        if(!statusId){
+          const choose=window.AltamamDialog?.form;
+          if(typeof choose!=="function")
+            throw Error("نافذة اختيار الحالة المنفصلة غير متاحة؛ لم يُحفظ شيء.");
+          const picked=await choose([{
+            name:"statusId",label:"الحالة الجديدة",type:"select",required:true,
+            options:[{value:"",label:"اختر حالة"},
+              ...choices.filter(x=>persons.some(p=>p.statusId!==x.statusId))
+                .map(x=>({value:x.statusId,label:x.displayName}))]
+          }],{
+            title:bulk?"اختيار حالة المحضّرين المحددين":"اختيار حالة "+persons[0].name,
+            message:"لا تُعدّل الحالة إلا بعد معاينة الخادم والتأكيد النهائي.",
+            confirmLabel:"متابعة إلى المعاينة"
+          });
+          if(!picked||disposed)return;
+          if(expectedVersion!==selectionVersion)
+            throw Error("تغيّر التحديد أثناء اختيار الحالة؛ راجع الأفراد مجدداً.");
+          statusId=picked.statusId;
+        }
+        const chosen=choices.find(item=>item.statusId===statusId);
+        if(!chosen)throw Error("اختر حالة نشطة وصحيحة قبل المعاينة.");
+        const unchanged=persons.find(person=>person.statusId===statusId);
+        if(unchanged)throw Error("لا يمكن تغيير حالة "+unchanged.name+
+          " ("+unchanged.serviceNumberA+"): الحالة الجديدة هي نفسها الحالة المحفوظة.");
+        // ONE status and ONE C# transaction for the entire selection.
         const response=await bridge().invoke("PreviewAttendanceChange",{
           businessDate:date,personIds:ids,statusId:chosen.statusId,
           siteId:site,mode:"revise"
@@ -559,8 +564,7 @@
         visiblePeople=result.items;
         const tb=createTable([{label:"تحديد"},{label:"الرقم"},{label:"الرقم (ع)"},
           {label:"الاسم"},{label:"الموقع"},{label:"تاريخ التحضير"},
-          {label:"مصدر التحضير"},{label:"الحالة المحفوظة"},
-          {label:"الحالة الجديدة"},{label:"الإجراء"}]);
+          {label:"مصدر التحضير"},{label:"الحالة المحفوظة"},{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
@@ -584,18 +588,8 @@
             person.name,person.siteName,person.savedBusinessDate||date,
             person.autoSource||"مصدر غير موثق",person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
-          const selectCell=el("td"),statusSelect=el("select","form-select auto-attendance-status-select");
-          statusSelect.setAttribute("aria-label","الحالة الجديدة لـ "+person.name);
-          const placeholder=el("option","","اختر حالة");placeholder.value="";
-          statusSelect.appendChild(placeholder);
-          for(const item of choices){
-            if(item.statusId===person.statusId)continue;
-            const opt=el("option","",item.displayName);opt.value=item.statusId;
-            statusSelect.appendChild(opt);
-          }
-          selectCell.appendChild(statusSelect);row.appendChild(selectCell);
-          const action=el("td");action.appendChild(button("معاينة التعديل",
-            ()=>void editAutoStatuses([person],statusSelect.value)));
+          const action=el("td");action.appendChild(button("اختيار الحالة والمعاينة",
+            ()=>void editAutoStatuses([person],null)));
           row.appendChild(action);
           tb.body.appendChild(row);
         });
@@ -619,10 +613,6 @@
       if(disposed)return;
       const data=parseData(reply);
       choices=Array.isArray(data)?data:(data?.items||[]);
-      for(const item of choices){
-        const option=el("option","",item.displayName);option.value=item.statusId;
-        batchStatus.appendChild(option);
-      }
       if(!choices.length)
         notice.replaceChildren(message("لا توجد حالات نشطة للتعديل؛ عرض السجل متاح."));
       void load();
