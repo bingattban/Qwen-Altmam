@@ -62,6 +62,7 @@ class Element {
 const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
+let failOneDueTimeSave = false;
 let deferAuditHistory = false, completeDeferredAuditHistory = null;
 let showAuditEntry = false, deferAuditDetail = false, completeDeferredAuditDetail = null;
 const auditTestEntry = {
@@ -80,6 +81,10 @@ const document = {
 const bridge = {
   invoke: async (name, body) => {
     calls.push({ name, body });
+    if(name==="SetAttendanceSchedule" && body?.dueTimeLocal && failOneDueTimeSave){
+      failOneDueTimeSave=false;
+      throw Error("فشل تجريبي: تعذر حفظ وقت التحضير");
+    }
     if(name==="GetAuditEntryDetails"){
       const reply={data:auditTestEntry};
       if(deferAuditDetail)return new Promise(resolve=>{
@@ -861,7 +866,50 @@ async function run() {
   assert.equal(statusSaves.length,1,
     "default attendance status is a third independent mutation");
   assert.equal(statusSaves[0].body.statusId,"STS-ABSENT");
+
   assert.ok(statusSaves[0].body.operationId.length>=16);
+  assert.ok(visible().some(x=>x.className.includes("settings-success")&&
+    x.textContent.includes("وقت التحضير التلقائي")&&x.textContent.includes("وقت القفل اليومي")),
+    "each committed setting must be acknowledged by the UI");
+
+  // A single rejected native clock write must not abort the other two
+  // independently committed mutations, and the retry must target ONLY
+  // the still-uncommitted value using the same operation ID.
+  await controller.renderSettings(admin,()=>{});
+  const retryDue=visible().find(x=>x.tag==="input"&&
+    x.attrs["aria-label"]==="وقت التحضير التلقائي");
+  const retryLock=visible().find(x=>x.tag==="input"&&
+    x.attrs["aria-label"]==="وقت قفل التحضير اليومي");
+  const retryStatus=visible().find(x=>x.tag==="select"&&
+    x.attrs["aria-label"]==="الحالة الافتراضية عند عدم وجود تحضير أمس");
+  retryDue.value="07:40";retryLock.value="18:20";retryStatus.value="STS-ABSENT";
+  const beforePartial=calls.length;
+  failOneDueTimeSave=true;
+  await buttonNamed("حفظ إعدادات التحضير التلقائي").handlers.click();
+  const partial=calls.slice(beforePartial).filter(x=>
+    ["SetAttendanceSchedule","SetAutoAttendanceDefaultStatus"].includes(x.name));
+  assert.equal(partial.length,3,"a failed first operation must not stop the next two");
+  assert.equal(partial[0].body.dueTimeLocal,"07:40");
+  assert.equal(partial[1].body.dailyLockTimeLocal,"18:20");
+  assert.equal(partial[2].body.statusId,"STS-ABSENT");
+  assert.ok(visible().some(x=>x.textContent.includes("تعذر حفظ وقت التحضير التلقائي")),
+    "the rejected setting must display a truthful Arabic failure");
+  assert.ok(visible().some(x=>x.className.includes("settings-success")&&
+    x.textContent.includes("وقت القفل اليومي")&&
+    x.textContent.includes("الحالة الافتراضية")),
+    "successful independent writes remain visibly successful despite one failure");
+  const beforeRetry=calls.length;
+  await buttonNamed("حفظ إعدادات التحضير التلقائي").handlers.click();
+  const retried=calls.slice(beforeRetry).filter(x=>
+    ["SetAttendanceSchedule","SetAutoAttendanceDefaultStatus"].includes(x.name));
+  assert.equal(retried.length,1,
+    "retry must skip both successfully committed settings");
+  assert.equal(retried[0].body.dueTimeLocal,"07:40");
+  assert.equal(retried[0].body.operationId,partial[0].body.operationId,
+    "a retry of the failed operation preserves its idempotency key");
+  assert.ok(visible().some(x=>x.className.includes("settings-success")&&
+    x.textContent.includes("وقت التحضير التلقائي")),
+    "retry success is displayed only after a server-confirmed write");
 
   assert.ok(buttonNamed("إنشاء نسخة احتياطية الآن").disabled,
     "manual backup disabled on a device without E: drive");
