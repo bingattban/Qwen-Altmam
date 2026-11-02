@@ -171,7 +171,7 @@ public sealed class DailyMonthlyReadService
                    COALESCE(s.VisibleName, 'غير محدد'),
                    ar.StatusId, ar.StatusNameSnapshot, ar.StatusColorSnapshot,
                    m.MovementId, m.SourceSiteNameSnapshot, m.DestinationSiteNameSnapshot,
-                   ar.IdempotencyKey, ar.AttendanceLocalDate
+                   ar.IdempotencyKey, ar.AttendanceLocalDate, ar.CommittedAtUtc
             """ + "\n" + fromSql + "\n" + """
             ORDER BY p.CurrentVisibleName, p.PersonId LIMIT $limit OFFSET $offset;
             """;
@@ -198,6 +198,7 @@ public sealed class DailyMonthlyReadService
                 ["statusColor"] = reader.IsDBNull(6)
                     ? (reader.IsDBNull(7) ? null : "#D8B4FE") : reader.GetString(6),
                 ["savedBusinessDate"] = reader.IsDBNull(11) ? null : reader.GetString(11),
+                ["committedAtUtc"] = reader.IsDBNull(12) ? null : reader.GetString(12),
                 ["autoSource"] = reader.IsDBNull(10) ? null :
                     reader.GetString(10).StartsWith("AUTO08H-", StringComparison.Ordinal)
                         ? "تحضير تلقائي 08:00" :

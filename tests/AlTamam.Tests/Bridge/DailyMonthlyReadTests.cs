@@ -114,6 +114,7 @@ public sealed class DailyMonthlyReadTests : IAsyncLifetime, IDisposable
         var person=Assert.Single(Assert.IsType<JsonArray>(data["items"]));
         Assert.Equal("TST-P-1",person!["personId"]!.GetValue<string>());
         Assert.Equal("غياب",person["statusName"]!.GetValue<string>());
+        Assert.Equal("2026-10-19T07:00:00Z",person["committedAtUtc"]!.GetValue<string>());
         var noMatch=await svc.DailyRosterAsync(new JsonObject{
             ["businessDate"]="2026-10-19",["siteId"]="SITE-OTHER",
             ["statusId"]="__AUTO_PREPARED__"

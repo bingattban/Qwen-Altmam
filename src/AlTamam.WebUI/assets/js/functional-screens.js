@@ -365,7 +365,7 @@
     const closeButton=button("إغلاق",close);
     append(heading,title,closeButton);
     const description=el("p","section-description",
-      "يمكن اختيار فرد واحد أو مجموعة وتغيير حالتهم بعد معاينة الأسماء والحالات السابقة والجديدة ثم التأكيد. لا يحدث أي تعديل بمجرد التحديد أو فتح السجل.");
+      "هذا سجل للقراءة والبحث. اختيار حالة جديدة للفرد أو للمحددين يجري في نافذة منفصلة، ثم معاينة وتأكيد قبل الحفظ. لا يحدث أي تعديل بمجرد فتح السجل أو التحديد.");
     const search=field("search","بحث بالاسم أو الرقم (ع)");
     search.input.maxLength=100;
     const searchButton=button("بحث",()=>{term=search.input.value.trim();page=1;void load();});
@@ -564,7 +564,7 @@
         visiblePeople=result.items;
         const tb=createTable([{label:"تحديد"},{label:"الرقم"},{label:"الرقم (ع)"},
           {label:"الاسم"},{label:"الموقع"},{label:"تاريخ التحضير"},
-          {label:"مصدر التحضير"},{label:"الحالة المحفوظة"},{label:"الإجراء"}]);
+          {label:"مصدر التحضير"},{label:"وقت الاعتماد UTC"},{label:"الحالة المحفوظة"},{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
@@ -586,7 +586,8 @@
           checkCell.appendChild(checkbox);row.appendChild(checkCell);
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
             person.name,person.siteName,person.savedBusinessDate||date,
-            person.autoSource||"مصدر غير موثق",person.statusName].forEach(value=>
+            person.autoSource||"مصدر غير موثق",person.committedAtUtc||"—",
+            person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
           const action=el("td");action.appendChild(button("اختيار الحالة والمعاينة",
             ()=>void editAutoStatuses([person],null)));

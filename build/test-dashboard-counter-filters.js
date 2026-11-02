@@ -36,7 +36,8 @@ let approveStatusForm=true;
 const statusForms=[];
 let autoPeople=[{personId:"P3",name:"P3",serviceNumberA:"12345",
   siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
-  savedBusinessDate:"2026-10-29",autoSource:"تحضير تلقائي 08:00"}];
+  savedBusinessDate:"2026-10-29",committedAtUtc:"2026-10-29T08:03:12Z",
+  autoSource:"تحضير تلقائي 08:00"}];
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
  invoke:async(action,payload)=>{
    calls.push({action,payload});
@@ -203,6 +204,8 @@ async function main(){
    "the automatic register must show the persisted source of preparation");
  assert.ok(readOnly.all().some(x=>x.textContent==="2026-10-29"),
    "the automatic register must display the date of the saved attendance");
+ assert.ok(readOnly.all().some(x=>x.textContent==="2026-10-29T08:03:12Z"),
+   "the register must show the actual saved timestamp rather than assumed 08:00");
  const selectedCheck=readOnly.all().find(x=>x.tag==="input"&&x.type==="checkbox");
  assert.ok(selectedCheck,"each automatic record allows individual selection");
  assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,0,
