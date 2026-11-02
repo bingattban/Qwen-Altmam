@@ -363,8 +363,13 @@ public sealed class AuditOverlayService
         // coerce a supplied non-integer, negative or overflowing version to 0.
         // Doing so could authorise an unwanted first overlay write.
         long expectedVersion = 0;
-        if (payload["expectedOverlayVersion"] is JsonNode suppliedVersion)
+        if (payload.ContainsKey("expectedOverlayVersion"))
         {
+            JsonNode? suppliedVersion = payload["expectedOverlayVersion"];
+            if (suppliedVersion is null)
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "إصدار قيد السجل غير صالح؛ استخدم عدداً صحيحاً غير سالب.",
+                    "expectedOverlayVersion");
             try { expectedVersion = suppliedVersion.GetValue<int>(); }
             catch
             {

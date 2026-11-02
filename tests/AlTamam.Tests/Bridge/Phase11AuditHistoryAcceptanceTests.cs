@@ -317,7 +317,7 @@ public sealed class Phase11AuditHistoryAcceptanceTests : IAsyncLifetime, IDispos
         count.CommandText="SELECT COUNT(*) FROM AuditEvents;";
         long beforeEvents=Convert.ToInt64(count.ExecuteScalar());
         foreach(var invalid in new JsonNode?[]{
-            JsonValue.Create("not-a-number"),JsonValue.Create(-1),JsonValue.Create(1.5)
+            JsonValue.Create("not-a-number"),JsonValue.Create(-1),JsonValue.Create(1.5),null
         })
         {
             var attempt=await service.UpdateAuditPresentationAsync(new JsonObject{
