@@ -11,6 +11,21 @@ $parseErrors = $null
 [void][System.Management.Automation.Language.Parser]::ParseFile(
     $script, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count -ne 0) { throw ('Invalid PowerShell syntax: ' + ($parseErrors -join '; ')) }
+$source = Get-Content -LiteralPath $script -Raw
+foreach ($mustRemain in @(
+    'ConfirmDisposableWindowsAccount', 'Get-NetAdapter',
+    'Get-FileHash', 'SourceSha', 'ReleaseRunId',
+    'db.key.protected', 'altamam.db', 'unins000.exe',
+    '--webview-ui-e2e', '--webview-bridge-e2e',
+    'AUTOMATED_OFFLINE_SMOKE_PASS_NOT_FINAL_UAT',
+    'actualFirstRunAttendanceExcelAndRestore',
+    'independentVerifierAndOwnerSignoff'
+)) {
+    if (-not $source.Contains($mustRemain)) {
+        throw ('Unsafe regression: offline acceptance guard missing: ' + $mustRemain)
+    }
+}
+
 $work = Join-Path $env:TEMP ('altamam-offline-contract-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 try {
