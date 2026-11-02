@@ -201,11 +201,27 @@ public sealed class Phase11AuditHistoryAcceptanceTests : IAsyncLifetime, IDispos
         Assert.Equal(metaId,Assert.IsType<JsonObject>(replay.Data)
             ["operationAuditEventId"]!.GetValue<string>());
 
-        var hide=await audit.DeleteAuditPresentationAsync(new JsonObject{
-            ["auditEventId"]=targetId,["expectedOverlayVersion"]=1,
-            ["reason"]="إخفاء العرض فقط مع إبقاء الدليل الأصلي",
-            ["operationId"]="SEC08-OVERLAY-RECEIPT-HIDE-00001"
-        },General,default);
+        // Exercise the native C# handler AND WebView2 dispatcher, not only
+        // the underlying service: the target ID must never be mistaken for
+        // the ID of this newly audited hide operation.
+        var dispatcher=BridgeHandlerCatalog.Create(new BridgeSharedServices(_db));
+        var hideRequest=new JsonObject{
+            ["requestId"]="SEC08-OVERLAY-HIDE-BRIDGE-01",
+            ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+            ["action"]="DeleteAuditPresentation",
+            ["sessionNonce"]=General.SessionNonce,
+            ["payload"]=new JsonObject{
+                ["auditEventId"]=targetId,["expectedOverlayVersion"]=1,
+                ["reason"]="إخفاء العرض فقط مع إبقاء الدليل الأصلي",
+                ["operationId"]="SEC08-OVERLAY-RECEIPT-HIDE-00001"
+            }
+        };
+        var dispatched=await dispatcher.DispatchAsync(
+            hideRequest.ToJsonString(),LocalWebUiOrigin.BaseUrl,true,
+            nonce=>Task.FromResult<BridgePrincipal?>(
+                nonce==General.SessionNonce?General:null));
+        Assert.Equal(BridgeOutcomeKind.Success,dispatched.Kind);
+        var hide=dispatched.Response;
         Assert.True(hide.Success,hide.UserMessage);
         var hideData=Assert.IsType<JsonObject>(hide.Data);
         Assert.Equal(targetId,hideData["auditEventId"]!.GetValue<string>());
