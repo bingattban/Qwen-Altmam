@@ -57,7 +57,7 @@ def check():
         require(migration.name in db,
                 "Phase 02: a migration is missing from the canonical registration: "
                 + migration.name)
-    require(re.search(r"\\b[A-Za-z_][A-Za-z0-9_]*\\.VerifyRecordedHashes\\(connection\\)", db)
+    require(re.search(r"\b[A-Za-z_][A-Za-z0-9_]*\.VerifyRecordedHashes\(connection\)", db)
             and "if (hasVersionTable)" in db,
             "Phase 02: current-schema startup must verify stored migration pins")
     packages = ET.fromstring(read("Directory.Packages.props"))
