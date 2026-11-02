@@ -36,6 +36,7 @@ dotnet build AlTamam.slnx -c Debug --no-restore
 dotnet build AlTamam.slnx -c Release --no-restore
 dotnet test AlTamam.slnx -c Release --no-build --no-restore
 python build/manifest-guard.py
+python build/test-phase00-01-inventory.py
 python build/validate-ui-shell.py
 python build/test-ci-exit-guards.py
 python build/test-ci-performance-contract.py

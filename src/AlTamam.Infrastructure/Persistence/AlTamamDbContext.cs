@@ -143,6 +143,11 @@ public sealed class AlTamamDbContext : IDisposable
             }
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
+            // Already-current encrypted databases must validate all historical
+            // migration pins on every startup, without DDL, repair or backup.
+            if (hasVersionTable)
+                new SchemaMigrationRunner(CanonicalMigrations).VerifyRecordedHashes(connection);
+
             // Bootstrap path: V001 lands a version-1 database — upgrade it to this build's schema
             // through the hash-pinned, forward-only migration runner (V002, V003, …).
             if (!hasVersionTable && CurrentSchemaVersion > 1)

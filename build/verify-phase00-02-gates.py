@@ -70,6 +70,8 @@ def collect(root: Path) -> dict:
             "runtime: win-x86", "runtime: win-x64",
             "Build Portable ZIP", "compile installer")),
         "phase02_integration_on_both": phase2_test in core and phase2_test in release,
+        "current_schema_pin_verified": bool(re.search(
+            r"if\s*\(hasVersionTable\)\s*new\s+SchemaMigrationRunner\(CanonicalMigrations\)\.VerifyRecordedHashes\(connection\)", db)),
         "destructive_restore_wired": bool(
             re.search(r'"RestoreDatabaseAtomically"\s*=>', bridge)),
         "offline_contract": (
@@ -118,6 +120,8 @@ def verify(f: dict) -> list[str]:
         errors.append("Phase 00 solution project inventory drift")
     if not f["cipher_pragma"]:
         errors.append("Phase 02 SQLCipher/WAL startup integrity contract drift")
+    if not f["current_schema_pin_verified"]:
+        errors.append("Phase 02 already-current SQLCipher databases must verify historical migration pins on startup")
     if not f["legacy_nullable_v012"]:
         errors.append("Phase 02 V012 legacy unknown-count preservation changed")
     return errors

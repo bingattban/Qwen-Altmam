@@ -21,6 +21,7 @@ class PhaseGateTests(unittest.TestCase):
         f=gate.collect(ROOT)
         self.assertTrue(gate.verify(dict(f,sqlcipher_version="unapproved")))
         self.assertTrue(gate.verify(dict(f,destructive_restore_wired=True)))
+        self.assertTrue(gate.verify(dict(f,current_schema_pin_verified=False)))
     def test_test_first_and_four_artifacts(self):
         f=gate.collect(ROOT)
         for key in ("two_workflows","core_tests","release_test_gate",

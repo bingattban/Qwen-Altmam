@@ -5,6 +5,10 @@
 database, WAL, DPAPI key and encrypted-backup formats. No provider switch and
 no rewriting previously released V001–V011 migration resources.
 
+## Phase 00–02 additive regression, 2026-11-02
+The current canonical schema is **V012**, with `V012_AutoAttendanceOutcomeCounts` after the immutable prior V001–V011 migration resources. The separate `AlTamam.IntegrationTests` project now exercises a REAL encrypted V011 -> V012 migration using only the normal `SchemaMigrationRunner`, refusing to modify the schema when the pre-upgrade rescue folder is blocked. After safely removing the synthetic test-only blocker, it verifies the encrypted **V011** rescue snapshot and upgraded **V012** live DB. This is an automated Windows SQLCipher test; it does not certify power-cut or cross-PC restore.
+The Phase 00 route/output matrix and Phase 01 independent Windows workflow policy are automatically checked before expensive tests using `build/test-phase00-01-inventory.py`. No package/provider/key/schema/role/clock changes are authorized by this documentation update.
+
 ## Baseline code mapped to 02.01–02.12
 
 - 02.01, 02.08: `AlTamamDbContext.CreateOpenConnection` requires

@@ -82,3 +82,8 @@ HEAD and the exact four packages/checksums/provenance succeed. Record final PR
 head and merged-main SHA with run URLs after completion; do not copy old pass
 figures or assert physical UAT. This record is a live scope/implementation map,
 not a signed Phase 15 GO decision.
+
+## Incremental integration after PR #204
+- A current V012 encrypted database now validates historical migration pins upon ordinary startup, not just on forward upgrades.
+- Real SQLCipher regressions exercise an unwritable rescue destination before V011→V012, corrupt or missing V002+ historical pins, interrupted forward upgrades, and preserved valid encrypted data.
+- Exact screen CSV mapping is checked by both independent Windows preflight jobs; these static gates do not establish physical Windows/UAT release approval.

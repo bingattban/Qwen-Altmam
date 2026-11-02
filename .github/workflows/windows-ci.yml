@@ -31,6 +31,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Phase 00–02 negative-path regression failed' }
           python build/verify-phase00-02-gates.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 00–02 live contract drift detected' }
+      - name: Phase 00–01 exact screen matrix and solution inventory regression
+        run: python build/test-phase00-01-inventory.py
       - name: Phase 13 PowerShell self-check scripts pass native parser before expensive tests
         shell: pwsh
         run: |

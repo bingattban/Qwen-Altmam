@@ -1,3 +1,4 @@
+using AlTamam.Infrastructure.Persistence.Migrations;
 using System.Security.Cryptography;
 using System.Text;
 using AlTamam.Domain.Policies;
@@ -372,6 +373,136 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
             "DELETE FROM AuditEvents WHERE AuditEventId='TST-AUDIT-001';"));
         Assert.Throws<SqliteException>(() => Execute(inspect,
             "DELETE FROM AuditLogPresentationEdits WHERE AuditEventId='TST-AUDIT-001';"));
+    }
+
+    [Fact]
+    public async Task ExistingV011Database_RequiresEncryptedRescueBeforeUpgrade_ToV012()
+    {
+        // Build a genuine older, encrypted SQLCipher schema with the immutable
+        // shipped V001..V011 resources. Do NOT change released migrations.
+        string path = Path.Combine(_directory, "phase02-legacy-v011.db");
+        using (var legacy = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        using (var connection = legacy.CreateOpenConnection())
+        {
+            var oldRunner = new SchemaMigrationRunner(
+                AlTamamDbContext.CanonicalMigrations.Take(11).ToArray());
+            await oldRunner.UpgradeAsync(connection);
+            Assert.Equal(11, SchemaMigrationRunner.GetCurrentVersion(connection));
+        }
+
+        // A real filesystem blocker at the rescue location must STOP the
+        // upgrade. No silent migration, fallback, or deletion of the blocker.
+        string rescueDirectory = path + ".migration-backups";
+        File.WriteAllText(rescueDirectory, "synthetic-directory-collision");
+        using (var blocked = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        {
+            var error = await Record.ExceptionAsync(() => blocked.InitializeAsync());
+            Assert.NotNull(error);
+        }
+        using (var untouched = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        using (var connection = untouched.CreateOpenConnection())
+        {
+            Assert.Equal(11, SchemaMigrationRunner.GetCurrentVersion(connection));
+            Assert.NotEmpty(Value(connection, "PRAGMA cipher_version;"));
+        }
+
+        File.Delete(rescueDirectory);
+        using (var upgraded = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        {
+            await upgraded.InitializeAsync();
+            using var connection = upgraded.CreateOpenConnection();
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,
+                         SchemaMigrationRunner.GetCurrentVersion(connection));
+        }
+
+        string[] snapshots = Directory.GetFiles(rescueDirectory, "pre-migration-v011-to-v*.db");
+        string backup = Assert.Single(snapshots);
+        Assert.False(ReadHeader(backup).SequenceEqual(
+            Encoding.ASCII.GetBytes("SQLite format 3\0")));
+        using (var rescue = new AlTamamDbContext(backup, _key, useConnectionPooling: false))
+        using (var connection = rescue.CreateOpenConnection())
+        {
+            Assert.Equal(11, SchemaMigrationRunner.GetCurrentVersion(connection));
+            Assert.NotEmpty(Value(connection, "PRAGMA cipher_version;"));
+        }
+    }
+
+    [Theory]
+    [InlineData("null-pin")]
+    [InlineData("wrong-pin")]
+    [InlineData("missing-version-row")]
+    public async Task ReopeningCurrentSchema_RejectsMissingOrTamperedPinnedMigration(
+        string caseName)
+    {
+        // Synthetic encrypted database only. V001 predates the hash column and
+        // is intentionally unpinned; every V002+ migration is mandatory.
+        int pinnedVersion=AlTamamDbContext.CurrentSchemaVersion-1;
+        using(var c=_database.CreateOpenConnection())
+        using(var edit=c.CreateCommand())
+        {
+            edit.CommandText=caseName switch {
+                "null-pin" => "UPDATE SchemaVersions SET Sha256=NULL WHERE SchemaVersion=$v;",
+                "wrong-pin" => "UPDATE SchemaVersions SET Sha256=$bad WHERE SchemaVersion=$v;",
+                _ => "DELETE FROM SchemaVersions WHERE SchemaVersion=$v;"
+            };
+            edit.Parameters.AddWithValue("$v",pinnedVersion);
+            edit.Parameters.AddWithValue("$bad",new string('0',64));
+            Assert.Equal(1,edit.ExecuteNonQuery());
+        }
+
+        using var reopened=new AlTamamDbContext(DatabasePath,_key,useConnectionPooling:false);
+        var failure=await Assert.ThrowsAsync<InvalidOperationException>(
+            ()=>reopened.InitializeAsync());
+        Assert.Contains("migration",failure.Message,StringComparison.OrdinalIgnoreCase);
+        using var check=_database.CreateOpenConnection();
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion.ToString(),
+            Value(check,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+        Assert.Equal("ok",Value(check,"PRAGMA integrity_check;"));
+        Assert.Equal(0L,Count(check,"SELECT COUNT(*) FROM Persons;"));
+        Assert.False(Directory.Exists(DatabasePath + ".migration-backups"));
+    }
+
+    [Fact]
+    public async Task InterruptedUpgrade_RejectsCorruptPriorPinBeforeAnyNewMigration()
+    {
+        // Synthetic interrupted-upgrade state. Highest recorded version is 11
+        // although V012's physical columns exist; corrupt the V011 pin.
+        // The runner must reject that corruption BEFORE attempting V012 SQL.
+        int prior=AlTamamDbContext.CurrentSchemaVersion-1;
+        using(var c=_database.CreateOpenConnection())
+        {
+            using var cmd=c.CreateCommand();
+            cmd.CommandText="DELETE FROM SchemaVersions WHERE SchemaVersion=$current;";
+            cmd.Parameters.AddWithValue("$current",AlTamamDbContext.CurrentSchemaVersion);
+            Assert.Equal(1,cmd.ExecuteNonQuery());
+            using var tamper=c.CreateCommand();
+            tamper.CommandText="UPDATE SchemaVersions SET Sha256=NULL WHERE SchemaVersion=$v;";
+            tamper.Parameters.AddWithValue("$v",prior);
+            Assert.Equal(1,tamper.ExecuteNonQuery());
+            var runner=new AlTamam.Infrastructure.Persistence.Migrations.SchemaMigrationRunner(
+                AlTamamDbContext.CanonicalMigrations);
+            var err=await Assert.ThrowsAsync<InvalidOperationException>(
+                ()=>runner.UpgradeAsync(c));
+            Assert.Contains("migration hash missing",err.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(prior.ToString(),
+                Value(c,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+            Assert.Equal("ok",Value(c,"PRAGMA integrity_check;"));
+        }
+    }
+
+    [Fact]
+    public async Task ReopeningCurrentSchema_PreservesValidHistoricalPinsAndEncryptedData()
+    {
+        using(var c=_database.CreateOpenConnection())
+            Execute(c,"INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc) VALUES('TST-PH02-PIN','safe','2026-10-20T00:00:00Z') ON CONFLICT(SettingKey) DO UPDATE SET SettingValue='safe';");
+        using var reopened=new AlTamamDbContext(DatabasePath,_key,useConnectionPooling:false);
+        await reopened.InitializeAsync();
+        using var read=reopened.CreateOpenConnection();
+        Assert.Equal("safe",Value(read,
+            "SELECT SettingValue FROM AppSettings WHERE SettingKey='TST-PH02-PIN';"));
+        Assert.Equal("ok",Value(read,"PRAGMA integrity_check;"));
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion.ToString(),
+            Value(read,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
     }
 
     [Fact]

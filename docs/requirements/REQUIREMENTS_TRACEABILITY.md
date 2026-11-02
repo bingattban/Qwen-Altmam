@@ -3,10 +3,10 @@
 ## Source-of-truth and boundary
 The owner-approved `AlTamam_Daily_Reconciled_Master_Plan_EN_2026-10-28.txt` (Sections 01–11, Section 07's 69 routes) is the governing directive. `docs/requirements/OWNER_DECISIONS_2026-10-31.md` takes precedence for the newer independent-save, catch-up, screen-preservation and audit-role decisions. Historical audit reports are date-specific snapshots, **not** current requirements, and do not constitute an additional approval/Gate-0 phase. No obsolete Jules/Termux operational prerequisite or fake tool link is authorized.
 
-Source inspected: `bingattban/Qwen-Altmam` `main` @ `62767fef1335ec7da073a9e9d17acc777aa428ac`. Phase 00 is **inventory and reconciliation only**; no Windows runtime, security, final release or service wiring is accepted based solely on files, route contracts or screenshots.
+Phase 00–02 source re-inspected against `bingattban/Qwen-Altmam` `main` @ `f1cd235cc0b4e4b77fbc708c17eb9fd7bec57539` (merged PR #204). Phase 00 is **inventory and reconciliation only**; no Windows runtime, security, final release or service wiring is accepted based solely on files, route contracts or screenshots.
 
 ## Current repository inventory, measured
-- `AlTamam.slnx`: 5 production C# projects (`AlTamam.Domain`, `Contracts`, `Application`, `Infrastructure`, `DesktopHost`) plus `AlTamam.Tests` xUnit project. `AlTamam.WebUI` is local HTML/CSS/JS assets, not a `.csproj`.
+- `AlTamam.slnx`: 5 production C# projects (`AlTamam.Domain`, `Contracts`, `Application`, `Infrastructure`, `DesktopHost`) plus **three** independent test projects (`AlTamam.Tests`, `AlTamam.UnitTests`, `AlTamam.IntegrationTests`). `AlTamam.WebUI` is local HTML/CSS/JS assets, not a `.csproj`.
 - WPF `.NET 10`, local WebView2, SQLCipher/DPAPI key storage, SQLite history/migrations, native C# bridge. Source architecture is present; actual functional acceptance is owned by later phases.
 - Central NuGet versions (from `Directory.Packages.props`): Microsoft.Data.Sqlite.Core 9.0.2; SQLitePCLRaw.bundle_e_sqlcipher 2.1.10; Konscious.Security.Cryptography.Argon2 1.3.1; Microsoft.Web.WebView2 1.0.2903.40; System.Security.Cryptography.ProtectedData 9.0.2; Microsoft.NET.Test.Sdk 17.12.0; xunit 2.9.2; xunit.runner.visualstudio 2.8.2.
 - `screen-manifest.json` **actual `screens.length = 69`**, declared count=69, 69 distinct stable IDs and `routeKey`s, 69 equal live `SCREEN_CATALOG` entries (key/path/title/phase), 68 distinct screen HTML files on disk **because screen_070 intentionally shares the Edit Names asset**, plus the root UI shell. Every manifest local asset was found. `action-manifest.json`: 103 registered actions/11 service owners, **not proof of 103 fully tested handlers**.
@@ -68,3 +68,7 @@ Optional policies awaiting new owner decision must remain OPTIONAL and must not 
 
 ## Phase 00 acceptance/evidence limits
 Static validation: Section 07=69 entries; JSON manifest=69; live JS catalog=69; 69 unique keys; all 69 exact stable IDs; 68 HTML physical pages with embedded AddPerson; every manifest path exists; owning phase equality; retired `screen_020`/Reports route and HTML absent; screen_025/070/002/069 correct. This is inventory PASS. Actual .NET and Windows UI/E2E tests were **NOT EXECUTED** by this documentation operation; Phase 01–15 tests, four Windows build artifacts, checksum evidence, native restore and physical UAT remain distinct required gates, never inferred PASS here.
+
+## Additive Phase 00–02 validation, 2026-11-02
+- The exact route-to-screen CSV matrix is checked against the live manifest in both Windows preflights; this is inventory evidence, not acceptance of every UI interaction.
+- SQLCipher startup refuses existing-current-schema missing or tampered V002+ pins. Real encrypted tests include fail-closed V011-to-V012 rescue and interrupted-upgrade cases; no released migration SQL or provider was changed.
