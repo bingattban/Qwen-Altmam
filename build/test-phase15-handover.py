@@ -30,7 +30,7 @@ class CandidateAuditTests(unittest.TestCase):
             for kind, ext in (("Portable", ".zip"), ("Installer", ".exe")):
                 folder = self.root / f"AlTamam-{kind}-{arch}-rc-{VERSION}"
                 folder.mkdir()
-                name = f"AlTamam-{kind}-{arch}{ext}"
+                name = f"AlTamamDaily_{VERSION}_{'Portable' if kind == 'Portable' else 'Setup'}_{runtime}{ext}"
                 data = f"SYNTHETIC ONLY {arch} {kind}".encode("ascii")
                 (folder / name).write_bytes(data)
                 sha = hashlib.sha256(data).hexdigest()
@@ -49,6 +49,11 @@ class CandidateAuditTests(unittest.TestCase):
         self.assertEqual(len({f["sha256"] for f in out["releaseFiles"]}), 4)
         self.assertEqual(out["independentCleanOfflineWindowsAcceptance"], "NOT_EXECUTED")
         self.assertFalse(out["ownerSignedFinalRelease"])
+        self.assertEqual({row["file"] for row in out["releaseFiles"]}, {
+            f"AlTamamDaily_{VERSION}_{kind}_{runtime}{ext}"
+            for runtime in ("win-x86", "win-x64")
+            for kind, ext in (("Portable", ".zip"), ("Setup", ".exe"))
+        })
 
     def test_wrong_source_and_version_are_rejected(self):
         for version, checkout, source in [
@@ -60,13 +65,13 @@ class CandidateAuditTests(unittest.TestCase):
                 MOD.audit(self.root, version, checkout, source)
 
     def test_tampered_portable_or_installer_fails(self):
-        p = self.root / f"AlTamam-Installer-Windows-32bit-rc-{VERSION}" / "AlTamam-Installer-Windows-32bit.exe"
+        p = self.root / f"AlTamam-Installer-Windows-32bit-rc-{VERSION}" / f"AlTamamDaily_{VERSION}_Setup_win-x86.exe"
         p.write_bytes(b"tampered")
         with self.assertRaisesRegex(ValueError, "SHA-256"):
             MOD.audit(self.root, VERSION, SHA, SOURCE)
 
     def test_missing_class_or_extra_untrusted_folder_rejected(self):
-        p = self.root / f"AlTamam-Portable-Windows-64bit-rc-{VERSION}" / "AlTamam-Portable-Windows-64bit.zip"
+        p = self.root / f"AlTamam-Portable-Windows-64bit-rc-{VERSION}" / f"AlTamamDaily_{VERSION}_Portable_win-x64.zip"
         p.unlink()
         with self.assertRaises(ValueError):
             MOD.audit(self.root, VERSION, SHA, SOURCE)
