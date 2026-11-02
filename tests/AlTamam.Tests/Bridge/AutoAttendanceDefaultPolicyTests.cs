@@ -239,6 +239,79 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         Assert.Equal(3L,Count("AuditEvents"));
     }
 
+
+    [Fact]
+    public async Task IndependentSettings_ReturnRealCommittedAuditIds_WithReplayAndNoOpSafety()
+    {
+        var policy = new AutoAttendancePolicyService(_db);
+        var due = new JsonObject {
+            ["dueTimeLocal"]="07:35", ["operationId"]="SEC08-DUE-AUDIT-RECEIPT-001"
+        };
+        var locked = new JsonObject {
+            ["dailyLockTimeLocal"]="19:10", ["operationId"]="SEC08-LOCK-AUDIT-RECEIPT-001"
+        };
+        var fallback = Selection("STS-PERMISSION","SEC08-STATUS-AUDIT-RECEIPT-001");
+
+        var first = await policy.SetScheduleAsync(due, Admin, default);
+        var second = await policy.SetScheduleAsync(locked, Admin, default);
+        var third = await policy.SetAsync(fallback, Admin, default);
+        foreach (var response in new[] { first, second, third })
+        {
+            Assert.True(response.Success, response.UserMessage);
+            var data = Assert.IsType<JsonObject>(response.Data);
+            var id = data["auditEventId"]!.GetValue<string>();
+            Assert.StartsWith("AUD-", id);
+            Assert.Equal(id, response.AuditEventId);
+            using var connection = _db.CreateOpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM AuditEvents WHERE AuditEventId=$id;";
+            command.Parameters.AddWithValue("$id", id);
+            Assert.Equal(1L, Convert.ToInt64(command.ExecuteScalar()));
+        }
+        Assert.Equal(3L, Count("AuditEvents"));
+
+        var duplicate = await policy.SetScheduleAsync((JsonObject)due.DeepClone(), Admin, default);
+        Assert.True(duplicate.Success, duplicate.UserMessage);
+        Assert.Equal(Assert.IsType<JsonObject>(first.Data)["auditEventId"]!.GetValue<string>(),
+            Assert.IsType<JsonObject>(duplicate.Data)["auditEventId"]!.GetValue<string>());
+        Assert.Equal(3L, Count("AuditEvents"));
+
+        var noOp = await policy.SetScheduleAsync(new JsonObject {
+            ["dueTimeLocal"]="07:35", ["operationId"]="SEC08-DUE-NOCHANGE-RECEIPT-001"
+        }, Admin, default);
+        Assert.True(noOp.Success, noOp.UserMessage);
+        Assert.Null(Assert.IsType<JsonObject>(noOp.Data)["auditEventId"]);
+        Assert.Null(noOp.AuditEventId);
+        Assert.Equal(3L, Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task IndependentSettings_ReportFieldSpecificErrorsWithoutMutatingOtherValues()
+    {
+        var policy = new AutoAttendancePolicyService(_db);
+        var badDue = await policy.SetScheduleAsync(new JsonObject {
+            ["dueTimeLocal"]="29:99", ["operationId"]="SEC08-INVALID-DUE-TIME-0001"
+        }, Admin, default);
+        Assert.False(badDue.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError, badDue.Code);
+        Assert.NotNull(badDue.ValidationErrors?["dueTimeLocal"]);
+        Assert.Null(badDue.Data);
+        Assert.Null(badDue.AuditEventId);
+
+        var badLock = await policy.SetScheduleAsync(new JsonObject {
+            ["dailyLockTimeLocal"]="abc", ["operationId"]="SEC08-INVALID-LOCK-TIME-0001"
+        }, Admin, default);
+        Assert.False(badLock.Success);
+        Assert.NotNull(badLock.ValidationErrors?["dailyLockTimeLocal"]);
+
+        var invalidStatus = await policy.SetAsync(Selection(
+            "STS-NOT-EXISTING", "SEC08-INVALID-FALLBACK-0001"), Admin, default);
+        Assert.False(invalidStatus.Success);
+        Assert.NotNull(invalidStatus.ValidationErrors?["statusId"]);
+        Assert.Equal(0L, Count("AuditEvents"));
+        Assert.Equal(0L, Count("MutationReceipts"));
+    }
+
     [Fact]
     public async Task MissingYesterday_RequiresAdministratorSettingThenRunsOnceWithoutOverwritingManual()
     {
