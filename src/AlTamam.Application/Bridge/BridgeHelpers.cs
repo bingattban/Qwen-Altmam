@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Contracts.Events;
 
@@ -13,8 +14,11 @@ internal static class BridgeHelpers
         IReadOnlyList<UiInvalidationEventPayload>? events = null)
         => new("", true, data, null, null, revision, events);
 
-    internal static BridgeResponse Error(string code, string message)
-        => new("", false, null, code, message);
+    internal static BridgeResponse Error(string code, string message, string? field = null)
+        => new BridgeResponse("", false, null, code, message)
+        {
+            ValidationErrors = field is null ? null : new JsonObject { [field] = message }
+        };
 
     internal static IReadOnlyList<UiInvalidationEventPayload> InvalidationEvent(
         string eventName, string effectiveLocalDate, IEnumerable<string> affectedEntityIds)

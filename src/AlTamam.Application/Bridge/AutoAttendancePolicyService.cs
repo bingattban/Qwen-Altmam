@@ -82,7 +82,8 @@ public sealed class AutoAttendancePolicyService
         try {statusId=payload?["statusId"]?.GetValue<string>()?.Trim()??"";}
         catch {statusId="";}
         if(statusId.Length is <1 or >128)
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"اختر حالة تحضير نشطة من الإعدادات.");
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "اختر حالة تحضير نشطة من الإعدادات.", "statusId");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
@@ -94,12 +95,13 @@ public sealed class AutoAttendancePolicyService
             string? name=await status.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
             if(name is null)
                 return BridgeHelpers.Error(BridgeErrorCodes.CustomStatusInactive,
-                    "الحالة المختارة غير موجودة أو غير نشطة؛ اختر حالة نشطة.");
+                    "الحالة المختارة غير موجودة أو غير نشطة؛ اختر حالة نشطة.", "statusId");
             using var before=c.CreateCommand();before.Transaction=t;
             before.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
             before.Parameters.AddWithValue("$key",DefaultStatusKey);
             string? previous=await before.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
             string timestamp=_time.GetUtcNow().ToString("O");
+            string? auditEventId=null;
             if(previous!=statusId)
             {
                 using var save=c.CreateCommand();save.Transaction=t;
@@ -113,7 +115,7 @@ public sealed class AutoAttendancePolicyService
                 save.Parameters.AddWithValue("$id",statusId);
                 save.Parameters.AddWithValue("$now",timestamp);
                 await save.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                await BridgeAuditWriter.WriteAsync(c,t,_time,
+                auditEventId=await BridgeAuditWriter.WriteAsync(c,t,_time,
                     "AUTO_ATTENDANCE_DEFAULT_STATUS_SET","تعيين الحالة الافتراضية للتحضير",
                     actor.UserId,actor.Username,actor.Username,
                     "AppSetting",DefaultStatusKey,"الحالة الافتراضية عند عدم وجود تحضير أمس",
@@ -133,8 +135,9 @@ public sealed class AutoAttendancePolicyService
             var data=new JsonObject{["defaultStatusId"]=statusId,["defaultStatusName"]=name,
                 ["configured"]=true,
                 ["dueTimeLocal"]=IsValidClock(storedDue)?storedDue:DefaultDueTime};
+            if(auditEventId is not null)data["auditEventId"]=auditEventId;
             await MutationIdempotency.StoreAsync(c,t,receipt,data,_time,ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(data);
+            return BridgeHelpers.Ok(data) with {AuditEventId=auditEventId};
         },ct).ConfigureAwait(false);
     }
     // Each clock is a distinct idempotent, audited SQLCipher transaction.
@@ -145,7 +148,8 @@ public sealed class AutoAttendancePolicyService
     {
         if(!IsValidClock(value))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "وقت التحضير أو القفل غير صالح؛ استخدم الصيغة HH:mm.");
+                "وقت التحضير أو القفل غير صالح؛ استخدم الصيغة HH:mm.",
+                key==DueTimeKey?"dueTimeLocal":"dailyLockTimeLocal");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
@@ -157,6 +161,7 @@ public sealed class AutoAttendancePolicyService
             prior.Parameters.AddWithValue("$key",key);
             string old=(await prior.ExecuteScalarAsync(ct).ConfigureAwait(false))?.ToString()
                 ??(key==DueTimeKey?DefaultDueTime:DefaultLockTime);
+            string? auditEventId=null;
             if(old!=value)
             {
                 using var change=c.CreateCommand();
@@ -171,7 +176,7 @@ public sealed class AutoAttendancePolicyService
                 change.Parameters.AddWithValue("$value",value);
                 change.Parameters.AddWithValue("$at",_time.GetUtcNow().ToString("O"));
                 await change.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                await BridgeAuditWriter.WriteAsync(c,t,_time,
+                auditEventId=await BridgeAuditWriter.WriteAsync(c,t,_time,
                     "ATTENDANCE_CLOCK_SET","تعديل وقت التحضير أو قفل اليوم",
                     actor.UserId,actor.Username,null,"AppSetting",key,
                     key==DueTimeKey?"وقت التحضير التلقائي":"وقت قفل التحضير",
@@ -182,8 +187,9 @@ public sealed class AutoAttendancePolicyService
                     .ConfigureAwait(false);
             }
             var result=new JsonObject{["settingKey"]=key,["value"]=value};
+            if(auditEventId is not null)result["auditEventId"]=auditEventId;
             await MutationIdempotency.StoreAsync(c,t,receipt,result,_time,ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(result);
+            return BridgeHelpers.Ok(result) with {AuditEventId=auditEventId};
         },ct).ConfigureAwait(false);
     }
 
@@ -214,8 +220,14 @@ public sealed class AutoAttendancePolicyService
         }
         catch { due=""; locked=""; }
         if(!IsValidClock(due) || !IsValidClock(locked))
+        {
+            var fields=new JsonObject();
+            if(!IsValidClock(due))fields["dueTimeLocal"]="وقت التحضير غير صالح.";
+            if(!IsValidClock(locked))fields["dailyLockTimeLocal"]="وقت القفل غير صالح.";
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "حدد وقتين صحيحين بصيغة 24 ساعة (HH:mm).");
+                "حدد وقتين صحيحين بصيغة 24 ساعة (HH:mm).")
+                with {ValidationErrors=fields};
+        }
         // Backward compatible: existing time-only callers may omit this field.
         // The unified settings form supplies it so all three values commit atomically.
         bool updateDefault=payload?.ContainsKey("defaultStatusId")==true;
@@ -223,10 +235,11 @@ public sealed class AutoAttendancePolicyService
         if(updateDefault)
         {
             try {newStatus=payload?["defaultStatusId"]?.GetValue<string>()?.Trim();}
-            catch {return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,"الحالة الافتراضية غير صالحة.");}
+            catch {return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "الحالة الافتراضية غير صالحة.", "defaultStatusId");}
             if(string.IsNullOrWhiteSpace(newStatus)||newStatus.Length>128)
                 return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                    "اختر حالة افتراضية نشطة قبل حفظ إعدادات التحضير.");
+                    "اختر حالة افتراضية نشطة قبل حفظ إعدادات التحضير.", "defaultStatusId");
         }
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
@@ -253,9 +266,11 @@ public sealed class AutoAttendancePolicyService
                 newStatusName=await status.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
                 if(newStatusName is null)
                     return BridgeHelpers.Error(BridgeErrorCodes.CustomStatusInactive,
-                        "الحالة الافتراضية المختارة غير نشطة أو غير موجودة؛ لم تُحفظ أي تغييرات.");
+                        "الحالة الافتراضية المختارة غير نشطة أو غير موجودة؛ لم تُحفظ أي تغييرات.",
+                        "defaultStatusId");
             }
             string timestamp=_time.GetUtcNow().ToString("O");
+            string? auditEventId=null;
             if(oldDue!=due || oldLock!=locked || (updateDefault && oldStatus!=newStatus))
             {
                 var changes=new List<(string Key,string Value)>{
@@ -275,7 +290,7 @@ public sealed class AutoAttendancePolicyService
                     save.Parameters.AddWithValue("$now",timestamp);
                     await save.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 }
-                await BridgeAuditWriter.WriteAsync(c,t,_time,
+                auditEventId=await BridgeAuditWriter.WriteAsync(c,t,_time,
                     "ATTENDANCE_SCHEDULE_SET","تغيير أوقات التحضير والإغلاق",
                     actor.UserId,actor.Username,actor.Username,
                     "AppSetting",DueTimeKey,"أوقات التحضير التلقائي وقفل التمام اليومي",
@@ -290,8 +305,9 @@ public sealed class AutoAttendancePolicyService
             var response=new JsonObject{["dueTimeLocal"]=due,["dailyLockTimeLocal"]=locked,
                 ["defaultStatusId"]=updateDefault?newStatus:oldStatus,
                 ["defaultStatusName"]=newStatusName};
+            if(auditEventId is not null)response["auditEventId"]=auditEventId;
             await MutationIdempotency.StoreAsync(c,t,receipt,response,_time,ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(response);
+            return BridgeHelpers.Ok(response) with {AuditEventId=auditEventId};
         },ct).ConfigureAwait(false);
     }
 
