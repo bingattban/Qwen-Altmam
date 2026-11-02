@@ -91,8 +91,30 @@ public sealed class Phase06AttendanceAcceptanceTests : IAsyncLifetime, IDisposab
         var intent = new JsonObject {
             ["previewToken"] = token, ["operationId"] = "phase06-1000-person-absent-batch-01"
         };
-        Assert.True((await service.CommitAsync(intent, Actor, false, default)).Success);
-        Assert.True((await service.CommitAsync((JsonObject)intent.DeepClone(), Actor, false, default)).Success);
+        var committed = await service.CommitAsync(intent, Actor, false, default);
+        Assert.True(committed.Success, committed.UserMessage);
+        var firstResult = Assert.IsType<JsonObject>(committed.Data);
+        var auditIds = Assert.IsType<JsonArray>(firstResult["auditEventIds"]);
+        Assert.Equal(100, auditIds.Count);
+        Assert.Equal(100, auditIds.Select(x=>x!.GetValue<string>())
+            .Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(auditIds[0]!.GetValue<string>(), committed.AuditEventId);
+        var repeated = await service.CommitAsync((JsonObject)intent.DeepClone(), Actor, false, default);
+        Assert.True(repeated.Success, repeated.UserMessage);
+        Assert.Equal(committed.AuditEventId, repeated.AuditEventId);
+        Assert.Equal(firstResult["auditEventIds"]!.ToJsonString(),
+            Assert.IsType<JsonObject>(repeated.Data)["auditEventIds"]!.ToJsonString());
+        using(var connection = _db.CreateOpenConnection())
+        using(var verified = connection.CreateCommand())
+        {
+            verified.CommandText = "SELECT COUNT(*) FROM AuditEvents WHERE AuditEventId=$id;";
+            var param=verified.Parameters.Add("$id",Microsoft.Data.Sqlite.SqliteType.Text);
+            foreach(var item in auditIds)
+            {
+                param.Value=item!.GetValue<string>();
+                Assert.Equal(1L,Convert.ToInt64(verified.ExecuteScalar()));
+            }
+        }
         Assert.Equal(100L, Count("AttendanceRecords"));
         Assert.Equal(100L, Count("AuditEvents"));
         Assert.Equal(0L, Count("AttendanceRevisions"));
@@ -143,10 +165,51 @@ public sealed class Phase06AttendanceAcceptanceTests : IAsyncLifetime, IDisposab
         Assert.Contains("فرد اختبار العدد 0002", rejected.UserMessage);
         Assert.Contains("9300002", rejected.UserMessage);
         Assert.Contains(Today(), rejected.UserMessage);
-        var issues = Assert.IsType<JsonObject>(rejected.Data);
-        Assert.Equal(2, Assert.IsType<JsonArray>(issues["conflicts"]).Count);
+        Assert.Null(rejected.Data);
+        var issues = Assert.IsType<JsonObject>(rejected.ConflictInfo);
+        var people = Assert.IsType<JsonArray>(issues["conflicts"]);
+        Assert.Equal(2,people.Count);
+        Assert.All(people.OfType<JsonObject>(), p =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(p["name"]?.GetValue<string>()));
+            Assert.False(string.IsNullOrWhiteSpace(p["serviceNumberA"]?.GetValue<string>()));
+            Assert.False(string.IsNullOrWhiteSpace(p["reason"]?.GetValue<string>()));
+        });
         Assert.Equal(1L, Count("AttendanceRecords"));
         Assert.Equal(1L, Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task IndividualCommit_ExposesDurableAuditIdAndIdempotentReplay()
+    {
+        Seed(1);
+        var service = new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var preview=await service.PreviewAsync(Selection("initial","STS-PRESENT",
+            "TST-PHASE06-P0001"),Actor,default);
+        Assert.True(preview.Success,preview.UserMessage);
+        var command=new JsonObject{
+            ["previewToken"]=Assert.IsType<JsonObject>(preview.Data)["previewToken"]!.GetValue<string>(),
+            ["operationId"]="SEC08-ATTENDANCE-AUDIT-0001"
+        };
+        var applied=await service.CommitAsync(command,Actor,false,default);
+        Assert.True(applied.Success,applied.UserMessage);
+        var receipt=Assert.IsType<JsonObject>(applied.Data);
+        var eventId=receipt["auditEventId"]!.GetValue<string>();
+        Assert.StartsWith("AUD-",eventId);
+        Assert.Equal(eventId,applied.AuditEventId);
+        Assert.Single(Assert.IsType<JsonArray>(receipt["auditEventIds"]));
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE AuditEventId=$id;";
+            q.Parameters.AddWithValue("$id",eventId);
+            Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
+        }
+        var replay=await service.CommitAsync((JsonObject)command.DeepClone(),Actor,false,default);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(eventId,replay.AuditEventId);
+        Assert.Equal(1L,Count("AuditEvents"));
+        Assert.Equal(1L,Count("MutationReceipts"));
     }
 
     [Fact]
