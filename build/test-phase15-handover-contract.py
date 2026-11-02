@@ -111,6 +111,7 @@ class Phase15Contract(unittest.TestCase):
         self.assertNotIn("screen_020", routes)
         self.assertEqual(routes["screen_025"]["routeKey"], "PersonnelReport")
         self.assertEqual(routes["screen_026"]["titleAr"], "تصدير تقرير الأفراد")
+        self.assertIn("تصدير تقرير الأفراد", read("src/AlTamam.WebUI/screens/Administration/PersonnelManagement/PersonnelReport/ExportPersonReport/index.html"))
         self.assertEqual(routes["screen_070"]["routeKey"], "AddPerson")
         self.assertIn("08:00", routes["screen_069"]["breadcrumbAr"])
         self.assertNotIn("غير المحضرين", routes["screen_003"]["breadcrumbAr"])
