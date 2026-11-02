@@ -14,7 +14,7 @@ if ($parseErrors.Count -ne 0) { throw ('Invalid PowerShell syntax: ' + ($parseEr
 $source = Get-Content -LiteralPath $script -Raw
 foreach ($mustRemain in @(
     'ConfirmDisposableWindowsAccount', 'Get-NetAdapter',
-    'Get-FileHash', 'SourceSha', 'ReleaseRunId',
+    'Get-FileHash', 'SourceSha', 'ReleaseRunId', 'BuildMetadata',
     'db.key.protected', 'altamam.db', 'unins000.exe',
     '--webview-ui-e2e', '--webview-bridge-e2e',
     'AUTOMATED_OFFLINE_SMOKE_PASS_NOT_FINAL_UAT',
@@ -33,14 +33,29 @@ try {
     $zip = Join-Path $work "AlTamamDaily_${version}_Portable_win-x64.zip"
     $setup = Join-Path $work "AlTamamDaily_${version}_Setup_win-x64.exe"
     $sums = Join-Path $work 'SHA256SUMS.txt'
+    $metadataPath = Join-Path $work 'BUILD_METADATA.json'
     [IO.File]::WriteAllBytes($zip, [Text.Encoding]::ASCII.GetBytes('SYNTHETIC TEST ZIP; NOT A REAL PROGRAM'))
     [IO.File]::WriteAllBytes($setup, [Text.Encoding]::ASCII.GetBytes('SYNTHETIC TEST INSTALLER; NOT A REAL PROGRAM'))
     $zipSum = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     $setupSum = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText($sums, "$zipSum  $(Split-Path -Leaf $zip)`n$setupSum  $(Split-Path -Leaf $setup)`n")
+    $manifest = @{
+        version = $version
+        commit = ('a' * 40)
+        sourceHeadSha = ('a' * 40)
+        targetArchitecture = 'Windows-64bit'
+        runtimeIdentifier = 'win-x64'
+        architectureBitness = 64
+        files = @(
+            @{file = (Split-Path -Leaf $zip); sha256 = $zipSum; bytes = (Get-Item $zip).Length},
+            @{file = (Split-Path -Leaf $setup); sha256 = $setupSum; bytes = (Get-Item $setup).Length}
+        )
+    }
+    [IO.File]::WriteAllText($metadataPath, ($manifest | ConvertTo-Json -Depth 5))
     $cliArgs = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$script,
         '-Version',$version,'-Architecture','win-x64','-PortableZip',$zip,
-        '-SetupExe',$setup,'-Sha256Sums',$sums,'-IntegrityOnly')
+        '-SetupExe',$setup,'-Sha256Sums',$sums,
+        '-BuildMetadata',$metadataPath,'-IntegrityOnly')
 
     & powershell.exe @cliArgs
     if ($LASTEXITCODE -ne 0) { throw 'Matching exact customer files and SHA-256 were rejected' }
@@ -69,6 +84,10 @@ try {
     [IO.File]::WriteAllBytes($zip, [Text.Encoding]::ASCII.GetBytes('SYNTHETIC TEST ZIP; NOT A REAL PROGRAM'))
     [IO.File]::AppendAllText($sums, "$zipSum  $(Split-Path -Leaf $zip)`n")
     Assert-Rejected $cliArgs 'duplicate checksum'
+    [IO.File]::WriteAllText($sums, "$zipSum  $(Split-Path -Leaf $zip)`n$setupSum  $(Split-Path -Leaf $setup)`n")
+    $manifest.sourceHeadSha = ('f' * 40)
+    [IO.File]::WriteAllText($metadataPath, ($manifest | ConvertTo-Json -Depth 5))
+    Assert-Rejected $cliArgs 'stale or different source HEAD metadata'
     Write-Host 'SECTION11 OFFLINE VALIDATOR CONTRACT PASS: exact-name and SHA integrity, unsafe version, arch mismatch, tamper and duplicate rejected; physical UAT NOT EXECUTED'
 }
 finally {
