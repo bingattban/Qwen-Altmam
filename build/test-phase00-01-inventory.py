@@ -54,6 +54,22 @@ class Phase00Inventory(unittest.TestCase):
         self.assertIn("PHASE00_01_02_LIVE_RECONCILIATION_2026-11-02.md", header)
         self.assertIn("| R-01 |", risk, "retain original historical risk evidence")
 
+    def test_section09_10_every_clause_and_ac_is_tracked_without_fake_go(self):
+        text = (ROOT / "docs/qa/SECTION09_10_ACCEPTANCE_MATRIX_2026-11-02.md").read_text(
+            encoding="utf-8")
+        clauses = re.findall(r"(?m)^\\| (09\\.\\d{2}) \\|", text)
+        scenarios = re.findall(r"(?m)^\\| (AC-\\d{3}) \\|", text)
+        self.assertEqual([f"09.{n:02d}" for n in range(1, 19)], clauses)
+        self.assertEqual([f"AC-{n:03d}" for n in range(1, 47)], scenarios)
+        self.assertRegex(text, r"\\| AC-023 \\|[^\\n]*\\| OWNER_CONFLICT \\|")
+        for ac in ("AC-025", "AC-027", "AC-028", "AC-044", "AC-046"):
+            self.assertIn(ac, text)
+        self.assertRegex(text, r"\\| AC-044 \\|[^\\n]*\\| NOT_EXECUTED \\|")
+        self.assertIn("NOT A RELEASE GO", text)
+        self.assertIn("three independent audited saves", text)
+        # A source matrix is not physical Windows/restore or 46 real E2E passes.
+        self.assertIn("not a claim", text.lower())
+
     def test_owner_overrides_and_original_phase_ownership_are_declared(self):
         adr = (ROOT / "docs/architecture/ADR-0001.md").read_text(encoding="utf-8")
         trace = (ROOT / "docs/requirements/REQUIREMENTS_TRACEABILITY.md").read_text(
