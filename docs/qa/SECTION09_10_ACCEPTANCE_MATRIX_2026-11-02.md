@@ -53,7 +53,7 @@ The path below is **related implementation/test evidence**, not a claim that tha
 | AC-020 | Identical names retain distinct PersonId and effective sites | `tests/AlTamam.Tests/Bridge/MonthlyHistoryReuseTests.cs` | AUTO_PARTIAL |
 | AC-021 | All-sites monthly export plus per-site sheets/path error | `tests/AlTamam.Tests/Bridge/MonthlyExcelExportTests.cs` | AUTO_PARTIAL |
 | AC-022 | Renaming column retains ColumnId and history | `tests/AlTamam.Tests/Bridge/RosterColumnStructureIntegrationTests.cs` | AUTO_PARTIAL |
-| AC-023 | 16:00 backup; independently saved 08:00/20:00/fallback | `tests/AlTamam.Tests/Bridge/AdminSettingsIntegrationTests.cs` | OWNER_CONFLICT |
+| AC-023 | 16:00 backup; independently saved 08:00/20:00/fallback | `tests/AlTamam.Tests/Bridge/AutoAttendanceDefaultPolicyTests.cs` | OWNER_APPROVED_AUTO_PARTIAL |
 | AC-024 | Missing disk shows exact Arabic error, no false success | `tests/AlTamam.Tests/Bridge/Phase12BackupDiskRecoveryTests.cs` | AUTO_PARTIAL |
 | AC-025 | Lost key versus disk errors; protected second-PC package | `tests/AlTamam.Tests/Security/PortableRecoveryKeyPackageTests.cs` | NOT_EXECUTED |
 | AC-026 | Corrupt backup/wrong key leaves live database intact | `tests/AlTamam.Tests/Persistence/StagedRestorePreparationTests.cs` | AUTO_PARTIAL |
@@ -79,7 +79,7 @@ The path below is **related implementation/test evidence**, not a claim that tha
 | AC-046 | 1024x768 RTL/170x35 search/sticky grid/modal keyboard focus | `build/test-modal-first-design.js` | NOT_EXECUTED |
 
 ## Owner ruling / acceptance boundaries
-- **AC-023 OWNER_CONFLICT:** the submitted text says three attendance settings are saved atomically together, but the owner's later approved rule requires **three independent audited saves**: 08:00 automatic time, 20:00 lock, fallback status. Preserve the later approved independent-save behavior; no partial success is rolled back and any failure is reported. Backup time 16:00 remains a fourth independent setting. A change to the owner rule requires an explicit decision.
+- **AC-023 OWNER APPROVED 2026-11-02:** the owner explicitly reaffirmed **three independent audited saves**: 08:00 automatic time, 20:00 lock, fallback status, **not** a multi-setting atomic transaction. A failure must identify its setting without undoing successful saves; retried failures retain their idempotency key. A combined native `SetAttendanceSchedule` payload is rejected without a database write, and the fallback is saved through its own native action. Backup time 16:00 remains a fourth independent setting. This owner-policy conflict is RESOLVED; `OWNER_APPROVED_AUTO_PARTIAL` still does **not** certify the entire physical AC-023 acceptance journey.
 - **AC-027/028/044/046 NOT_EXECUTED:** Github-hosted Windows E2E/smoke or synthetic benchmarks do not prove a separate clean offline x86/x64 PC, physical 10k grid scrolling, atomic cutover after power loss, or all RTL keyboard/focus requirements. Do not activate the disabled destructive restore path.
 - **AC-025:** protected recovery must be demonstrated on a second actual Windows device/account. Never log raw SQLCipher keys.
 - **AC-034:** a green PR workflow produces candidate packages, NOT production approval; recheck the merged-main SHA and require manual GO/NO-GO signoff.
