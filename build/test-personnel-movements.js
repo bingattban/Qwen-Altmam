@@ -16,12 +16,13 @@ let allow=false;
 let deferredArchive=null, nextCommitError=null, overrideCommitCount=null;
 const commitOptions=[];
 const modalReviews=[],detailReviews=[];
+const PREVIEW_TOKEN="a".repeat(64);
 const responses={
  QuerySites:[{siteId:"SITE-SOURCE",name:"الموقع الأول",active:true},
   {siteId:"SITE-DEST",name:"الموقع الثاني",active:true}],
  QueryPersons:{total:1,hasNext:false,items:[{personId:"P1",serviceNumberA:"001",
    displayName:"فرد تجريبي",siteName:"الموقع الأول"}]},
- PreviewInternalTransfer:{previewToken:"SERVER-ONLY-TOKEN",count:1,
+ PreviewInternalTransfer:{previewToken:PREVIEW_TOKEN,count:1,
    businessDate:"2026-10-25",external:false,destinationName:"الموقع الثاني",
    persons:[{personId:"P1",name:"فرد تجريبي",serviceNumberA:"001",
      sourceSiteId:"SITE-SOURCE",sourceSiteName:"الموقع الأول"}]},
@@ -80,7 +81,7 @@ async function run(){
  await find("button","معاينة النقل والتأكيد").handlers.click();
  assert.equal(committed.length,1);
  assert.equal(modalReviews.length,2,"final approval happens inside transfer modal");
- assert.equal(committed[0].previewToken,"SERVER-ONLY-TOKEN",
+ assert.equal(committed[0].previewToken,PREVIEW_TOKEN,
    "commit must send only the validated server preview token");
  assert.ok(commitOptions[0]?.timeoutMs>=60000,
    "saving a 100-person preview cannot silently fail at the generic 15-second bridge timeout");
