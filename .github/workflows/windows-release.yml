@@ -87,6 +87,8 @@ jobs:
         shell: pwsh
         run: |
           python build/test-phase15-handover.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 four-artifact metadata / SHA256 regression' }
+          python build/test-section11-delivery-standard.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 15 cross-architecture file checksum or source regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
