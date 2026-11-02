@@ -35,14 +35,19 @@ New Windows runs must pass; past PR green is NOT proof for new main SHA.
    hostfxr/hostpolicy and native SQLCipher is validated on the publish tree
    and the extracted customer ZIP. A file with only a familiar filename
    is not sufficient proof of a correct x86/x64 native dependency.
-4. Actual extracted Portable ZIP: WPF layout and offline WebView2 navigation
-   run with exit-code/timeout gates; the **full extracted application folder
+4. Actual extracted Portable ZIP: WPF layout and offline WebView2 navigation,
+   followed by the **native HTML/WebView2 -> C# bridge -> synthetic encrypted
+   SQLCipher -> HTML** full roundtrip (including all three roles and forbidden
+   calls), run for **both win-x86 and win-x64 customer ZIPs**, all with
+   exit-code/timeout/trace gates; the **full extracted application folder
    is moved** and the same checks run again. No adjacent data or second key
    path is allowed. Normal offline UI starts directly from the EXE, but
    if WebView2 is not installed the package must install its bundled local
    prerequisite; the missing-runtime case needs separate clean-PC testing.
 5. Actual Inno Installer EXE: silent installation, exact WPF EXE SHA-256
-   equality with Portable, layout/WebView2 checks, **same-version in-place
+   equality with Portable, layout/WebView2 and **real isolated SQLCipher
+   bridge/three-role E2E checks** on both installed native architectures,
+   **same-version in-place
    reinstallation**, uninstall, reinstall, and AppData sentinel/hash
    preservation. Same-version overwrite is **NOT** proof of a genuine
    older-version-to-new-version upgrade.
