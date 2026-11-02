@@ -1,186 +1,203 @@
-# AlTamam — Manifest Action Coverage Checklist (90 actions / 11 services)
+# AlTamam — Current C# Bridge Action Coverage
 
-Directive §20 completeness checklist. **Authoritative source:** `src/AlTamam.WebUI/action-manifest.json`
-(exact signatures, allowedRoles, requestSchema, mutating/idempotency, error codes). This document marks
-implementation and test status per action; it does not replace the manifest.
+Generated from the current shipped `action-manifest.json` and explicit `BridgeHandlerCatalog.cs` switch arms.
+This table is a **routing inventory**, not an assertion that every command passes feature,
+Windows E2E, clean-machine or physical restore acceptance tests.
 
-Generated & cross-checked 2026-10-23 from working tree at local HEAD `2d0be83`:
-- Inventory ↔ manifest cross-check: **PASS** — all 90 names present, owningService matches on every row, no extras.
-- C# mirror (`ActionManifest.cs`): 90 records, enforced equal by `BridgeRbacMatrixTests.ManifestMirror_ContainsExactlyTheDeclaredNinetyActions`.
-- Dispatcher registration: enforced by `BridgeRbacMatrixTests.Dispatcher_RegistersEveryManifestAction_NoUiOnlyGating`.
+**Manifest:** 103 actions / 11 owning services.
+**Explicit native handlers:** 102.
+**Intentionally unavailable:** `RestoreDatabaseAtomically` (native physical restore acceptance gate).
 
-## Status vocabulary (honest, per §2.3 — never translate absent coverage into PASS)
+## Service-level coverage
 
-| Code | Meaning |
-|---|---|
-| WIRED | Authentic handler executes real logic through the bridge dispatcher |
-| REFUSAL | Registered with full manifest metadata; returns honest phase-pending refusal (never fake success) |
-| RBAC ✔ | Authorization gate exercised by the 360-case matrix (90 actions × GA/OA/SV/Unauthenticated), server-side, independent of UI visibility |
-| FUZZ ✔ | Payload path exercised by hostile-input fuzz tests |
-| FT — | No feature-level (behavioral) test yet; only contract/RBAC coverage exists |
+| Owning service | Manifest actions | Explicit C# handlers |
+|---|---:|---:|
+| AttendanceService | 12 | 12 |
+| AuthenticationService | 6 | 6 |
+| ConfigurationService | 12 | 12 |
+| DashboardService | 4 | 4 |
+| ExcelSheetsService | 11 | 11 |
+| MonthlyGridService | 3 | 3 |
+| MovementService | 11 | 11 |
+| PersonRosterService | 10 | 10 |
+| ReportingService | 6 | 6 |
+| SettingsBackupService | 17 | 16 |
+| UserAuditService | 11 | 11 |
 
-Totals: 90 actions / 11 services — WIRED: 19, REFUSAL (phase-pending): 71.
-All 90 are RBAC-gated at the dispatcher and covered by the matrix; behavioral wiring follows the phase plan.
+## Action-by-action routing inventory
 
-## AttendanceService (7 actions)
+Statuses: **WIRED** = explicit native handler (behavior must be tested separately);
+**DISABLED** = no allowed execution or default-success fallback.
+Idempotency and role data remain authoritative in the JSON manifest and C# mirror.
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| GetActiveAttendanceStatuses | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| PreviewAttendanceChange | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| SubmitAttendance | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| ReviseTodayAttendance | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| SaveAttendanceDraft | MUTATION | yes | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: ✔; FT: BridgeFuzzPayloadTests.HostileDraftFields_* |
-| ListAttendanceDrafts | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| DeleteAttendanceDraft | MUTATION | yes | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
+### AttendanceService
 
-## AuthenticationService (6 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `CommitAdministrativeAttendanceCatchUp` | MUTATION | yes | WIRED |
+| `CommitClosedDayCorrection` | MUTATION | yes | WIRED |
+| `DeleteAttendanceDraft` | MUTATION | yes | WIRED |
+| `GetActiveAttendanceStatuses` | READ | no | WIRED |
+| `ListAttendanceDrafts` | READ | no | WIRED |
+| `PreviewAdministrativeAttendanceCatchUp` | READ | no | WIRED |
+| `PreviewAttendanceChange` | READ | no | WIRED |
+| `PreviewClosedDayCorrection` | READ | no | WIRED |
+| `ReviseTodayAttendance` | MUTATION | yes | WIRED |
+| `SaveAttendanceDraft` | MUTATION | yes | WIRED |
+| `SetClosedDayCorrectionPolicy` | MUTATION | yes | WIRED |
+| `SubmitAttendance` | MUTATION | yes | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| GetProvisioningState | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: ✔; FT: SecretHygieneAndFailureTests (provisioning/bootstrap paths); BridgeFuzzPayloadTests.InitializeAsync (real GA auth) |
-| AuthenticateLocalUser | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: ✔; FT: SecretHygieneAndFailureTests.Argon2*; BridgeFuzzPayloadTests (real session nonce) |
-| GetCurrentSession | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| GetNavigationPermissions | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| Logout | MUTATION | yes | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| GetAllowedRoles | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
+### AuthenticationService
 
-## ConfigurationService (12 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `AuthenticateLocalUser` | READ | no | WIRED |
+| `GetAllowedRoles` | READ | no | WIRED |
+| `GetCurrentSession` | READ | no | WIRED |
+| `GetNavigationPermissions` | READ | no | WIRED |
+| `GetProvisioningState` | READ | no | WIRED |
+| `Logout` | MUTATION | yes | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| QueryAttendanceStatuses | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CreateAttendanceStatus | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| UpdateAttendanceStatus | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| DeactivateOrDeleteStatus | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| QuerySites | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CreateSite | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| RenameSite | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| RemoveSiteAndReassignCurrentPersons | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| GetCustomFieldDefinitions | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CreateCustomFieldDefinition | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| UpdateCustomFieldMetadata | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| DeactivateCustomField | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
+### ConfigurationService
 
-## DashboardService (4 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `CreateAttendanceStatus` | MUTATION | yes | WIRED |
+| `CreateCustomFieldDefinition` | MUTATION | yes | WIRED |
+| `CreateSite` | MUTATION | yes | WIRED |
+| `DeactivateCustomField` | MUTATION | yes | WIRED |
+| `DeactivateOrDeleteStatus` | MUTATION | yes | WIRED |
+| `GetCustomFieldDefinitions` | READ | no | WIRED |
+| `QueryAttendanceStatuses` | READ | no | WIRED |
+| `QuerySites` | READ | no | WIRED |
+| `RemoveSiteAndReassignCurrentPersons` | MUTATION | yes | WIRED |
+| `RenameSite` | MUTATION | yes | WIRED |
+| `UpdateAttendanceStatus` | MUTATION | yes | WIRED |
+| `UpdateCustomFieldMetadata` | MUTATION | yes | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| GetDashboardSummary | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| QueryDailyRoster | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| QueryUnprepared | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| GetAutoAttendanceRun | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
+### DashboardService
 
-## ExcelSheetsService (11 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `GetAutoAttendanceRun` | READ | no | WIRED |
+| `GetDashboardSummary` | READ | no | WIRED |
+| `QueryDailyRoster` | READ | no | WIRED |
+| `QueryUnprepared` | READ | no | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| SelectImportWorkbook | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| AnalyzeImport | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| PreviewImportPlan | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CommitImport | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| QueryImportOutcome | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| ExportImportIssues | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| GetExportablePeriods | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| PreviewMonthlyExport | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| ExportMonthlyWorkbookSet | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| GetExportProgress | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CancelExport | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
+### ExcelSheetsService
 
-## MonthlyGridService (3 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `AnalyzeImport` | READ | no | WIRED |
+| `CancelExport` | MUTATION | yes | WIRED |
+| `CommitImport` | MUTATION | yes | WIRED |
+| `ExportImportIssues` | MUTATION | yes | WIRED |
+| `ExportMonthlyWorkbookSet` | MUTATION | yes | WIRED |
+| `GetExportProgress` | READ | no | WIRED |
+| `GetExportablePeriods` | READ | no | WIRED |
+| `PreviewImportPlan` | READ | no | WIRED |
+| `PreviewMonthlyExport` | READ | no | WIRED |
+| `QueryImportOutcome` | READ | no | WIRED |
+| `SelectImportWorkbook` | READ | no | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| GetAvailableArchivePeriods | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| QueryMonthlyGrid | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| GetMonthlyCellDetails | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
+### MonthlyGridService
 
-## MovementService (11 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `GetAvailableArchivePeriods` | READ | no | WIRED |
+| `GetMonthlyCellDetails` | READ | no | WIRED |
+| `QueryMonthlyGrid` | READ | no | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| QueryActivePersonsBySite | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| PreviewInternalTransfer | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CommitInternalTransfer | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| PreviewExternalTransfer | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CommitExternalTransfer | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| QueryMovementArchive | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| GetMovementDetails | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| PreviewSeparation | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CommitSeparation | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| QuerySeparationArchive | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| GetSeparationDetails | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
+### MovementService
 
-## PersonRosterService (7 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `CommitExternalTransfer` | MUTATION | yes | WIRED |
+| `CommitInternalTransfer` | MUTATION | yes | WIRED |
+| `CommitSeparation` | MUTATION | yes | WIRED |
+| `GetMovementDetails` | READ | no | WIRED |
+| `GetSeparationDetails` | READ | no | WIRED |
+| `PreviewExternalTransfer` | READ | no | WIRED |
+| `PreviewInternalTransfer` | READ | no | WIRED |
+| `PreviewSeparation` | READ | no | WIRED |
+| `QueryActivePersonsBySite` | READ | no | WIRED |
+| `QueryMovementArchive` | READ | no | WIRED |
+| `QuerySeparationArchive` | READ | no | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| SearchPersons | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: ✔; FT: BridgeFuzzPayloadTests.HostileTerm_*; PersonRosterService paging/validation (unit coverage deferred to Windows CI run) |
-| GetPersonSummary | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| QueryPersons | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: ✔; FT: BridgeFuzzPayloadTests.HostileTerm_* |
-| PreviewPersonIdentityUpdate | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| UpdatePersonIdentity | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| PreviewArchivePersons | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| ArchivePersons | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
+### PersonRosterService
 
-## ReportingService (6 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `ArchivePersons` | MUTATION | yes | WIRED |
+| `CommitArchivedReturn` | MUTATION | yes | WIRED |
+| `CreatePerson` | MUTATION | yes | WIRED |
+| `GetPersonSummary` | READ | no | WIRED |
+| `PreviewArchivePersons` | READ | no | WIRED |
+| `PreviewArchivedIdentity` | READ | no | WIRED |
+| `PreviewPersonIdentityUpdate` | READ | no | WIRED |
+| `QueryPersons` | READ | no | WIRED |
+| `SearchPersons` | READ | no | WIRED |
+| `UpdatePersonIdentity` | MUTATION | yes | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| QueryPersonAttendanceTimeline | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| QueryPersonAttendanceTotals | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| BuildPersonLifetimeReport | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| QueryPersonOperationsTimeline | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| QueryPersonMovements | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| ExportPersonLifetimeExcel | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
+### ReportingService
 
-## SettingsBackupService (13 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `BuildPersonLifetimeReport` | READ | no | WIRED |
+| `ExportPersonLifetimeExcel` | MUTATION | yes | WIRED |
+| `QueryPersonAttendanceTimeline` | READ | no | WIRED |
+| `QueryPersonAttendanceTotals` | READ | no | WIRED |
+| `QueryPersonMovements` | READ | no | WIRED |
+| `QueryPersonOperationsTimeline` | READ | no | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| GetSettingsOverview | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CreateVerifiedBackup | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| VerifyBackup | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| InspectBackup | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| PreviewRestore | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| RestoreDatabaseAtomically | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| GetBackupSchedule | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| UpdateBackupSchedule | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| RunDatabaseIntegrityCheck | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| PreviewFullReset | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| CommitFullReset | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| SetTheme | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| GetApplicationVersion | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
+### SettingsBackupService
 
-## UserAuditService (10 actions)
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `CommitFullReset` | MUTATION | yes | WIRED |
+| `CreateVerifiedBackup` | MUTATION | yes | WIRED |
+| `GetApplicationVersion` | READ | no | WIRED |
+| `GetAutoAttendancePolicy` | READ | no | WIRED |
+| `GetBackupSchedule` | READ | no | WIRED |
+| `GetSettingsOverview` | READ | no | WIRED |
+| `InspectBackup` | READ | no | WIRED |
+| `PreviewFullReset` | READ | no | WIRED |
+| `PreviewRestore` | READ | no | WIRED |
+| `RestoreDatabaseAtomically` | MUTATION | yes | DISABLED |
+| `RunDatabaseIntegrityCheck` | READ | no | WIRED |
+| `SetAttendanceSchedule` | MUTATION | yes | WIRED |
+| `SetAutoAttendanceDefaultStatus` | MUTATION | yes | WIRED |
+| `SetOutputDirectory` | MUTATION | yes | WIRED |
+| `SetTheme` | MUTATION | yes | WIRED |
+| `UpdateBackupSchedule` | MUTATION | yes | WIRED |
+| `VerifyBackup` | READ | no | WIRED |
 
-| Action | Kind | Idempotent | Implementation | Tests marked |
-|---|---|---|---|---|
-| ListUserAccounts | READ | no | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| SearchActivePersonsForAccount | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: ✔; FT: BridgeFuzzPayloadTests.HostileTerm_* |
-| CreateUserAccount | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| ChangeUserPassword | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| DeactivateUserAccount | MUTATION | yes | REFUSAL (phase-pending) | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| QueryAuditLog | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| GetAuditEntryDetails | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
-| UpdateAuditPresentation | MUTATION | yes | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| DeleteAuditPresentation | MUTATION | yes | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles) + DangerousActions_* / GaOnlyActions_* / UserHierarchy_* where applicable; FUZZ: envelope-level only; FT: — |
-| QueryAuditPresentationChanges | READ | no | **WIRED** | BridgeRbacMatrixTests.EveryManifestAction_RoleGateMatchesContract (4 roles); FUZZ: envelope-level only; FT: — |
+### UserAuditService
 
-## Cross-cutting test evidence index
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `ChangeUserPassword` | MUTATION | yes | WIRED |
+| `CreateUserAccount` | MUTATION | yes | WIRED |
+| `DeactivateUserAccount` | MUTATION | yes | WIRED |
+| `DeleteAuditPresentation` | MUTATION | yes | WIRED |
+| `GetAuditEntryDetails` | READ | no | WIRED |
+| `ListUserAccounts` | READ | no | WIRED |
+| `QueryAuditLog` | READ | no | WIRED |
+| `QueryAuditPresentationChanges` | READ | no | WIRED |
+| `ReactivateUserAccount` | MUTATION | yes | WIRED |
+| `SearchActivePersonsForAccount` | READ | no | WIRED |
+| `UpdateAuditPresentation` | MUTATION | yes | WIRED |
 
-| Test file | Covers | Directive step |
-|---|---|---|
-| tests/AlTamam.Tests/Bridge/BridgeRbacMatrixTests.cs | All 90 actions × 4 caller identities (360 allow/deny cases), manifest-mirror equality, dispatcher registration completeness, forged-role payload, GA-only reset family, OA↔SV hierarchy, unknown action, oversized payload, replay conflict, stale-revision guard, origin/frame guards, malformed envelopes, handler-crash containment | 14.03, §20 |
-| tests/AlTamam.Tests/Security/BridgeFuzzPayloadTests.cs | Hostile strings (SQL/traversal/XSS/path), draft-field fuzz, JSON depth limit, virtual-host navigation semantics, foreign-origin frames | 14.02 |
-| tests/AlTamam.Tests/Security/SecretHygieneAndFailureTests.cs | Argon2id parameters/verify, key format validation, secrets-in-files scan, DPAPI usage review, SQLCipher failure paths | 14.04 |
-| tests/AlTamam.Tests/Performance/SqliteIndexPerformanceTests.cs | Index usage plans, synthetic large personnel/month periods, concurrent writers, output-identity before/after | 14.05 |
-| build/manifest-guard.py (CI) | 90 unique actions, role vocabulary, reset-family GA-only, mutating⇒idempotent, manifest↔C# drift, CSP strictness | 14.03/15.01 |
+## Unresolved acceptance evidence (not marked PASS)
 
-## Honest limitations
+- The 69-route screen/navigation inventory is not proof of each route's full end-to-end contract.
+- Error metadata, actor identity and durable audit receipts require real service/bridge tests per action.
+- Missing, skipped, running and failed automatic attendance attempts are not durably recorded
+  by the completion-only ledger; an unrecorded due time is **not** a proven failure.
+- Destructive `RestoreDatabaseAtomically` stays disabled until owner-approved native
+  restore, rollback and independent physical Windows acceptance pass.
+- Four packaged Windows artifacts and SHA-256 passing CI do not replace owner clean-machine
+  offline acceptance or production signoff.
 
-1. **Zero tests have executed.** No .NET SDK or Windows runtime exists in this sandbox; every "Test marked" row above states *authored* coverage awaiting its first `dotnet test` run on Windows CI. Execution status = NOT RUN (≠ PASS).
-2. **71/90 actions are contract-complete but behaviorally pending.** They register correct ownership/roles/mutating flags and refuse honestly at runtime. Wiring belongs to the later functional phases (attendance commit, movements, Excel I/O, backup/restore, reporting, dashboard, user-account CRUD, config CRUD) per the phase plan — recorded here rather than silently half-implemented.
-3. The inventory supplied in directive §20 was cross-checked mechanically against the manifest on 2026-10-23: **no mismatches found** (names, counts per service, ownership).
-4. READ/MUTATION and idempotency columns are read directly from the manifest per row — not restated from the checklist prose — so any future manifest change invalidates this file until regenerated.
-
+Regenerate with `python build/generate-manifest-action-coverage.py` and verify
+with `python build/generate-manifest-action-coverage.py --check`.

@@ -108,6 +108,11 @@ public sealed class AutoAttendanceRunReadTests : IAsyncLifetime, IDisposable
         Assert.Empty(Assert.IsType<JsonArray>(data["runs"]));
         Assert.NotNull(data["nextDueLocal"]);
         Assert.False(data["failureHistoryAvailable"]!.GetValue<bool>());
+        Assert.False(data["todayReceiptPresent"]!.GetValue<bool>());
+        Assert.Equal(data["currentDayDue"]!.GetValue<bool>()
+            ? "due_without_receipt" : "not_due",
+            data["todayStatus"]!.GetValue<string>());
+        Assert.Null(data["todayEvidence"]);
         Assert.Equal(beforeAttendance, Count("AttendanceRecords"));
         Assert.Equal(beforeAudits, Count("AuditEvents"));
         Assert.Equal(0, Count("AutoAttendanceRuns"));
@@ -129,9 +134,29 @@ public sealed class AutoAttendanceRunReadTests : IAsyncLifetime, IDisposable
         Assert.Equal(7, newest["copiedCount"]!.GetValue<int>());
         Assert.True(newest["isCatchUpRun"]!.GetValue<bool>());
         Assert.True(newest["completed"]!.GetValue<bool>());
+        Assert.Equal("completed",newest["status"]!.GetValue<string>());
+        Assert.False(data["todayReceiptPresent"]!.GetValue<bool>());
         Assert.Equal("2026-10-21", data["lastRunDate"]!.GetValue<string>());
         Assert.Equal(before, Count("AutoAttendanceRuns"));
         Assert.Equal(0, Count("AuditEvents"));
+    }
+
+    [Fact]
+    public async Task TodayIsCompletedOnlyWhenDatabaseHasAnActualTodayReceipt()
+    {
+        string today=TimeProvider.System.GetLocalNow().ToString("yyyy-MM-dd");
+        await SeedRun("AUTO08H-"+today,today,false,8);
+        var result=await Query(GaNonce,new JsonObject{["take"]=10});
+        Assert.True(result.Response.Success,result.Response.UserMessage);
+        var data=Assert.IsType<JsonObject>(result.Response.Data);
+        Assert.True(data["todayReceiptPresent"]!.GetValue<bool>());
+        Assert.Equal("completed",data["todayStatus"]!.GetValue<string>());
+        Assert.Equal("AutoAttendanceRuns",data["todayEvidence"]!.GetValue<string>());
+        var item=Assert.IsType<JsonObject>(Assert.Single(Assert.IsType<JsonArray>(data["runs"])));
+        Assert.Equal("completed",item["status"]!.GetValue<string>());
+        Assert.Equal(1L,Count("AutoAttendanceRuns"));
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        Assert.Equal(0L,Count("AuditEvents"));
     }
 
     [Fact]
@@ -140,12 +165,16 @@ public sealed class AutoAttendanceRunReadTests : IAsyncLifetime, IDisposable
         var invalid = await Query(GaNonce, new JsonObject { ["take"] = 0 });
         Assert.False(invalid.Response.Success);
         Assert.Equal(BridgeErrorCodes.ValidationError, invalid.Response.ErrorCode);
+        Assert.NotNull(invalid.Response.ValidationErrors?["take"]);
         var tooMany = await Query(GaNonce, new JsonObject { ["take"] = 1000 });
         Assert.False(tooMany.Response.Success);
         Assert.Equal(BridgeErrorCodes.ValidationError, tooMany.Response.ErrorCode);
+        Assert.NotNull(tooMany.Response.ValidationErrors?["take"]);
         var badType = await Query(GaNonce, new JsonObject { ["take"] = "nope" });
         Assert.False(badType.Response.Success);
         Assert.Equal(BridgeErrorCodes.ValidationError, badType.Response.ErrorCode);
+        Assert.NotNull(badType.Response.ValidationErrors?["take"]);
+        Assert.Null(badType.Response.Data);
         var anonymous = await Query("ffffffffffffffffffffffffffffffff");
         Assert.Equal(BridgeOutcomeKind.Unauthorized, anonymous.Kind);
         Assert.Equal(0, Count("AutoAttendanceRuns"));
