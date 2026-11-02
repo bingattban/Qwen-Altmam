@@ -169,6 +169,55 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
     }
 
     [Theory]
+    [InlineData("null-pin")]
+    [InlineData("wrong-pin")]
+    [InlineData("missing-version-row")]
+    public async Task ReopeningCurrentSchema_RejectsMissingOrTamperedPinnedMigration(
+        string caseName)
+    {
+        // Synthetic encrypted database only. V001 predates the hash column and
+        // is intentionally unpinned; every V002+ migration is mandatory.
+        int pinnedVersion=AlTamamDbContext.CurrentSchemaVersion-1;
+        using(var c=_database.CreateOpenConnection())
+        using(var edit=c.CreateCommand())
+        {
+            edit.CommandText=caseName switch {
+                "null-pin" => "UPDATE SchemaVersions SET Sha256=NULL WHERE SchemaVersion=$v;",
+                "wrong-pin" => "UPDATE SchemaVersions SET Sha256=$bad WHERE SchemaVersion=$v;",
+                _ => "DELETE FROM SchemaVersions WHERE SchemaVersion=$v;"
+            };
+            edit.Parameters.AddWithValue("$v",pinnedVersion);
+            edit.Parameters.AddWithValue("$bad",new string('0',64));
+            Assert.Equal(1,edit.ExecuteNonQuery());
+        }
+
+        using var reopened=new AlTamamDbContext(DatabasePath,_key,useConnectionPooling:false);
+        var failure=await Assert.ThrowsAsync<InvalidOperationException>(
+            ()=>reopened.InitializeAsync());
+        Assert.Contains("migration",failure.Message,StringComparison.OrdinalIgnoreCase);
+        using var check=_database.CreateOpenConnection();
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion.ToString(),
+            Value(check,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+        Assert.Equal("ok",Value(check,"PRAGMA integrity_check;"));
+        Assert.Equal(0L,Count(check,"SELECT COUNT(*) FROM Persons;"));
+    }
+
+    [Fact]
+    public async Task ReopeningCurrentSchema_PreservesValidHistoricalPinsAndEncryptedData()
+    {
+        using(var c=_database.CreateOpenConnection())
+            Execute(c,"INSERT INTO AppSettings(SettingKey,SettingValue) VALUES('TST-PH02-PIN','safe') ON CONFLICT(SettingKey) DO UPDATE SET SettingValue='safe';");
+        using var reopened=new AlTamamDbContext(DatabasePath,_key,useConnectionPooling:false);
+        await reopened.InitializeAsync();
+        using var read=reopened.CreateOpenConnection();
+        Assert.Equal("safe",Value(read,
+            "SELECT SettingValue FROM AppSettings WHERE SettingKey='TST-PH02-PIN';"));
+        Assert.Equal("ok",Value(read,"PRAGMA integrity_check;"));
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion.ToString(),
+            Value(read,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+    }
+
+    [Theory]
     [InlineData("٠۰٠۰١۲٣۴", "00001234")]
     [InlineData("۰۰٠٠٠١٢٣٤", "000001234")]
     [InlineData("00001234", "00001234")]
