@@ -113,8 +113,13 @@
     if (msg.success) {
       entry.resolve(msg);
     } else {
-      const err = new Error(msg.userMessage || 'فشلت العملية عبر الجسر.');
-      err.errorCode = msg.errorCode || 'ValidationError';
+      const err = new Error(msg.messageAr || msg.userMessage || 'فشلت العملية عبر الجسر.');
+      err.errorCode = msg.code && msg.code !== 'OK'
+        ? msg.code : msg.errorCode || 'ValidationError';
+      err.validationErrors = msg.validationErrors || null;
+      err.conflictInfo = msg.conflictInfo || null;
+      err.expectedVersion = msg.expectedVersion ?? null;
+      err.actualVersion = msg.actualVersion ?? null;
       err.canonical = CANONICAL_ERROR_CODES.indexOf(err.errorCode) !== -1;
       entry.reject(err);
     }

@@ -2207,11 +2207,14 @@
               {key:"defaultStatusId",label:"الحالة الافتراضية",action:"SetAutoAttendanceDefaultStatus",
                 value:picker.value}
             ];
-            const failures=[];
+            const outcomes=[];
             saveTimes.disabled=true;
             try{
               for(const entry of entries){
-                if(entry.value===approved[entry.key])continue;
+                if(entry.value===approved[entry.key]){
+                  outcomes.push({label:entry.label,kind:"unchanged"});
+                  continue;
+                }
                 const signature=entry.key+":"+entry.value;
                 if(intentions.get(entry.key)?.signature!==signature)
                   intentions.set(entry.key,{signature,operationId:makeOperationId()});
@@ -2225,14 +2228,25 @@
                   if(!result?.data)throw Error("لم يؤكد الخادم الحفظ.");
                   approved[entry.key]=entry.value;
                   intentions.delete(entry.key);
+                  outcomes.push({label:entry.label,kind:"saved"});
                 }catch(e){
-                  failures.push(entry.label+": "+(e?.message||"تعذر حفظ الإعداد."));
+                  outcomes.push({label:entry.label,kind:"failed",
+                    message:e?.message||"تعذر حفظ الإعداد."});
                 }
               }
               if(token!==currentRequest)return;
+              // Each independently committed result is reported accurately;
+              // a failure never erases another successful operation or its receipt.
               feedback.replaceChildren();
-              if(failures.length)
-                feedback.appendChild(warning("تعذر حفظ: "+failures.join("؛ ")));
+              for(const item of outcomes){
+                if(item.kind==="failed")
+                  feedback.appendChild(warning("تعذر حفظ "+item.label+": "+item.message));
+                else if(item.kind==="saved")
+                  feedback.appendChild(node("p","settings-success","تم حفظ "+item.label+" بنجاح."));
+                else
+                  feedback.appendChild(node("p","section-description",
+                    item.label+": دون تغيير، لا يلزم الحفظ."));
+              }
             }finally{saveTimes.disabled=false;}
           },"btn btn-primary settings-action");
           const timesRow=node("div","settings-attendance-fields");

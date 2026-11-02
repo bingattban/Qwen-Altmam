@@ -377,6 +377,11 @@ public sealed class BridgeRbacMatrixTests
 
         Assert.Equal(BridgeOutcomeKind.Conflict, result.Kind);
         Assert.Equal(BridgeErrorCodes.ConflictStale, result.Response.ErrorCode);
+        Assert.Equal(7L, result.Response.ExpectedVersion);
+        Assert.Equal(5L, result.Response.ActualVersion);
+        Assert.NotNull(result.Response.ConflictInfo);
+        Assert.Equal("OptimisticConcurrency",
+            result.Response.ConflictInfo!["reason"]!.GetValue<string>());
     }
 
     [Fact]
