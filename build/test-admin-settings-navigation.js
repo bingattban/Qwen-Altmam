@@ -868,9 +868,10 @@ async function run() {
   assert.equal(statusSaves[0].body.statusId,"STS-ABSENT");
 
   assert.ok(statusSaves[0].body.operationId.length>=16);
-  assert.ok(visible().some(x=>x.className.includes("settings-success")&&
-    x.textContent.includes("وقت التحضير التلقائي")&&x.textContent.includes("وقت القفل اليومي")),
-    "each committed setting must be acknowledged by the UI");
+  assert.ok(["وقت التحضير التلقائي","وقت القفل اليومي","الحالة الافتراضية"]
+    .every(label=>visible().some(x=>x.className.includes("settings-success")&&
+      x.textContent.includes(label))),
+    "each independently committed setting must receive a separate success confirmation");
 
   // A single rejected native clock write must not abort the other two
   // independently committed mutations, and the retry must target ONLY
@@ -894,10 +895,10 @@ async function run() {
   assert.equal(partial[2].body.statusId,"STS-ABSENT");
   assert.ok(visible().some(x=>x.textContent.includes("تعذر حفظ وقت التحضير التلقائي")),
     "the rejected setting must display a truthful Arabic failure");
-  assert.ok(visible().some(x=>x.className.includes("settings-success")&&
-    x.textContent.includes("وقت القفل اليومي")&&
-    x.textContent.includes("الحالة الافتراضية")),
-    "successful independent writes remain visibly successful despite one failure");
+  assert.ok(["وقت القفل اليومي","الحالة الافتراضية"]
+    .every(label=>visible().some(x=>x.className.includes("settings-success")&&
+      x.textContent.includes(label))),
+    "two committed settings remain individually reported despite the first failure");
   const beforeRetry=calls.length;
   await buttonNamed("حفظ إعدادات التحضير التلقائي").handlers.click();
   const retried=calls.slice(beforeRetry).filter(x=>
