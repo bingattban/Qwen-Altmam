@@ -50,6 +50,11 @@ jobs:
         run: |
           python build/test-section08-bridge-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 08 UI/native contract regression' }
+      - name: Phases 00/01/02 current inventory, pipeline, and SQLCipher pin integrity guard
+        shell: pwsh
+        run: |
+          python build/test-phase00-01-02-baseline.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 00/01/02 baseline or encryption regression' }
       - name: Phase 15 all-four SHA256 provenance negative-path tests
         shell: pwsh
         run: |
