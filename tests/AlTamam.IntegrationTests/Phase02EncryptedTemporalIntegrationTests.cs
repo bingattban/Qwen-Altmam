@@ -529,6 +529,60 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         }
         Assert.Equal(1L, Count(connection, "PRAGMA foreign_keys;"));
     }
+
+    [Fact]
+    public async Task Section09_V012ToV013_PreservesOriginal20hLedgerAndCreatesEncryptedRescue()
+    {
+        // A genuine V012 SQLCipher database is upgraded through the shipped
+        // migration runner. No synthetic fake SHA rows and no production data.
+        string path = Path.Combine(_directory, "section09-legacy-v012.db");
+        string originalPin;
+        using (var old = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        using (var connection = old.CreateOpenConnection())
+        {
+            var previous = new AlTamam.Infrastructure.Persistence.Migrations.SchemaMigrationRunner(
+                AlTamamDbContext.CanonicalMigrations.Take(12).ToArray());
+            await previous.UpgradeAsync(connection);
+            Assert.Equal(12, AlTamam.Infrastructure.Persistence.Migrations.SchemaMigrationRunner.GetCurrentVersion(connection));
+            Execute(connection, """
+                INSERT INTO AutoAttendanceRuns(JobKey,BusinessDate,DueTimeLocal,
+                    StartedAtUtc,CompletedAtUtc,IsCatchUpRun,CopiedCount,
+                    SkippedNoYesterdayCount,SkippedTransferExemptCount,SummaryArabic)
+                VALUES('AUTO20H-2025-01-20','2025-01-20','20:00',
+                    '2025-01-20T17:00:00Z','2025-01-20T17:00:05Z',0,4,2,1,
+                    'سجل تاريخي حقيقي من المخطط السابق');
+                """);
+            originalPin = Value(connection,
+                "SELECT Sha256 FROM SchemaVersions WHERE SchemaVersion=12;");
+            Assert.Equal(64, originalPin.Length);
+        }
+        using (var migrated = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        {
+            await migrated.InitializeAsync();
+            using var c = migrated.CreateOpenConnection();
+            Assert.Equal(13,
+                AlTamam.Infrastructure.Persistence.Migrations.SchemaMigrationRunner.GetCurrentVersion(c));
+            Assert.Equal(originalPin,
+                Value(c, "SELECT Sha256 FROM SchemaVersions WHERE SchemaVersion=12;"));
+            Assert.Equal("AUTO20H-2025-01-20",
+                Value(c, "SELECT JobKey FROM AutoAttendanceRuns WHERE BusinessDate='2025-01-20';"));
+            Assert.Equal("4",
+                Value(c, "SELECT CopiedCount FROM AutoAttendanceRuns WHERE BusinessDate='2025-01-20';"));
+            Assert.Equal("0",
+                Value(c, "SELECT COUNT(*) FROM AutoAttendanceRuns WHERE JobKey LIKE 'AUTO08H-%';"));
+            Assert.Equal("ok", Value(c, "PRAGMA integrity_check;"));
+        }
+        string rescueDir = path + ".migration-backups";
+        string rescue = Assert.Single(Directory.GetFiles(rescueDir, "pre-migration-v012-to-v013-*.db"));
+        Assert.False(ReadHeader(rescue).SequenceEqual("SQLite format 3\0"u8.ToArray()));
+        using var snapshot = new AlTamamDbContext(rescue, _key, useConnectionPooling: false);
+        using var restored = snapshot.CreateOpenConnection();
+        Assert.Equal(12,
+            AlTamam.Infrastructure.Persistence.Migrations.SchemaMigrationRunner.GetCurrentVersion(restored));
+        Assert.Equal("AUTO20H-2025-01-20",
+            Value(restored, "SELECT JobKey FROM AutoAttendanceRuns WHERE BusinessDate='2025-01-20';"));
+    }
+
     [Fact]
     public void V012LegacyAutoAttendanceCounts_AreUnknown_NotFakeZeros_AndNonnegative()
     {

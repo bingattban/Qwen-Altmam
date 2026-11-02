@@ -207,7 +207,17 @@ public sealed class SqliteIndexPerformanceTests : IClassFixture<SqliteIndexPerfo
                 SELECT SiteId FROM PersonAssignments WHERE PersonId = $p AND ValidToLocalDate IS NULL;";
             assignments.Parameters.AddWithValue("$p", "TST-P-000123");
             string plan = ReadAll(assignments);
-            Assert.Contains("IX_PersonAssignments_Person_Dates", plan, StringComparison.OrdinalIgnoreCase);
+            // V013 adds a partial unique index for the common "currently open"
+            // lookup. SQLite may correctly prefer it to the older temporal
+            // history index. Both are indexed seeks; a table scan is NOT OK.
+            bool temporalSeek = plan.Contains("IX_PersonAssignments_Person_Dates",
+                StringComparison.OrdinalIgnoreCase);
+            bool openAssignmentSeek = plan.Contains("UX_PersonAssignments_OneOpenPerPerson",
+                StringComparison.OrdinalIgnoreCase);
+            Assert.True(temporalSeek || openAssignmentSeek,
+                $"Expected a person-assignment index seek, actual query plan: {plan}");
+            Assert.DoesNotContain("SCAN PersonAssignments", plan,
+                StringComparison.OrdinalIgnoreCase);
         }
     }
 

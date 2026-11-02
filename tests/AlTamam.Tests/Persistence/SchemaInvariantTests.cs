@@ -180,6 +180,71 @@ public sealed class SchemaInvariantTests : IDisposable, IAsyncLifetime
         Assert.Throws<SqliteException>(() => bad.ExecuteNonQuery());
     }
 
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(5)]
+    public void Section09_InvalidMovementTypes_AreRejectedAtEncryptedStorageBoundary(int type)
+    {
+        using var c = Open();
+        SeedPerson(c, SyntheticFixtures.PersonId);
+        using var movement = c.CreateCommand();
+        movement.CommandText = """
+            INSERT INTO PersonnelMovements
+                (MovementId,PersonId,PersonNameSnapshot,ServiceNumberASnapshot,
+                 MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                 EffectiveLocalDate,CommittedAtUtc,ActorUserId,IdempotencyKey)
+            VALUES($id,$person,'شخص اصطناعي','900001',$type,
+                   'SITE-UNSPECIFIED','غير محدد','2025-06-02',
+                   '2025-06-02T08:00:00Z','TST-ACTOR',$idem);
+            """;
+        movement.Parameters.AddWithValue("$id", "TST-MOV-" + Guid.NewGuid().ToString("N"));
+        movement.Parameters.AddWithValue("$person", SyntheticFixtures.PersonId);
+        movement.Parameters.AddWithValue("$type", type);
+        movement.Parameters.AddWithValue("$idem", Guid.NewGuid().ToString("N"));
+        Assert.Throws<SqliteException>(() => movement.ExecuteNonQuery());
+        using var count = c.CreateCommand();
+        count.CommandText = "SELECT COUNT(*) FROM PersonnelMovements;";
+        Assert.Equal(0L, Convert.ToInt64(count.ExecuteScalar()));
+    }
+
+    [Fact]
+    public void Section09_AttendanceIdentityDate_CannotBeReassignedByDirectSql()
+    {
+        using var c = Open();
+        SeedPerson(c, SyntheticFixtures.PersonId);
+        SeedAssignment(c, SyntheticFixtures.AssignmentId, SyntheticFixtures.PersonId, "2025-01-01", null);
+        InsertAttendance(c, SyntheticFixtures.NewIdempotencyKey("locked-identity"),
+            SyntheticFixtures.PersonId, "2025-06-01");
+        using var reassignment = c.CreateCommand();
+        // Both dates are eligible under the same assignment: eligibility alone
+        // must not permit rewriting a committed person's history.
+        reassignment.CommandText = """
+            UPDATE AttendanceRecords SET AttendanceLocalDate='2025-06-02'
+            WHERE PersonId=$person AND AttendanceLocalDate='2025-06-01';
+            """;
+        reassignment.Parameters.AddWithValue("$person", SyntheticFixtures.PersonId);
+        Assert.Throws<SqliteException>(() => reassignment.ExecuteNonQuery());
+        using var original = c.CreateCommand();
+        original.CommandText = "SELECT AttendanceLocalDate FROM AttendanceRecords WHERE PersonId=$person;";
+        original.Parameters.AddWithValue("$person", SyntheticFixtures.PersonId);
+        Assert.Equal("2025-06-01", original.ExecuteScalar()?.ToString());
+    }
+
+    [Fact]
+    public void Section09_OneOpenAssignment_AlsoHasStorageUniquePartialIndex()
+    {
+        using var c = Open();
+        using var index = c.CreateCommand();
+        index.CommandText = """
+            SELECT COUNT(*) FROM sqlite_master WHERE type='index'
+            AND name='UX_PersonAssignments_OneOpenPerPerson'
+            AND sql LIKE '%WHERE ValidToLocalDate IS NULL%';
+            """;
+        Assert.Equal(1L, Convert.ToInt64(index.ExecuteScalar()));
+    }
+
     private static void InsertAttendance(SqliteConnection c, string idempotencyKey, string personId, string localDate)
     {
         // RecordId is INTEGER AUTOINCREMENT — omitted. Column set matches V001 exactly.

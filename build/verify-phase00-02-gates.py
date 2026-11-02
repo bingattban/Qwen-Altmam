@@ -35,6 +35,7 @@ def collect(root: Path) -> dict:
     core = read(".github/workflows/windows-ci.yml")
     release = read(".github/workflows/windows-release.yml")
     v012 = read("src/AlTamam.Infrastructure/Persistence/Migrations/V012_AutoAttendanceOutcomeCounts.sql")
+    v013 = read("src/AlTamam.Infrastructure/Persistence/Migrations/V013_MovementAttendanceImmutableKeys.sql")
     slnx = read("AlTamam.slnx")
     schema_match = re.search(r"CurrentSchemaVersion\s*=\s*(\d+)", db)
     provider_match = re.search(
@@ -82,6 +83,10 @@ def collect(root: Path) -> dict:
         "projects": sorted(projects),
         "all_projects_exist": all((root / p).is_file() for p in projects),
         "cipher_pragma": "PRAGMA cipher_version;" in db and "PRAGMA journal_mode=WAL" in db,
+        "v013_storage_constraints": all(k in v013 for k in (
+            "TR_PersonnelMovements_AllowedType_Insert",
+            "TR_AttendanceRecords_ImmutablePersonDate_Update",
+            "UX_PersonAssignments_OneOpenPerPerson")),
         "legacy_nullable_v012": all(
             (key + " INTEGER NULL CHECK (" + key + " >= 0)") in v012
             for key in ("DefaultedCount", "SkippedManualCount", "FailedCount")),
@@ -94,12 +99,12 @@ def verify(f: dict) -> list[str]:
         errors.append("screen inventory: expected 69 canonical routes")
     if f["action_count"] != 103 or f["unique_actions"] != 103:
         errors.append("action inventory: expected 103 unique canonical actions")
-    if f["registered_migrations"] != list(range(1, 13)):
-        errors.append("migration registration: expected contiguous V001–V012")
-    if sorted(f["embedded_migrations"]) != list(range(1, 13)):
-        errors.append("migration resources: every V001–V012 SQL file must ship")
-    if f["schema_version"] != 12:
-        errors.append("migration current schema version must match V012")
+    if f["registered_migrations"] != list(range(1, 14)):
+        errors.append("migration registration: expected contiguous V001–V013")
+    if sorted(f["embedded_migrations"]) != list(range(1, 14)):
+        errors.append("migration resources: every V001–V013 SQL file must ship")
+    if f["schema_version"] != 13:
+        errors.append("migration current schema version must match V013")
     if f["sqlcipher_version"] != "2.1.10":
         errors.append("SQLCipher provider changed without approved migration")
     if f["destructive_restore_wired"]:
@@ -122,6 +127,8 @@ def verify(f: dict) -> list[str]:
         errors.append("Phase 02 SQLCipher/WAL startup integrity contract drift")
     if not f["current_schema_pin_verified"]:
         errors.append("Phase 02 already-current SQLCipher databases must verify historical migration pins on startup")
+    if not f["v013_storage_constraints"]:
+        errors.append("Section 09 movement/attendance/assignment storage constraints missing")
     if not f["legacy_nullable_v012"]:
         errors.append("Phase 02 V012 legacy unknown-count preservation changed")
     return errors
@@ -139,7 +146,7 @@ def main() -> int:
         for error in errors:
             print(" -", error)
         return 1
-    print("PHASE 00–02 GUARD PASS: 69 routes, 103 actions, 8 projects, 2 gated Windows workflows, V001–V012, SQLCipher pinned, restore disabled.")
+    print("PHASE 00–02 GUARD PASS: 69 routes, 103 actions, 8 projects, 2 gated Windows workflows, V001–V013, SQLCipher pinned, restore disabled.")
     print("This is a source/CI invariant check, NOT clean-machine or destructive restore acceptance.")
     return 0
 

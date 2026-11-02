@@ -110,36 +110,40 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         var initial=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
         Assert.Equal("08:00",initial["dueTimeLocal"]!.GetValue<string>());
         Assert.Equal("20:00",initial["dailyLockTimeLocal"]!.GetValue<string>());
-        var choice=new JsonObject{
-            ["dueTimeLocal"]="07:15",["dailyLockTimeLocal"]="19:30",
-            ["operationId"]="AUTO-CLOCKS-CHANGE-0001"
-        };
-        var forbidden=await policy.SetScheduleAsync((JsonObject)choice.DeepClone(),Supervisor,default);
+
+        var due=new JsonObject{["dueTimeLocal"]="07:15",
+            ["operationId"]="AUTO-DUE-INDEPENDENT-0001"};
+        var locked=new JsonObject{["dailyLockTimeLocal"]="19:30",
+            ["operationId"]="AUTO-LOCK-INDEPENDENT-0001"};
+        var forbidden=await policy.SetScheduleAsync((JsonObject)due.DeepClone(),Supervisor,default);
         Assert.False(forbidden.Success);
         Assert.Equal(BridgeErrorCodes.Unauthorized,forbidden.ErrorCode);
         var invalid=await policy.SetScheduleAsync(new JsonObject{
-            ["dueTimeLocal"]="25:42",["dailyLockTimeLocal"]="19:30",
-            ["operationId"]="AUTO-CLOCKS-INVALID-0001"
+            ["dueTimeLocal"]="25:42",["operationId"]="AUTO-DUE-INVALID-0001"
         },Admin,default);
         Assert.False(invalid.Success);
         Assert.Equal(BridgeErrorCodes.ValidationError,invalid.ErrorCode);
 
-        var accepted=await policy.SetScheduleAsync(choice,Admin,default);
-        Assert.True(accepted.Success,accepted.UserMessage);
-        Assert.True((await policy.SetScheduleAsync(
-            (JsonObject)choice.DeepClone(),Admin,default)).Success);
-        var restartedPolicy=new AutoAttendancePolicyService(_db);
-        var read=Assert.IsType<JsonObject>((await restartedPolicy.GetAsync(default)).Data);
+        var first=await policy.SetScheduleAsync(due,Admin,default);
+        Assert.True(first.Success,first.UserMessage);
+        var repeated=await policy.SetScheduleAsync((JsonObject)due.DeepClone(),Admin,default);
+        Assert.True(repeated.Success,repeated.UserMessage);
+        Assert.Equal(first.AuditEventId,repeated.AuditEventId);
+        var second=await policy.SetScheduleAsync(locked,Admin,default);
+        Assert.True(second.Success,second.UserMessage);
+        Assert.NotEqual(first.AuditEventId,second.AuditEventId);
+        var restarted=new AutoAttendancePolicyService(_db);
+        var read=Assert.IsType<JsonObject>((await restarted.GetAsync(default)).Data);
         Assert.Equal("07:15",read["dueTimeLocal"]!.GetValue<string>());
         Assert.Equal("19:30",read["dailyLockTimeLocal"]!.GetValue<string>());
         Assert.Equal(TimeSpan.FromHours(7)+TimeSpan.FromMinutes(15),
             await new AutoAttendanceService(_db).GetDueTimeAsync());
-        Assert.Equal(1L,Count("MutationReceipts"));
-        Assert.Equal(1L,Count("AuditEvents"));
+        Assert.Equal(2L,Count("MutationReceipts"));
+        Assert.Equal(2L,Count("AuditEvents"));
 
         var lockAllDay=await policy.SetScheduleAsync(new JsonObject{
-            ["dueTimeLocal"]="07:15",["dailyLockTimeLocal"]="00:00",
-            ["operationId"]="AUTO-CLOCKS-CHANGE-0002"
+            ["dailyLockTimeLocal"]="00:00",
+            ["operationId"]="AUTO-LOCK-INDEPENDENT-0002"
         },Admin,default);
         Assert.True(lockAllDay.Success,lockAllDay.UserMessage);
         var preview=await new AttendanceCommitService(_db).PreviewAsync(new JsonObject{
@@ -151,64 +155,58 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
     }
 
     [Fact]
-    public async Task UnifiedSettingsSave_RollsBackInvalidStatus_AndKeepsIdempotentSingleAudit()
+    public async Task OwnerDecision_RejectsLegacyCombinedPayloadWithoutUndoingSuccessfulIndependentSaves()
     {
         var policy=new AutoAttendancePolicyService(_db);
-        var invalid=await policy.SetScheduleAsync(new JsonObject{
+        var combined=new JsonObject{
             ["dueTimeLocal"]="09:45",["dailyLockTimeLocal"]="18:00",
-            ["defaultStatusId"]="STS-DOES-NOT-EXIST",
-            ["operationId"]="TST-UNIFIED-INVALID-0001"
+            ["defaultStatusId"]="STS-PERMISSION",
+            ["operationId"]="TST-LEGACY-COMBINED-0001"
+        };
+        var forbidden=await policy.SetScheduleAsync(combined,Admin,default);
+        Assert.False(forbidden.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,forbidden.ErrorCode);
+        Assert.NotNull(forbidden.ValidationErrors?["dueTimeLocal"]);
+        Assert.NotNull(forbidden.ValidationErrors?["dailyLockTimeLocal"]);
+        Assert.NotNull(forbidden.ValidationErrors?["defaultStatusId"]);
+        var timesOnly=await policy.SetScheduleAsync(new JsonObject{
+            ["dueTimeLocal"]="09:45",["dailyLockTimeLocal"]="18:00",
+            ["operationId"]="TST-LEGACY-CLOCKS-ONLY1"
         },Admin,default);
-        Assert.False(invalid.Success);
-        Assert.Equal(BridgeErrorCodes.CustomStatusInactive,invalid.ErrorCode);
-        var before=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
-        Assert.False(before["configured"]!.GetValue<bool>());
-        Assert.Equal("08:00",before["dueTimeLocal"]!.GetValue<string>());
-        Assert.Equal("20:00",before["dailyLockTimeLocal"]!.GetValue<string>());
+        Assert.False(timesOnly.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,timesOnly.ErrorCode);
+        var wrongRoute=await policy.SetScheduleAsync(new JsonObject{
+            ["defaultStatusId"]="STS-PERMISSION",
+            ["operationId"]="TST-LEGACY-STATUS-ONLY1"
+        },Admin,default);
+        Assert.False(wrongRoute.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,wrongRoute.ErrorCode);
         Assert.Equal(0L,Count("AuditEvents"));
         Assert.Equal(0L,Count("MutationReceipts"));
 
-        var selected=new JsonObject{
-            ["dueTimeLocal"]="09:45",["dailyLockTimeLocal"]="18:00",
-            ["defaultStatusId"]="STS-PERMISSION",
-            ["operationId"]="TST-UNIFIED-VALID-000001"
-        };
-        var accepted=await policy.SetScheduleAsync(selected,Admin,default);
-        Assert.True(accepted.Success,accepted.UserMessage);
-        Assert.Equal("STS-PERMISSION",
-            Assert.IsType<JsonObject>(accepted.Data)["defaultStatusId"]!.GetValue<string>());
-        var repeated=await policy.SetScheduleAsync((JsonObject)selected.DeepClone(),Admin,default);
-        Assert.True(repeated.Success,repeated.UserMessage);
-        Assert.Equal(accepted.AuditEventId, repeated.AuditEventId);
-        Assert.StartsWith("AUD-", accepted.AuditEventId);
-        Assert.Equal(1L,Count("AuditEvents"));
-        Assert.Equal(1L,Count("MutationReceipts"));
-
-        var persisted=Assert.IsType<JsonObject>((await new AutoAttendancePolicyService(_db)
-            .GetAsync(default)).Data);
-        Assert.Equal("STS-PERMISSION",persisted["defaultStatusId"]!.GetValue<string>());
-        Assert.Equal("09:45",persisted["dueTimeLocal"]!.GetValue<string>());
-        Assert.Equal("18:00",persisted["dailyLockTimeLocal"]!.GetValue<string>());
-
-        // Older time-only callers continue to work without changing the fallback.
-        var timesOnly=await policy.SetScheduleAsync(new JsonObject{
-            ["dueTimeLocal"]="10:15",["dailyLockTimeLocal"]="18:00",
-            ["operationId"]="TST-UNIFIED-TIMES-ONLY1"
+        var due=await policy.SetScheduleAsync(new JsonObject{
+            ["dueTimeLocal"]="09:45",["operationId"]="TST-INDEPENDENT-DUE-0001"
         },Admin,default);
-        Assert.True(timesOnly.Success,timesOnly.UserMessage);
-        var after=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
-        Assert.Equal("STS-PERMISSION",after["defaultStatusId"]!.GetValue<string>());
-        Assert.Equal("10:15",after["dueTimeLocal"]!.GetValue<string>());
+        Assert.True(due.Success,due.UserMessage);
+        var invalidDefault=await policy.SetAsync(Selection(
+            "STS-DOES-NOT-EXIST","TST-INDEPENDENT-BAD-DEFAULT1"),Admin,default);
+        Assert.False(invalidDefault.Success);
+        Assert.Equal(BridgeErrorCodes.CustomStatusInactive,invalidDefault.ErrorCode);
+        var locked=await policy.SetScheduleAsync(new JsonObject{
+            ["dailyLockTimeLocal"]="18:00",["operationId"]="TST-INDEPENDENT-LOCK-0001"
+        },Admin,default);
+        Assert.True(locked.Success,locked.UserMessage);
+        var values=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
+        Assert.Equal("09:45",values["dueTimeLocal"]!.GetValue<string>());
+        Assert.Equal("18:00",values["dailyLockTimeLocal"]!.GetValue<string>());
+        Assert.False(values["configured"]!.GetValue<bool>());
         Assert.Equal(2L,Count("AuditEvents"));
-
-        var supervisor=await policy.SetScheduleAsync(new JsonObject{
-            ["dueTimeLocal"]="11:00",["dailyLockTimeLocal"]="19:00",
-            ["defaultStatusId"]="STS-ABSENT",
-            ["operationId"]="TST-UNIFIED-DENIED-0001"
-        },Supervisor,default);
-        Assert.False(supervisor.Success);
-        Assert.Equal(BridgeErrorCodes.Unauthorized,supervisor.ErrorCode);
-        Assert.Equal(2L,Count("AuditEvents"));
+        Assert.Equal(2L,Count("MutationReceipts"));
+        var approved=await policy.SetAsync(Selection(
+            "STS-PERMISSION","TST-INDEPENDENT-GOOD-DEFAULT1"),Admin,default);
+        Assert.True(approved.Success,approved.UserMessage);
+        Assert.Equal(3L,Count("AuditEvents"));
+        Assert.Equal(3L,Count("MutationReceipts"));
     }
 
     [Fact]
