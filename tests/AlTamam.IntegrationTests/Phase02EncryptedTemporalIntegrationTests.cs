@@ -203,6 +203,34 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
     }
 
     [Fact]
+    public async Task InterruptedUpgrade_RejectsCorruptPriorPinBeforeAnyNewMigration()
+    {
+        // Synthetic interrupted-upgrade state. Highest recorded version is 11
+        // although V012's physical columns exist; corrupt the V011 pin.
+        // The runner must reject that corruption BEFORE attempting V012 SQL.
+        int prior=AlTamamDbContext.CurrentSchemaVersion-1;
+        using(var c=_database.CreateOpenConnection())
+        {
+            using var cmd=c.CreateCommand();
+            cmd.CommandText="DELETE FROM SchemaVersions WHERE SchemaVersion=$current;";
+            cmd.Parameters.AddWithValue("$current",AlTamamDbContext.CurrentSchemaVersion);
+            Assert.Equal(1,cmd.ExecuteNonQuery());
+            using var tamper=c.CreateCommand();
+            tamper.CommandText="UPDATE SchemaVersions SET Sha256=NULL WHERE SchemaVersion=$v;";
+            tamper.Parameters.AddWithValue("$v",prior);
+            Assert.Equal(1,tamper.ExecuteNonQuery());
+            var runner=new AlTamam.Infrastructure.Persistence.Migrations.SchemaMigrationRunner(
+                AlTamamDbContext.CanonicalMigrations);
+            var err=await Assert.ThrowsAsync<InvalidOperationException>(
+                ()=>runner.UpgradeAsync(c));
+            Assert.Contains("Migration pin missing or mismatched",err.Message);
+            Assert.Equal(prior.ToString(),
+                Value(c,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+            Assert.Equal("ok",Value(c,"PRAGMA integrity_check;"));
+        }
+    }
+
+    [Fact]
     public async Task ReopeningCurrentSchema_PreservesValidHistoricalPinsAndEncryptedData()
     {
         using(var c=_database.CreateOpenConnection())
