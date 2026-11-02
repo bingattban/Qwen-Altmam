@@ -9,6 +9,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from release_names import owner_filename
 
 ROOT = Path(__file__).resolve().parent.parent
 MODULE = ROOT / "build/stage-phase14-distributions.py"
@@ -21,6 +22,7 @@ spec.loader.exec_module(stage_module)
 ARCH = "Windows-32bit"
 CHECKOUT = "b" * 40
 HEAD = "a" * 40
+VERSION = "1.2.3"
 
 
 class Phase14DistributionTests(unittest.TestCase):
@@ -32,13 +34,14 @@ class Phase14DistributionTests(unittest.TestCase):
         self.dist = root / "dist"
         self.source.mkdir()
         self.files = []
-        for name in (f"AlTamam-Portable-{ARCH}.zip", f"AlTamam-Installer-{ARCH}.exe"):
+        for name in (owner_filename(VERSION, ARCH, "Portable"),
+                     owner_filename(VERSION, ARCH, "Installer")):
             content = ("synthetic-only:" + name).encode()
             (self.source / name).write_bytes(content)
             self.files.append({"file": name, "bytes": len(content),
                                "sha256": hashlib.sha256(content).hexdigest()})
         metadata = {
-            "commit": CHECKOUT, "sourceHeadSha": HEAD,
+            "commit": CHECKOUT, "sourceHeadSha": HEAD, "version": VERSION,
             "targetArchitecture": ARCH, "runtimeIdentifier": "win-x86",
             "architectureBitness": 32, "files": self.files,
         }
