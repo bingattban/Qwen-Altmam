@@ -14,10 +14,11 @@ class El{
  all(){return [this,...this.children.flatMap(x=>x instanceof El?x.all():[])];}
 }
 const root=new El("main"),calls=[],writes=[],reviews=[];
-let approved=false, errorName="",expandedRoster=false;
+let approved=false, errorName="",expandedRoster=false,structuredFailure=null;
 let cancelConfirmed=false,confirmations=0,navigations=0;
 const bridge={invoke:async(name,payload)=>{
  calls.push({name,payload});
+ if(structuredFailure&&name===structuredFailure.action)throw structuredFailure.error;
  if(name==="QueryDailyRoster"&&expandedRoster){
     const all=Array.from({length:112},(_,i)=>({personId:"P"+(i+1),name:"فرد "+(i+1),
       serviceNumberA:String(100+i),siteName:"غير محدد",statusName:"غير محضر"}));
@@ -130,6 +131,64 @@ async function main(){
  assert.equal(writes.length,committed,"failed individual preview never commits");
  assert.ok(root.all().some(x=>x.textContent.includes("شخص تجريبي")&&
    x.textContent.includes("12345")),"rejection identifies the person and الرقم (ع)");
+
+ // Native structured conflicts must survive the bridge-to-UI boundary.
+ // Never put a rejected request's data in a success card or open an approval modal.
+ errorName="";
+ const nativeConflict=new Error("لم يُحفظ أي تحضير بسبب التعارضات التالية.");
+ nativeConflict.errorCode="ConflictStale";
+ nativeConflict.conflictInfo={conflicts:[
+   {personId:"P1",name:"شخص تجريبي",serviceNumberA:"12345",
+    reason:"الحالة مسجلة اليوم."},
+   {personId:"P2",name:"آخر <script>unsafe</script>",serviceNumberA:"67890",
+    reason:"منقول اليوم."}
+ ]};
+ structuredFailure={action:"PreviewAttendanceChange",error:nativeConflict};
+ const previouslyCommitted=writes.length,previouslyReviewed=reviews.length;
+ await one("معاينة التحضير").handlers.click();await flush();
+ assert.equal(writes.length,previouslyCommitted,"structured preview rejection is read-only");
+ assert.equal(reviews.length,previouslyReviewed,"native rejection never opens review modal");
+ const conflictRows=root.all().filter(x=>x.tag==="li"&&
+   x.className.includes("attendance-conflict-person"));
+ assert.equal(conflictRows.length,2,"all native person conflict details render separately");
+ assert.ok(conflictRows.some(x=>x.textContent.includes("شخص تجريبي")&&
+   x.textContent.includes("12345")&&x.textContent.includes("الحالة مسجلة")));
+ assert.ok(conflictRows.some(x=>x.textContent.includes("آخر <script>unsafe</script>")&&
+   x.textContent.includes("67890")&&x.textContent.includes("منقول اليوم")),
+   "names are visible as literal text, never HTML");
+ assert.ok(!root.all().some(x=>x.tag==="script"),"server error names cannot create script elements");
+
+ const nativeValidation=new Error("اختر الحالة والأفراد.");
+ nativeValidation.errorCode="ValidationError";
+ nativeValidation.validationErrors={
+   statusId:"الحالة المحددة غير نشطة.",
+   personIds:"اختر فرداً واحداً على الأقل."
+ };
+ structuredFailure={action:"PreviewAttendanceChange",error:nativeValidation};
+ await one("معاينة التحضير").handlers.click();await flush();
+ const fieldErrors=root.all().filter(x=>x.tag==="li"&&
+   x.className.includes("attendance-validation-field"));
+ assert.equal(fieldErrors.length,2,"field-specific native errors are visible");
+ assert.ok(fieldErrors.some(x=>x.textContent.includes("الحالة")&&
+   x.textContent.includes("غير نشطة")));
+ assert.ok(fieldErrors.some(x=>x.textContent.includes("الأفراد")&&
+   x.textContent.includes("اختر فرداً")));
+ assert.equal(writes.length,previouslyCommitted);
+ assert.equal(reviews.length,previouslyReviewed);
+ structuredFailure=null;
+
+ // Even after the user confirms a valid preview, a native conflict in COMMIT
+ // must not be reported as success or save any client-side fake attendance.
+ structuredFailure={action:"SubmitAttendance",error:nativeConflict};
+ await one("معاينة التحضير").handlers.click();await flush();
+ assert.equal(writes.length,previouslyCommitted,
+   "native refused commit never records client-side successful write");
+ assert.ok(root.all().some(x=>x.className.includes("attendance-conflict-warning")));
+ assert.equal(root.all().filter(x=>x.tag==="li"&&
+   x.className.includes("attendance-conflict-person")).length,2);
+ assert.ok(!root.all().some(x=>x.className.includes("settings-success")));
+ structuredFailure=null;
+
  // Search must reach the authorized QueryDailyRoster service before pagination.
   const termBox=()=>root.all().find(x=>x.tag==="input"&&x.type==="search");
   assert.ok(termBox(),"attendance selector has a direct search input");
