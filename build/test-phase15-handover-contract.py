@@ -84,5 +84,24 @@ class Phase15Contract(unittest.TestCase):
                 self.assertIn("if ($LASTEXITCODE -ne 0)", content)
 
 
+    def test_core_sqlcipher_evidence_check_has_source_sha_in_scope(self):
+        """The test's step-local env must also be visible to the later verifier."""
+        core = read(".github/workflows/windows-ci.yml")
+        job_header = (
+            "  core-tests:\n"
+            "    needs: manifest-contract\n"
+            "    runs-on: windows-latest\n"
+            "    env:\n"
+            "      ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}\n"
+        )
+        self.assertIn(job_header, core, "SHA must exist at job scope, not test step only")
+        self.assertIn(
+            "python build/check-phase15-perf-evidence.py "
+            "PerformanceEvidence/phase15-10k-multi-year.json "
+            "$env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA",
+            core,
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

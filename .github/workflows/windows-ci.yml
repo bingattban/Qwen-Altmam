@@ -114,6 +114,8 @@ jobs:
   core-tests:
     needs: manifest-contract
     runs-on: windows-latest
+    env:
+      ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
