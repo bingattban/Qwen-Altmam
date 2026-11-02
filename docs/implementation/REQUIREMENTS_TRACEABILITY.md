@@ -1,5 +1,8 @@
 # AlTamam — Requirements Traceability Matrix (Phase 00 / Step 00.03)
 
+**Historical traceability baseline (2026-10-23):** Old references to no tests, 90 actions, and an unconnected repository are not current findings. See [current Phase 00–02 source audit and CI gate](PHASE00_01_02_LIVE_RECONCILIATION_2026-11-02.md). Preserve the original requirement evidence below.
+
+
 Baseline commit: `1bb28bb` on branch `qwen-code-3daf4f97-7cb4-4a54-af89-c5f4e69a0b40` (base `main` @ `eb34116`).
 All repo counts below were re-verified against the CONNECTED REPOSITORY working tree, not only the supplied project.zip.
 
