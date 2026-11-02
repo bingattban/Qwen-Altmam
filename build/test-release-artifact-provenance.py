@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from release_names import owner_filename
 
 MODULE_PATH = Path(__file__).with_name("verify-release-artifacts.py")
 spec = importlib.util.spec_from_file_location("release_verifier", MODULE_PATH)
@@ -14,6 +15,7 @@ spec.loader.exec_module(module)
 HEAD = "a" * 40
 CHECKOUT = "b" * 40
 ARCH = "Windows-32bit"
+VERSION = "1.2.3"
 
 
 class ProvenanceTests(unittest.TestCase):
@@ -21,14 +23,15 @@ class ProvenanceTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.folder = Path(self.tmp.name)
-        names = [f"AlTamam-Portable-{ARCH}.zip", f"AlTamam-Installer-{ARCH}.exe"]
+        names = [owner_filename(VERSION, ARCH, k) for k in ("Portable", "Installer")]
         rows = []
         for name in names:
             content = ("synthetic:" + name).encode("ascii")
             (self.folder / name).write_bytes(content)
             rows.append({"file": name, "sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)})
         self.rows = rows
-        self.meta = {"commit": CHECKOUT, "sourceHeadSha": HEAD, "targetArchitecture": ARCH,
+        self.meta = {"commit": CHECKOUT, "sourceHeadSha": HEAD, "version": VERSION,
+                     "targetArchitecture": ARCH,
                      "runtimeIdentifier": "win-x86", "architectureBitness": 32, "files": rows}
         self.write()
 
