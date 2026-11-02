@@ -39,7 +39,7 @@
     {
       "routeKey": "SelectStatusAndConfirm",
       "titleAr": "اختيار الحالة والتأكيد",
-      "breadcrumbAr": "الرئيسية > غير المحضرين > اختيار الحالة والتأكيد",
+      "breadcrumbAr": "الرئيسية > المحضّرون تلقائياً > اختيار الحالة والتأكيد",
       "relativeFolder": "Dashboard/UnpreparedPersonnel/SelectStatusAndConfirm",
       "kind": "confirmation flow",
       "access": "Attendance-authorized authenticated users",
@@ -324,7 +324,7 @@
     },
     {
       "routeKey": "ExportPersonReport",
-      "titleAr": "تصدير تقرير الفرد",
+      "titleAr": "تصدير تقرير الأفراد",
       "breadcrumbAr": "الإدارة > إدارة القوة > التقرير > تصدير Excel",
       "relativeFolder": "Administration/PersonnelManagement/PersonnelReport/ExportPersonReport",
       "kind": "export flow",
@@ -884,7 +884,7 @@
     {
       "routeKey": "EightPmScheduler",
       "titleAr": "جدولة التحضير التلقائي",
-      "breadcrumbAr": "مكوّن نظامي > استكمال تحضير غير المحضرين",
+      "breadcrumbAr": "مكوّن نظامي > التحضير التلقائي 08:00 (افتراضياً)",
       "relativeFolder": "SharedScreens/EightPmScheduler",
       "kind": "shared system flow",
       "access": "SYSTEM scheduled operation; admin read-only summary; not interactive manual backdating",
