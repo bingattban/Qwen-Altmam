@@ -61,12 +61,21 @@ class Phase00Inventory(unittest.TestCase):
         scenarios = re.findall(r"(?m)^\| (AC-\d{3}) \|", text)
         self.assertEqual([f"09.{n:02d}" for n in range(1, 19)], clauses)
         self.assertEqual([f"AC-{n:03d}" for n in range(1, 47)], scenarios)
-        self.assertRegex(text, r"\| AC-023 \|[^\n]*\| OWNER_CONFLICT \|")
+        self.assertRegex(text, r"\| AC-023 \|[^\n]*\| OWNER_APPROVED_AUTO_PARTIAL \|")
         for ac in ("AC-025", "AC-027", "AC-028", "AC-044", "AC-046"):
             self.assertIn(ac, text)
         self.assertRegex(text, r"\| AC-044 \|[^\n]*\| NOT_EXECUTED \|")
         self.assertIn("NOT A RELEASE GO", text)
         self.assertIn("three independent audited saves", text)
+        decision = (ROOT / "docs/requirements/OWNER_DECISIONS_2026-10-31.md").read_text(
+            encoding="utf-8")
+        policy = (ROOT / "src/AlTamam.Application/Bridge/AutoAttendancePolicyService.cs").read_text(
+            encoding="utf-8")
+        self.assertIn("إعادة تأكيد قرار المالك — 2026-11-02", decision)
+        self.assertIn("الحفظ المنفصل", decision)
+        self.assertIn("if(hasDue==hasLock || hasDefault)", policy)
+        self.assertNotIn("ATTENDANCE_SCHEDULE_SET", policy)
+        self.assertNotIn("Legacy two-clock callers", policy)
         # A source matrix is not physical Windows/restore or 46 real E2E passes.
         self.assertIn("not a claim", text.lower())
 
