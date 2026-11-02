@@ -50,6 +50,8 @@ jobs:
         with: { python-version: '3.12' }
       - name: Action-manifest security guard (CSP, RBAC drift)
         run: python build/manifest-guard.py
+      - name: Phase 00–01 route matrix, solution and two-workflow inventory guard
+        run: python build/test-phase00-01-inventory.py
       - name: Phase 13 PowerShell self-check scripts pass native parser before expensive tests
         shell: pwsh
         run: |
