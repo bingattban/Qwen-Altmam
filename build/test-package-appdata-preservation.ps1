@@ -45,7 +45,7 @@ function Run-Checked([string]$file, [string[]]$arguments, [int]$timeoutSeconds =
 # the SAME real navigation/title/exit-code gate as release pre-package checks,
 # with at most two independent attempts (the host creates a fresh profile).
 # Never accept a nonzero exit or timeout as success; surface the native phases.
-function Run-PackagedWebViewChecked([string]$file, [string]$phase) {
+function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verifyNativeBridge = $false) {
     Assert-True (Test-Path -LiteralPath $file -PathType Leaf) "Executable absent: $file"
     $originalTrace = [Environment]::GetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE")
     $passed = $false
@@ -57,7 +57,26 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase) {
             $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $trace
             Write-Host "PACKAGED WEBVIEW: $phase ($ExpectedArch), attempt $attempt of 2"
             try {
-                Run-Checked $file @("--webview-selfcheck") 90
+                if ($verifyNativeBridge) {
+                    # Exercise the ACTUAL shipped x86/x64 WPF/WebView2 -> C#
+                    # bridge -> isolated encrypted SQLCipher -> HTML roundtrip.
+                    # --webview-selfcheck uses a fresh TEMP profile and DATABASE;
+                    # no production user data, passwords or DPAPI key is touched.
+                    Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e") 180
+                    Assert-True (Test-Path -LiteralPath $trace -PathType Leaf) "No packaged native bridge trace: $phase"
+                    $text = Get-Content -LiteralPath $trace -Raw
+                    foreach ($required in @(
+                        "UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus",
+                        "PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests",
+                        "PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations",
+                        "PASS all 69 manifest routes opened in real Windows WebView2"
+                    )) {
+                        Assert-True ($text.Contains($required)) "Packaged native bridge evidence missing: $phase [$required]"
+                    }
+                }
+                else {
+                    Run-Checked $file @("--webview-selfcheck") 90
+                }
                 $passed = $true
             }
             catch {
@@ -139,7 +158,7 @@ try {
     Run-Checked $portableExe @("--layout-selfcheck") 90
     # Real Windows WebView2 navigation from the extracted customer-facing ZIP.
     # This is an automated smoke test, NOT interactive end-to-end or disconnected physical UAT.
-    Run-PackagedWebViewChecked $portableExe "Portable ZIP"
+    Run-PackagedWebViewChecked $portableExe "Portable ZIP" $true
     Assert-DataPreserved "Portable direct run"
     $portableHash = Hash-OrAbsent $portableExe
 
@@ -159,7 +178,7 @@ try {
     Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) "Installer did not create uninstaller"
     Assert-True ((Hash-OrAbsent $installedExe) -eq $portableHash) "Portable and Installer EXEs differ"
     Run-Checked $installedExe @("--layout-selfcheck") 90
-    Run-PackagedWebViewChecked $installedExe "Installer"
+    Run-PackagedWebViewChecked $installedExe "Installer" $true
     Assert-DataPreserved "Installer run"
 
     # Reinstall the SAME version in-place while installed: this is an automated
@@ -180,7 +199,7 @@ try {
     Run-PackagedWebViewChecked $installedExe "Reinstall"
     Assert-DataPreserved "Reinstall"
     Write-Host ("PACKAGE-PRESERVATION PASS: " + $ExpectedArch +
-        "; genuine Portable + moved Portable + Installer + same-version in-place install/uninstall/reinstall; unchanged LocalAppData data/key")
+        "; actual x86/x64 packaged WebView2/SQLCipher role E2E, Portable move + Installer in-place install/uninstall/reinstall; unchanged LocalAppData data/key")
 }
 finally {
     # Never clean/rename the application database or DPAPI key. Only delete
