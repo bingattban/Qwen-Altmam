@@ -116,6 +116,64 @@ public sealed class Section08CatalogAuditReceiptsTests : IAsyncLifetime, IDispos
         AssertStoredReceipt(actual.Response, "SITE_CREATE");
     }
 
+    [Fact]
+    public async Task SiteRenameAndStatusUpdate_ReturnNewAuditReceiptsAndReplayAfterVersionBump()
+    {
+        var svc = new AdminConfigurationService(_db);
+        var createdSite = await svc.CreateSiteAsync(new JsonObject {
+            ["name"]="موقع الإيصال قبل إعادة التسمية",
+            ["operationId"]="SEC08-CATALOG-RENAME-PREPARE-0001"
+        }, Admin, default);
+        AssertStoredReceipt(createdSite,"SITE_CREATE");
+        string siteId=Assert.IsType<JsonObject>(createdSite.Data)["siteId"]!.GetValue<string>();
+        var createdStatus=await svc.CreateStatusAsync(new JsonObject{
+            ["name"]="حالة إيصال قبل التعديل", ["symbol"]="QZ1", ["color"]="#446688",
+            ["operationId"]="SEC08-CATALOG-UPDATE-PREPARE-0001"
+        },Admin,default);
+        AssertStoredReceipt(createdStatus,"STATUS_CREATE");
+        string statusId=Assert.IsType<JsonObject>(createdStatus.Data)["statusId"]!.GetValue<string>();
+
+        // Date-effective history prohibits two changes on the same local day.
+        // Simulate an existing record created on a previous calendar day.
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                UPDATE SiteNameHistory SET ValidFromLocalDate='2020-01-01'
+                WHERE SiteId=$site;
+                UPDATE AttendanceStatusNameHistory SET ValidFromLocalDate='2020-01-01'
+                WHERE StatusId=$status;
+                """;
+            q.Parameters.AddWithValue("$site",siteId);
+            q.Parameters.AddWithValue("$status",statusId);
+            q.ExecuteNonQuery();
+        }
+
+        var rename=new JsonObject{
+            ["siteId"]=siteId,["name"]="موقع الإيصال بعد إعادة التسمية",
+            ["expectedRevision"]=1L,
+            ["operationId"]="SEC08-CATALOG-SITE-RENAME-0001"
+        };
+        var renamed=await svc.RenameSiteAsync(rename,Admin,default);
+        AssertStoredReceipt(renamed,"SITE_RENAME");
+        var renameRetry=await svc.RenameSiteAsync((JsonObject)rename.DeepClone(),Admin,default);
+        Assert.True(renameRetry.Success,renameRetry.UserMessage);
+        Assert.Equal(renamed.AuditEventId,renameRetry.AuditEventId);
+
+        var update=new JsonObject{
+            ["statusId"]=statusId,["name"]="حالة إيصال بعد التعديل",
+            ["symbol"]="QZ2",["color"]="#557799",["expectedRevision"]=1L,
+            ["operationId"]="SEC08-CATALOG-STATUS-UPDATE-0001"
+        };
+        var updated=await svc.UpdateStatusAsync(update,Admin,default);
+        AssertStoredReceipt(updated,"STATUS_UPDATE");
+        var updateRetry=await svc.UpdateStatusAsync((JsonObject)update.DeepClone(),Admin,default);
+        Assert.True(updateRetry.Success,updateRetry.UserMessage);
+        Assert.Equal(updated.AuditEventId,updateRetry.AuditEventId);
+        Assert.Equal(4L,Count("AuditEvents"));
+        Assert.Equal(4L,Count("MutationReceipts"));
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {
