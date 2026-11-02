@@ -234,6 +234,13 @@ try {
     $installedExe = Join-Path $installed 'AlTamam.DesktopHost.exe'
     Invoke-NativeSmoke $installedExe 'reinstalled' $false
     Require-NoProductionData $dataRoot $sentinel $sentinelHash
+    Invoke-Checked $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 240
+    Assert-Condition (-not (Test-Path -LiteralPath $installedExe)) (
+        'Final uninstall did not remove the tested WPF executable')
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+    Assert-Condition (@(Get-NetAdapter -ErrorAction Stop |
+        Where-Object { $_.Status -eq 'Up' }).Count -eq 0) (
+        'A network adapter became active during the offline test')
     $success = $true
     Write-Evidence 'AUTOMATED_OFFLINE_SMOKE_PASS_NOT_FINAL_UAT' (
         'Real offline Portable, relocated Portable, installed/reinstalled WPF, ' +
