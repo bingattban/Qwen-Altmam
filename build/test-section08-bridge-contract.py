@@ -84,6 +84,26 @@ class Section08Contract(unittest.TestCase):
         supplied = set(re.findall(r'"([A-Za-z]\w+)"', match.group(1)))
         self.assertEqual(supplied, required)
 
+    def test_current_coverage_document_is_generated_from_actual_shipped_handlers(self):
+        import runpy
+        generator = runpy.run_path(str(ROOT / "build/generate-manifest-action-coverage.py"))
+        inventory = ROOT / "docs/implementation/MANIFEST_ACTION_COVERAGE.md"
+        self.assertEqual(inventory.read_text(encoding="utf-8"),
+                         generator["render_coverage"]())
+
+    def test_bridge_catalog_preserves_native_error_metadata_without_false_success(self):
+        source = CATALOG.read_text(encoding="utf-8")
+        name = "private static BridgeResponse Fail(BridgeRequest req, BridgeResponse inner)"
+        self.assertIn(name, source)
+        guard = source[source.rindex(name):]
+        self.assertIn("=> inner with", guard)
+        for invariant in ("RequestId = req.RequestId", "Data = null",
+                          "AuditEventId = null", "InvalidationEvents = null"):
+            self.assertIn(invariant, guard)
+        self.assertIn('["todayStatus"] = todayStatus', source)
+        self.assertIn('["todayReceiptPresent"] = todayHasReceipt', source)
+        self.assertIn('["status"] = "completed"', source)
+
     def test_structured_error_contract_and_no_forged_server_identity(self):
         response = RESPONSE.read_text(encoding="utf-8")
         for name in ("Code", "MessageAr", "ValidationErrors", "ConflictInfo",
