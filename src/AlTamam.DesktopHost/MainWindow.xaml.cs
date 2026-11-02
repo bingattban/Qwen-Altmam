@@ -462,6 +462,13 @@ public partial class MainWindow : Window
                 const check = (value, name) => { if (!value) throw new Error("UI-E2E: " + name); };
                 check(location.origin === "https://manger.adwas.example", "offline origin");
                 check(document.documentElement.dir === "rtl", "Arabic RTL document");
+                check(window.AltamamTables?.normalize(" مُحَمَّد ١٢٣ ۴۵۶ ") === "محمد 123 456",
+                    "Arabic and Persian numerals normalize in real WebView2");
+                const csp = document.querySelector('meta[http-equiv="Content-Security-Policy"]')
+                    ?.content || "";
+                check(csp.includes("script-src 'self'") &&
+                    csp.includes("connect-src 'none'") &&
+                    !csp.includes("'unsafe-inline'"), "strict offline CSP");
                 check(document.querySelector("#appViewport"), "live application viewport");
                 for (const [id, label] of [
                     ["dashboard", "الرئيسية"], ["monthly", "التمام الشهري"],

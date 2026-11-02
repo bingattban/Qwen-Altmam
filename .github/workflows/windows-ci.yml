@@ -25,6 +25,16 @@ jobs:
         with: { python-version: '3.12' }
       - name: Action/screen manifest security + drift guard
         run: python build/manifest-guard.py
+      - name: Phase 13 PowerShell self-check scripts pass native parser before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
+      - name: Phase 13 evidence contract guard before lengthy Windows tests
+        shell: pwsh
+        run: |
+          python build/test-phase13-qa-evidence-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 evidence source or order regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
@@ -145,6 +155,9 @@ jobs:
           if ($count -lt 1) { throw 'Core suite executed zero tests' }
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
+        env:
+          ALTAMAM_PHASE13_EVIDENCE_PATH: ${{ github.workspace }}/Phase13Evidence/windows-e2e.json
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
@@ -163,6 +176,25 @@ jobs:
           if (-not $measure) { throw 'No measured performance or hardware characteristics recorded' }
           Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### Section 01 hardware measurements"
           foreach ($line in $measure) { Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ("- " + $line.Line) }
+      - name: Phase 13 runner hardware and measured synthetic search facts
+        shell: pwsh
+        env:
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json -MeasurementFile PerformanceEvidence/ten-thousand-person-search.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 Windows hardware evidence failed' }
+      - name: Phase 13 reject forged or mismatched Windows E2E evidence
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./tests/AlTamam.WindowsE2E/Validate-Phase13Evidence.ps1 -EvidenceDir Phase13Evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 E2E evidence did not validate' }
+      - name: Upload Phase 13 Windows E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase13-real-windows-e2e-core
+          path: Phase13Evidence/*.json
+          if-no-files-found: warn
       - name: Upload synthetic search performance evidence
         uses: actions/upload-artifact@v4
         with:

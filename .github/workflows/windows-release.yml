@@ -50,6 +50,16 @@ jobs:
         with: { python-version: '3.12' }
       - name: Action-manifest security guard (CSP, RBAC drift)
         run: python build/manifest-guard.py
+      - name: Phase 13 PowerShell self-check scripts pass native parser before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
+      - name: Phase 13 evidence contract guard before lengthy Windows tests
+        shell: pwsh
+        run: |
+          python build/test-phase13-qa-evidence-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 evidence source or order regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
@@ -124,6 +134,21 @@ jobs:
           if (Select-String -Path vulnerable.txt -SimpleMatch 'has an easily accessible vulnerability') {
             throw 'ADVISORY GATE FAILED: transitive package vulnerability present'
           }
+      - name: Phase 13 software dependency inventory and CycloneDX SBOM
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path Phase13Dependencies -Force | Out-Null
+          dotnet list AlTamam.slnx package --include-transitive --format json |
+            Set-Content -Path Phase13Dependencies/dotnet-dependencies.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 package inventory command failed' }
+          python tooling/perf/emit_phase13_sbom.py Phase13Dependencies/dotnet-dependencies.json Phase13Dependencies/cyclonedx-sbom.json
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 SBOM conversion failed' }
+      - name: Upload Phase 13 dependency inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase13-dotnet-dependency-inventory-windows
+          path: Phase13Dependencies/*.json
+          if-no-files-found: error
 
   build-test:
     name: Build + full test suite on Windows x64 (15.01)
@@ -175,9 +200,30 @@ jobs:
           }
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
+        env:
+          ALTAMAM_PHASE13_EVIDENCE_PATH: ${{ github.workspace }}/Phase13Evidence/windows-e2e.json
         run: |
           pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows WebView2 UI E2E failed before packaging' }
+      - name: Phase 13 runner hardware evidence
+        shell: pwsh
+        env:
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pwsh -NoProfile -File ./tooling/perf/Collect-Phase13WindowsFacts.ps1 -OutputPath Phase13Evidence/runner-facts.json
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 Windows hardware evidence failed' }
+      - name: Phase 13 reject forged or mismatched Windows E2E evidence
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./tests/AlTamam.WindowsE2E/Validate-Phase13Evidence.ps1 -EvidenceDir Phase13Evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 13 E2E evidence did not validate' }
+      - name: Upload Phase 13 Windows E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase13-real-windows-e2e-release
+          path: Phase13Evidence/*.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always()
         with:
