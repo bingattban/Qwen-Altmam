@@ -180,6 +180,11 @@ foreach ($entry in @(@($expectedZip, $PortableZip, $portableHash),
     Assert-Condition ([long]$declared.bytes -eq (Get-Item -LiteralPath $file).Length) (
         'Metadata byte size mismatch: ' + $name)
 }
+if (-not [string]::IsNullOrWhiteSpace($SourceSha)) {
+    Assert-Condition ($SourceSha -cmatch '^[0-9a-f]{40}$') 'Invalid requested source SHA'
+    Assert-Condition ($metadata.sourceHeadSha -ceq $SourceSha) (
+        'Source head SHA differs from the signed-off candidate metadata')
+}
 if ($IntegrityOnly) {
     Write-Host 'FILE INTEGRITY ONLY PASS: two exact customer names and actual file SHA-256 agree; NO Windows application or offline UAT was executed'
     return
