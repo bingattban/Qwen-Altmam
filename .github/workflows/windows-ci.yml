@@ -65,6 +65,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Phase 15 four-artifact metadata / SHA256 regression' }
           python build/test-section11-delivery-standard.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 15 cross-architecture file checksum or source regression' }
+      - name: Section 11 independent disconnected-Windows probe input integrity regression (synthetic only)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./build/test-independent-offline-windows-contract.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Section 11 physical offline probe contract failed; NOT UAT' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
