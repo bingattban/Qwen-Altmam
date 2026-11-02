@@ -427,6 +427,84 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         }
     }
 
+    [Theory]
+    [InlineData("null-pin")]
+    [InlineData("wrong-pin")]
+    [InlineData("missing-version-row")]
+    public async Task ReopeningCurrentSchema_RejectsMissingOrTamperedPinnedMigration(
+        string caseName)
+    {
+        // Synthetic encrypted database only. V001 predates the hash column and
+        // is intentionally unpinned; every V002+ migration is mandatory.
+        int pinnedVersion=AlTamamDbContext.CurrentSchemaVersion-1;
+        using(var c=_database.CreateOpenConnection())
+        using(var edit=c.CreateCommand())
+        {
+            edit.CommandText=caseName switch {
+                "null-pin" => "UPDATE SchemaVersions SET Sha256=NULL WHERE SchemaVersion=$v;",
+                "wrong-pin" => "UPDATE SchemaVersions SET Sha256=$bad WHERE SchemaVersion=$v;",
+                _ => "DELETE FROM SchemaVersions WHERE SchemaVersion=$v;"
+            };
+            edit.Parameters.AddWithValue("$v",pinnedVersion);
+            edit.Parameters.AddWithValue("$bad",new string('0',64));
+            Assert.Equal(1,edit.ExecuteNonQuery());
+        }
+
+        using var reopened=new AlTamamDbContext(DatabasePath,_key,useConnectionPooling:false);
+        var failure=await Assert.ThrowsAsync<InvalidOperationException>(
+            ()=>reopened.InitializeAsync());
+        Assert.Contains("migration",failure.Message,StringComparison.OrdinalIgnoreCase);
+        using var check=_database.CreateOpenConnection();
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion.ToString(),
+            Value(check,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+        Assert.Equal("ok",Value(check,"PRAGMA integrity_check;"));
+        Assert.Equal(0L,Count(check,"SELECT COUNT(*) FROM Persons;"));
+        Assert.False(Directory.Exists(DatabasePath + ".migration-backups"));
+    }
+
+    [Fact]
+    public async Task InterruptedUpgrade_RejectsCorruptPriorPinBeforeAnyNewMigration()
+    {
+        // Synthetic interrupted-upgrade state. Highest recorded version is 11
+        // although V012's physical columns exist; corrupt the V011 pin.
+        // The runner must reject that corruption BEFORE attempting V012 SQL.
+        int prior=AlTamamDbContext.CurrentSchemaVersion-1;
+        using(var c=_database.CreateOpenConnection())
+        {
+            using var cmd=c.CreateCommand();
+            cmd.CommandText="DELETE FROM SchemaVersions WHERE SchemaVersion=$current;";
+            cmd.Parameters.AddWithValue("$current",AlTamamDbContext.CurrentSchemaVersion);
+            Assert.Equal(1,cmd.ExecuteNonQuery());
+            using var tamper=c.CreateCommand();
+            tamper.CommandText="UPDATE SchemaVersions SET Sha256=NULL WHERE SchemaVersion=$v;";
+            tamper.Parameters.AddWithValue("$v",prior);
+            Assert.Equal(1,tamper.ExecuteNonQuery());
+            var runner=new AlTamam.Infrastructure.Persistence.Migrations.SchemaMigrationRunner(
+                AlTamamDbContext.CanonicalMigrations);
+            var err=await Assert.ThrowsAsync<InvalidOperationException>(
+                ()=>runner.UpgradeAsync(c));
+            Assert.Contains("migration hash missing",err.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(prior.ToString(),
+                Value(c,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+            Assert.Equal("ok",Value(c,"PRAGMA integrity_check;"));
+        }
+    }
+
+    [Fact]
+    public async Task ReopeningCurrentSchema_PreservesValidHistoricalPinsAndEncryptedData()
+    {
+        using(var c=_database.CreateOpenConnection())
+            Execute(c,"INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc) VALUES('TST-PH02-PIN','safe','2026-10-20T00:00:00Z') ON CONFLICT(SettingKey) DO UPDATE SET SettingValue='safe';");
+        using var reopened=new AlTamamDbContext(DatabasePath,_key,useConnectionPooling:false);
+        await reopened.InitializeAsync();
+        using var read=reopened.CreateOpenConnection();
+        Assert.Equal("safe",Value(read,
+            "SELECT SettingValue FROM AppSettings WHERE SettingKey='TST-PH02-PIN';"));
+        Assert.Equal("ok",Value(read,"PRAGMA integrity_check;"));
+        Assert.Equal(AlTamamDbContext.CurrentSchemaVersion.ToString(),
+            Value(read,"SELECT MAX(SchemaVersion) FROM SchemaVersions;"));
+    }
+
     [Fact]
     public void Schema_HasRequiredTemporalAndOperationalIndexes()
     {
@@ -451,4 +529,38 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         }
         Assert.Equal(1L, Count(connection, "PRAGMA foreign_keys;"));
     }
+    [Fact]
+    public void V012LegacyAutoAttendanceCounts_AreUnknown_NotFakeZeros_AndNonnegative()
+    {
+        using var connection = _database.CreateOpenConnection();
+        Execute(connection, """
+            INSERT INTO AutoAttendanceRuns(JobKey,BusinessDate,DueTimeLocal,StartedAtUtc,
+                CompletedAtUtc,IsCatchUpRun,CopiedCount,SkippedNoYesterdayCount,
+                SkippedTransferExemptCount,SummaryArabic)
+            VALUES('AUTO08H-2024-12-31','2024-12-31','08:00',
+                '2024-12-31T05:00:00Z','2024-12-31T05:00:05Z',0,4,1,2,'إيصال تاريخي');
+            """);
+        Assert.Equal("1", Value(connection, """
+            SELECT CASE WHEN DefaultedCount IS NULL AND SkippedManualCount IS NULL
+                 AND FailedCount IS NULL THEN 1 ELSE 0 END
+            FROM AutoAttendanceRuns WHERE BusinessDate='2024-12-31';
+            """));
+        Execute(connection, """
+            UPDATE AutoAttendanceRuns SET DefaultedCount=4,SkippedManualCount=1,
+                FailedCount=0 WHERE BusinessDate='2024-12-31';
+            """);
+        Assert.Equal("4", Value(connection, """
+            SELECT DefaultedCount FROM AutoAttendanceRuns
+            WHERE BusinessDate='2024-12-31';
+            """));
+        Assert.Throws<SqliteException>(() => Execute(connection, """
+            UPDATE AutoAttendanceRuns SET FailedCount=-1
+            WHERE BusinessDate='2024-12-31';
+            """));
+        Assert.Equal("0", Value(connection, """
+            SELECT FailedCount FROM AutoAttendanceRuns
+            WHERE BusinessDate='2024-12-31';
+            """));
+    }
+
 }
