@@ -206,7 +206,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
     public async Task ReopeningCurrentSchema_PreservesValidHistoricalPinsAndEncryptedData()
     {
         using(var c=_database.CreateOpenConnection())
-            Execute(c,"INSERT INTO AppSettings(SettingKey,SettingValue) VALUES('TST-PH02-PIN','safe') ON CONFLICT(SettingKey) DO UPDATE SET SettingValue='safe';");
+            Execute(c,"INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc) VALUES('TST-PH02-PIN','safe','2026-10-20T00:00:00Z') ON CONFLICT(SettingKey) DO UPDATE SET SettingValue='safe';");
         using var reopened=new AlTamamDbContext(DatabasePath,_key,useConnectionPooling:false);
         await reopened.InitializeAsync();
         using var read=reopened.CreateOpenConnection();
