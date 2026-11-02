@@ -298,6 +298,108 @@ public sealed class Phase11AuditHistoryAcceptanceTests : IAsyncLifetime, IDispos
         Assert.Equal(1L,Convert.ToInt64(count.ExecuteScalar()));
     }
 
+
+    [Fact]
+    public async Task OverlayInvalidVersionIsRejectedWithoutAppendingAnyEvidence()
+    {
+        var made=await new AdminConfigurationService(_db).CreateSiteAsync(
+            new JsonObject{["name"]="موقع فحص إصدار التدقيق"},General,default);
+        Assert.True(made.Success,made.UserMessage);
+        var service=new AuditOverlayService(_db);
+        var events=await service.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="SITE_CREATE",["target"]="موقع فحص إصدار التدقيق"
+        },default,General);
+        var item=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(events.Data)["items"])));
+        string targetId=item["auditEventId"]!.GetValue<string>();
+        using var c=_db.CreateOpenConnection();
+        using var count=c.CreateCommand();
+        count.CommandText="SELECT COUNT(*) FROM AuditEvents;";
+        long beforeEvents=Convert.ToInt64(count.ExecuteScalar());
+        foreach(var invalid in new JsonNode?[]{
+            JsonValue.Create("not-a-number"),JsonValue.Create(-1),JsonValue.Create(1.5),null
+        })
+        {
+            var attempt=await service.UpdateAuditPresentationAsync(new JsonObject{
+                ["auditEventId"]=targetId,
+                ["expectedOverlayVersion"]=invalid?.DeepClone(),
+                ["correctedDescription"]="وصف ينبغي رفضه",
+                ["reason"]="التحقق من رفض إصدار غير صالح",
+                ["operationId"]="SEC08-OVERLAY-INVALID-VERSION-0001"
+            },Admin,default);
+            Assert.False(attempt.Success);
+            Assert.Equal(BridgeErrorCodes.ValidationError,attempt.Code);
+            Assert.NotNull(attempt.ValidationErrors?["expectedOverlayVersion"]);
+            Assert.Null(attempt.AuditEventId);
+            Assert.Null(attempt.Data);
+        }
+        Assert.Equal(beforeEvents,Convert.ToInt64(count.ExecuteScalar()));
+        using var overlay=c.CreateCommand();
+        overlay.CommandText="SELECT COUNT(*) FROM AuditLogPresentationEdits;";
+        Assert.Equal(0L,Convert.ToInt64(overlay.ExecuteScalar()));
+        using var receipts=c.CreateCommand();
+        receipts.CommandText="SELECT COUNT(*) FROM MutationReceipts;";
+        Assert.Equal(0L,Convert.ToInt64(receipts.ExecuteScalar()));
+    }
+
+    [Fact]
+    public async Task InvalidOperationIdAndReusedDifferentPayloadFailWithoutDuplicateAudit()
+    {
+        var made=await new AdminConfigurationService(_db).CreateSiteAsync(
+            new JsonObject{["name"]="موقع فحص إعادة استخدام المعرف"},General,default);
+        Assert.True(made.Success,made.UserMessage);
+        var service=new AuditOverlayService(_db);
+        var events=await service.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="SITE_CREATE",["target"]="موقع فحص إعادة استخدام المعرف"
+        },default,General);
+        string targetId=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(events.Data)["items"])))
+            ["auditEventId"]!.GetValue<string>();
+        foreach(var invalid in new JsonNode?[]{JsonValue.Create("short"),
+                                                 JsonValue.Create(123)})
+        {
+            var bad=await service.UpdateAuditPresentationAsync(new JsonObject{
+                ["auditEventId"]=targetId,["expectedOverlayVersion"]=0,
+                ["reason"]="إدخال اختبار غير صالح",
+                ["correctedDescription"]="وصف غير معتمد",
+                ["operationId"]=invalid?.DeepClone()
+            },Admin,default);
+            Assert.False(bad.Success);
+            Assert.Equal(BridgeErrorCodes.ValidationError,bad.Code);
+            Assert.NotNull(bad.ValidationErrors?["operationId"]);
+            Assert.Null(bad.Data);
+        }
+        var original=new JsonObject{
+            ["auditEventId"]=targetId,["expectedOverlayVersion"]=0,
+            ["reason"]="إجراء صالح واحد",
+            ["correctedDescription"]="الوصف المعتمد",
+            ["operationId"]="SEC08-OVERLAY-SAME-OPERATION-0001"
+        };
+        var applied=await service.UpdateAuditPresentationAsync(original,Admin,default);
+        Assert.True(applied.Success,applied.UserMessage);
+        using var c=_db.CreateOpenConnection();
+        using var audit=c.CreateCommand();
+        audit.CommandText="SELECT COUNT(*) FROM AuditEvents;";
+        long before=Convert.ToInt64(audit.ExecuteScalar());
+        var changed=(JsonObject)original.DeepClone();
+        changed["correctedDescription"]="محاولة تغيير النص بنفس معرف العملية";
+        var rejected=await service.UpdateAuditPresentationAsync(changed,Admin,default);
+        Assert.False(rejected.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,rejected.Code);
+        Assert.Equal("OperationIdPayloadMismatch",
+            rejected.ConflictInfo?["reason"]?.GetValue<string>());
+        Assert.Null(rejected.Data);
+        Assert.Null(rejected.AuditEventId);
+        Assert.Equal(before,Convert.ToInt64(audit.ExecuteScalar()));
+        using var overlays=c.CreateCommand();
+        overlays.CommandText="SELECT COUNT(*) FROM AuditLogPresentationEdits WHERE AuditEventId=$id;";
+        overlays.Parameters.AddWithValue("$id",targetId);
+        Assert.Equal(1L,Convert.ToInt64(overlays.ExecuteScalar()));
+        using var receipts=c.CreateCommand();
+        receipts.CommandText="SELECT COUNT(*) FROM MutationReceipts WHERE OperationId='SEC08-OVERLAY-SAME-OPERATION-0001';";
+        Assert.Equal(1L,Convert.ToInt64(receipts.ExecuteScalar()));
+    }
+
     [Fact]
     public async Task EventTimeActorSnapshotsRemainUnchangedAfterAccountAndRosterRename()
     {

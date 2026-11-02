@@ -24,12 +24,13 @@ internal static class MutationIdempotency
         string operationId;
         try {operationId=payload?["operationId"]?.GetValue<string>()?.Trim()??"";}
         catch {return (BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-            "معرف عملية الإنشاء غير صالح."),null);}
+            "معرف عملية الإنشاء غير صالح.","operationId"),null);}
         if(operationId.Length==0)return (null,null);
         if(operationId.Length is <16 or >128 ||
            operationId.Any(ch=>!char.IsAsciiLetterOrDigit(ch)&&ch!='-'&&ch!='_'))
             return (BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                "يجب أن يكون معرف العملية من 16 إلى 128 حرفاً لاتينياً أو رقماً."),null);
+                "يجب أن يكون معرف العملية من 16 إلى 128 حرفاً لاتينياً أو رقماً.",
+                "operationId"),null);
         var content=(JsonObject)(payload?.DeepClone()??new JsonObject());
         content.Remove("operationId");
         string normalized=BridgePreviewTokens.Canonicalize(content);
@@ -50,7 +51,10 @@ internal static class MutationIdempotency
                 result=reader.GetString(2);
             if(actionSaved!=action || fingerprintSaved!=fingerprint)
                 return (BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
-                    "معرف العملية مستخدم سابقاً مع إجراء أو بيانات مختلفة."),null);
+                    "معرف العملية مستخدم سابقاً مع إجراء أو بيانات مختلفة.")
+                    with {ConflictInfo=new JsonObject {
+                        ["reason"]="OperationIdPayloadMismatch"
+                    }},null);
             return (BridgeHelpers.Ok(JsonNode.Parse(result)),null);
         }
         return (null,new Context(actor,operationId,action,fingerprint));
