@@ -13,7 +13,8 @@ class Element {
 }
 const root=new Element("div"),invoked=[],committed=[],archiveRequests=[];
 let allow=false;
-let deferredArchive=null;
+let deferredArchive=null, nextCommitError=null, overrideCommitCount=null;
+const commitOptions=[];
 const modalReviews=[],detailReviews=[];
 const responses={
  QuerySites:[{siteId:"SITE-SOURCE",name:"الموقع الأول",active:true},
@@ -23,7 +24,7 @@ const responses={
  PreviewInternalTransfer:{previewToken:"SERVER-ONLY-TOKEN",count:1,
    businessDate:"2026-10-25",external:false,destinationName:"الموقع الثاني",
    persons:[{name:"فرد تجريبي",serviceNumberA:"001",sourceSiteName:"الموقع الأول"}]},
- CommitInternalTransfer:{count:1},
+ CommitInternalTransfer:{count:1,destinationName:"الموقع الثاني"},
  QueryMovementArchive:{total:1,hasNext:false,items:[{movementId:"MOV-TST-1",
   serviceNumberA:"001",name:"فرد تجريبي",type:"داخلي",
   sourceSite:"الموقع الأول",destination:"الموقع الثاني",date:"2026-10-23"}]},
@@ -32,8 +33,13 @@ const responses={
    date:"2026-10-23",committedAtUtc:"2026-10-23T08:00:00Z",actorUsername:"test-admin"},
  ExportPersonLifetimeExcel:{filePath:"C:\\Reports\\نقل داخلي_2026-10-26.xlsx"}
 };
-const bridge={invoke:async(name,payload)=>{
- invoked.push(name);if(name==="CommitInternalTransfer")committed.push(payload);
+const bridge={invoke:async(name,payload,opts)=>{
+ invoked.push(name);
+ if(name==="CommitInternalTransfer"){
+   committed.push(payload);commitOptions.push(opts);
+   if(nextCommitError){const error=nextCommitError;nextCommitError=null;throw error;}
+   if(overrideCommitCount!==null)return {data:{count:overrideCommitCount,destinationName:"الموقع الثاني"}};
+ }
  if(name==="QueryMovementArchive"||name==="ExportPersonLifetimeExcel")
     archiveRequests.push({name,payload});
  if(name==="QueryMovementArchive"&&deferredArchive)
@@ -75,6 +81,44 @@ async function run(){
  assert.equal(modalReviews.length,2,"final approval happens inside transfer modal");
  assert.equal(committed[0].previewToken,"SERVER-ONLY-TOKEN",
    "commit must send only the validated server preview token");
+ assert.ok(commitOptions[0]?.timeoutMs>=60000,
+   "saving a 100-person preview cannot silently fail at the generic 15-second bridge timeout");
+ assert.equal(typeof committed[0].operationId,"string");
+ assert.ok(committed[0].operationId.length>=16);
+ function selectAgain(){
+   const next=all().find(x=>x.tag==="input"&&x.type==="checkbox");
+   assert.ok(next);
+   next.checked=true;next.handlers.change();
+ }
+ selectAgain();
+ const stale=Object.assign(new Error("تغير موقع الفرد؛ حدّث الكشف."),{errorCode:"ConflictStale"});
+ nextCommitError=stale;
+ await find("button","معاينة النقل والتأكيد").handlers.click();
+ assert.ok(all().some(x=>x.textContent.includes("تغير موقع الفرد")),
+   "a definitive stale server rejection must be visible in the transfer screen");
+ assert.ok(!find("button","إعادة مراجعة ومحاولة التأكيد"),
+   "stale preview must not offer a retry using the rejected token");
+ const beforeRetry=committed.length;
+ nextCommitError=Object.assign(new Error("انتهت مهلة الاستجابة."),{errorCode:"BridgeTimeout"});
+ await find("button","معاينة النقل والتأكيد").handlers.click();
+ const retry=find("button","إعادة مراجعة ومحاولة التأكيد");
+ assert.ok(retry,"only an ambiguous timeout can offer an idempotent retry");
+ const retryId=committed.at(-1).operationId;
+ await retry.handlers.click();
+ assert.equal(committed.length,beforeRetry+2);
+ assert.equal(committed.at(-1).operationId,retryId,
+   "lost-response retry must retain the exact original operation ID");
+ assert.equal(committed.at(-1).previewToken,committed.at(-2).previewToken);
+ assert.ok(all().some(x=>x.textContent.includes("تم حفظ نقل 1")),
+   "success only follows a confirmed C# commit response");
+ selectAgain();
+ overrideCommitCount=0;
+ await find("button","معاينة النقل والتأكيد").handlers.click();
+ assert.ok(!all().some(x=>x.textContent==="تم حفظ نقل 0 فرداً وسجل العملية."),
+   "a malformed or mismatched native count must never produce a false success");
+ assert.ok(all().some(x=>x.textContent.includes("عدد")),
+   "mismatched native confirmation must be explained to the user");
+ overrideCommitCount=null;
  const archiveRoot=new Element("div");
  await ctx.window.AltamamMovements.render(archiveRoot,"archiveInternal");
  assert.ok(invoked.includes("QueryMovementArchive"),"real movement archive read");
