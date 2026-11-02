@@ -79,8 +79,8 @@ def audit(root: Path, version: str, checkout: str, source: str) -> dict:
                 raise ValueError(arch + ": malformed or duplicate SHA256SUMS entry")
             listed[match.group(2)] = match.group(1)
         expected_files = {
-            f"AlTamam-Portable-{arch}.zip",
-            f"AlTamam-Installer-{arch}.exe",
+            f"AlTamamDaily_{version}_Portable_{runtime}.zip",
+            f"AlTamamDaily_{version}_Setup_{runtime}.exe",
         }
         if set(listed) != expected_files:
             raise ValueError(arch + ": checksum manifest does not name both exact packages")
@@ -94,7 +94,7 @@ def audit(root: Path, version: str, checkout: str, source: str) -> dict:
         if set(by_name) != expected_files:
             raise ValueError(arch + ": package metadata names mismatch")
         for kind, suffix in (("Portable", ".zip"), ("Installer", ".exe")):
-            name = f"AlTamam-{kind}-{arch}{suffix}"
+            name = f"AlTamamDaily_{version}_{'Portable' if kind == 'Portable' else 'Setup'}_{runtime}{suffix}"
             p = root / f"AlTamam-{kind}-{arch}-rc-{version}" / name
             if p.is_symlink() or not p.is_file() or p.stat().st_size <= 0:
                 raise ValueError("missing / linked / empty current-run customer package: " + name)
