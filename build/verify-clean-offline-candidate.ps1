@@ -11,6 +11,7 @@ param(
     [Parameter(Mandatory = $true)][string]$PortableZip,
     [Parameter(Mandatory = $true)][string]$SetupExe,
     [Parameter(Mandatory = $true)][string]$Sha256Sums,
+    [Parameter(Mandatory = $true)][string]$BuildMetadata,
     [switch]$IntegrityOnly,
     [switch]$ConfirmDisposableWindowsAccount,
     [string]$SourceSha,
@@ -96,6 +97,7 @@ function Write-Evidence([string]$status, [string]$detail) {
         arch = $Architecture
         version = $Version
         immutableSourceSha = $SourceSha
+        testedCheckoutSha = $metadata.commit
         githubReleaseWorkflowRunId = $ReleaseRunId
         portable = (Split-Path -Leaf $PortableZip)
         portableSha256 = $portableHash
@@ -122,7 +124,7 @@ $expectedZip = 'AlTamamDaily_' + $Version + '_Portable_' + $Architecture + '.zip
 $expectedSetup = 'AlTamamDaily_' + $Version + '_Setup_' + $Architecture + '.exe'
 Assert-Condition ((Split-Path -Leaf $PortableZip) -ceq $expectedZip) 'Incorrect Portable filename'
 Assert-Condition ((Split-Path -Leaf $SetupExe) -ceq $expectedSetup) 'Incorrect Setup filename'
-foreach ($file in @($PortableZip, $SetupExe, $Sha256Sums)) {
+foreach ($file in @($PortableZip, $SetupExe, $Sha256Sums, $BuildMetadata)) {
     Assert-Condition (Test-Path -LiteralPath $file -PathType Leaf) (
         'Required file is missing: ' + $file)
 }
@@ -147,6 +149,37 @@ Assert-Condition ($setupHash -ceq $expectedHashes[$expectedSetup]) 'Setup SHA256
 Assert-Condition ((Get-Item -LiteralPath $PortableZip).Length -gt 0) 'Empty Portable'
 Assert-Condition ((Get-Item -LiteralPath $SetupExe).Length -gt 0) 'Empty Setup'
 
+# Verify the source/checkout/version and actual bytes against BUILD_METADATA
+# from the same Release artifact. An operator-entered source SHA alone is NOT
+# acceptable evidence of the binary's origin.
+$metadata = Get-Content -LiteralPath $BuildMetadata -Raw -Encoding UTF8 |
+    ConvertFrom-Json
+Assert-Condition ($null -ne $metadata) 'Invalid or missing build metadata object'
+$expectedBuildArch = if ($Architecture -eq 'win-x64') { 'Windows-64bit' } else { 'Windows-32bit' }
+$expectedBits = if ($Architecture -eq 'win-x64') { 64 } else { 32 }
+Assert-Condition ($metadata.version -ceq $Version) 'Metadata version mismatch'
+Assert-Condition ($metadata.runtimeIdentifier -ceq $Architecture) 'Metadata runtime mismatch'
+Assert-Condition ($metadata.targetArchitecture -ceq $expectedBuildArch) 'Metadata bitness mismatch'
+Assert-Condition ([int]$metadata.architectureBitness -eq $expectedBits) 'Incorrect metadata bitness'
+Assert-Condition ($metadata.commit -cmatch '^[0-9a-f]{40}$') 'Invalid tested checkout SHA'
+Assert-Condition ($metadata.sourceHeadSha -cmatch '^[0-9a-f]{40}$') 'Invalid source head SHA'
+$declaredFiles = @($metadata.files)
+Assert-Condition ($declaredFiles.Count -eq 2) 'Expected exactly two binary metadata entries'
+$declaredByName = @{}
+foreach ($item in $declaredFiles) {
+    Assert-Condition (-not [string]::IsNullOrWhiteSpace($item.file)) 'Unnamed metadata file'
+    Assert-Condition (-not $declaredByName.ContainsKey($item.file)) 'Duplicated metadata file'
+    $declaredByName[$item.file] = $item
+}
+foreach ($entry in @(@($expectedZip, $PortableZip, $portableHash),
+                     @($expectedSetup, $SetupExe, $setupHash))) {
+    $name, $file, $digest = $entry
+    Assert-Condition ($declaredByName.ContainsKey($name)) ('Missing metadata: ' + $name)
+    $declared = $declaredByName[$name]
+    Assert-Condition ($declared.sha256 -ceq $digest) ('Metadata SHA256 mismatch: ' + $name)
+    Assert-Condition ([long]$declared.bytes -eq (Get-Item -LiteralPath $file).Length) (
+        'Metadata byte size mismatch: ' + $name)
+}
 if ($IntegrityOnly) {
     Write-Host 'FILE INTEGRITY ONLY PASS: two exact customer names and actual file SHA-256 agree; NO Windows application or offline UAT was executed'
     return
@@ -158,6 +191,8 @@ Assert-Condition (-not [string]::IsNullOrWhiteSpace($EvidencePath)) (
     'An explicit new evidence JSON path is required')
 Assert-Condition ($SourceSha -cmatch '^[0-9a-f]{40}$') (
     'Exact tested source commit SHA is required for evidence')
+Assert-Condition ($metadata.sourceHeadSha -ceq $SourceSha) (
+    'Source head SHA differs from the original build metadata')
 Assert-Condition ($ReleaseRunId -cmatch '^[0-9]{8,20}$') (
     'Actual tested Windows Release workflow run ID is required for evidence')
 Assert-Condition ($Architecture -ceq $(if ([Environment]::Is64BitOperatingSystem) {
