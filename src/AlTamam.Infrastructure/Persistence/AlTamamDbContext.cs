@@ -143,6 +143,12 @@ public sealed class AlTamamDbContext : IDisposable
             }
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
+            // Opening an ALREADY CURRENT database must still fail closed on
+            // missing/altered migration pins. Upgrades are verified by the
+            // runner itself; this path used to skip checking stored hashes.
+            if (hasVersionTable)
+                new SchemaMigrationRunner(CanonicalMigrations).VerifyRecordedHashes(connection);
+
             // Bootstrap path: V001 lands a version-1 database — upgrade it to this build's schema
             // through the hash-pinned, forward-only migration runner (V002, V003, …).
             if (!hasVersionTable && CurrentSchemaVersion > 1)

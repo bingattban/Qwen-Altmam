@@ -94,6 +94,11 @@ public sealed class SchemaMigrationRunner
             throw new InvalidOperationException(
                 $"Database schema version {current} is newer than the application's latest known version {LatestKnownVersion}. Refusing to downgrade.");
 
+        // Validate every already-applied migration BEFORE attempting any new
+        // DDL or data migration. A null, absent or altered pin must not be
+        // discovered only after later irreversible steps have committed.
+        VerifyRecordedHashes(connection);
+
         foreach (var migration in _migrations.Where(m => m.Version > current))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -287,10 +292,16 @@ public sealed class SchemaMigrationRunner
         {
             if (!migration.RecordsHash) continue; // pre-hardening bootstrap rows carry no pin by design
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT Sha256 FROM SchemaVersions WHERE SchemaVersion = $v;";
+            cmd.CommandText = "SELECT MigrationName,Sha256 FROM SchemaVersions WHERE SchemaVersion = $v;";
             cmd.Parameters.Add("$v", SqliteType.Integer).Value = migration.Version;
-            var recorded = cmd.ExecuteScalar() as string;
-            if (recorded is null) continue; // legacy row without hash column (pre-V002 databases)
+            using var row = cmd.ExecuteReader();
+            if (!row.Read() || row.IsDBNull(0) || row.IsDBNull(1) ||
+                !string.Equals(row.GetString(0), migration.Name, StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(row.GetString(1)))
+                throw new InvalidOperationException(
+                    $"Migration pin missing or mismatched for '{migration.Name}' (version {migration.Version}). " +
+                    "A released migration must keep its original name and SHA-256 record.");
+            string recorded = row.GetString(1);
             string expected = ComputeExpectedHash(migration);
             if (!string.Equals(recorded, expected, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
