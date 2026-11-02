@@ -244,7 +244,13 @@ public sealed class AttendanceCommitService
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,t,revise?"ReviseTodayAttendance":"SubmitAttendance",actor.UserId,payload,ct)
                 .ConfigureAwait(false);
-            if(replay is not null)return replay;
+            if(replay is not null)
+            {
+                if(replay.Success && replay.Data is JsonObject prior &&
+                    prior["auditEventId"] is JsonValue id)
+                    return replay with {AuditEventId=id.GetValue<string>()};
+                return replay;
+            }
             if(CutoffReached())return Fail(BridgeErrorCodes.HistoricDayLocked,
                 "انتهت صلاحية معاينة التحضير بعد وقت القفل المحدد في الإعدادات.");
             using var find=c.CreateCommand();find.Transaction=t;
@@ -319,6 +325,7 @@ public sealed class AttendanceCommitService
             if(consumed!=0)return Fail(BridgeErrorCodes.ConflictStale,"معاينة قديمة أو مستخدمة.");
             string now=_time.GetUtcNow().ToString("O"),reason=Read(info,"reason");
             string corr=Guid.NewGuid().ToString("N");
+            var auditEventIds=new JsonArray();
             foreach(var person in snapshots)
             {
                 using var cmd=c.CreateCommand();cmd.Transaction=t;
@@ -381,7 +388,7 @@ public sealed class AttendanceCommitService
                     revision.Parameters.AddWithValue("$now",now);
                     await revision.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 }
-                await BridgeAuditWriter.WriteAsync(c,t,_time,
+                string auditEventId=await BridgeAuditWriter.WriteAsync(c,t,_time,
                     revise?"ATTENDANCE_REVISE":"ATTENDANCE_COMMIT",
                     revise?"تعديل التحضير":"اعتماد التحضير",
                     actor.UserId,actor.Username,actor.Username,"Person",person.PersonId,person.Name,
@@ -390,17 +397,24 @@ public sealed class AttendanceCommitService
                         ["date"]=date,["serviceNumberA"]=person.Number,["site"]=person.SiteName}.ToJsonString(),
                     revise?"تعديل تحضير اليوم بسبب: "+reason:"تحضير اليوم",
                     revise?reason:null,date,corr,ct).ConfigureAwait(false);
+                auditEventIds.Add(auditEventId);
             }
+            string primaryAuditEventId=auditEventIds[0]!.GetValue<string>();
             var result=new JsonObject
             {
                 ["count"]=snapshots.Count,["date"]=date,["statusId"]=statusId,
-                ["revised"]=revise
+                ["revised"]=revise,
+                // For bulk commits, AuditEventId identifies one real event;
+                // auditEventIds carries the complete one-to-one person/event set.
+                ["auditEventId"]=primaryAuditEventId,
+                ["auditEventIds"]=auditEventIds
             };
             await MutationIdempotency.StoreAsync(c,t,receipt,result,_time,ct)
                 .ConfigureAwait(false);
             return BridgeHelpers.Ok(result,events:BridgeHelpers.InvalidationEvent(
                 revise?UiInvalidationEvents.AttendanceRevised:UiInvalidationEvents.AttendanceCommitted,
-                date,snapshots.Select(p=>p.PersonId)));
+                date,snapshots.Select(p=>p.PersonId)))
+                with {AuditEventId=primaryAuditEventId};
         },ct).ConfigureAwait(false);
     }
 }
