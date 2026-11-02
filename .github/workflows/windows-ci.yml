@@ -40,6 +40,11 @@ jobs:
         run: |
           python build/test-phase14-distribution-stage.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution stage negative-path regression' }
+      - name: Phase 15 non-destructive static handover/route/RBAC regression
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 static contract regression failed' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
