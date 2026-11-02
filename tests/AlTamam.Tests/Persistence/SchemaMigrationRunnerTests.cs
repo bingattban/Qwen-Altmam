@@ -161,6 +161,41 @@ public sealed class SchemaMigrationRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task HashVerification_RejectsMissingV002PinOrDeletedV001History()
+    {
+        using var context = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex);
+        using var connection = context.CreateOpenConnection();
+        var runner = DefaultRunner();
+        await runner.UpgradeAsync(connection);
+        using (var edit = connection.CreateCommand())
+        {
+            edit.CommandText = "UPDATE SchemaVersions SET Sha256=NULL WHERE SchemaVersion=2;";
+            Assert.Equal(1,edit.ExecuteNonQuery());
+        }
+        var missing = Assert.Throws<InvalidOperationException>(
+            () => runner.VerifyRecordedHashes(connection));
+        Assert.Contains("missing",missing.Message,StringComparison.OrdinalIgnoreCase);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => runner.UpgradeAsync(connection));
+
+        using (var edit = connection.CreateCommand())
+        {
+            edit.CommandText = "UPDATE SchemaVersions SET Sha256=$hash WHERE SchemaVersion=2;";
+            edit.Parameters.AddWithValue("$hash",runner.ComputeExpectedHash(V002));
+            edit.ExecuteNonQuery();
+        }
+        runner.VerifyRecordedHashes(connection);
+        using (var remove = connection.CreateCommand())
+        {
+            remove.CommandText = "DELETE FROM SchemaVersions WHERE SchemaVersion=1;";
+            remove.ExecuteNonQuery();
+        }
+        var gap = Assert.Throws<InvalidOperationException>(
+            () => runner.VerifyRecordedHashes(connection));
+        Assert.Contains("missing",gap.Message,StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task UpgradeAsync_FailedMigration_RollsBackItsOwnStep()
     {
         using var context = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex);
