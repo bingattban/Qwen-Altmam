@@ -11,7 +11,7 @@ personnel records in the user's real profile, and never calls the internet.
 ## Preparation (use separate x86 and x64 clean disposable Windows machines)
 
 1. Obtain the four ACTUAL package binaries and the corresponding two
-   `SHA256SUMS.txt` files from a **single successful Release workflow** whose
+   `SHA256SUMS.txt` and `BUILD_METADATA.json` files from a **single successful Release workflow** whose
    exact source commit matches both successful Windows Core and Release runs.
    The independent four-file provenance artifact must also be green. Extract
    GitHub Actions *artifact container ZIPs* first: only actual internal customer
@@ -50,12 +50,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$folder\verify-clean-of
   -PortableZip "$folder\AlTamamDaily_${version}_Portable_${arch}.zip" `
   -SetupExe "$folder\AlTamamDaily_${version}_Setup_${arch}.exe" `
   -Sha256Sums "$folder\SHA256SUMS.txt" `
+  -BuildMetadata "$folder\BUILD_METADATA.json" `
   -SourceSha $sourceSha -ReleaseRunId $releaseRunId `
   -ConfirmDisposableWindowsAccount `
   -EvidencePath "$folder\smoke-${arch}.json"
 ```
 
-The command performs true SHA-256 verification of the exact two binaries; full
+The command checks BUILD_METADATA checkout/source SHA, release version, architecture, each byte size and SHA256 against actual bytes. It performs true SHA-256 verification of both binaries; full
 Portable extraction/direct execution; real WPF/WebView2 RTL/modal plus SQLCipher
 synthetic bridge-role checks; Portable-folder relocation; genuine Inno Setup
 install/uninstall/reinstall and AppData preservation. It refuses stale/incorrect
