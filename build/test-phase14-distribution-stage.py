@@ -83,7 +83,7 @@ class Phase14DistributionTests(unittest.TestCase):
             stage_module.stage(self.source, self.dist, ARCH, CHECKOUT, "c" * 40, VERSION)
         (self.source / self.files[1]["file"]).write_bytes(b"tampered")
         with self.assertRaises(ValueError):
-            stage_module.stage(self.source, self.dist, ARCH, CHECKOUT, HEAD)
+            stage_module.stage(self.source, self.dist, ARCH, CHECKOUT, HEAD, VERSION)
         self.assertFalse((self.dist / "installer" / self.files[1]["file"]).exists())
 
     def test_staging_rejects_architecture_mismatch_and_incomplete_metadata(self):
@@ -91,7 +91,7 @@ class Phase14DistributionTests(unittest.TestCase):
             stage_module.stage(self.source, self.dist, "Windows-64bit", CHECKOUT, HEAD, VERSION)
         (self.source / "SHA256SUMS.txt").unlink()
         with self.assertRaises(ValueError):
-            stage_module.stage(self.source, self.dist, ARCH, CHECKOUT, HEAD)
+            stage_module.stage(self.source, self.dist, ARCH, CHECKOUT, HEAD, VERSION)
 
 
 if __name__ == "__main__":
