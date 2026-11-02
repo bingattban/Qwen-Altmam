@@ -102,6 +102,11 @@ public static class BridgeRequestParser
         string? requestId = ReadString(obj, BridgeProtocol.RequestIdField, required: true);
         if (string.IsNullOrEmpty(requestId) || requestId.Length > BridgeProtocol.MaxRequestIdLength)
             Throw(BridgeErrorCodes.ValidationError, "معرّف الطلب مفقود أو خارج الحدود.");
+        // Correlation IDs may not contain whitespace, Unicode confusables,
+        // path separators or controls. The existing UI emits 32 hex chars.
+        foreach (char ch in requestId!)
+            if (!char.IsAsciiLetterOrDigit(ch) && ch != '-' && ch != '_')
+                Throw(BridgeErrorCodes.ValidationError, "معرّف الطلب يحتوي على رموز غير مسموحة.");
 
         if (!obj.TryGetPropertyValue(BridgeProtocol.ProtocolVersionField, out JsonNode? protoNode) || protoNode is null)
             Throw(BridgeErrorCodes.ValidationError, "إصدار البروتوكول مفقود.");

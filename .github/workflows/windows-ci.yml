@@ -45,6 +45,11 @@ jobs:
         run: |
           python build/test-phase15-handover-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 15 static contract regression failed' }
+      - name: Section 08 canonical UI-to-native bridge and response envelope contract
+        shell: pwsh
+        run: |
+          python build/test-section08-bridge-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Section 08 UI/native contract regression' }
       - name: Phase 15 all-four SHA256 provenance negative-path tests
         shell: pwsh
         run: |

@@ -135,7 +135,7 @@ public sealed class WebView2BridgeDispatcher
                 || operationId.Any(ch => !char.IsAsciiLetterOrDigit(ch) && ch != '-' && ch != '_'))
                 return Fail(request.RequestId, BridgeErrorCodes.ValidationError,
                     "معرف العملية operationId إلزامي من 16 إلى 128 حرفاً لاتينياً أو رقماً.",
-                    BridgeOutcomeKind.ProtocolError);
+                    BridgeOutcomeKind.ProtocolError, field: "operationId");
         }
 
         // 6) Anti-replay: a requestId is accepted only once per authenticated
@@ -193,7 +193,8 @@ public sealed class WebView2BridgeDispatcher
             && expected != actual)
         {
             return Fail(request.RequestId, BridgeErrorCodes.ConflictStale,
-                "نسخة البيانات قديمة، أعد التحميل قبل الحفظ.", BridgeOutcomeKind.Conflict);
+                "نسخة البيانات قديمة، أعد التحميل قبل الحفظ.", BridgeOutcomeKind.Conflict,
+                expectedVersion: expected, actualVersion: actual);
         }
 
         // 8) Tie the request's lifetime to the SERVER's nonce revocation.
@@ -230,7 +231,23 @@ public sealed class WebView2BridgeDispatcher
                 }
                 finally { _gate.Release(); }
             }
-            var shaped = response with { RequestId = request.RequestId };
+            // Never expose accidental error payloads as trusted data.
+            // Actual audit IDs are obtained ONLY from native service results;
+            // uncommitted, unaudited reads never manufacture an audit receipt.
+            string? auditEventId = response.AuditEventId;
+            if (registration.IsMutating && response.Success &&
+                string.IsNullOrWhiteSpace(auditEventId) &&
+                response.Data is JsonObject data && data["auditEventId"] is JsonNode auditNode)
+            {
+                try { auditEventId = auditNode.GetValue<string>(); }
+                catch (InvalidOperationException) { /* no trustworthy ID */ }
+            }
+            var shaped = response with {
+                RequestId = request.RequestId,
+                Data = response.Success ? response.Data : null,
+                AuditEventId = response.Success && registration.IsMutating &&
+                    !string.IsNullOrWhiteSpace(auditEventId) ? auditEventId : null
+            };
             return new BridgeDispatchResult(shaped, shaped.Success ? BridgeOutcomeKind.Success : BridgeOutcomeKind.HandlerError);
         }
         catch (OperationCanceledException) when (executionToken.IsCancellationRequested)
@@ -300,8 +317,24 @@ public sealed class WebView2BridgeDispatcher
         return "";
     }
 
-    private static BridgeDispatchResult Fail(string requestId, string code, string message, BridgeOutcomeKind kind)
-        => new(new BridgeResponse(requestId, false, null, code, message), kind);
+    private static BridgeDispatchResult Fail(
+        string requestId, string code, string message, BridgeOutcomeKind kind,
+        string? field = null, long? expectedVersion = null, long? actualVersion = null)
+    {
+        var response = new BridgeResponse(requestId, false, null, code, message)
+        {
+            ValidationErrors = field is null ? null : new JsonObject { [field] = message },
+            ExpectedVersion = expectedVersion,
+            ActualVersion = actualVersion,
+            ConflictInfo = expectedVersion.HasValue && actualVersion.HasValue
+                ? new JsonObject {
+                    ["reason"] = "OptimisticConcurrency",
+                    ["expectedVersion"] = expectedVersion.Value,
+                    ["actualVersion"] = actualVersion.Value
+                } : null
+        };
+        return new BridgeDispatchResult(response, kind);
+    }
 }
 
 /// <summary>Server-side registration of one canonical action (ownership metadata comes from action-manifest.json).</summary>
