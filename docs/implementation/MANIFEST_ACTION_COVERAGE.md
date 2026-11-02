@@ -93,8 +93,8 @@ Idempotency and role data remain authoritative in the JSON manifest and C# mirro
 | `CommitImport` | MUTATION | yes | WIRED |
 | `ExportImportIssues` | MUTATION | yes | WIRED |
 | `ExportMonthlyWorkbookSet` | MUTATION | yes | WIRED |
-| `GetExportablePeriods` | READ | no | WIRED |
 | `GetExportProgress` | READ | no | WIRED |
+| `GetExportablePeriods` | READ | no | WIRED |
 | `PreviewImportPlan` | READ | no | WIRED |
 | `PreviewMonthlyExport` | READ | no | WIRED |
 | `QueryImportOutcome` | READ | no | WIRED |
@@ -132,8 +132,8 @@ Idempotency and role data remain authoritative in the JSON manifest and C# mirro
 | `CommitArchivedReturn` | MUTATION | yes | WIRED |
 | `CreatePerson` | MUTATION | yes | WIRED |
 | `GetPersonSummary` | READ | no | WIRED |
-| `PreviewArchivedIdentity` | READ | no | WIRED |
 | `PreviewArchivePersons` | READ | no | WIRED |
+| `PreviewArchivedIdentity` | READ | no | WIRED |
 | `PreviewPersonIdentityUpdate` | READ | no | WIRED |
 | `QueryPersons` | READ | no | WIRED |
 | `SearchPersons` | READ | no | WIRED |
