@@ -1,0 +1,60 @@
+{
+  "schema": "AlTamam.Phase15.PriorCandidateReference.v1",
+  "referenceOnly": true,
+  "notFinalProductionRelease": true,
+  "status": "CI_CANDIDATE_ONLY",
+  "repository": "bingattban/Qwen-Altmam",
+  "phase14MergedPr": 191,
+  "sourcePrHeadSha": "f65f2d4ca468aaf65d4b8825a93790f380a9db5f",
+  "testedPrMergeCheckoutSha": "2505989e7c00e769bba5fb7ce4b57747dcbb732d",
+  "laterMainMergeSha": "c599b9aae191be36cf1ef72193719f2ca2182d60",
+  "version": "0.0.831-ci",
+  "releaseRunId": 41372987701,
+  "coreRunId": 41372987699,
+  "coreConclusion": "success",
+  "releaseConclusion": "success",
+  "manualCleanOfflineAcceptance": "NOT_EXECUTED",
+  "nativeAtomicRestore": "DISABLED",
+  "signing": "false",
+  "source": "Actual SHA256SUMS.txt and BUILD_METADATA.json downloaded from GitHub artifacts 13110143693 and 13110517916",
+  "packages": [
+    {
+      "class": "x86 Portable",
+      "artifactId": 13110288453,
+      "file": "AlTamam-Portable-Windows-32bit.zip",
+      "sha256": "57c072bc13136d1ab1edf4b2e5453dc7620f409638ea5b5e44307053a066cfa0",
+      "bytes": 253072743
+    },
+    {
+      "class": "x86 Installer",
+      "artifactId": 13109739678,
+      "file": "AlTamam-Installer-Windows-32bit.exe",
+      "sha256": "f08b396b1ec5b8e4e3e82b8ee889c65877dc9fd042536020784bb78b3dcfb67c",
+      "bytes": 234396880
+    },
+    {
+      "class": "x64 Portable",
+      "artifactId": 13111120026,
+      "file": "AlTamam-Portable-Windows-64bit.zip",
+      "sha256": "152457eb7fd2017ac18c927825d4bbd5d83cea07bc66669d01106d7539b7b89f",
+      "bytes": 282684763
+    },
+    {
+      "class": "x64 Installer",
+      "artifactId": 13111100046,
+      "file": "AlTamam-Installer-Windows-64bit.exe",
+      "sha256": "d0c518479685e12c5d2cffbee0d332ae713f76d7e8e9618658b20494fe606a75",
+      "bytes": 263098146
+    }
+  ],
+  "performance": {
+    "coreMeasuredSyntheticSearch10kMs": 2.64,
+    "os": "Windows Server 2025 Datacenter build 26100",
+    "cpu": "AMD EPYC 7763",
+    "cores": 2,
+    "logicalProcessors": 4,
+    "memoryBytes": 17174360064,
+    "multiYearMonthAndExport": "NOT_EXECUTED",
+    "hardwareSource": "CI Core perf artifact 13110576360; Release hardware/E2E artifact 13110900123"
+  }
+}

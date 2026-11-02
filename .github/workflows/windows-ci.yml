@@ -45,6 +45,11 @@ jobs:
         run: |
           python build/test-phase15-handover-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 15 static contract regression failed' }
+      - name: Phase 15 all-four SHA256 provenance negative-path tests
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 cross-architecture file checksum or source regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |

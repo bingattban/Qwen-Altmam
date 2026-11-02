@@ -70,6 +70,11 @@ jobs:
         run: |
           python build/test-phase15-handover-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 15 static contract regression failed' }
+      - name: Phase 15 all-four SHA256 provenance negative-path tests
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 cross-architecture file checksum or source regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
@@ -448,13 +453,43 @@ jobs:
           retention-days: 30
           compression-level: 1
 
+  handover-evidence:
+    # Independent same-run x86+x64 customer-file hash verification after the
+    # entire Release test and per-architecture real package smoke matrix.
+    name: Phase 15 independent four-package customer SHA256 audit
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download real current-run Portable Installer and Checksums artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AlTamam-*-rc-${{ env.RELEASE_VERSION }}
+          path: Phase15Downloads
+          merge-multiple: false
+      - name: Independently hash four actual binaries from both architecture jobs
+        shell: pwsh
+        run: |
+          python build/verify-phase15-handover.py Phase15Downloads "$env:RELEASE_VERSION" $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA Phase15Evidence/four-package-inventory.json
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 exact-SHA four-file provenance failed' }
+      - name: Upload verified candidate JSON (NOT owner acceptance)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Phase15-FourPackage-Provenance-${{ env.RELEASE_VERSION }}
+          path: Phase15Evidence/four-package-inventory.json
+          if-no-files-found: error
+          retention-days: 90
+
   clean-windows-acceptance:
     # The main branch automatically packages TESTED CANDIDATES. It is not a claim
     # of completed clean-machine acceptance; manual/tagged candidates retain that gate.
     # NEVER mark nightly/main artifacts as final released deliverables.
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     name: Clean-machine acceptance matrix (15.06) — manual evidence gate
-    needs: package
+    needs: handover-evidence
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

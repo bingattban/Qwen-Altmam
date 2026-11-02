@@ -1,40 +1,61 @@
-# AlTamam Release {VERSION} — build {COMMIT} ({BUILT_UTC})
+# AlTamam Release {VERSION} — tested SHA {CHECKOUT_SHA}
 
-**Status: RELEASE CANDIDATE.** Publication is blocked until the Phase 16 gate passes and the
-owner explicitly approves (directive 15.08). Nothing in this file may claim "secure" for an
-unsigned build.
+**STATUS: UNSIGNED CI RELEASE CANDIDATE — NO-GO** until the exact-SHA
+independent four-class clean OFFLINE Windows and native recovery gates pass
+and the owner explicitly signs off. This is a TEMPLATE, not a signed release.
 
-## Artifacts (both produced by workflow `Windows Release Packages (Phase 15)`)
-| Artifact | SHA-256 | Size |
-|---|---|---|
-| AlTamam-Portable-win-x64.zip | {SHA_PORTABLE} | {BYTES_PORTABLE} |
-| AlTamam-Installer-win-x64.exe | {SHA_INSTALLER} | {BYTES_INSTALLER} |
+## Immutable build identities
 
-Verify before use: `Get-FileHash -Algorithm SHA256 <file>` must equal SHA256SUMS.txt from the same run.
+- Tested checkout SHA: `{CHECKOUT_SHA}` (on pull_request this can be a
+  synthetic GitHub merge ref, NOT the later `main` merge commit)
+- Source PR head SHA: `{SOURCE_HEAD_SHA}`
+- Windows Core run: {CORE_RUN_URL}, conclusion: {CORE_CONCLUSION}
+- Windows Release run: {RELEASE_RUN_URL}, conclusion: {RELEASE_CONCLUSION}
+- Windows runner / hardware evidence: {HARDWARE_EVIDENCE}
+- Signed binary proof: {SIGNATURE_EVIDENCE_OR_UNSIGNED}
+- Manual offline/upgrade/cross-PC acceptance: {ACCEPTANCE_STATUS — NOT_EXECUTED unless independently attached}
 
-## Signing
-Signing: **{SIGNED_OR_UNSIGNED}**. Unsigned candidates carry NO security endorsement; SmartScreen/AV
-prompts are expected and are not bypassed by renaming or fake manifests. Optional signing runs only
-with an owner-provisioned approved certificate stored in repository secrets (never in the repo).
+## Actual customer artifacts
 
-## Contents / runtime strategy (15.05)
-- Genuine WPF executable `AlTamam.DesktopHost.exe` (.NET 10 self-contained, win-x64, layout validated
-  by build/validate-layout.py in CI: real PE header check, WebView2Loader.dll, native SQLCipher under runtimes/).
-- Bundled offline WebUI (69 screens) served from pinned virtual origin https://manger.adwas.example
-  via WebView2 folder mapping (host-resource access = Deny); strict CSP, no external network.
-- WebView2 Evergreen runtime required: detected at first run; if absent the app shows a bilingual
-  prerequisite message. Offline-bundled fixed-version runtime is an OPEN OWNER DECISION — do not ship
-  until decided. Minimum OS: Windows 10 20H2+ x64 (WebView2 SDK baseline; recorded as untested on older builds).
+**Fill ONLY from `SHA256SUMS.txt` and `BUILD_METADATA.json` of the same
+tested Release workflow** (never from the outer GitHub artifact ZIP digest).
 
-## Installer policy (15.04)
-Inno Setup 6, admin install to Program Files, per-user writable data in %LOCALAPPDATA%\AlTamam
-(DB + backups + DPAPI-protected key file). Uninstall NEVER deletes user data; upgrade-in-place
-preserves it. Portable ZIP stores data in .\data beside the EXE.
+| Windows class | Real CI file | SHA-256 (fill from run) | Bytes |
+|---|---|---|---|
+| x86 Portable | `AlTamam-Portable-Windows-32bit.zip` | {X86_PORTABLE_SHA256} | {X86_PORTABLE_BYTES} |
+| x86 Installer | `AlTamam-Installer-Windows-32bit.exe` | {X86_INSTALLER_SHA256} | {X86_INSTALLER_BYTES} |
+| x64 Portable | `AlTamam-Portable-Windows-64bit.zip` | {X64_PORTABLE_SHA256} | {X64_PORTABLE_BYTES} |
+| x64 Installer | `AlTamam-Installer-Windows-64bit.exe` | {X64_INSTALLER_SHA256} | {X64_INSTALLER_BYTES} |
 
-## Tested on
-CI matrix evidence links: {RUN_URL}. Clean-machine acceptance (15.06): {ACCEPTANCE_STATUS —
-PENDING until logged with run URL; no pass claimed without evidence}.
+Check each with PowerShell: `Get-FileHash -Algorithm SHA256 -LiteralPath ".\PACKAGE"`.
 
-## Known limitations carried into Phase 16
-- UI smoke beyond --layout-selfcheck requires interactive session tests (owner-run checklist).
-- License report generation step pending owner choice of tooling.
+## Offline runtime and data policy
+
+- Genuine self-contained `.NET 10` WPF executable with native SQLCipher,
+  matching x86/x64 WebView2 loader, Arabic fonts and locally bundled
+  license-compliant Microsoft Edge WebView2 offline runtime installer.
+  Normal startup NEVER needs internet; missing runtime must be installed
+  from the local `Prerequisites` directory. A clean system test is required.
+- Both Portable and Installer use exactly
+  `%LOCALAPPDATA%\AlTamam` **for the same Windows account**, regardless of
+  EXE extraction folder. **There is no adjacent `.\data` mode.**
+- Portable runs from the extracted `AlTamam.DesktopHost.exe`. Installer
+  uses Inno Setup and preserves per-user DB/key/backups across uninstall.
+- The same-user DPAPI key file does NOT automatically transfer to another PC.
+  Cross-PC recovery requires separately encrypted portable recovery material
+  and independent validation; no silent copy, migration or restore.
+- All production resources are local with CSP/virtual-host restrictions;
+  the CI packaging step may download an authentic runtime prerequisite
+  during build, but the resulting customer package works offline.
+- The end-user `RestoreDatabaseAtomically` route remains DISABLED.
+  A backup read-only preview is NOT a restored live database.
+
+## Non-final limitations and owner approval
+
+Document actual clean Windows runs for x86 Portable/Installer and x64
+Portable/Installer, historical equality/10k multi-year measurement, old→new
+upgrade, offline missing runtime, physical disk interruptions, SQLCipher
+recovery from independent Windows account, signing/license and P0/P1 triage.
+
+{OWNER_SIGNATURE_OR_PENDING} / {VERIFIER_SIGNATURE_OR_PENDING}
+See `docs/release/GO_NO_GO.md` and `docs/support/FINAL_VERIFICATION_CHECKLIST.md`.

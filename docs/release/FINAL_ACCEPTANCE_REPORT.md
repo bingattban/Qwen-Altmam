@@ -1,3 +1,20 @@
+# 2026-11-02 — current Phase 15 evidence location
+
+**Read [GO_NO_GO.md](GO_NO_GO.md) and
+[PHASE15_ACCEPTANCE_MATRIX.md](PHASE15_ACCEPTANCE_MATRIX.md) for CURRENT
+project state.** This file retains historical 2026-10-29/10-23 reports with
+old repository links, old numbering, retired data-root assumptions and
+outdated test counts; they are NOT current operating instructions.
+The current repository is `bingattban/Qwen-Altmam`; Phase 14 PR #191
+merged at `c599b9aae191be36cf1ef72193719f2ca2182d60`.
+The four genuine PR #191 package-file SHA-256 values, not outer artifact
+wrapper digests, are recorded in current GO_NO_GO and in
+`artifacts/REFERENCE_PR191_CANDIDATE.json`.
+**Independent clean OFFLINE Windows, native restore, cross-PC recovery,
+multi-year 10k benchmark and owner signoff remain NO-GO.**
+
+---
+
 # Current evidence addendum — 2026-10-29 (owner plan, introductory directive)
 
 **Current governing repository:** [`bingattban2/Qwen-Altmam`](https://github.com/bingattban2/Qwen-Altmam).

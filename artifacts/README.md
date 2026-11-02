@@ -16,3 +16,11 @@ Reported GitHub Actions candidate output classes:
 Download from that real run, inspect `BUILD_METADATA.json` and **compute actual SHA-256 of the extracted customer files**. These outputs are CI release CANDIDATES, not owner-approved production releases. Full clean OFFLINE Windows and native restore signoff missing; see `docs/release/GO_NO_GO.md`.
 
 The working release pipeline stages verified byte-identical files under `dist/portable/`, `dist/installer/`, `dist/metadata/` ON THE WINDOWS CI RUNNER; those executable bytes are uploaded as artifacts, not automatically committed to this Git repository.
+
+The verified prior PR #191 customer-file SHA-256 values, exact tested checkout
+and actual filenames are also in `artifacts/REFERENCE_PR191_CANDIDATE.json`,
+sourced from the run's downloadable `SHA256SUMS.txt` and `BUILD_METADATA.json`
+files. This reference is never a replacement for current-run rehashing.
+The Phase 15 `handover-evidence` job independently re-downloads all four
+new customer files and both checksum manifests and uploads an inventory
+marked `CI_CANDIDATE_ONLY_NOT_PRODUCTION_ACCEPTANCE`.
