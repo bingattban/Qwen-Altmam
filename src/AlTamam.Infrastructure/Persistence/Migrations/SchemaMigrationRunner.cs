@@ -287,10 +287,16 @@ public sealed class SchemaMigrationRunner
         {
             if (!migration.RecordsHash) continue; // pre-hardening bootstrap rows carry no pin by design
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT Sha256 FROM SchemaVersions WHERE SchemaVersion = $v;";
+            cmd.CommandText = "SELECT MigrationName,Sha256 FROM SchemaVersions WHERE SchemaVersion = $v;";
             cmd.Parameters.Add("$v", SqliteType.Integer).Value = migration.Version;
-            var recorded = cmd.ExecuteScalar() as string;
-            if (recorded is null) continue; // legacy row without hash column (pre-V002 databases)
+            using var row = cmd.ExecuteReader();
+            if (!row.Read() || row.IsDBNull(0) || row.IsDBNull(1) ||
+                !string.Equals(row.GetString(0), migration.Name, StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(row.GetString(1)))
+                throw new InvalidOperationException(
+                    $"Migration pin missing or mismatched for '{migration.Name}' (version {migration.Version}). " +
+                    "A released migration must keep its original name and SHA-256 record.");
+            string recorded = row.GetString(1);
             string expected = ComputeExpectedHash(migration);
             if (!string.Equals(recorded, expected, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
