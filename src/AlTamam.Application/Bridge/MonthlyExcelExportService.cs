@@ -52,8 +52,17 @@ public sealed class MonthlyExcelExportService
         if(stem.Length is <1 or >119 || stem!=stem.Trim() ||
            !stem.All(c=>char.IsLetterOrDigit(c)||c is ' ' or '-' or '_' or '(' or ')'))
             return false;
-        if(new[]{"CON","PRN","AUX","NUL","COM1","COM2","COM3","LPT1","LPT2"}
-            .Contains(stem,StringComparer.OrdinalIgnoreCase))return false;
+        // Windows device basenames remain reserved even with an .xlsx extension.
+        // Validate uniformly on Windows and non-Windows test runners, before any
+        // .part file or output directory is created. COM1..COM9 and LPT1..LPT9
+        // are all reserved; the historical shorter list missed COM4 and LPT9.
+        if(stem.Equals("CON",StringComparison.OrdinalIgnoreCase) ||
+           stem.Equals("PRN",StringComparison.OrdinalIgnoreCase) ||
+           stem.Equals("AUX",StringComparison.OrdinalIgnoreCase) ||
+           stem.Equals("NUL",StringComparison.OrdinalIgnoreCase) ||
+           (stem.Length==4 && (stem.StartsWith("COM",StringComparison.OrdinalIgnoreCase) ||
+                               stem.StartsWith("LPT",StringComparison.OrdinalIgnoreCase)) &&
+            stem[3] is >= '1' and <= '9'))return false;
         name=stem+".xlsx";
         return true;
     }
