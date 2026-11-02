@@ -23,30 +23,37 @@ try {
     $zipSum = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     $setupSum = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText($sums, "$zipSum  $(Split-Path -Leaf $zip)`n$setupSum  $(Split-Path -Leaf $setup)`n")
-    $args = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$script,
+    $cliArgs = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$script,
         '-Version',$version,'-Architecture','win-x64','-PortableZip',$zip,
         '-SetupExe',$setup,'-Sha256Sums',$sums,'-IntegrityOnly')
-    & powershell.exe @args
+
+    & powershell.exe @cliArgs
     if ($LASTEXITCODE -ne 0) { throw 'Matching exact customer files and SHA-256 were rejected' }
+
+    function Assert-Rejected([string[]]$candidate, [string]$reason) {
+        $original = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            & powershell.exe @candidate *> $null
+            if ($LASTEXITCODE -eq 0) { throw ('Untrusted input accepted: ' + $reason) }
+        }
+        finally { $ErrorActionPreference = $original }
+    }
 
     $badVersions = @('../escape', 'version with spaces', '.hidden')
     foreach ($bad in $badVersions) {
-        $case = @($args)
+        $case = @($cliArgs)
         $case[7] = $bad
-        & powershell.exe @case 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) { throw "Unsafe version passed: $bad" }
+        Assert-Rejected $case ("unsafe version " + $bad)
     }
-    $wrongArch = @($args)
+    $wrongArch = @($cliArgs)
     $wrongArch[9] = 'win-x86'
-    & powershell.exe @wrongArch 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) { throw 'Wrong customer architecture passed' }
+    Assert-Rejected $wrongArch 'wrong architecture'
     Add-Content -LiteralPath $zip -Value 'TAMPERED'
-    & powershell.exe @args 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) { throw 'Tampered portable passed SHA-256 check' }
+    Assert-Rejected $cliArgs 'tampered portable'
     [IO.File]::WriteAllBytes($zip, [Text.Encoding]::ASCII.GetBytes('SYNTHETIC TEST ZIP; NOT A REAL PROGRAM'))
     [IO.File]::AppendAllText($sums, "$zipSum  $(Split-Path -Leaf $zip)`n")
-    & powershell.exe @args 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) { throw 'Duplicate customer checksum passed' }
+    Assert-Rejected $cliArgs 'duplicate checksum'
     Write-Host 'SECTION11 OFFLINE VALIDATOR CONTRACT PASS: exact-name and SHA integrity, unsafe version, arch mismatch, tamper and duplicate rejected; physical UAT NOT EXECUTED'
 }
 finally {
