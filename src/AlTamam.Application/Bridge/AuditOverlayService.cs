@@ -359,14 +359,39 @@ public sealed class AuditOverlayService
         string auditEventId = ReadString(payload, "auditEventId");
         string reason = ReadString(payload, "reason");
         string corrected = ReadString(payload, "correctedDescription");
-        long expectedVersion = ReadInt(payload, "expectedOverlayVersion", 0);
+        // Preserve the old omitted-version default (0), but NEVER silently
+        // coerce a supplied non-integer, negative or overflowing version to 0.
+        // Doing so could authorise an unwanted first overlay write.
+        long expectedVersion = 0;
+        if (payload.ContainsKey("expectedOverlayVersion"))
+        {
+            JsonNode? suppliedVersion = payload["expectedOverlayVersion"];
+            if (suppliedVersion is null)
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "إصدار قيد السجل غير صالح؛ استخدم عدداً صحيحاً غير سالب.",
+                    "expectedOverlayVersion");
+            try { expectedVersion = suppliedVersion.GetValue<int>(); }
+            catch
+            {
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "إصدار قيد السجل غير صالح؛ استخدم عدداً صحيحاً غير سالب.",
+                    "expectedOverlayVersion");
+            }
+            if (expectedVersion < 0)
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "إصدار قيد السجل غير صالح؛ استخدم عدداً صحيحاً غير سالب.",
+                    "expectedOverlayVersion");
+        }
 
         if (string.IsNullOrWhiteSpace(auditEventId))
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "معرّف القيد مطلوب.");
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "معرّف القيد مطلوب.", "auditEventId");
         if (string.IsNullOrWhiteSpace(reason))
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "السبب إلزامي لتعديل أو إخفاء قيد السجل.");
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "السبب إلزامي لتعديل أو إخفاء قيد السجل.", "reason");
         if (!tombstone && string.IsNullOrWhiteSpace(corrected))
-            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "الوصف البديل مطلوب للتعديل الظاهر.");
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "الوصف البديل مطلوب للتعديل الظاهر.", "correctedDescription");
 
         string editedAtUtc = _time.GetUtcNow().ToString("O");
 
@@ -379,7 +404,13 @@ public sealed class AuditOverlayService
                 connection, transaction,
                 tombstone ? "DeleteAuditPresentation" : "UpdateAuditPresentation",
                 principal.UserId, payload, ct).ConfigureAwait(false);
-            if (replay is not null) return replay;
+            if (replay is not null)
+            {
+                if (replay.Success && replay.Data is JsonObject remembered &&
+                    remembered["operationAuditEventId"] is JsonValue savedId)
+                    return replay with { AuditEventId = savedId.GetValue<string>() };
+                return replay;
+            }
             var evidence=await AuditPresentationEvidenceReader.ReadAsync(
                 connection,transaction,auditEventId,ct).ConfigureAwait(false);
             if(evidence is null)
@@ -388,11 +419,20 @@ public sealed class AuditOverlayService
             long currentVersion=before.OverlayVersion;
             if(currentVersion!=expectedVersion)
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
-                    $"تم تعديل القيد من مستخدم آخر (الإصدار الحالي {currentVersion}). حدّث الشاشة وأعد المحاولة.");
+                    $"تم تعديل القيد من مستخدم آخر (الإصدار الحالي {currentVersion}). حدّث الشاشة وأعد المحاولة.")
+                    with {
+                        ExpectedVersion=expectedVersion,
+                        ActualVersion=currentVersion,
+                        ConflictInfo=new JsonObject {
+                            ["reason"]="OverlayVersionStale",
+                            ["auditEventId"]=auditEventId
+                        }
+                    };
             var after=AuditPresentationState.Next(before,tombstone,corrected);
 
             // Meta-audit: the overlay action itself is immutable evidence (atomic in same tx).
-            await BridgeAuditWriter.WriteAsync(connection, transaction, _time,
+            string operationAuditEventId=await BridgeAuditWriter.WriteAsync(
+                connection, transaction, _time,
                 tombstone ? "DeleteAuditPresentation" : "UpdateAuditPresentation",
                 tombstone ? "إخفاء قيد في سجل العمليات" : "تعديل الوصف الظاهر لقيد في سجل العمليات",
                 principal.UserId, principal.Username, actorDisplayName: null,
@@ -452,7 +492,10 @@ public sealed class AuditOverlayService
 
             var result = new JsonObject
             {
+                // Existing auditEventId is the TARGET row (legacy UI contract);
+                // the newly inserted immutable meta-audit has a distinct ID.
                 ["auditEventId"] = auditEventId,
+                ["operationAuditEventId"] = operationAuditEventId,
                 ["overlayVersion"] = currentVersion + 1,
                 ["isTombstoned"] = tombstone,
                 ["beforeState"] = before.ToJson(),
@@ -461,7 +504,9 @@ public sealed class AuditOverlayService
             };
             await MutationIdempotency.StoreAsync(connection, transaction,
                 receipt, result, _time, ct).ConfigureAwait(false);
-            return BridgeHelpers.Ok(result);
+            return BridgeHelpers.Ok(result) with {
+                AuditEventId=operationAuditEventId
+            };
         }, ct).ConfigureAwait(false);
     }
 

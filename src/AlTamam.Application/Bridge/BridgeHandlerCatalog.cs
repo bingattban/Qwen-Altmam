@@ -822,6 +822,7 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.UpdateAuditPresentationAsync(payload, principal!, ct).ConfigureAwait(false);
             return inner.Success
                 ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.VisibleAuditOverlayChanged))
+                    with { AuditEventId = inner.AuditEventId }
                 : Fail(req, inner);
         },
         "DeleteAuditPresentation" => async (req, principal, ct) =>
@@ -832,6 +833,7 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.DeleteAuditPresentationAsync(payload, principal!, ct).ConfigureAwait(false);
             return inner.Success
                 ? Done(req, inner.Data, Invalidation(UiInvalidationEvents.VisibleAuditOverlayChanged))
+                    with { AuditEventId = inner.AuditEventId }
                 : Fail(req, inner);
         },
         "QueryAuditPresentationChanges" => async (req, principal, ct) =>
