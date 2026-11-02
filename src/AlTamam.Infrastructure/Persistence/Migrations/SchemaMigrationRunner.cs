@@ -94,6 +94,11 @@ public sealed class SchemaMigrationRunner
             throw new InvalidOperationException(
                 $"Database schema version {current} is newer than the application's latest known version {LatestKnownVersion}. Refusing to downgrade.");
 
+        // Validate every already-applied migration BEFORE attempting any new
+        // DDL or data migration. A null, absent or altered pin must not be
+        // discovered only after later irreversible steps have committed.
+        VerifyRecordedHashes(connection);
+
         foreach (var migration in _migrations.Where(m => m.Version > current))
         {
             cancellationToken.ThrowIfCancellationRequested();
