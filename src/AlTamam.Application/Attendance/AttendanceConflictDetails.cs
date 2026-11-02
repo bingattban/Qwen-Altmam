@@ -79,7 +79,13 @@ internal static class AttendanceConflictDetails
             "«"+x["name"]?.GetValue<string>()+"» (الرقم (ع): "+
             x["serviceNumberA"]?.GetValue<string>()+"): "+
             x["reason"]?.GetValue<string>()));
-        return new("",false,new JsonObject {["conflicts"]=conflicts},
-            code,"لم يُحفظ أي تحضير بسبب التعارضات التالية:\n"+details);
+        // Error payload is never successful Data: the dispatcher intentionally
+        // strips error Data. Keep every verified person/reason in ConflictInfo,
+        // which survives the canonical WebView2 response envelope.
+        return new BridgeResponse("",false,null,code,
+            "لم يُحفظ أي تحضير بسبب التعارضات التالية:\n"+details)
+        {
+            ConflictInfo = new JsonObject {["conflicts"]=conflicts}
+        };
     }
 }
