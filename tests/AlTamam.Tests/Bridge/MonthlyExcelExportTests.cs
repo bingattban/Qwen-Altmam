@@ -274,6 +274,65 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task MonthlyExport_UsesActualSiteName_ForPreviewAndEachWorkbook()
+    {
+        // A deliberately awkward real site caption must become a safe file name
+        // without using an ordinal such as "موقع-01" or a client-forged site name.
+        using(var c=_db.CreateOpenConnection())
+        using(var change=c.CreateCommand())
+        {
+            change.CommandText="UPDATE Sites SET VisibleName='موقع الربوة / القطاع A' WHERE SiteId='SITE-UNSPECIFIED';";
+            Assert.Equal(1,await change.ExecuteNonQueryAsync());
+        }
+        var service=new MonthlyExcelExportService(_db);
+        var selected=Period("SITE-UNSPECIFIED");
+        selected["directory"]=_output;
+        var preview=await service.PreviewAsync(selected,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var summary=Assert.IsType<JsonObject>(preview.Data);
+        Assert.Equal("موقع الربوة / القطاع A",summary["siteName"]!.GetValue<string>());
+        var suggestion=summary["suggestedFileName"]!.GetValue<string>();
+        Assert.Contains("موقع الربوة",suggestion);
+        Assert.Contains("2026-10",suggestion);
+        Assert.DoesNotContain("/",suggestion);
+
+        var single=await service.ExportAsync(selected,CancellationToken.None);
+        Assert.True(single.Success,single.UserMessage);
+        string one=Assert.IsType<JsonObject>(single.Data)["filePath"]!.GetValue<string>();
+        _exports.Add(one);
+        Assert.Contains("موقع الربوة",Path.GetFileName(one));
+        Assert.DoesNotContain("موقع-01",Path.GetFileName(one));
+        Assert.True(File.Exists(one));
+        Assert.DoesNotContain("/",Path.GetFileName(one));
+        var repeated=await service.ExportAsync(selected,CancellationToken.None);
+        Assert.True(repeated.Success,repeated.UserMessage);
+        string second=Assert.IsType<JsonObject>(repeated.Data)["filePath"]!.GetValue<string>();
+        _exports.Add(second);
+        Assert.NotEqual(one,second);
+        Assert.True(File.Exists(one));
+
+        var all=Period();
+        all["directory"]=_output;
+        var response=await service.ExportAsync(all,CancellationToken.None);
+        Assert.True(response.Success,response.UserMessage);
+        var result=Assert.IsType<JsonObject>(response.Data);
+        var files=Assert.IsType<JsonArray>(result["files"]).OfType<JsonObject>().ToArray();
+        Assert.Equal(2,files.Length);
+        Assert.Equal("جميع المواقع",files[0]["siteName"]!.GetValue<string>());
+        Assert.Equal("موقع الربوة / القطاع A",files[1]["siteName"]!.GetValue<string>());
+        Assert.Contains("موقع الربوة",Path.GetFileName(files[1]["filePath"]!.GetValue<string>()));
+        Assert.DoesNotContain("موقع-01",Path.GetFileName(files[1]["filePath"]!.GetValue<string>()));
+        foreach(var item in files)
+        {
+            var saved=item["filePath"]!.GetValue<string>();
+            _exports.Add(saved);
+            Assert.True(File.Exists(saved));
+            Assert.Equal(_output,Path.GetDirectoryName(saved));
+        }
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
     public async Task WindowsReservedDeviceBasenames_AreRejectedBeforeAnyXlsxWrite()
     {
         // Windows reserves all numbered COM/LPT device names, with or without
