@@ -978,7 +978,7 @@
           const properties=el("dl","app-preview-properties");
           [
             ["الشهر",year+"-"+String(month).padStart(2,"0")],
-            ["النطاق",STATE.siteId?"الموقع المحدد":"جميع المواقع"],
+            ["النطاق",preview.siteName|| (STATE.siteId?"الموقع المحدد":"جميع المواقع")],
             ["عدد الأفراد",String(preview.personCount)],
             ["عدد ملفات Excel",Number.isSafeInteger(preview.fileCount)&&preview.fileCount>0?
               String(preview.fileCount):"يُحدد عند إنشاء الملفات"]
@@ -996,7 +996,8 @@
           const fileLabel=el("label","section-description","اسم ملف Excel المقترح");
           const fileInput=el("input","form-control");
           fileInput.type="text";
-          fileInput.value="التمام الشهري_"+year+"-"+String(month).padStart(2,"0")+".xlsx";
+          fileInput.value=preview.suggestedFileName||
+            ("التمام الشهري_"+year+"-"+String(month).padStart(2,"0")+".xlsx");
           fileInput.setAttribute("aria-label","اسم ملف التصدير الشهري");
           const destination=message("جارٍ قراءة مجلد الحفظ الحالي...");
           let directory="";
@@ -1080,7 +1081,7 @@
                 throw new Error("لم يرجع الخادم قائمة ملفات جميع المواقع مكتملة.");
               const lines=files.length?
                 "تم حفظ "+files.length+" ملفات Excel: "+files.map((f,i)=>
-                  (i===0?"الكشف الموحد":("الموقع "+i))+" — "+f.filePath).join(" | "):
+                  (f.siteName||(i===0?"جميع المواقع":"الموقع المحدد"))+" — "+f.filePath).join(" | "):
                 "تم حفظ الكشف بنجاح: "+result.filePath;
               exportPanel.replaceChildren(message(lines),dismissExport);
             }catch(error){

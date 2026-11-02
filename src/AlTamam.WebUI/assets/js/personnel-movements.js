@@ -75,9 +75,19 @@ async function transfer(host,external){
     else payload.destinationSiteId=to.value;
     previewButton.disabled=true;
     try{
-      const data=(await api().invoke(external?"PreviewExternalTransfer":"PreviewInternalTransfer",payload)).data||{};
+      note.replaceChildren(el("p","جارٍ إعداد معاينة النقل والتحقق من المواقع والأفراد...","section-description"));
+      const data=(await api().invoke(external?"PreviewExternalTransfer":"PreviewInternalTransfer",
+        payload,{timeoutMs:60000})).data||{};
       if(!card.isConnected)return;
-      if(!data.previewToken||!Array.isArray(data.persons))throw Error("فشلت المعاينة.");
+      const expectedIds=new Set(payload.personIds);
+      if(typeof data.previewToken!=="string"||data.previewToken.length<32||
+         !Array.isArray(data.persons)||data.persons.length!==expectedIds.size||
+         data.count!==expectedIds.size||typeof data.destinationName!=="string"||
+         !data.persons.every(p=>p&&expectedIds.has(p.personId)&&
+           p.sourceSiteId===payload.sourceSiteId)||
+         new Set(data.persons.map(p=>p.personId)).size!==expectedIds.size)
+        throw Error("لم تتطابق معاينة النقل من الخدمة مع الأفراد المحددين؛ لم تُنفذ العملية.");
+      note.replaceChildren();
       // The complete server-verified movement preview opens immediately as a modal.
       // Keep the same token and operationId for a possible lost-response retry.
       const transferReview=window.AltamamDialog?.transferReview;
@@ -86,24 +96,57 @@ async function transfer(host,external){
       const operationId=window.crypto?.randomUUID?.()||
         ("MOV-"+Date.now()+"-"+Math.random().toString(36).slice(2)+
          Math.random().toString(36).slice(2));
+      let submitting=false;
       async function commitSamePlan(){
-        try{
-          const result=await api().invoke(external?"CommitExternalTransfer":"CommitInternalTransfer",
-            {previewToken:data.previewToken,operationId});
-          reset();page=1;await load();
-          note.replaceChildren(el("p","تم حفظ نقل "+result.data.count+" فرداً وسجل العملية.","settings-success"));
-        }catch(error){
-          err(note,error);
-          // The commit may have succeeded before the response was lost.
-          // Retrying with the exact same operation identity is safe and idempotent.
-          const dismiss=btn("إغلاق نافذة إعادة المحاولة",()=>confirmation.replaceChildren());
-          dismiss.className="btn btn-outline app-modal-close";
-          confirmation.replaceChildren(dismiss,
-            el("p","تعذّر تأكيد نتيجة النقل. لا تتكرر العملية إلا بعد معاينة الخطة نفسها.","section-description"),
-            btn("إعادة مراجعة ومحاولة التأكيد",async()=>{
-            if(await transferReview(data))await commitSamePlan();
-          }));
+        if(submitting||!card.isConnected)return;
+        // The user may have changed the source or destination while a native
+        // preview was in flight. Never commit a plan for a different choice.
+        if(from.value!==payload.sourceSiteId ||
+           (external ? outside.value.trim()!==payload.destinationExternalName :
+            to.value!==payload.destinationSiteId) ||
+           selected.size!==expectedIds.size ||
+           !Array.from(selected).every(id=>expectedIds.has(id))){
+          return err(note,new Error("تغيّر اختيار الأفراد أو مواقع النقل أثناء المعاينة؛ أعد معاينة الخطة."));
         }
+        submitting=true;
+        confirmation.replaceChildren();
+        note.replaceChildren(el("p","جارٍ تثبيت النقل في قاعدة البيانات وتسجيل الحركة...","section-description"));
+        try{
+          const response=await api().invoke(
+            external?"CommitExternalTransfer":"CommitInternalTransfer",
+            {previewToken:data.previewToken,operationId},{timeoutMs:120000});
+          if(!response?.data||response.data.count!==expectedIds.size||
+             response.data.destinationName!==data.destinationName){
+            const error=new Error("لم يتطابق عدد أو وجهة النقل المؤكد مع المعاينة. تحقّق من الأرشيف قبل إعادة المحاولة.");
+            error.errorCode="BridgeResultMismatch";throw error;
+          }
+          if(!card.isConnected)return;
+          reset();page=1;
+          note.replaceChildren(el("p","تم حفظ نقل "+expectedIds.size+
+            " فرداً إلى "+data.destinationName+" وتسجيل العملية.","settings-success"));
+          // Refresh is a separate read. A failed refresh must not turn an
+          // already committed, receipted transfer into a false retry prompt.
+          await load();
+        }catch(error){
+          if(!card.isConnected)return;
+          err(note,error);
+          if(error?.errorCode==="BridgeTimeout"||error?.errorCode==="BridgeOffline"){
+            // The write may have succeeded before its response was lost:
+            // retry only with the exact same previewToken + operationId.
+            const dismiss=btn("إغلاق نافذة إعادة المحاولة",()=>confirmation.replaceChildren());
+            dismiss.className="btn btn-outline app-modal-close";
+            confirmation.replaceChildren(dismiss,
+              el("p","لم تتأكد نتيجة الحفظ بعد فقدان الاتصال بالخدمة؛ يمكن إعادة إرسال نفس العملية دون تكرارها.","section-description"),
+              btn("إعادة مراجعة ومحاولة التأكيد",async()=>{
+                if(submitting)return;
+                if(await transferReview(data))await commitSamePlan();
+              }));
+          }else{
+            confirmation.replaceChildren(el("p",
+              "رفضت الخدمة الخطة أو تعذّر إثبات نتيجتها؛ تحقّق من الأرشيف ثم أعد معاينة النقل عند الحاجة.",
+              "section-description"));
+          }
+        }finally{submitting=false;}
       }
       if(await transferReview(data))await commitSamePlan();
     }catch(e){err(note,e);}

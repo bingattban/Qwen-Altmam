@@ -274,6 +274,89 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task MonthlyExport_UsesActualSiteName_ForPreviewAndEachWorkbook()
+    {
+        // Add a real non-system SQLCipher site with enrolled personnel. Never
+        // modify SITE-UNSPECIFIED: V013 correctly prevents renaming that site.
+        using(var c=_db.CreateOpenConnection())
+        using(var change=c.CreateCommand())
+        {
+            change.CommandText="""
+                INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,ActiveFlag,
+                    CreatedAtUtc,RowVersion)
+                VALUES('SITE-EXPORT-NAMED','موقع الربوة / القطاع A','موقع الربوة القطاع A',
+                    0,1,'2026-10-01T07:00:00Z',1);
+                INSERT INTO SiteNameHistory(SiteId,VisibleNameSnapshot,ValidFromLocalDate,
+                    ValidToLocalDate,ChangedByUserId,RecordedAtUtc)
+                VALUES('SITE-EXPORT-NAMED','موقع الربوة / القطاع A','2026-10-01',
+                    NULL,'TST-U','2026-10-01T07:00:00Z');
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                    CurrentServiceNumberA,NormalizedServiceNumberA,
+                    FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,
+                    ActiveFlag,RowVersion)
+                VALUES('TST-SITE-EX','فرد موقع الربوة','فرد موقع الربوة','91222','91222',
+                    '2026-10-01','2026-10-01T07:00:00Z',1,1,1);
+                INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,
+                    ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc,Reason)
+                VALUES('TST-SITE-EX','فرد موقع الربوة','91222','2026-10-01',
+                    NULL,'TST-U','2026-10-01T07:00:00Z','سجل تجريبي');
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,
+                    ValidToLocalDate,SourceMovementId,CreatedAtUtc)
+                VALUES('TST-SITE-EX-A','TST-SITE-EX','SITE-EXPORT-NAMED',
+                    '2026-10-01',NULL,NULL,'2026-10-01T07:00:00Z');
+                """;
+            await change.ExecuteNonQueryAsync();
+        }
+        var service=new MonthlyExcelExportService(_db);
+        var selected=Period("SITE-EXPORT-NAMED");
+        selected["directory"]=_output;
+        var preview=await service.PreviewAsync(selected,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var summary=Assert.IsType<JsonObject>(preview.Data);
+        Assert.Equal(1L,summary["personCount"]!.GetValue<long>());
+        Assert.Equal("موقع الربوة / القطاع A",summary["siteName"]!.GetValue<string>());
+        var suggestion=summary["suggestedFileName"]!.GetValue<string>();
+        Assert.Contains("موقع الربوة",suggestion);
+        Assert.Contains("2026-10",suggestion);
+        Assert.DoesNotContain("/",suggestion);
+
+        var single=await service.ExportAsync(selected,CancellationToken.None);
+        Assert.True(single.Success,single.UserMessage);
+        string one=Assert.IsType<JsonObject>(single.Data)["filePath"]!.GetValue<string>();
+        _exports.Add(one);
+        Assert.Contains("موقع الربوة",Path.GetFileName(one));
+        Assert.DoesNotContain("موقع-01",Path.GetFileName(one));
+        Assert.True(File.Exists(one));
+        var repeated=await service.ExportAsync(selected,CancellationToken.None);
+        Assert.True(repeated.Success,repeated.UserMessage);
+        string second=Assert.IsType<JsonObject>(repeated.Data)["filePath"]!.GetValue<string>();
+        _exports.Add(second);
+        Assert.NotEqual(one,second);
+        Assert.True(File.Exists(one));
+
+        var all=Period();
+        all["directory"]=_output;
+        var response=await service.ExportAsync(all,CancellationToken.None);
+        Assert.True(response.Success,response.UserMessage);
+        var result=Assert.IsType<JsonObject>(response.Data);
+        var files=Assert.IsType<JsonArray>(result["files"]).OfType<JsonObject>().ToArray();
+        Assert.Equal(3,files.Length); // consolidated + unspecified + named site
+        Assert.Equal("جميع المواقع",files[0]["siteName"]!.GetValue<string>());
+        var siteFile=Assert.Single(files,x=>x["siteId"]!.GetValue<string>()=="SITE-EXPORT-NAMED");
+        Assert.Equal("موقع الربوة / القطاع A",siteFile["siteName"]!.GetValue<string>());
+        Assert.Contains("موقع الربوة",Path.GetFileName(siteFile["filePath"]!.GetValue<string>()));
+        Assert.DoesNotContain("موقع-01",Path.GetFileName(siteFile["filePath"]!.GetValue<string>()));
+        foreach(var item in files)
+        {
+            var saved=item["filePath"]!.GetValue<string>();
+            _exports.Add(saved);
+            Assert.True(File.Exists(saved));
+            Assert.Equal(_output,Path.GetDirectoryName(saved));
+        }
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
     public async Task WindowsReservedDeviceBasenames_AreRejectedBeforeAnyXlsxWrite()
     {
         // Windows reserves all numbered COM/LPT device names, with or without

@@ -133,6 +133,8 @@ public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDispos
         Assert.Equal(1, data["issueCount"]!.GetValue<int>());
         string filename = data["filePath"]!.GetValue<string>();
         _reports.Add(filename);
+        Assert.Contains("دفعة_الاستيراد",Path.GetFileName(filename));
+        Assert.StartsWith("أخطاء الاستيراد_",Path.GetFileName(filename));
         Assert.False(File.Exists(filename+".part"),"Verified error workbook must not leave .part file.");
         using var archive = ZipFile.OpenRead(filename);
         foreach (string part in new[] {

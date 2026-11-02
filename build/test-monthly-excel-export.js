@@ -37,7 +37,10 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
        days:{[firstDay]:{symbol:"غ",name:"غياب",color:"#EF4444"},
          [currentVisibleDay]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
     if(action==="PreviewMonthlyExport"){
-      const reply={data:{personCount:1,year,month,siteId:payload.siteId,format:"xlsx"}};
+      const reply={data:{personCount:1,year,month,siteId:payload.siteId,
+        siteName:payload.siteId?"غير محدد":"جميع المواقع",
+        suggestedFileName:"التمام الشهري_جميع المواقع_"+year+"-"+String(month).padStart(2,"0")+"_20261103-120000_aabbccdd.xlsx",
+        format:"xlsx"}};
       if(deferMonthlyPreview)
         return new Promise(resolve=>{resolveMonthlyPreview=()=>resolve(reply);});
       return reply;
@@ -46,8 +49,8 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
     if(action==="ExportMonthlyWorkbookSet")return{data:{
       filePath:"C:\\Users\\Test\\Documents\\AlTamam\\Exports\\sample.xlsx",
       format:"xlsx",personCount:1,fileCount:2,files:[
-        {siteId:"",filePath:"C:\\Reports\\sample.xlsx",personCount:1},
-        {siteId:"SITE-UNSPECIFIED",filePath:"C:\\Reports\\site.xlsx",personCount:1}
+        {siteId:"",siteName:"جميع المواقع",filePath:"C:\\Reports\\sample.xlsx",personCount:1},
+        {siteId:"SITE-UNSPECIFIED",siteName:"غير محدد",filePath:"C:\\Reports\\site.xlsx",personCount:1}
       ]}};
     if(action==="GetMonthlyCellDetails")return{data:{personId:payload.personId,businessDate:payload.businessDate,
       personName:"شخص اختباري",serviceNumberA:"X1",siteName:"غير محدد",
@@ -179,6 +182,8 @@ async function main(){
   const chosenName=viewport.all().find(x=>x.tag==="input"&&
     x.attrs["aria-label"]==="اسم ملف التصدير الشهري");
   assert.ok(chosenName,"operator can propose the XLSX filename");
+  assert.ok(chosenName.value.startsWith("التمام الشهري_جميع المواقع_"),
+    "real native preview proposes the authoritative monthly site name");
   chosenName.value="كشف مختار.xlsx";
     await saveAgain.handlers.click();await tick();
   const exported=calls.filter(x=>x.action==="ExportMonthlyWorkbookSet");
@@ -191,6 +196,8 @@ async function main(){
   assert.equal(exported[0].payload.directory,"E:\\\\MonthlyExports");
   const confirmation=viewport.all().map(x=>String(x.textContent)).join(" | ");
   assert.ok(confirmation.includes("sample.xlsx"),"completed export path is rendered");
+  assert.ok(confirmation.includes("غير محدد — "),
+    "multiple Excel files must display their actual site labels, not site ordinal numbers");
   const exportDialog=viewport.all().find(x=>x.className.includes("functional-export-preview"));
   assert.equal(exportDialog.attrs["aria-modal"],"true","Excel preview is an actual modal");
   const dismiss=exportDialog.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق المعاينة");

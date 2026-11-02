@@ -130,8 +130,9 @@ public sealed class ExcelImportOutcomeService
         if (!OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
             return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
                 "مجلد النسخ والتصدير غير متاح؛ غيّره من الإعدادات.");
-        string filename = "أخطاء الاستيراد_" + DateTime.Now.ToString("yyyy-MM-dd",
-            CultureInfo.InvariantCulture) + "_" + Guid.NewGuid().ToString("N") + ".xlsx";
+        // The saved committed import batch, not the requesting browser, owns
+        // the source caption. Always remove unsafe Windows filename characters.
+        string filename=ExcelOutputNames.ImportIssues(Read(batch,"fileName"));
         string destination = Path.Combine(directory, filename);
         string partial = destination + ".part";
         try

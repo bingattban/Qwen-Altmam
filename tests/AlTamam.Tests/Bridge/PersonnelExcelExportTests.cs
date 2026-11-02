@@ -117,6 +117,29 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task SinglePersonExcel_UsesServerResolvedPersonNameInActualWorkbookFilename()
+    {
+        var svc=new PersonnelExcelExportService(_db);
+        var input=new JsonObject
+        {
+            ["mode"]="report",["exportId"]=Guid.NewGuid().ToString("N"),
+            ["personId"]="TST-XLSX-NEW",
+            ["dateFrom"]="2026-10-01",["dateTo"]="2026-10-26"
+        };
+        var preview=await svc.PreviewReportAsync(input,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var expected=Assert.IsType<JsonObject>(preview.Data)["fileName"]!.GetValue<string>();
+        Assert.Contains("الموظف الجديد",expected);
+        Assert.DoesNotContain("TST-XLSX-NEW",expected);
+        var exported=await svc.ExportAsync(input,Actor,CancellationToken.None);
+        Assert.True(exported.Success,exported.UserMessage);
+        var output=Assert.IsType<JsonObject>(exported.Data);
+        Assert.Equal(expected,output["fileName"]!.GetValue<string>());
+        Assert.True(System.IO.File.Exists(File(output)));
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
     public async Task GroupWorkbook_UsesIndependentDisplayOrdinalsWithoutExposingPersonId_ExportAudited()
     {
         var svc=new PersonnelExcelExportService(_db);
