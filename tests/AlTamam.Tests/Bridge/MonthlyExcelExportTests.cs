@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
 using AlTamam.Application.Bridge;
+using AlTamam.Contracts.Bridge;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Infrastructure.Excel.Reports;
 using AlTamam.Tests.Fixtures;
@@ -270,6 +271,36 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
             Assert.False(result.Success,"Unsafe candidate must be rejected: "+candidate);
         }
         Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task WindowsReservedDeviceBasenames_AreRejectedBeforeAnyXlsxWrite()
+    {
+        // Windows reserves all numbered COM/LPT device names, with or without
+        // extensions. These must fail validation on every OS, not merely fall
+        // through to a Windows-specific I/O error after opening a .part file.
+        var service = new MonthlyExcelExportService(_db);
+        var request = Period("SITE-UNSPECIFIED");
+        request["directory"] = _output;
+        string[] blocked = {
+            "COM1.xlsx", "COM4.xlsx", "COM9.xlsx",
+            "LPT1.xlsx", "LPT4.xlsx", "LPT9.xlsx",
+            "CON.xlsx", "PRN.xlsx", "AUX.xlsx", "NUL.xlsx"
+        };
+        var existing = Directory.GetFiles(_output, "*", SearchOption.TopDirectoryOnly)
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+        foreach (string name in blocked)
+        {
+            request["fileName"] = name;
+            var response = await service.ExportAsync(request, CancellationToken.None);
+            Assert.False(response.Success, "Reserved Windows filename must fail: " + name);
+            Assert.Equal(BridgeErrorCodes.ValidationError, response.ErrorCode);
+            Assert.Equal(existing,
+                Directory.GetFiles(_output, "*", SearchOption.TopDirectoryOnly)
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray());
+            Assert.False(File.Exists(Path.Combine(_output, name + ".part")));
+        }
+        Assert.True(_db.HasValidIntegrity());
     }
 
     [Fact]
