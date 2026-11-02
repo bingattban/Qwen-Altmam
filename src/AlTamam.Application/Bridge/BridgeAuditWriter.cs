@@ -20,7 +20,7 @@ internal static class BridgeCorrelationExtensions
 public static class BridgeAuditWriter
 {
     /// <summary>Writes one immutable AuditEvents row inside the given transaction.</summary>
-    public static async Task WriteAsync(
+    public static async Task<string> WriteAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         TimeProvider time,
@@ -124,7 +124,11 @@ public static class BridgeAuditWriter
         insert.Parameters.AddWithValue("$corr", correlationId);
         insert.Parameters.AddWithValue("$hash", eventHash);
         insert.Parameters.AddWithValue("$prior", priorHash);
-        await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        if (await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
+            throw new InvalidOperationException("Immutable audit row was not inserted.");
+        // This identifier belongs to the ACTUAL row inside the caller's
+        // transaction; it must never be generated in JavaScript.
+        return auditEventId;
     }
 
     /// <summary>Convenience: serializes a JsonObject snapshot pair for old/new value columns.</summary>
