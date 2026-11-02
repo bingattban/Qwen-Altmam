@@ -13,6 +13,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Sha256Sums,
     [switch]$IntegrityOnly,
     [switch]$ConfirmDisposableWindowsAccount,
+    [string]$SourceSha,
+    [string]$ReleaseRunId,
     [string]$EvidencePath
 )
 Set-StrictMode -Version Latest
@@ -93,6 +95,8 @@ function Write-Evidence([string]$status, [string]$detail) {
         is64BitOperatingSystem = [Environment]::Is64BitOperatingSystem
         arch = $Architecture
         version = $Version
+        immutableSourceSha = $SourceSha
+        githubReleaseWorkflowRunId = $ReleaseRunId
         portable = (Split-Path -Leaf $PortableZip)
         portableSha256 = $portableHash
         setup = (Split-Path -Leaf $SetupExe)
@@ -152,6 +156,220 @@ Assert-Condition $ConfirmDisposableWindowsAccount.IsPresent (
     'Full smoke requires -ConfirmDisposableWindowsAccount on an isolated test PC')
 Assert-Condition (-not [string]::IsNullOrWhiteSpace($EvidencePath)) (
     'An explicit new evidence JSON path is required')
+Assert-Condition ($SourceSha -cmatch '^[0-9a-f]{40}
+Assert-Condition ($Architecture -ceq $(if ([Environment]::Is64BitOperatingSystem) {
+    'win-x64'
+} else { 'win-x86' })) 'Must run each package on its matching actual Windows architecture'
+Assert-Condition ($null -ne (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue)) (
+    'Cannot verify offline state: Get-NetAdapter is unavailable')
+$connected = @(Get-NetAdapter -ErrorAction Stop |
+    Where-Object { $_.Status -eq 'Up' })
+Assert-Condition ($connected.Count -eq 0) (
+    'Disable ALL network adapters before testing: not an offline environment')
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$admin = New-Object Security.Principal.WindowsPrincipal($identity)
+Assert-Condition ($admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) (
+    'The isolated test account must run elevated to install genuine Inno Setup')
+# Prevent a test installer with a matching AppId from modifying any existing
+# application registration, even if the current account is otherwise clean.
+$uninstallRoots = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+)
+foreach ($root in $uninstallRoots) {
+    if (Test-Path -LiteralPath $root) {
+        $registrations = @(Get-ChildItem -LiteralPath $root -ErrorAction Stop |
+            Where-Object { $_.PSChildName -match '(?i)B94D3F15|3A156EF1' })
+        Assert-Condition ($registrations.Count -eq 0) (
+            'An existing AlTamam Installer registration is present: use a clean VM')
+    }
+}
+$dataRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'AlTamam'
+if (Test-Path -LiteralPath $dataRoot) {
+    $existing = @(Get-ChildItem -LiteralPath $dataRoot -Force -Recurse -ErrorAction Stop |
+        Select-Object -First 1)
+    Assert-Condition ($existing.Count -eq 0) (
+        'AlTamam AppData is not empty. Never test on an existing account.')
+}
+$work = Join-Path $env:TEMP ('altamam-independent-offline-' + [guid]::NewGuid().ToString('N'))
+$portable = Join-Path $work 'portable'
+$relocated = Join-Path $work 'portable-relocated'
+$installed = Join-Path $work 'installed'
+$backups = Join-Path $dataRoot 'backups'
+$sentinel = Join-Path $backups ('independent-smoke-' + [guid]::NewGuid().ToString('N') + '.txt')
+$sentinelHash = ''
+$uninstaller = Join-Path $installed 'unins000.exe'
+$success = $false
+try {
+    New-Item -ItemType Directory -Path $portable, $backups -Force | Out-Null
+    [IO.File]::WriteAllText($sentinel, 'Disposable-only marker: no live personnel', [Text.Encoding]::UTF8)
+    $sentinelHash = Hash-File $sentinel
+    Expand-Archive -LiteralPath $PortableZip -DestinationPath $portable
+    $portableExe = Join-Path $portable 'AlTamam.DesktopHost.exe'
+    Assert-Condition (Test-Path -LiteralPath $portableExe -PathType Leaf) 'Portable ZIP lacks WPF EXE'
+    Invoke-NativeSmoke $portableExe 'portable' $true
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+
+    Move-Item -LiteralPath $portable -Destination $relocated
+    $relocatedExe = Join-Path $relocated 'AlTamam.DesktopHost.exe'
+    Invoke-NativeSmoke $relocatedExe 'moved-portable' $false
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+
+    $installArgs = @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES',
+        '/NORESTART', ('/DIR="' + $installed + '"'))
+    Invoke-Checked $SetupExe $installArgs 300
+    $installedExe = Join-Path $installed 'AlTamam.DesktopHost.exe'
+    Assert-Condition (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'Real uninstaller missing'
+    Assert-Condition ((Hash-File $installedExe) -ceq (Hash-File $relocatedExe)) (
+        'Portable and installed executable bytes differ')
+    Invoke-NativeSmoke $installedExe 'installed' $true
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+    Invoke-Checked $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 240
+    Assert-Condition (-not (Test-Path -LiteralPath $installedExe)) (
+        'Uninstall did not remove installed WPF executable')
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+
+    Invoke-Checked $SetupExe $installArgs 300
+    $installedExe = Join-Path $installed 'AlTamam.DesktopHost.exe'
+    Invoke-NativeSmoke $installedExe 'reinstalled' $false
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+    $success = $true
+    Write-Evidence 'AUTOMATED_OFFLINE_SMOKE_PASS_NOT_FINAL_UAT' (
+        'Real offline Portable, relocated Portable, installed/reinstalled WPF, ' +
+        'SQLCipher native synthetic bridge, uninstall and unchanged test AppData')
+    Write-Host 'INDEPENDENT OFFLINE SMOKE PASSED: real binaries on clean disconnected Windows; actual human UAT, older-to-newer upgrade, power failure and restore remain PENDING'
+}
+catch {
+    $failure = $_.Exception.Message
+    try { Write-Evidence 'AUTOMATED_OFFLINE_SMOKE_FAILED' $failure }
+    catch { Write-Warning ('Failure evidence could not be written: ' + $_.Exception.Message) }
+    throw
+}
+finally {
+    if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
+        try {
+            Invoke-Checked $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 240
+        }
+        catch { Write-Warning 'Disposable installer cleanup was not fully completed; inspect the clean test VM.' }
+    }
+    if (Test-Path -LiteralPath $sentinel -PathType Leaf) {
+        Remove-Item -LiteralPath $sentinel -Force
+    }
+    if (Test-Path -LiteralPath $work) {
+        try { Remove-Item -LiteralPath $work -Recurse -Force }
+        catch { Write-Warning 'Disposable working files could not all be removed.' }
+    }
+}
+) (
+    'Exact tested source commit SHA is required for evidence')
+Assert-Condition ($ReleaseRunId -cmatch '^[0-9]{8,20}
+Assert-Condition ($Architecture -ceq $(if ([Environment]::Is64BitOperatingSystem) {
+    'win-x64'
+} else { 'win-x86' })) 'Must run each package on its matching actual Windows architecture'
+Assert-Condition ($null -ne (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue)) (
+    'Cannot verify offline state: Get-NetAdapter is unavailable')
+$connected = @(Get-NetAdapter -ErrorAction Stop |
+    Where-Object { $_.Status -eq 'Up' })
+Assert-Condition ($connected.Count -eq 0) (
+    'Disable ALL network adapters before testing: not an offline environment')
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$admin = New-Object Security.Principal.WindowsPrincipal($identity)
+Assert-Condition ($admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) (
+    'The isolated test account must run elevated to install genuine Inno Setup')
+# Prevent a test installer with a matching AppId from modifying any existing
+# application registration, even if the current account is otherwise clean.
+$uninstallRoots = @(
+    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+    'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+)
+foreach ($root in $uninstallRoots) {
+    if (Test-Path -LiteralPath $root) {
+        $matches = @(Get-ChildItem -LiteralPath $root -ErrorAction Stop |
+            Where-Object { $_.PSChildName -match '(?i)B94D3F15|3A156EF1' })
+        Assert-Condition ($matches.Count -eq 0) (
+            'An existing AlTamam Installer registration is present: use a clean VM')
+    }
+}
+$dataRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'AlTamam'
+if (Test-Path -LiteralPath $dataRoot) {
+    $existing = @(Get-ChildItem -LiteralPath $dataRoot -Force -Recurse -ErrorAction Stop |
+        Select-Object -First 1)
+    Assert-Condition ($existing.Count -eq 0) (
+        'AlTamam AppData is not empty. Never test on an existing account.')
+}
+$work = Join-Path $env:TEMP ('altamam-independent-offline-' + [guid]::NewGuid().ToString('N'))
+$portable = Join-Path $work 'portable'
+$relocated = Join-Path $work 'portable-relocated'
+$installed = Join-Path $work 'installed'
+$backups = Join-Path $dataRoot 'backups'
+$sentinel = Join-Path $backups ('independent-smoke-' + [guid]::NewGuid().ToString('N') + '.txt')
+$sentinelHash = ''
+$uninstaller = Join-Path $installed 'unins000.exe'
+$success = $false
+try {
+    New-Item -ItemType Directory -Path $portable, $backups -Force | Out-Null
+    [IO.File]::WriteAllText($sentinel, 'Disposable-only marker: no live personnel', [Text.Encoding]::UTF8)
+    $sentinelHash = Hash-File $sentinel
+    Expand-Archive -LiteralPath $PortableZip -DestinationPath $portable
+    $portableExe = Join-Path $portable 'AlTamam.DesktopHost.exe'
+    Assert-Condition (Test-Path -LiteralPath $portableExe -PathType Leaf) 'Portable ZIP lacks WPF EXE'
+    Invoke-NativeSmoke $portableExe 'portable' $true
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+
+    Move-Item -LiteralPath $portable -Destination $relocated
+    $relocatedExe = Join-Path $relocated 'AlTamam.DesktopHost.exe'
+    Invoke-NativeSmoke $relocatedExe 'moved-portable' $false
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+
+    $installArgs = @('/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES',
+        '/NORESTART', ('/DIR="' + $installed + '"'))
+    Invoke-Checked $SetupExe $installArgs 300
+    $installedExe = Join-Path $installed 'AlTamam.DesktopHost.exe'
+    Assert-Condition (Test-Path -LiteralPath $uninstaller -PathType Leaf) 'Real uninstaller missing'
+    Assert-Condition ((Hash-File $installedExe) -ceq (Hash-File $relocatedExe)) (
+        'Portable and installed executable bytes differ')
+    Invoke-NativeSmoke $installedExe 'installed' $true
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+    Invoke-Checked $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 240
+    Assert-Condition (-not (Test-Path -LiteralPath $installedExe)) (
+        'Uninstall did not remove installed WPF executable')
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+
+    Invoke-Checked $SetupExe $installArgs 300
+    $installedExe = Join-Path $installed 'AlTamam.DesktopHost.exe'
+    Invoke-NativeSmoke $installedExe 'reinstalled' $false
+    Require-NoProductionData $dataRoot $sentinel $sentinelHash
+    $success = $true
+    Write-Evidence 'AUTOMATED_OFFLINE_SMOKE_PASS_NOT_FINAL_UAT' (
+        'Real offline Portable, relocated Portable, installed/reinstalled WPF, ' +
+        'SQLCipher native synthetic bridge, uninstall and unchanged test AppData')
+    Write-Host 'INDEPENDENT OFFLINE SMOKE PASSED: real binaries on clean disconnected Windows; actual human UAT, older-to-newer upgrade, power failure and restore remain PENDING'
+}
+catch {
+    $failure = $_.Exception.Message
+    try { Write-Evidence 'AUTOMATED_OFFLINE_SMOKE_FAILED' $failure }
+    catch { Write-Warning ('Failure evidence could not be written: ' + $_.Exception.Message) }
+    throw
+}
+finally {
+    if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
+        try {
+            Invoke-Checked $uninstaller @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') 240
+        }
+        catch { Write-Warning 'Disposable installer cleanup was not fully completed; inspect the clean test VM.' }
+    }
+    if (Test-Path -LiteralPath $sentinel -PathType Leaf) {
+        Remove-Item -LiteralPath $sentinel -Force
+    }
+    if (Test-Path -LiteralPath $work) {
+        try { Remove-Item -LiteralPath $work -Recurse -Force }
+        catch { Write-Warning 'Disposable working files could not all be removed.' }
+    }
+}
+) (
+    'Actual tested Windows Release workflow run ID is required for evidence')
 Assert-Condition ($Architecture -ceq $(if ([Environment]::Is64BitOperatingSystem) {
     'win-x64'
 } else { 'win-x86' })) 'Must run each package on its matching actual Windows architecture'
