@@ -98,7 +98,9 @@ Assert-True (-not [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) "Requires isol
 $work = Join-Path $env:RUNNER_TEMP ("altamam-package-acceptance-" + [guid]::NewGuid().ToString("N"))
 $portableDir = Join-Path $work "extracted-portable"
 $installedDir = Join-Path $work "installed"
+$movedPortableDir = Join-Path $work "relocated-portable"
 $portableExe = Join-Path $portableDir "AlTamam.DesktopHost.exe"
+$movedPortableExe = Join-Path $movedPortableDir "AlTamam.DesktopHost.exe"
 $installedExe = Join-Path $installedDir "AlTamam.DesktopHost.exe"
 $uninstaller = Join-Path $installedDir "unins000.exe"
 
@@ -121,6 +123,7 @@ function Assert-DataPreserved([string]$phase) {
     Assert-True (Test-Path -LiteralPath $sentinel -PathType Leaf) "$phase deleted AppData sentinel"
     Assert-True ((Hash-OrAbsent $sentinel) -eq $script:sentinelHash) "$phase altered AppData sentinel"
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $portableDir "data"))) "$phase wrote adjacent Portable data"
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $movedPortableDir "data"))) "$phase wrote adjacent relocated Portable data"
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $installedDir "data"))) "$phase wrote adjacent Installer data"
 }
 
@@ -138,16 +141,32 @@ try {
     # This is an automated smoke test, NOT interactive end-to-end or disconnected physical UAT.
     Run-PackagedWebViewChecked $portableExe "Portable ZIP"
     Assert-DataPreserved "Portable direct run"
+    $portableHash = Hash-OrAbsent $portableExe
+
+    # Move the ACTUAL extracted Portable tree, not just the EXE. A customer can
+    # relocate an existing Portable installation without moving the per-user
+    # SQLCipher database, DPAPI-wrapped key or internal rescue backups.
+    Move-Item -LiteralPath $portableDir -Destination $movedPortableDir
+    Assert-True (Test-Path -LiteralPath $movedPortableExe -PathType Leaf) "Relocated Portable EXE missing"
+    Assert-True ((Hash-OrAbsent $movedPortableExe) -eq $portableHash) "Relocated Portable executable changed"
+    Run-Checked $movedPortableExe @("--layout-selfcheck") 90
+    Run-PackagedWebViewChecked $movedPortableExe "Portable moved"
+    Assert-DataPreserved "Portable move to new folder"
 
     # Fresh silent install from the REAL installer, not the raw publish directory.
     Run-Checked $installerExe (Inno-Args $installedDir)
     Assert-True (Test-Path -LiteralPath $installedExe -PathType Leaf) "Installer did not create runnable EXE"
     Assert-True (Test-Path -LiteralPath $uninstaller -PathType Leaf) "Installer did not create uninstaller"
-    $portableHash = Hash-OrAbsent $portableExe
     Assert-True ((Hash-OrAbsent $installedExe) -eq $portableHash) "Portable and Installer EXEs differ"
     Run-Checked $installedExe @("--layout-selfcheck") 90
     Run-PackagedWebViewChecked $installedExe "Installer"
     Assert-DataPreserved "Installer run"
+
+    # Reinstall the SAME version in-place while installed: this is an automated
+    # overwrite-preservation test, NOT evidence of an older-to-newer upgrade.
+    Run-Checked $installerExe (Inno-Args $installedDir)
+    Assert-True ((Hash-OrAbsent $installedExe) -eq $portableHash) "Same-version reinstall EXE differs"
+    Assert-DataPreserved "Same-version in-place reinstall"
 
     # Verify unattended uninstall removes installed binaries but retains the
     # exact old encrypted database, key and rescue/backups location.
@@ -161,7 +180,7 @@ try {
     Run-PackagedWebViewChecked $installedExe "Reinstall"
     Assert-DataPreserved "Reinstall"
     Write-Host ("PACKAGE-PRESERVATION PASS: " + $ExpectedArch +
-        "; genuine Portable + Installer + uninstall/reinstall; unchanged LocalAppData data/key")
+        "; genuine Portable + moved Portable + Installer + same-version in-place install/uninstall/reinstall; unchanged LocalAppData data/key")
 }
 finally {
     # Never clean/rename the application database or DPAPI key. Only delete
