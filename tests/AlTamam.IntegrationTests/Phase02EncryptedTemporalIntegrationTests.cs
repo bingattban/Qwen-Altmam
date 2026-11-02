@@ -574,7 +574,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         }
         string rescueDir = path + ".migration-backups";
         string rescue = Assert.Single(Directory.GetFiles(rescueDir, "pre-migration-v012-to-v013-*.db"));
-        Assert.False(ReadHeader(rescue).SequenceEqual("SQLite format 3\\0"u8.ToArray()));
+        Assert.False(ReadHeader(rescue).SequenceEqual("SQLite format 3\0"u8.ToArray()));
         using var snapshot = new AlTamamDbContext(rescue, _key, useConnectionPooling: false);
         using var restored = snapshot.CreateOpenConnection();
         Assert.Equal(12,
