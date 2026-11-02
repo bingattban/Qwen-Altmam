@@ -1,3 +1,8 @@
+> **Historical snapshot (2026-10-23), not current repository state.**
+> For verified current Phase 00–02 inventories, test/build gates, and remaining
+> acceptance constraints, see [PHASE00_01_02_LIVE_RECONCILIATION_2026-11-02.md](PHASE00_01_02_LIVE_RECONCILIATION_2026-11-02.md).
+> The original baseline findings below are retained for audit history.
+
 # AlTamam — Risk Register (Phase 00 / Step 00.06)
 
 Baseline: commit `1bb28bb`, branch `qwen-code-3daf4f97-…`, base `main` @ `eb34116`. Severity: H/M/L = likelihood×impact judgment, owner may re-rank. Mitigation phases are proposals pending Gate 0 + owner approval.

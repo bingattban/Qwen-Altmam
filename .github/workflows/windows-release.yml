@@ -50,6 +50,8 @@ jobs:
         with: { python-version: '3.12' }
       - name: Action-manifest security guard (CSP, RBAC drift)
         run: python build/manifest-guard.py
+      - name: Phase 00-02 live inventory, test topology and SQLCipher startup provenance
+        run: python build/test-phase00-02-live-contract.py
       - name: Phase 13 PowerShell self-check scripts pass native parser before expensive tests
         shell: pwsh
         run: |
