@@ -65,6 +65,16 @@ jobs:
         run: |
           python build/test-phase14-distribution-stage.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution stage negative-path regression' }
+      - name: Phase 15 non-destructive static handover/route/RBAC regression
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 static contract regression failed' }
+      - name: Phase 15 all-four SHA256 provenance negative-path tests
+        shell: pwsh
+        run: |
+          python build/test-phase15-handover.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 cross-architecture file checksum or source regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
@@ -184,6 +194,8 @@ jobs:
           dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=phase03-unit.trx" --results-directory TestResults
       - name: Full deterministic test suite (all authored tests; unit+persistence+security+bridge+performance)
+        env:
+          ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=full-suite.trx" --results-directory TestResults
@@ -203,6 +215,17 @@ jobs:
               throw 'Phase 03 unit suite is incomplete'
             }
           }
+      - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
+        shell: pwsh
+        run: |
+          python build/check-phase15-perf-evidence.py PerformanceEvidence/phase15-10k-multi-year.json $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 10k-person multi-year SQLCipher benchmark did not actually run' }
+      - name: Upload Phase 15 actual Windows multi-year SQLCipher measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase15-sqlcipher-10k-three-year-release
+          path: PerformanceEvidence/phase15-10k-multi-year.json
+          if-no-files-found: error
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
         env:
@@ -443,13 +466,43 @@ jobs:
           retention-days: 30
           compression-level: 1
 
+  handover-evidence:
+    # Independent same-run x86+x64 customer-file hash verification after the
+    # entire Release test and per-architecture real package smoke matrix.
+    name: Phase 15 independent four-package customer SHA256 audit
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download real current-run Portable Installer and Checksums artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: AlTamam-*-rc-${{ env.RELEASE_VERSION }}
+          path: Phase15Downloads
+          merge-multiple: false
+      - name: Independently hash four actual binaries from both architecture jobs
+        shell: pwsh
+        run: |
+          python build/verify-phase15-handover.py Phase15Downloads "$env:RELEASE_VERSION" $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA Phase15Evidence/four-package-inventory.json
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 exact-SHA four-file provenance failed' }
+      - name: Upload verified candidate JSON (NOT owner acceptance)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AlTamam-Phase15-FourPackage-Provenance-${{ env.RELEASE_VERSION }}
+          path: Phase15Evidence/four-package-inventory.json
+          if-no-files-found: error
+          retention-days: 90
+
   clean-windows-acceptance:
     # The main branch automatically packages TESTED CANDIDATES. It is not a claim
     # of completed clean-machine acceptance; manual/tagged candidates retain that gate.
     # NEVER mark nightly/main artifacts as final released deliverables.
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     name: Clean-machine acceptance matrix (15.06) — manual evidence gate
-    needs: package
+    needs: handover-evidence
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
