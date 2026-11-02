@@ -67,6 +67,19 @@ public sealed class MonthlyExcelExportService
         return true;
     }
 
+    private async Task<string> SiteCaptionAsync(string siteId, CancellationToken ct)
+    {
+        if(siteId.Length==0)return "جميع المواقع";
+        using var connection=_db.CreateOpenConnection();
+        using var command=connection.CreateCommand();
+        // Historical membership may reference a retired site. Its persisted
+        // name is still authoritative; UI text and ordinals are not.
+        command.CommandText="SELECT VisibleName FROM Sites WHERE SiteId=$site;";
+        command.Parameters.AddWithValue("$site",siteId);
+        var value=await command.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+        return string.IsNullOrWhiteSpace(value) ? "غير محدد" : value.Trim();
+    }
+
     public Task<BridgeResponse> PeriodsAsync(CancellationToken ct) => _read.ArchivePeriodsAsync(ct);
 
     public async Task<BridgeResponse> PreviewAsync(JsonObject? input, CancellationToken ct)
@@ -82,10 +95,12 @@ public sealed class MonthlyExcelExportService
         long total = ((JsonObject)page.Data!)["total"]!.GetValue<long>();
         if (total > 100000)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError, "عدد الأفراد يتجاوز حد التصدير الآمن (100000).");
+        string siteName=await SiteCaptionAsync(site,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["year"] = year, ["month"] = month, ["siteId"] = site, ["term"] = term,
-            ["personCount"] = total, ["daysInMonth"] = DateTime.DaysInMonth(year, month),
+            ["year"] = year, ["month"] = month, ["siteId"] = site, ["siteName"] = siteName,
+            ["suggestedFileName"] = ExcelOutputNames.Monthly(year,month,siteName),
+            ["term"] = term, ["personCount"] = total, ["daysInMonth"] = DateTime.DaysInMonth(year, month),
             ["format"] = "xlsx"
         });
     }
@@ -131,9 +146,11 @@ public sealed class MonthlyExcelExportService
             !OutputDirectorySettings.IsSafeDirectory(selected,_db.DatabasePath,out string directory))
             return BridgeHelpers.Error(BridgeErrorCodes.ExcelExportFailed,
                 "هذا المسار غير صالح أو غير متاح، يُرجى تحديد مسار سليم وصحيح. اختر مجلداً محلياً قابلاً للكتابة للتصدير.");
+        // Without a user-edited filename, use the actual SQLCipher site name;
+        // the preview and export use the same naming rules, with a unique
+        // suffix so repeated valid exports never overwrite existing files.
         string basename = requestedName is null ?
-            $"التمام الشهري_{year:D4}-{month:D2}_تصدير-{DateTime.Now:yyyy-MM-dd}_{Guid.NewGuid():N}.xlsx" :
-            chosenName;
+            previewData["suggestedFileName"]!.GetValue<string>() : chosenName;
         string destination = Path.Combine(directory, basename);
         string partial = destination + ".part";
         progress?.Invoke(0,checked((int)total));
@@ -245,7 +262,8 @@ public sealed class MonthlyExcelExportService
             {
                 ["filePath"] = destination, ["fileName"] = basename,
                 ["personCount"] = total, ["year"] = year, ["month"] = month, ["term"] = term,
-                ["siteId"] = site, ["format"] = "xlsx"
+                ["siteId"] = site, ["siteName"] = previewData["siteName"]!.GetValue<string>(),
+                ["format"] = "xlsx"
             });
         }
         catch (OperationCanceledException) { throw; }
@@ -270,7 +288,7 @@ public sealed class MonthlyExcelExportService
         if(combined==0)
             return BridgeHelpers.Error(BridgeErrorCodes.MissingData,
                 "لا توجد أسماء لهذا الشهر لتصدير كشف موحد ومواقع منفصلة.");
-        var sitePlans=new List<(string SiteId,long Count)>();
+        var sitePlans=new List<(string SiteId,long Count,string Name,string SuggestedFileName)>();
         using(var connection=_db.CreateOpenConnection())
         using(var cmd=connection.CreateCommand())
         {
@@ -287,8 +305,11 @@ public sealed class MonthlyExcelExportService
                 candidate["siteId"]=siteId;
                 var preview=await PreviewAsync(candidate,ct).ConfigureAwait(false);
                 if(!preview.Success)return preview;
-                long count=((JsonObject)preview.Data!)["personCount"]!.GetValue<long>();
-                if(count>0)sitePlans.Add((siteId,count));
+                var sitePreview=(JsonObject)preview.Data!;
+                long count=sitePreview["personCount"]!.GetValue<long>();
+                if(count>0)sitePlans.Add((siteId,count,
+                    sitePreview["siteName"]!.GetValue<string>(),
+                    sitePreview["suggestedFileName"]!.GetValue<string>()));
             }
         }
         long sum=combined+sitePlans.Sum(x=>x.Count);
@@ -301,41 +322,35 @@ public sealed class MonthlyExcelExportService
         bool success=false;
         try
         {
-            async Task<BridgeResponse> OneAsync(string siteId,int siteOrdinal)
+            async Task<BridgeResponse> OneAsync(string siteId,string? perSiteName)
             {
                 var selected=(JsonObject)input.DeepClone();
                 selected["siteId"]=siteId;
-                if(siteOrdinal>0 && selected["fileName"] is not null)
-                {
-                    string requested=selected["fileName"]!.GetValue<string>();
-                    if(!SafeOutputName(requested,out string safe))
-                        return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                            "اسم ملف التصدير المقترح غير صالح.");
-                    selected["fileName"]=safe[..^5]+"-موقع-"+siteOrdinal.ToString("D2",CultureInfo.InvariantCulture)+".xlsx";
-                }
+                if(siteId.Length>0)
+                    selected["fileName"]=perSiteName; // Authenticated site's name, never موقع-01
                 selected["consolidatedOnly"]=true;
                 int before=completed;
                 return await ExportAsync(selected,ct,(done,total)=>
                     progress?.Invoke(checked(before+done),checked((int)sum))).ConfigureAwait(false);
             }
-            var all=await OneAsync("",0).ConfigureAwait(false);
+            var all=await OneAsync("",null).ConfigureAwait(false);
             if(!all.Success)return all;
             var combinedData=(JsonObject)all.Data!;
             string combinedPath=combinedData["filePath"]!.GetValue<string>();
             created.Add(combinedPath);
-            files.Add(new JsonObject{["siteId"]="",
+            files.Add(new JsonObject{["siteId"]="",["siteName"]="جميع المواقع",
                 ["filePath"]=combinedPath,["personCount"]=combined});
             completed=checked((int)combined);
             for(int siteOrdinal=0;siteOrdinal<sitePlans.Count;siteOrdinal++)
             {
                 ct.ThrowIfCancellationRequested();
                 var plan=sitePlans[siteOrdinal];
-                var individual=await OneAsync(plan.SiteId,siteOrdinal+1).ConfigureAwait(false);
+                var individual=await OneAsync(plan.SiteId,plan.SuggestedFileName).ConfigureAwait(false);
                 if(!individual.Success)return individual;
                 var entry=(JsonObject)individual.Data!;
                 string file=entry["filePath"]!.GetValue<string>();
                 created.Add(file);
-                files.Add(new JsonObject{["siteId"]=plan.SiteId,
+                files.Add(new JsonObject{["siteId"]=plan.SiteId,["siteName"]=plan.Name,
                     ["filePath"]=file,["personCount"]=plan.Count});
                 completed=checked(completed+(int)plan.Count);
             }
