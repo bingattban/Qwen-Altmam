@@ -30,7 +30,7 @@ class CandidateAuditTests(unittest.TestCase):
             for kind, ext in (("Portable", ".zip"), ("Installer", ".exe")):
                 folder = self.root / f"AlTamam-{kind}-{arch}-rc-{VERSION}"
                 folder.mkdir()
-                name = f"AlTamam-{kind}-{arch}{ext}"
+                name = MOD.owner_filename(VERSION, arch, kind)
                 data = f"SYNTHETIC ONLY {arch} {kind}".encode("ascii")
                 (folder / name).write_bytes(data)
                 sha = hashlib.sha256(data).hexdigest()
@@ -60,13 +60,15 @@ class CandidateAuditTests(unittest.TestCase):
                 MOD.audit(self.root, version, checkout, source)
 
     def test_tampered_portable_or_installer_fails(self):
-        p = self.root / f"AlTamam-Installer-Windows-32bit-rc-{VERSION}" / "AlTamam-Installer-Windows-32bit.exe"
+        p = (self.root / f"AlTamam-Installer-Windows-32bit-rc-{VERSION}" /
+             MOD.owner_filename(VERSION, "Windows-32bit", "Installer"))
         p.write_bytes(b"tampered")
         with self.assertRaisesRegex(ValueError, "SHA-256"):
             MOD.audit(self.root, VERSION, SHA, SOURCE)
 
     def test_missing_class_or_extra_untrusted_folder_rejected(self):
-        p = self.root / f"AlTamam-Portable-Windows-64bit-rc-{VERSION}" / "AlTamam-Portable-Windows-64bit.zip"
+        p = (self.root / f"AlTamam-Portable-Windows-64bit-rc-{VERSION}" /
+             MOD.owner_filename(VERSION, "Windows-64bit", "Portable"))
         p.unlink()
         with self.assertRaises(ValueError):
             MOD.audit(self.root, VERSION, SHA, SOURCE)
