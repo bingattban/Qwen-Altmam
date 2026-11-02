@@ -24,6 +24,30 @@ public sealed class Section08CatalogAuditReceiptsTests : IAsyncLifetime, IDispos
         await _db.InitializeAsync();
     }
 
+    // A real date transition, using the service's injected clock. Never mutate
+    // effective-dated history directly: SQLCipher forbids rewriting its origin.
+    private sealed class NextDayClock : TimeProvider
+    {
+        private DateTimeOffset _now;
+        public override TimeZoneInfo LocalTimeZone => TimeProvider.System.LocalTimeZone;
+
+        public NextDayClock()
+        {
+            var yesterdayNoon=TimeProvider.System.GetLocalNow().Date.AddDays(-1).AddHours(12);
+            _now=new DateTimeOffset(yesterdayNoon,
+                LocalTimeZone.GetUtcOffset(yesterdayNoon)).ToUniversalTime();
+        }
+
+        public override DateTimeOffset GetUtcNow() => _now;
+
+        public void AdvanceOneDay()
+        {
+            var nextNoon=GetLocalNow().Date.AddDays(1).AddHours(12);
+            _now=new DateTimeOffset(nextNoon,
+                LocalTimeZone.GetUtcOffset(nextNoon)).ToUniversalTime();
+        }
+    }
+
     private long Count(string table)
     {
         using var c = _db.CreateOpenConnection();
@@ -119,7 +143,9 @@ public sealed class Section08CatalogAuditReceiptsTests : IAsyncLifetime, IDispos
     [Fact]
     public async Task SiteRenameAndStatusUpdate_ReturnNewAuditReceiptsAndReplayAfterVersionBump()
     {
-        var svc = new AdminConfigurationService(_db);
+        var clock=new NextDayClock();
+        string priorDay=clock.GetLocalNow().ToString("yyyy-MM-dd");
+        var svc = new AdminConfigurationService(_db, clock);
         var createdSite = await svc.CreateSiteAsync(new JsonObject {
             ["name"]="موقع الإيصال قبل إعادة التسمية",
             ["operationId"]="SEC08-CATALOG-RENAME-PREPARE-0001"
@@ -133,21 +159,29 @@ public sealed class Section08CatalogAuditReceiptsTests : IAsyncLifetime, IDispos
         AssertStoredReceipt(createdStatus,"STATUS_CREATE");
         string statusId=Assert.IsType<JsonObject>(createdStatus.Data)["statusId"]!.GetValue<string>();
 
-        // Date-effective history prohibits two changes on the same local day.
-        // Simulate an existing record created on a previous calendar day.
+        // Verify both original histories were authored for the first day.
         using(var c=_db.CreateOpenConnection())
-        using(var q=c.CreateCommand())
+        using(var check=c.CreateCommand())
         {
-            q.CommandText="""
-                UPDATE SiteNameHistory SET ValidFromLocalDate='2020-01-01'
-                WHERE SiteId=$site;
-                UPDATE AttendanceStatusNameHistory SET ValidFromLocalDate='2020-01-01'
-                WHERE StatusId=$status;
+            check.CommandText="""
+                SELECT COUNT(*) FROM SiteNameHistory
+                WHERE SiteId=$site AND ValidFromLocalDate=$prior AND ValidToLocalDate IS NULL;
                 """;
-            q.Parameters.AddWithValue("$site",siteId);
-            q.Parameters.AddWithValue("$status",statusId);
-            q.ExecuteNonQuery();
+            check.Parameters.AddWithValue("$site",siteId);
+            check.Parameters.AddWithValue("$prior",priorDay);
+            Assert.Equal(1L,Convert.ToInt64(check.ExecuteScalar()));
+            check.CommandText="""
+                SELECT COUNT(*) FROM AttendanceStatusNameHistory
+                WHERE StatusId=$status AND ValidFromLocalDate=$prior AND ValidToLocalDate IS NULL;
+                """;
+            check.Parameters.AddWithValue("$status",statusId);
+            Assert.Equal(1L,Convert.ToInt64(check.ExecuteScalar()));
         }
+        // Advance only the injected clock; the production service closes its
+        // own old intervals and inserts the new immutable effective-day version.
+        clock.AdvanceOneDay();
+        string nextDay=clock.GetLocalNow().ToString("yyyy-MM-dd");
+        Assert.NotEqual(priorDay,nextDay);
 
         var rename=new JsonObject{
             ["siteId"]=siteId,["name"]="موقع الإيصال بعد إعادة التسمية",
@@ -172,6 +206,28 @@ public sealed class Section08CatalogAuditReceiptsTests : IAsyncLifetime, IDispos
         Assert.Equal(updated.AuditEventId,updateRetry.AuditEventId);
         Assert.Equal(4L,Count("AuditEvents"));
         Assert.Equal(4L,Count("MutationReceipts"));
+        // SQLCipher triggers and the application must preserve both intervals:
+        // yesterday closes at today's date and the new row remains open.
+        using var checkConnection=_db.CreateOpenConnection();
+        using var history=checkConnection.CreateCommand();
+        history.Parameters.AddWithValue("$site",siteId);
+        history.Parameters.AddWithValue("$status",statusId);
+        history.Parameters.AddWithValue("$prior",priorDay);
+        history.Parameters.AddWithValue("$next",nextDay);
+        history.CommandText="""
+            SELECT COUNT(*) FROM SiteNameHistory
+            WHERE SiteId=$site AND (
+                (ValidFromLocalDate=$prior AND ValidToLocalDate=$next) OR
+                (ValidFromLocalDate=$next AND ValidToLocalDate IS NULL));
+            """;
+        Assert.Equal(2L,Convert.ToInt64(history.ExecuteScalar()));
+        history.CommandText="""
+            SELECT COUNT(*) FROM AttendanceStatusNameHistory
+            WHERE StatusId=$status AND (
+                (ValidFromLocalDate=$prior AND ValidToLocalDate=$next) OR
+                (ValidFromLocalDate=$next AND ValidToLocalDate IS NULL));
+            """;
+        Assert.Equal(2L,Convert.ToInt64(history.ExecuteScalar()));
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
