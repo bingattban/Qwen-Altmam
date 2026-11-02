@@ -62,6 +62,19 @@ class WebViewSmokeContract(unittest.TestCase):
         self.assertIn('Assert-DataPreserved "Installer run"', package)
         self.assertIn('Assert-DataPreserved "Reinstall"', package)
 
+    def test_phase14_real_packaged_sqlcipher_bridge_is_mandatory_on_x86_and_x64(self):
+        package = (ROOT / "build/test-package-appdata-preservation.ps1").read_text(encoding="utf-8")
+        self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e") 180', package)
+        self.assertIn('Run-PackagedWebViewChecked $portableExe "Portable ZIP" $true', package)
+        self.assertIn('Run-PackagedWebViewChecked $installedExe "Installer" $true', package)
+        self.assertIn("PASS actual HTML-C#-SQLCipher-HTML roundtrip", package)
+        self.assertIn("PASS real Windows GeneralAdmin Admin Supervisor", package)
+        self.assertIn("PASS all 69 manifest routes opened", package)
+        for runtime in ("win-x86", "win-x64"):
+            self.assertIn("runtime: " + runtime, RELEASE)
+        self.assertLess(RELEASE.index("needs: build-test"),
+                        RELEASE.index("test-package-appdata-preservation.ps1"))
+
     def test_contract_is_run_by_both_parallel_windows_workflows_before_build(self):
         for workflow in (CORE, RELEASE):
             self.assertIn("python build/test-webview-selfcheck-contract.py", workflow)
