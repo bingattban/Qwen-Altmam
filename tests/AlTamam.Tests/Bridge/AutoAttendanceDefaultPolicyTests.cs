@@ -179,6 +179,8 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
             Assert.IsType<JsonObject>(accepted.Data)["defaultStatusId"]!.GetValue<string>());
         var repeated=await policy.SetScheduleAsync((JsonObject)selected.DeepClone(),Admin,default);
         Assert.True(repeated.Success,repeated.UserMessage);
+        Assert.Equal(accepted.AuditEventId, repeated.AuditEventId);
+        Assert.StartsWith("AUD-", accepted.AuditEventId);
         Assert.Equal(1L,Count("AuditEvents"));
         Assert.Equal(1L,Count("MutationReceipts"));
 
@@ -274,6 +276,7 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         Assert.True(duplicate.Success, duplicate.UserMessage);
         Assert.Equal(Assert.IsType<JsonObject>(first.Data)["auditEventId"]!.GetValue<string>(),
             Assert.IsType<JsonObject>(duplicate.Data)["auditEventId"]!.GetValue<string>());
+        Assert.Equal(first.AuditEventId, duplicate.AuditEventId);
         Assert.Equal(3L, Count("AuditEvents"));
 
         var noOp = await policy.SetScheduleAsync(new JsonObject {
