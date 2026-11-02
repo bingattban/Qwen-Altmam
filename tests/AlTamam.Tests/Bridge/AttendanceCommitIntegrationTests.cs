@@ -391,6 +391,71 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
         Assert.Equal(0L,Count("AttendanceRecords"));
     }
 
+    [Fact]
+    public async Task InvalidAttendanceInputs_IdentifyEveryFieldAndNeverCommit()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var invalid=Payload("unknown-mode","",[]);
+        var response=await service.PreviewAsync(invalid,Actor,CancellationToken.None);
+        Assert.False(response.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,response.ErrorCode);
+        Assert.Null(response.Data);
+        var fields=Assert.IsType<JsonObject>(response.ValidationErrors);
+        Assert.NotNull(fields["personIds"]);
+        Assert.NotNull(fields["statusId"]);
+        Assert.NotNull(fields["mode"]);
+        Assert.Equal(3,fields.Count);
+
+        var wrongDate=Payload("initial","STS-PRESENT",["TST-ATTEND-P1"]);
+        wrongDate["businessDate"]=DateOnly.FromDateTime(DateTime.Now)
+            .AddDays(3).ToString("yyyy-MM-dd");
+        var rejectedDate=await service.PreviewAsync(wrongDate,Actor,CancellationToken.None);
+        Assert.False(rejectedDate.Success);
+        Assert.NotNull(rejectedDate.ValidationErrors?["businessDate"]);
+
+        var unknownStatus=await service.PreviewAsync(
+            Payload("initial","STS-UNKNOWN",["TST-ATTEND-P1"]),
+            Actor,CancellationToken.None);
+        Assert.False(unknownStatus.Success);
+        Assert.Equal(BridgeErrorCodes.CustomStatusInactive,unknownStatus.Code);
+        Assert.NotNull(unknownStatus.ValidationErrors?["statusId"]);
+
+        var badReason=await service.PreviewAsync(
+            Payload("revise","STS-ABSENT",["TST-ATTEND-P1"],"لا"),
+            Actor,CancellationToken.None);
+        Assert.False(badReason.Success);
+        Assert.NotNull(badReason.ValidationErrors?["reason"]);
+
+        var badCommit=await service.CommitAsync(new JsonObject(),Actor,false,CancellationToken.None);
+        Assert.False(badCommit.Success);
+        Assert.Null(badCommit.Data);
+        Assert.NotNull(badCommit.ValidationErrors?["previewToken"]);
+        Assert.Equal(0L,Count("AttendanceRecords"));
+        Assert.Equal(0L,Count("AuditEvents"));
+        Assert.Equal(0L,Count("MutationReceipts"));
+    }
+
+    [Fact]
+    public async Task ReusedAttendancePreview_ReturnsStructuredStaleReasonWithoutSecondMutation()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        string token=Token(await service.PreviewAsync(
+            Payload("initial","STS-PRESENT",["TST-ATTEND-P1"]),
+            Actor,CancellationToken.None));
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=token},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var repeated=await service.CommitAsync(new JsonObject{["previewToken"]=token},
+            Actor,false,CancellationToken.None);
+        Assert.False(repeated.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,repeated.Code);
+        Assert.Null(repeated.Data);
+        Assert.Equal("InvalidOrExpiredPreviewToken",
+            repeated.ConflictInfo?["reason"]?.GetValue<string>());
+        Assert.Equal(1L,Count("AttendanceRecords"));
+        Assert.Equal(1L,Count("AuditEvents"));
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose()
     {

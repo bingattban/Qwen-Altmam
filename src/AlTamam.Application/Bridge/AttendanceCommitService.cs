@@ -35,7 +35,8 @@ public sealed class AttendanceCommitService
             : TimeSpan.FromHours(20);
         return _time.GetLocalNow().TimeOfDay>=cutoff;
     }
-    private static BridgeResponse Fail(string code,string message)=>BridgeHelpers.Error(code,message);
+    private static BridgeResponse Fail(string code,string message,string? field=null)=>
+        BridgeHelpers.Error(code,message,field);
     private static string[] PersonIds(JsonObject? data)
     {
         if(data?["personIds"] is not JsonArray a)return [];
@@ -143,18 +144,26 @@ public sealed class AttendanceCommitService
         string reason=Read(payload,"reason");
         var ids=PersonIds(payload);
         if(date!=Today())return Fail(BridgeErrorCodes.HistoricDayLocked,
-            "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.");
+            "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.",
+            "businessDate");
         if(CutoffReached())return Fail(BridgeErrorCodes.HistoricDayLocked,
             "انتهى الوقت المحدد للتحضير اليومي في الإعدادات.");
-        if(ids.Length==0||statusId.Length==0||mode is not("initial" or "revise"))
-            return Fail(BridgeErrorCodes.ValidationError,"اختر الحالة وفرداً أو أكثر (حتى 100) ونوع العملية.");
+        var invalidFields=new JsonObject();
+        if(ids.Length==0)invalidFields["personIds"]="اختر من فرد واحد إلى 100 فرد دون تكرار.";
+        if(statusId.Length==0)invalidFields["statusId"]="اختر الحالة المطلوبة.";
+        if(mode is not("initial" or "revise"))
+            invalidFields["mode"]="نوع عملية التحضير غير صالح.";
+        if(invalidFields.Count>0)
+            return Fail(BridgeErrorCodes.ValidationError,
+                "اختر الحالة وفرداً أو أكثر (حتى 100) ونوع العملية.")
+                with {ValidationErrors=invalidFields};
         // A routine same-day status change requires an explicit, user-bound preview
         // and approval, but the operator must not be forced to type a reason.
         // Preserve an audit explanation even when the UI supplies no reason.
         if(mode=="revise" && reason.Length==0)
             reason="تغيير حالة التمام بتأكيد المستخدم";
         if(mode=="revise" && reason.Length is <5 or >400)
-            return Fail(BridgeErrorCodes.ValidationError,"سبب التعديل المدخل غير صالح.");
+            return Fail(BridgeErrorCodes.ValidationError,"سبب التعديل المدخل غير صالح.","reason");
         using var c=_db.CreateOpenConnection();
         if(await Closed(c,null,date,ct).ConfigureAwait(false))
         {
@@ -169,7 +178,8 @@ public sealed class AttendanceCommitService
         }
         var status=await Status(c,null,statusId,ct).ConfigureAwait(false);
         if(status is null)
-            return Fail(BridgeErrorCodes.CustomStatusInactive,"الحالة المحددة غير نشطة.");
+            return Fail(BridgeErrorCodes.CustomStatusInactive,
+                "الحالة المحددة غير نشطة.","statusId");
         var people=new JsonArray();
         var conflicts=new JsonArray();
         string? firstError=null;
@@ -234,7 +244,8 @@ public sealed class AttendanceCommitService
         bool revise,CancellationToken ct)
     {
         string token=Read(payload,"previewToken"),mode=revise?"revise":"initial";
-        if(token.Length<32)return Fail(BridgeErrorCodes.ValidationError,"معرّف المعاينة مطلوب.");
+        if(token.Length<32)return Fail(BridgeErrorCodes.ValidationError,
+            "معرّف المعاينة مطلوب.","previewToken");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
             // A lost WebView2 response may be retried with the same user-intent ID.
@@ -265,7 +276,10 @@ public sealed class AttendanceCommitService
             find.Parameters.AddWithValue("$now",_time.GetUtcNow().ToString("O"));
             string? data=await find.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
             if(data is null)return Fail(BridgeErrorCodes.ConflictStale,
-                "انتهت المعاينة أو استُخدمت مسبقاً. أعد عرض الكشف والتأكيد.");
+                "انتهت المعاينة أو استُخدمت مسبقاً. أعد عرض الكشف والتأكيد.")
+                with {ConflictInfo=new JsonObject{
+                    ["reason"]="InvalidOrExpiredPreviewToken"
+                }};
             var info=JsonNode.Parse(data) as JsonObject;
             string date=Read(info,"businessDate"),statusId=Read(info,"statusId");
             if(info?["persons"] is not JsonArray selected || selected.Count==0 ||
@@ -322,7 +336,11 @@ public sealed class AttendanceCommitService
                 return AttendanceConflictDetails.Reject(BridgeErrorCodes.ConflictStale,conflicts);
             long? consumed=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,t,token,
                 "ATTENDANCE-"+mode,actor.UserId,0,ct).ConfigureAwait(false);
-            if(consumed!=0)return Fail(BridgeErrorCodes.ConflictStale,"معاينة قديمة أو مستخدمة.");
+            if(consumed!=0)return Fail(BridgeErrorCodes.ConflictStale,
+                "معاينة قديمة أو مستخدمة.")
+                with {ConflictInfo=new JsonObject{
+                    ["reason"]="InvalidOrExpiredPreviewToken"
+                }};
             string now=_time.GetUtcNow().ToString("O"),reason=Read(info,"reason");
             string corr=Guid.NewGuid().ToString("N");
             var auditEventIds=new JsonArray();
