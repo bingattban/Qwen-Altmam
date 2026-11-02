@@ -39,6 +39,7 @@ const viewport=new El("main"),logoutAction=new El("button"),sidebar=new El("asid
 let deferCellDetails=false,resolveCellDetails=null;
 const today=new Date(),year=today.getFullYear(),month=today.getMonth()+1;
 const firstDay=year+"-"+String(month).padStart(2,"0")+"-01";
+const currentVisibleDay=year+"-"+String(month).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
 const older=new Date(year,month-2,1),oldYear=older.getFullYear(),
   oldMonth=older.getMonth()+1;
 const oldPeriod=oldYear+"-"+String(oldMonth).padStart(2,"0");
@@ -51,10 +52,12 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
     if(action==="GetDashboardSummary")return{data:{totalForce:7}};
     if(action==="QueryMonthlyGrid"){
       const chosen=payload.year+"-"+String(payload.month).padStart(2,"0")+"-01";
+      const visible=payload.year===year&&payload.month===month
+        ? currentVisibleDay : chosen;
       return{data:{total:1,page:payload.page,items:[
         {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
          days:{[chosen]:{symbol:"غ",name:"غياب",color:"#EF4444"},
-            [chosen.slice(0,8)+"02"]:{symbol:"إ",name:"إذن",color:"#808080"}}}]}};
+            [visible]:{symbol:"إ",name:"إذن",color:"#808080"}}}]}};
     }
     if(action==="GetMonthlyCellDetails"){
       const response={data:{personId:payload.personId,businessDate:payload.businessDate,
@@ -141,13 +144,13 @@ async function main(){
   assert.ok(midtone,"a midtone status background is present");
   assert.equal(midtone.style.color,"#000000",
     "WCAG regular-text contrast must select pure black on medium grey status");
-  assert.ok(open.attrs["aria-label"]?.includes(firstDay),"accessible date label");
+  assert.ok(open.attrs["aria-label"]?.includes(currentVisibleDay),"accessible date label for first current-month day in view");
   assert.equal(calls.filter(x=>x.action==="GetMonthlyCellDetails").length,0,
     "open page must not request details until click");
   await open.handlers.click();await tick();
   const call=calls.find(x=>x.action==="GetMonthlyCellDetails");
   assert.equal(call.payload.personId,"TST-P");
-  assert.equal(call.payload.businessDate,firstDay);
+  assert.equal(call.payload.businessDate,currentVisibleDay);
   assert.equal(call.payload.siteId,"");
   const output=viewport.all().map(x=>String(x.textContent)).join(" | ");
   for(const text of ["التحضير المعتمد", "غياب", "تاريخ تعديل التحضير", "سبب اختبار"])
