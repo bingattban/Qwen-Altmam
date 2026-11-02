@@ -57,14 +57,14 @@ class Phase00Inventory(unittest.TestCase):
     def test_section09_10_every_clause_and_ac_is_tracked_without_fake_go(self):
         text = (ROOT / "docs/qa/SECTION09_10_ACCEPTANCE_MATRIX_2026-11-02.md").read_text(
             encoding="utf-8")
-        clauses = re.findall(r"(?m)^\\| (09\\.\\d{2}) \\|", text)
-        scenarios = re.findall(r"(?m)^\\| (AC-\\d{3}) \\|", text)
+        clauses = re.findall(r"(?m)^\| (09\.\d{2}) \|", text)
+        scenarios = re.findall(r"(?m)^\| (AC-\d{3}) \|", text)
         self.assertEqual([f"09.{n:02d}" for n in range(1, 19)], clauses)
         self.assertEqual([f"AC-{n:03d}" for n in range(1, 47)], scenarios)
-        self.assertRegex(text, r"\\| AC-023 \\|[^\\n]*\\| OWNER_CONFLICT \\|")
+        self.assertRegex(text, r"\| AC-023 \|[^\n]*\| OWNER_CONFLICT \|")
         for ac in ("AC-025", "AC-027", "AC-028", "AC-044", "AC-046"):
             self.assertIn(ac, text)
-        self.assertRegex(text, r"\\| AC-044 \\|[^\\n]*\\| NOT_EXECUTED \\|")
+        self.assertRegex(text, r"\| AC-044 \|[^\n]*\| NOT_EXECUTED \|")
         self.assertIn("NOT A RELEASE GO", text)
         self.assertIn("three independent audited saves", text)
         # A source matrix is not physical Windows/restore or 46 real E2E passes.
