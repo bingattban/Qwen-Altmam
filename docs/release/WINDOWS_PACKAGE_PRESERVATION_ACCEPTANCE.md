@@ -20,6 +20,10 @@ The Windows Core and Windows Release jobs must still pass on the same PR head.
    with a bounded timeout. In addition, run genuine packaged
    `--webview-selfcheck` navigation/title verification from the extracted ZIP.
    The same real navigation runs from the installed EXE and reinstalled EXE.
+   For each architecture, both the extracted Portable and installed Installer
+   additionally run the compiled WPF/WebView2 E2E with a fresh, isolated
+   SQLCipher fixture and all three authorization roles. The native evidence
+   markers are mandatory, not a mocked page or layout-only surrogate.
    Each WebView2 check allows **at most two independent attempts**, each with
    a fresh temporary browser profile, a 90-second process limit, and a
    stage-by-stage native trace on failure. If both fail, CI stays **red**;

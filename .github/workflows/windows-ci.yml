@@ -35,6 +35,11 @@ jobs:
         run: |
           python build/test-phase13-qa-evidence-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 13 evidence source or order regression' }
+      - name: Phase 14 distribution staging provenance regression
+        shell: pwsh
+        run: |
+          python build/test-phase14-distribution-stage.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution stage negative-path regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |

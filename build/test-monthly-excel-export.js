@@ -24,6 +24,7 @@ const viewport=new El("main"),logoutAction=new El("button"),sidebar=new El("asid
 let deferMonthlyPreview=false,resolveMonthlyPreview=null;
 const today=new Date(),year=today.getFullYear(),month=today.getMonth()+1;
 const firstDay=year+"-"+String(month).padStart(2,"0")+"-01";
+const currentVisibleDay=year+"-"+String(month).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
 const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
   invoke:async(action,payload)=>{
     calls.push({action,payload});
@@ -33,7 +34,8 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
     if(action==="GetAvailableArchivePeriods")return{data:[firstDay.slice(0,7)]};
     if(action==="QueryMonthlyGrid")return{data:{total:1,page:1,items:[
       {personId:"TST-P",serviceNumberA:"X1",name:"شخص اختباري",siteName:"غير محدد",
-       days:{[firstDay]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
+       days:{[firstDay]:{symbol:"غ",name:"غياب",color:"#EF4444"},
+         [currentVisibleDay]:{symbol:"غ",name:"غياب",color:"#EF4444"}}}]}};
     if(action==="PreviewMonthlyExport"){
       const reply={data:{personCount:1,year,month,siteId:payload.siteId,format:"xlsx"}};
       if(deferMonthlyPreview)
@@ -197,13 +199,13 @@ async function main(){
   assert.equal(exportDialog.hidden,true,"dismiss keeps the monthly grid in place");
   const open=viewport.all().find(x=>x.tag==="button"&&x.className.includes("monthly-day-detail"));
   assert.ok(open,"one committed cell has a detail button");
-  assert.ok(open.attrs["aria-label"]?.includes(firstDay),"accessible date label");
+  assert.ok(open.attrs["aria-label"]?.includes(currentVisibleDay),"accessible date label for initially visible current day");
   assert.equal(calls.filter(x=>x.action==="GetMonthlyCellDetails").length,0,
     "open page must not request details until click");
   await open.handlers.click();await tick();
   const call=calls.find(x=>x.action==="GetMonthlyCellDetails");
   assert.equal(call.payload.personId,"TST-P");
-  assert.equal(call.payload.businessDate,firstDay);
+  assert.equal(call.payload.businessDate,currentVisibleDay);
   assert.equal(call.payload.siteId,"");
   const output=viewport.all().map(x=>String(x.textContent)).join(" | ");
   for(const text of ["التحضير المعتمد", "غياب", "تاريخ تعديل التحضير", "سبب اختبار"])

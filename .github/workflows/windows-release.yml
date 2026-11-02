@@ -60,6 +60,11 @@ jobs:
         run: |
           python build/test-phase13-qa-evidence-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Phase 13 evidence source or order regression' }
+      - name: Phase 14 distribution staging provenance regression
+        shell: pwsh
+        run: |
+          python build/test-phase14-distribution-stage.py
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution stage negative-path regression' }
       - name: Validate Arabic navigation and JavaScript syntax
         shell: pwsh
         run: |
@@ -399,12 +404,17 @@ jobs:
         run: |
           python build/verify-release-artifacts.py artifacts $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
           if ($LASTEXITCODE -ne 0) { throw "Release package provenance or SHA-256 verification failed" }
+      - name: Stage byte-identical verified customer outputs in dist/portable and dist/installer
+        shell: pwsh
+        run: |
+          python build/stage-phase14-distributions.py artifacts dist $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution provenance or staging failed' }
       # One download contains ONE customer-facing version, never both.
       - name: Upload standalone Portable package for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Portable-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
-          path: artifacts/AlTamam-Portable-${{ matrix.arch }}.zip
+          path: dist/portable/AlTamam-Portable-${{ matrix.arch }}.zip
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
@@ -412,7 +422,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Installer-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
-          path: artifacts/AlTamam-Installer-${{ matrix.arch }}.exe
+          path: dist/installer/AlTamam-Installer-${{ matrix.arch }}.exe
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
@@ -421,8 +431,8 @@ jobs:
         with:
           name: AlTamam-Checksums-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
           path: |
-            artifacts/SHA256SUMS.txt
-            artifacts/BUILD_METADATA.json
+            dist/metadata/SHA256SUMS.txt
+            dist/metadata/BUILD_METADATA.json
           if-no-files-found: error
           retention-days: 90
       - name: Retain raw publish dir for acceptance testing

@@ -67,6 +67,21 @@ def main() -> int:
     webview2 = os.path.join(root, "WebView2Loader.dll")
     if not os.path.isfile(webview2):
         errors.append("missing WebView2Loader.dll (WebView2 runtime dependency)")
+    # The package must contain the RIGHT native bitness. Mere presence of
+    # e_sqlcipher.dll / WebView2Loader.dll does not prove an x86 package can run
+    # on 32-bit Windows. Check native PE machine values in the published output.
+    if arch is not None:
+        expected_machine = {"win-x86": 0x14c, "win-x64": 0x8664}[arch]
+        native_machines = [
+            ("WebView2Loader.dll", webview2),
+            ("hostfxr.dll", os.path.join(root, "hostfxr.dll")),
+            ("hostpolicy.dll", os.path.join(root, "hostpolicy.dll")),
+        ]
+        for label, native_path in native_machines:
+            if not os.path.isfile(native_path):
+                errors.append(f"missing native {label} for {arch}")
+            elif pe_machine(native_path) != expected_machine:
+                errors.append(f"native {label} has wrong PE architecture for {arch}")
     natives = [d for d in os.listdir(root) if d.lower().startswith("runtimes")]
     cipher = []
     for base in ([os.path.join(root, d) for d in natives] + [root]):
@@ -74,6 +89,17 @@ def main() -> int:
             cipher += [f for f in files if "sqlcipher" in f.lower() or f.lower() == "e_sqlcipher.dll"]
     if not cipher:
         errors.append("no native SQLCipher library found under runtimes/ (encrypted DB would fail at startup)")
+    if arch is not None and cipher:
+        expected_machine = {"win-x86": 0x14c, "win-x64": 0x8664}[arch]
+        native_cipher_paths = [
+            os.path.join(directory, name)
+            for base in ([os.path.join(root, d) for d in natives] + [root])
+            for directory, _, filenames in os.walk(base)
+            for name in filenames
+            if name.lower() in {"e_sqlcipher.dll", "sqlcipher.dll"}
+        ]
+        if not any(pe_machine(path) == expected_machine for path in native_cipher_paths):
+            errors.append(f"no target-architecture native SQLCipher DLL for {arch}")
 
     if portable:
         runtime_installer=os.path.join(root,"Prerequisites","MicrosoftEdgeWebView2RuntimeInstaller.exe")
