@@ -1,5 +1,8 @@
 # AlTamam — AS-IS Architecture (Phase 00 / Step 00.04)
 
+**Historical architecture snapshot (2026-10-23):** The four-project/90-action figures below are not current. See [current live Phase 00–02 reconciliation](PHASE00_01_02_LIVE_RECONCILIATION_2026-11-02.md) for the five C# production projects and 103 actions.
+
+
 Verified against the CONNECTED REPOSITORY working tree at commit `1bb28bb` (base `main` @ `eb34116`), not only the supplied project.zip. ZIP correspondence: repo contains the same 103 baseline files plus 2 docs added in Phase 00 (105 tracked now); no structural divergence found.
 
 ## 1. Solution topology (AlTamam.slnx — 4 projects, NO executable host)

@@ -398,4 +398,38 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         }
         Assert.Equal(1L, Count(connection, "PRAGMA foreign_keys;"));
     }
+    [Fact]
+    public void V012LegacyAutoAttendanceCounts_AreUnknown_NotFakeZeros_AndNonnegative()
+    {
+        using var connection = _database.CreateOpenConnection();
+        Execute(connection, """
+            INSERT INTO AutoAttendanceRuns(JobKey,BusinessDate,DueTimeLocal,StartedAtUtc,
+                CompletedAtUtc,IsCatchUpRun,CopiedCount,SkippedNoYesterdayCount,
+                SkippedTransferExemptCount,SummaryArabic)
+            VALUES('AUTO08H-2024-12-31','2024-12-31','08:00',
+                '2024-12-31T05:00:00Z','2024-12-31T05:00:05Z',0,4,1,2,'إيصال تاريخي');
+            """);
+        Assert.Equal("1", Value(connection, """
+            SELECT CASE WHEN DefaultedCount IS NULL AND SkippedManualCount IS NULL
+                 AND FailedCount IS NULL THEN 1 ELSE 0 END
+            FROM AutoAttendanceRuns WHERE BusinessDate='2024-12-31';
+            """));
+        Execute(connection, """
+            UPDATE AutoAttendanceRuns SET DefaultedCount=4,SkippedManualCount=1,
+                FailedCount=0 WHERE BusinessDate='2024-12-31';
+            """);
+        Assert.Equal("4", Value(connection, """
+            SELECT DefaultedCount FROM AutoAttendanceRuns
+            WHERE BusinessDate='2024-12-31';
+            """));
+        Assert.Throws<SqliteException>(() => Execute(connection, """
+            UPDATE AutoAttendanceRuns SET FailedCount=-1
+            WHERE BusinessDate='2024-12-31';
+            """));
+        Assert.Equal("0", Value(connection, """
+            SELECT FailedCount FROM AutoAttendanceRuns
+            WHERE BusinessDate='2024-12-31';
+            """));
+    }
+
 }

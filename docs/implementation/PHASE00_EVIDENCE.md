@@ -1,5 +1,8 @@
 # PHASE 00 — Repository Baseline Audit & Evidence (AlTamam / التمام اليومي)
 
+**Historical snapshot (2026-10-23):** The 103-file/no-tests/90-action baseline below is superseded by [current Phase 00–02 live reconciliation](PHASE00_01_02_LIVE_RECONCILIATION_2026-11-02.md). Keep the original evidence unchanged.
+
+
 - Date: Friday, 2026-10-23
 - Engineer: Qwen Coder (implementing engineer role; ChatGPT = external reviewer, contacted manually by owner)
 - Branch audited: `qwen-code-3daf4f97-7cb4-4a54-af89-c5f4e69a0b40`
