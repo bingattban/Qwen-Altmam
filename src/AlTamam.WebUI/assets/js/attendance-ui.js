@@ -15,9 +15,43 @@
    const o=make("option",title);o.value=value;return o;
  };
  const showError=(box,error)=>{
-   const message=make("p",error.message||"تعذرت العملية",
-     "admin-warning attendance-conflict-warning");
+   // These fields originate from the authenticated C# response envelope.
+   // Use textContent only: person names and server messages are never HTML.
+   const conflicts=Array.isArray(error?.conflictInfo?.conflicts)
+     ? error.conflictInfo.conflicts.slice(0,100):[];
+   const fieldNames={
+     businessDate:"التاريخ",statusId:"الحالة",personIds:"الأفراد",
+     mode:"نوع العملية",reason:"سبب التعديل",
+     previewToken:"معرّف المعاينة",siteId:"الموقع"
+   };
+   const fields=error?.validationErrors&&typeof error.validationErrors==="object"
+     ?Object.entries(fieldNames).filter(([key])=>
+       typeof error.validationErrors[key]==="string"&&error.validationErrors[key].trim())
+     :[];
+   const text=String(error?.message||"تعذرت العملية");
+   const summary=conflicts.length?text.split("\n")[0]:text;
+   const message=make("p",summary,"admin-warning attendance-conflict-warning");
    box.replaceChildren(message);
+   if(conflicts.length){
+     const list=make("ul",undefined,"attendance-conflict-list");
+     for(const person of conflicts){
+       if(!person||typeof person!=="object")continue;
+       const name=String(person.name||"فرد غير معروف");
+       const number=String(person.serviceNumberA||"غير معروف");
+       const reason=String(person.reason||"تعارض في بيانات الفرد");
+       list.appendChild(make("li",
+         "«"+name+"» (الرقم (ع): "+number+"): "+reason,
+         "attendance-conflict-person"));
+     }
+     box.appendChild(list);
+   }
+   if(fields.length){
+     const list=make("ul",undefined,"attendance-validation-list");
+     for(const [key,label] of fields)
+       list.appendChild(make("li",label+": "+error.validationErrors[key],
+         "attendance-validation-field"));
+     box.appendChild(list);
+   }
  };
  function localDate(){
    const now=new Date();
