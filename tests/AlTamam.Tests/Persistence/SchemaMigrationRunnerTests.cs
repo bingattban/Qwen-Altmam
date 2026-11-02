@@ -161,6 +161,48 @@ public sealed class SchemaMigrationRunnerTests : IDisposable
     }
 
     [Fact]
+    public async Task InitializeAsync_ExistingCurrentSchema_RejectsTamperedMigrationPinWithoutWrites()
+    {
+        // Test the *application startup path*, not merely a direct runner call.
+        // A database already at latest version must never skip SHA-256 checks.
+        using (var initial = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex))
+            await initial.InitializeAsync();
+
+        using (var opened = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex))
+        using (var connection = opened.CreateOpenConnection())
+        using (var tamper = connection.CreateCommand())
+        {
+            tamper.CommandText = "UPDATE SchemaVersions SET Sha256 = 'deadbeef' WHERE SchemaVersion = 2;";
+            Assert.Equal(1, tamper.ExecuteNonQuery());
+        }
+
+        using (var restarted = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex))
+        {
+            var rejection = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => restarted.InitializeAsync());
+            Assert.Contains("hash mismatch", rejection.Message,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Startup must not silently repair a tampered pin, write a new schema
+        // version or generate a rescue image for a CURRENT schema.
+        using (var inspected = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex))
+        using (var connection = inspected.CreateOpenConnection())
+        {
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,
+                SchemaMigrationRunner.GetCurrentVersion(connection));
+            using var count = connection.CreateCommand();
+            count.CommandText = "SELECT COUNT(*) FROM SchemaVersions;";
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,
+                Convert.ToInt32(count.ExecuteScalar()));
+            using var pin = connection.CreateCommand();
+            pin.CommandText = "SELECT Sha256 FROM SchemaVersions WHERE SchemaVersion=2;";
+            Assert.Equal("deadbeef", pin.ExecuteScalar()?.ToString());
+        }
+        Assert.False(Directory.Exists(_dbPath + ".migration-backups"));
+    }
+
+    [Fact]
     public async Task UpgradeAsync_FailedMigration_RollsBackItsOwnStep()
     {
         using var context = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex);
