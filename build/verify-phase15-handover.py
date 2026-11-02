@@ -14,6 +14,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from release_names import owner_filename
 
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 SHA64 = re.compile(r"[0-9a-f]{64}\Z")
@@ -74,13 +75,13 @@ def audit(root: Path, version: str, checkout: str, source: str) -> dict:
             raise ValueError(arch + ": expected exactly two metadata file entries")
         listed = {}
         for line in sum_path.read_text(encoding="utf-8-sig").splitlines():
-            match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9.-]+)", line)
+            match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.+-]+)", line)
             if match is None or match.group(2) in listed:
                 raise ValueError(arch + ": malformed or duplicate SHA256SUMS entry")
             listed[match.group(2)] = match.group(1)
         expected_files = {
-            f"AlTamam-Portable-{arch}.zip",
-            f"AlTamam-Installer-{arch}.exe",
+            owner_filename(version, arch, "Portable"),
+            owner_filename(version, arch, "Installer"),
         }
         if set(listed) != expected_files:
             raise ValueError(arch + ": checksum manifest does not name both exact packages")
@@ -94,7 +95,7 @@ def audit(root: Path, version: str, checkout: str, source: str) -> dict:
         if set(by_name) != expected_files:
             raise ValueError(arch + ": package metadata names mismatch")
         for kind, suffix in (("Portable", ".zip"), ("Installer", ".exe")):
-            name = f"AlTamam-{kind}-{arch}{suffix}"
+            name = owner_filename(version, arch, kind)
             p = root / f"AlTamam-{kind}-{arch}-rc-{version}" / name
             if p.is_symlink() or not p.is_file() or p.stat().st_size <= 0:
                 raise ValueError("missing / linked / empty current-run customer package: " + name)
