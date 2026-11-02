@@ -94,6 +94,11 @@ public sealed class SchemaMigrationRunner
             throw new InvalidOperationException(
                 $"Database schema version {current} is newer than the application's latest known version {LatestKnownVersion}. Refusing to downgrade.");
 
+        // Fail BEFORE any new SQL is applied if existing migration evidence is
+        // missing/tampered. A rescue snapshot cannot make an untrusted schema valid.
+        if (current > 0)
+            VerifyRecordedHashes(connection);
+
         foreach (var migration in _migrations.Where(m => m.Version > current))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -285,12 +290,25 @@ public sealed class SchemaMigrationRunner
         int current = GetCurrentVersion(connection);
         foreach (var migration in _migrations.Where(m => m.Version <= current && m.Version >= 1))
         {
-            if (!migration.RecordsHash) continue; // pre-hardening bootstrap rows carry no pin by design
+            // MAX(SchemaVersion) alone does not establish an unbroken history.
+            // Checking every recorded name also covers missing V001 on a V002+
+            // database, without attempting to select Sha256 before V002 exists.
+            using (var name = connection.CreateCommand())
+            {
+                name.CommandText = "SELECT MigrationName FROM SchemaVersions WHERE SchemaVersion = $v;";
+                name.Parameters.Add("$v", SqliteType.Integer).Value = migration.Version;
+                if (name.ExecuteScalar() as string != migration.Name)
+                    throw new InvalidOperationException(
+                        $"Required migration history missing or renamed for '{migration.Name}' (version {migration.Version}).");
+            }
+            if (!migration.RecordsHash) continue; // V001 is the only intentional unpinned bootstrap.
             using var cmd = connection.CreateCommand();
             cmd.CommandText = "SELECT Sha256 FROM SchemaVersions WHERE SchemaVersion = $v;";
             cmd.Parameters.Add("$v", SqliteType.Integer).Value = migration.Version;
             var recorded = cmd.ExecuteScalar() as string;
-            if (recorded is null) continue; // legacy row without hash column (pre-V002 databases)
+            if (string.IsNullOrWhiteSpace(recorded))
+                throw new InvalidOperationException(
+                    $"Required migration hash missing for '{migration.Name}' (version {migration.Version}).");
             string expected = ComputeExpectedHash(migration);
             if (!string.Equals(recorded, expected, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException(
