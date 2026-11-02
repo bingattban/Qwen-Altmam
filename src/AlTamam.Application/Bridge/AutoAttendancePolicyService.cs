@@ -18,6 +18,22 @@ public sealed class AutoAttendancePolicyService
     public const string DefaultDueTime = "08:00";
     public const string DefaultLockTime = "20:00";
 
+    // Rehydrate only the ID persisted by our own SQLCipher mutation receipt:
+    // an idempotent retry has the SAME audit fact, never a newly forged event.
+    private static BridgeResponse WithCommittedAuditReceipt(BridgeResponse response)
+    {
+        if(!response.Success || response.Data is not JsonObject data ||
+           data["auditEventId"] is not JsonValue idNode)
+            return response;
+        try
+        {
+            string id=idNode.GetValue<string>();
+            return id.StartsWith("AUD-",StringComparison.Ordinal)
+                ? response with {AuditEventId=id} : response;
+        }
+        catch(InvalidOperationException) {return response;}
+    }
+
     public static bool IsValidClock(string? value) =>
         value is not null && value.Length == 5 &&
         TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture,
@@ -88,7 +104,7 @@ public sealed class AutoAttendancePolicyService
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,t,"SetAutoAttendanceDefaultStatus",actor.UserId,payload,ct).ConfigureAwait(false);
-            if(replay is not null)return replay;
+            if(replay is not null)return WithCommittedAuditReceipt(replay);
             using var status=c.CreateCommand();status.Transaction=t;
             status.CommandText="SELECT VisibleName FROM AttendanceStatusDefinitions WHERE StatusId=$id AND ActiveFlag=1;";
             status.Parameters.AddWithValue("$id",statusId);
@@ -154,7 +170,7 @@ public sealed class AutoAttendancePolicyService
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,t,"SetAttendanceSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
-            if(replay is not null)return replay;
+            if(replay is not null)return WithCommittedAuditReceipt(replay);
             using var prior=c.CreateCommand();
             prior.Transaction=t;
             prior.CommandText="SELECT SettingValue FROM AppSettings WHERE SettingKey=$key;";
@@ -245,7 +261,7 @@ public sealed class AutoAttendancePolicyService
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(
                 c,t,"SetAttendanceSchedule",actor.UserId,payload,ct).ConfigureAwait(false);
-            if(replay is not null)return replay;
+            if(replay is not null)return WithCommittedAuditReceipt(replay);
             async Task<string?> Prior(string key)
             {
                 using var q=c.CreateCommand();q.Transaction=t;
