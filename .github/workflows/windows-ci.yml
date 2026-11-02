@@ -156,6 +156,9 @@ jobs:
           Write-Host "Phase 03 unit tests executed: $count"
           if ($count -lt 4) { throw 'Phase 03 unit tests did not fully execute' }
       - name: Run deterministic core tests on Windows runner (steps 01.02-01.07)
+        env:
+          ALTAMAM_SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj
           --configuration Release --no-build --no-restore --logger "trx;LogFileName=core-tests.trx"
@@ -168,6 +171,17 @@ jobs:
           $count = [int]$xml.TestRun.ResultSummary.Counters.total
           Write-Host "Core full tests executed: $count"
           if ($count -lt 1) { throw 'Core suite executed zero tests' }
+      - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
+        shell: pwsh
+        run: |
+          python build/check-phase15-perf-evidence.py PerformanceEvidence/phase15-10k-multi-year.json $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 10k-person multi-year SQLCipher benchmark did not actually run' }
+      - name: Upload Phase 15 actual Windows multi-year SQLCipher measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase15-sqlcipher-10k-three-year-core
+          path: PerformanceEvidence/phase15-10k-multi-year.json
+          if-no-files-found: error
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
         env:

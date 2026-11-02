@@ -194,6 +194,8 @@ jobs:
           dotnet test tests/AlTamam.UnitTests/AlTamam.UnitTests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=phase03-unit.trx" --results-directory TestResults
       - name: Full deterministic test suite (all authored tests; unit+persistence+security+bridge+performance)
+        env:
+          ALTAMAM_PHASE15_MULTIYEAR_PERF_REPORT: ${{ github.workspace }}/PerformanceEvidence/phase15-10k-multi-year.json
         run: >
           dotnet test tests/AlTamam.Tests/AlTamam.Tests.csproj -c $env:CONFIGURATION --no-build --no-restore
           --logger "trx;LogFileName=full-suite.trx" --results-directory TestResults
@@ -213,6 +215,17 @@ jobs:
               throw 'Phase 03 unit suite is incomplete'
             }
           }
+      - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
+        shell: pwsh
+        run: |
+          python build/check-phase15-perf-evidence.py PerformanceEvidence/phase15-10k-multi-year.json $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Phase 15 10k-person multi-year SQLCipher benchmark did not actually run' }
+      - name: Upload Phase 15 actual Windows multi-year SQLCipher measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase15-sqlcipher-10k-three-year-release
+          path: PerformanceEvidence/phase15-10k-multi-year.json
+          if-no-files-found: error
       - name: Real WPF/WebView2 RTL/modal interaction E2E (pre-package, Windows)
         shell: pwsh
         env:
