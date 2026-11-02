@@ -32,12 +32,12 @@ try {
     $badVersions = @('../escape', 'version with spaces', '.hidden')
     foreach ($bad in $badVersions) {
         $case = @($args)
-        $case[8] = $bad
+        $case[7] = $bad
         & powershell.exe @case 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) { throw "Unsafe version passed: $bad" }
     }
     $wrongArch = @($args)
-    $wrongArch[10] = 'win-x86'
+    $wrongArch[9] = 'win-x86'
     & powershell.exe @wrongArch 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) { throw 'Wrong customer architecture passed' }
     Add-Content -LiteralPath $zip -Value 'TAMPERED'
