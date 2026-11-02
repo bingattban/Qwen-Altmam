@@ -406,8 +406,9 @@ jobs:
       - name: Build Portable ZIP (clean directory, real runnable EXE)
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
           Compress-Archive -Path "$env:PUBLISH_DIR\*" `
-            -DestinationPath "artifacts/AlTamam-Portable-$env:DISPLAY_ARCH.zip" -Force
+            -DestinationPath "artifacts/$portableName" -Force
         shell: pwsh
         env: { }
       - name: Install Inno Setup 6 (approved tool) and compile installer
@@ -427,11 +428,14 @@ jobs:
             /DTargetArch=$env:DISPLAY_ARCH `
             build/AlTamam-installer.iss
           if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compiler failed' }
-          Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH.exe" -Force
+          $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
+          Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/$setupName" -Force
       - name: Real packaged Portable vs Installer install/uninstall/reinstall and AppData preservation (15.06 automated subset)
         shell: pwsh
         run: |
-          & ./build/test-package-appdata-preservation.ps1 -PortableArchive ("artifacts/AlTamam-Portable-" + $env:DISPLAY_ARCH + ".zip") -InstallerPath ("artifacts/AlTamam-Installer-" + $env:DISPLAY_ARCH + ".exe") -ExpectedArch $env:RUNTIME
+          $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
+          $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
+          & ./build/test-package-appdata-preservation.ps1 -PortableArchive "artifacts/$portableName" -InstallerPath "artifacts/$setupName" -ExpectedArch $env:RUNTIME
           if ($LASTEXITCODE -ne 0) { throw 'Windows package preservation acceptance subset failed' }
       - name: Generate SHA-256 checksums + build metadata (15.07)
         run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
@@ -450,7 +454,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Portable-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
-          path: dist/portable/AlTamam-Portable-${{ matrix.arch }}.zip
+          path: dist/portable/AlTamamDaily_${{ env.RELEASE_VERSION }}_Portable_${{ matrix.runtime }}.zip
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
@@ -458,7 +462,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Installer-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
-          path: dist/installer/AlTamam-Installer-${{ matrix.arch }}.exe
+          path: dist/installer/AlTamamDaily_${{ env.RELEASE_VERSION }}_Setup_${{ matrix.runtime }}.exe
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
@@ -526,14 +530,14 @@ jobs:
         with: { pattern: "AlTamam-Installer-Windows-64bit-rc-*", merge-multiple: true, path: rc }
       - name: Stage installer next to cwd
         shell: pwsh
-        run: Copy-Item rc/AlTamam-Installer-Windows-64bit.exe .
+        run: Copy-Item "rc/AlTamamDaily_${env:RELEASE_VERSION}_Setup_win-x64.exe" .
       - name: Installer silent install to fresh profile
         shell: pwsh
         run: |
           # 1) first run, 2) login, 3) attendance, 4) import/export,
           # 5) shutdown/reopen, 6) upgrade-in-place, 7) uninstall keeps DB/backups,
           # 8) reinstall sees preserved data, 9) backup+restore round-trip.
-          Start-Process -FilePath ".\AlTamam-Installer-Windows-64bit.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
+          Start-Process -FilePath ".\AlTamamDaily_${env:RELEASE_VERSION}_Setup_win-x64.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
           if (-not (Test-Path "C:\AlTamamTest\AlTamam.DesktopHost.exe")) { throw "installer did not lay down exe" }
       - name: Automated acceptance driver (synthetic data only)
         # §22 audit 2026-10-23: Category=Acceptance tests DO NOT EXIST in the repo yet.
