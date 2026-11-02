@@ -113,11 +113,19 @@ public static class BridgeHandlerCatalog
                 catch
                 {
                     return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
-                        "عدد سجلات التحضير المطلوبة غير صالح."));
+                        "عدد سجلات التحضير المطلوبة غير صالح.") with {
+                            ValidationErrors = new JsonObject {
+                                ["take"] = "عدد سجلات التحضير يجب أن يكون عدداً صحيحاً."
+                            }
+                        });
                 }
                 if (take < 1 || take > 60)
                     return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
-                        "حدد عدد السجلات من 1 إلى 60."));
+                        "حدد عدد السجلات من 1 إلى 60.") with {
+                            ValidationErrors = new JsonObject {
+                                ["take"] = "القيمة المسموحة من 1 إلى 60."
+                            }
+                        });
             }
             var snapshot = await new AlTamam.Application.Scheduling.AutoAttendanceService(
                 services.Db, services.Time).ReadStatusAsync(take, ct).ConfigureAwait(false);
@@ -129,6 +137,7 @@ public static class BridgeHandlerCatalog
                     ["jobKey"] = run.JobKey,
                     ["businessDate"] = run.BusinessDate.ToString("yyyy-MM-dd"),
                     ["completed"] = true,
+                    ["status"] = "completed",
                     ["isCatchUpRun"] = run.IsCatchUpRun,
                     ["copiedCount"] = run.CopiedCount,
                     ["defaultedCount"] = run.HasDetailedCounts ? run.DefaultedCount : null,
@@ -139,9 +148,21 @@ public static class BridgeHandlerCatalog
                     ["summaryArabic"] = run.SummaryArabic
                 });
             }
+            // The ledger only persists successful completions. A due date
+            // lacking a row is UNKNOWN/UNRECORDED, not proof of failure.
+            // Clock rollback produces a separate guard state, never a success.
+            string today = snapshot.LocalNowIso[..10];
+            bool todayHasReceipt = snapshot.Runs.Any(run =>
+                run.BusinessDate.ToString("yyyy-MM-dd") == today);
+            string todayStatus = todayHasReceipt ? "completed" :
+                !snapshot.ClockIntegrityOk ? "clock_guarded" :
+                snapshot.CurrentDayDue ? "due_without_receipt" : "not_due";
             return Done(req, new JsonObject
             {
                 ["runs"] = history,
+                ["todayStatus"] = todayStatus,
+                ["todayReceiptPresent"] = todayHasReceipt,
+                ["todayEvidence"] = todayHasReceipt ? "AutoAttendanceRuns" : null,
                 ["hasCompletedRuns"] = snapshot.Runs.Count > 0,
                 ["lastRunDate"] = snapshot.Runs.Count > 0
                     ? snapshot.Runs[0].BusinessDate.ToString("yyyy-MM-dd") : null,
@@ -843,7 +864,17 @@ public static class BridgeHandlerCatalog
         => new(req.RequestId, true, data, null, null, null, events);
 
     private static BridgeResponse Fail(BridgeRequest req, BridgeResponse inner)
-        => new(req.RequestId, false, null, inner.ErrorCode ?? BridgeErrorCodes.ValidationError, inner.UserMessage ?? "فشلت العملية.");
+        // Preserve source C# validation/conflict/revision evidence. Rebuilding
+        // the record with a short constructor silently erased these fields.
+        // Error responses still MUST NOT expose success Data, audit receipts
+        // or invalidation events.
+        => inner with {
+            RequestId = req.RequestId,
+            Success = false,
+            Data = null,
+            InvalidationEvents = null,
+            AuditEventId = null
+        };
 
     private static IReadOnlyList<Contracts.Events.UiInvalidationEventPayload> Invalidation(string eventName) =>
         new[] { new Contracts.Events.UiInvalidationEventPayload(eventName, Array.Empty<string>(), DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd"), 1) };
