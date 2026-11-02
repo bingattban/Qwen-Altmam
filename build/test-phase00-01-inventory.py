@@ -46,6 +46,14 @@ class Phase00Inventory(unittest.TestCase):
         self.assertEqual(by_id["screen_069"]["routeKey"], "EightPmScheduler")
         self.assertEqual(by_id["screen_069"]["owningPhase"], "07")
 
+    def test_historical_risk_register_is_clearly_labeled(self):
+        risk = (ROOT / "docs/implementation/RISK_REGISTER.md").read_text(
+            encoding="utf-8")
+        header = risk[:600]
+        self.assertIn("Historical snapshot (2026-10-23)", header)
+        self.assertIn("PHASE00_01_02_LIVE_RECONCILIATION_2026-11-02.md", header)
+        self.assertIn("| R-01 |", risk, "retain original historical risk evidence")
+
     def test_owner_overrides_and_original_phase_ownership_are_declared(self):
         adr = (ROOT / "docs/architecture/ADR-0001.md").read_text(encoding="utf-8")
         trace = (ROOT / "docs/requirements/REQUIREMENTS_TRACEABILITY.md").read_text(
