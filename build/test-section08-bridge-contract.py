@@ -22,7 +22,7 @@ DISPATCHER = ROOT / "src" / "AlTamam.Application" / "Bridge" / "WebView2BridgeDi
 def handlers(source):
     # Includes C# switch arms such as '"A" or "B" =>'; no default arm.
     arms = re.findall(
-        r'^\\s*((?:"[A-Za-z]\\w*"\\s+or\\s+)*"[A-Za-z]\\w*")\\s*=>',
+        r'^\s*((?:"[A-Za-z]\w*"\s+or\s+)*"[A-Za-z]\w*")\s*=>',
         source, flags=re.MULTILINE
     )
     return {item for arm in arms for item in re.findall(r'"([A-Za-z]\w+)"', arm)}
