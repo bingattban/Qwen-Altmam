@@ -236,6 +236,7 @@ public sealed class WebView2BridgeDispatcher
             // uncommitted, unaudited reads never manufacture an audit receipt.
             string? auditEventId = response.AuditEventId;
             if (registration.IsMutating && response.Success &&
+                request.Action is not ("UpdateAuditPresentation" or "DeleteAuditPresentation") &&
                 string.IsNullOrWhiteSpace(auditEventId) &&
                 response.Data is JsonObject data && data["auditEventId"] is JsonNode auditNode)
             {
