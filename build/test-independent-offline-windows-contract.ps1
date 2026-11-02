@@ -55,7 +55,7 @@ try {
     $cliArgs = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$script,
         '-Version',$version,'-Architecture','win-x64','-PortableZip',$zip,
         '-SetupExe',$setup,'-Sha256Sums',$sums,
-        '-BuildMetadata',$metadataPath,'-IntegrityOnly')
+        '-BuildMetadata',$metadataPath,'-IntegrityOnly','-SourceSha',('a' * 40))
 
     & powershell.exe @cliArgs
     if ($LASTEXITCODE -ne 0) { throw 'Matching exact customer files and SHA-256 were rejected' }
