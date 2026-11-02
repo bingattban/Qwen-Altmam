@@ -56,8 +56,35 @@ public sealed class PersonnelExcelExportService
         catch { return false; }
     }
     private static string FileName(string label, string id)
-        => label + "_" + DateTime.Now.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture) +
-           "_" + id[..12] + ".xlsx";
+        => ExcelOutputNames.NamedReport(label,id);
+
+    private async Task<string> SiteLabelAsync(string? siteId, CancellationToken ct)
+    {
+        if(string.IsNullOrWhiteSpace(siteId))return "";
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT VisibleName FROM Sites WHERE SiteId=$id;";
+        q.Parameters.AddWithValue("$id",siteId);
+        string? text=await q.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+        return string.IsNullOrWhiteSpace(text)?"":ExcelOutputNames.Caption(text);
+    }
+
+    private async Task<string> ReportFileLabelAsync(string[] ids, JsonObject? payload,
+        CancellationToken ct)
+    {
+        if(ids.Length!=1)
+        {
+            string siteName=await SiteLabelAsync(Read(payload,"siteId"),ct).ConfigureAwait(false);
+            return siteName.Length>0?"تقرير جماعي_"+siteName:"تقرير جماعي";
+        }
+        using var c=_db.CreateOpenConnection();
+        using var q=c.CreateCommand();
+        q.CommandText="SELECT CurrentVisibleName FROM Persons WHERE PersonId=$id;";
+        q.Parameters.AddWithValue("$id",ids[0]);
+        string? name=await q.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
+        return string.IsNullOrWhiteSpace(name)?"تقرير فرد":
+            "تقرير فرد_"+ExcelOutputNames.Caption(name);
+    }
     private static bool ExportId(JsonObject? payload, out string id)
     {
         string source = Read(payload,"exportId");
@@ -104,7 +131,7 @@ public sealed class PersonnelExcelExportService
         if(ids.Length<=12)
             for(int i=0;i<ids.Length;i++) sheets.Add("فرد "+(i+1).ToString("D2",CultureInfo.InvariantCulture));
         if(ids.Length>1)sheets.Add("الإجمالي اليومي");
-        var title=ids.Length==1?"تقرير فرد":"تقرير جماعي";
+        var title=await ReportFileLabelAsync(ids,payload,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
             ["mode"]="report",["personCount"]=ids.Length,
@@ -379,12 +406,14 @@ public sealed class PersonnelExcelExportService
     {
         string mode=Read(payload,"mode");
         string label;
+        string? previewName=null;
         string[] ids=[];
         if(mode is "" or "report")
         {
             if(!TrySelected(payload,out ids))return Invalid("حدد الفرد أو المجموعة قبل التصدير.");
             var preview=await PreviewReportAsync(payload,ct).ConfigureAwait(false);
             if(!preview.Success)return preview;
+            previewName=Read((JsonObject)preview.Data!,"fileName");
             label=ids.Length==1?"تقرير فرد":"تقرير جماعي";
         }
         else if(mode=="movementArchive")
@@ -400,7 +429,17 @@ public sealed class PersonnelExcelExportService
         if(!ExportId(payload,out var exportId))return Invalid("معرف العملية غير صالح.");
         string? directory=await FolderAsync(ct).ConfigureAwait(false);
         if(directory is null)return ExportFailure("مجلد التصدير غير متاح؛ غيّره من الإعدادات.");
-        string fileName=FileName(label,exportId),destination=Path.Combine(directory,fileName);
+        // One person's report uses their actual current roster name. Archive
+        // and grouped exports with a site filter use the real SQLCipher site
+        // caption, never an untrusted label from the browser.
+        string reportLabel=label;
+        if(previewName is null)
+        {
+            string siteName=await SiteLabelAsync(Read(payload,"siteId"),ct).ConfigureAwait(false);
+            if(siteName.Length>0)reportLabel+="_"+siteName;
+        }
+        string fileName=previewName??FileName(reportLabel,exportId);
+        string destination=Path.Combine(directory,fileName);
         string partial=destination+".part";
         if(File.Exists(destination))return Invalid("سبق إنشاء الملف لهذه العملية؛ راجع المجلد قبل إعادة التصدير.");
         try
