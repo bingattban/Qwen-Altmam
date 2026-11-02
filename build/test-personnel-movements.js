@@ -121,6 +121,7 @@ async function run(){
  assert.ok(all().some(x=>x.textContent.includes("عدد")),
    "mismatched native confirmation must be explained to the user");
  overrideCommitCount=null;
+ const commitsBeforeArchive=committed.length;
  const archiveRoot=new Element("div");
  await ctx.window.AltamamMovements.render(archiveRoot,"archiveInternal");
  assert.ok(invoked.includes("QueryMovementArchive"),"real movement archive read");
@@ -133,7 +134,7 @@ async function run(){
  assert.equal(detailReviews.length,1,"movement details open inside the shared modal");
  assert.ok(detailReviews[0].rows.some(([key,value])=>
    key==="الرقم (ع) وقت النقل"&&value==="001"));
- assert.equal(committed.length,1,"read-only archive details must not commit another transfer");
+ assert.equal(committed.length,commitsBeforeArchive,"read-only archive details must not commit another transfer");
  const internalExport=archiveRoot.all().find(x=>x.tag==="button"&&
   x.textContent.includes("تصدير أرشيف النقل الداخلي"));
  assert.ok(internalExport);
