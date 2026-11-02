@@ -143,13 +143,18 @@ public sealed class AlTamamDbContext : IDisposable
             }
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
+            var runner = new SchemaMigrationRunner(CanonicalMigrations);
+            // Reopening an already-current encrypted database MUST validate its
+            // recorded migration SHA-256 pins. UpgradeAsync validates upgraded
+            // databases, but that path is intentionally skipped at current version.
+            // This is a read-only startup check: no rekey, DDL, backup, or repair.
+            if (hasVersionTable)
+                runner.VerifyRecordedHashes(connection);
+
             // Bootstrap path: V001 lands a version-1 database — upgrade it to this build's schema
             // through the hash-pinned, forward-only migration runner (V002, V003, …).
             if (!hasVersionTable && CurrentSchemaVersion > 1)
-            {
-                var runner = new SchemaMigrationRunner(CanonicalMigrations);
                 await runner.UpgradeAsync(connection, cancellationToken).ConfigureAwait(false);
-            }
         }
         finally { _writeGate.Release(); }
     }
