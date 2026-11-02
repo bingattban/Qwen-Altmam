@@ -74,7 +74,7 @@ def audit(root: Path, version: str, checkout: str, source: str) -> dict:
             raise ValueError(arch + ": expected exactly two metadata file entries")
         listed = {}
         for line in sum_path.read_text(encoding="utf-8-sig").splitlines():
-            match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9.-]+)", line)
+            match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9._-]+)", line)
             if match is None or match.group(2) in listed:
                 raise ValueError(arch + ": malformed or duplicate SHA256SUMS entry")
             listed[match.group(2)] = match.group(1)
