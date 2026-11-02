@@ -1,3 +1,4 @@
+using AlTamam.Infrastructure.Persistence.Migrations;
 using System.Security.Cryptography;
 using System.Text;
 using AlTamam.Domain.Policies;
@@ -372,6 +373,58 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
             "DELETE FROM AuditEvents WHERE AuditEventId='TST-AUDIT-001';"));
         Assert.Throws<SqliteException>(() => Execute(inspect,
             "DELETE FROM AuditLogPresentationEdits WHERE AuditEventId='TST-AUDIT-001';"));
+    }
+
+    [Fact]
+    public async Task ExistingV011Database_RequiresEncryptedRescueBeforeUpgrade_ToV012()
+    {
+        // Build a genuine older, encrypted SQLCipher schema with the immutable
+        // shipped V001..V011 resources. Do NOT change released migrations.
+        string path = Path.Combine(_directory, "phase02-legacy-v011.db");
+        using (var legacy = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        using (var connection = legacy.CreateOpenConnection())
+        {
+            var oldRunner = new SchemaMigrationRunner(
+                AlTamamDbContext.CanonicalMigrations.Take(11).ToArray());
+            await oldRunner.UpgradeAsync(connection);
+            Assert.Equal(11, SchemaMigrationRunner.GetCurrentVersion(connection));
+        }
+
+        // A real filesystem blocker at the rescue location must STOP the
+        // upgrade. No silent migration, fallback, or deletion of the blocker.
+        string rescueDirectory = path + ".migration-backups";
+        File.WriteAllText(rescueDirectory, "synthetic-directory-collision");
+        using (var blocked = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        {
+            var error = await Record.ExceptionAsync(() => blocked.InitializeAsync());
+            Assert.NotNull(error);
+        }
+        using (var untouched = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        using (var connection = untouched.CreateOpenConnection())
+        {
+            Assert.Equal(11, SchemaMigrationRunner.GetCurrentVersion(connection));
+            Assert.NotEmpty(Value(connection, "PRAGMA cipher_version;"));
+        }
+
+        File.Delete(rescueDirectory);
+        using (var upgraded = new AlTamamDbContext(path, _key, useConnectionPooling: false))
+        {
+            await upgraded.InitializeAsync();
+            using var connection = upgraded.CreateOpenConnection();
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,
+                         SchemaMigrationRunner.GetCurrentVersion(connection));
+        }
+
+        string[] snapshots = Directory.GetFiles(rescueDirectory, "pre-migration-v011-to-v*.db");
+        string backup = Assert.Single(snapshots);
+        Assert.False(ReadHeader(backup).SequenceEqual(
+            Encoding.ASCII.GetBytes("SQLite format 3\0")));
+        using (var rescue = new AlTamamDbContext(backup, _key, useConnectionPooling: false))
+        using (var connection = rescue.CreateOpenConnection())
+        {
+            Assert.Equal(11, SchemaMigrationRunner.GetCurrentVersion(connection));
+            Assert.NotEmpty(Value(connection, "PRAGMA cipher_version;"));
+        }
     }
 
     [Fact]
