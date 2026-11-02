@@ -103,5 +103,27 @@ class Phase15Contract(unittest.TestCase):
         )
 
 
+    def test_section07_runtime_route_semantics(self):
+        """Prevent retired route labels, wrong default hour and inline status edits."""
+        data = json.loads((WEB / "screen-manifest.json").read_text(encoding="utf-8"))
+        routes = {row["screenId"]: row for row in data["screens"]}
+        self.assertEqual(len(routes), 69)
+        self.assertNotIn("screen_020", routes)
+        self.assertEqual(routes["screen_025"]["routeKey"], "PersonnelReport")
+        self.assertEqual(routes["screen_026"]["titleAr"], "تصدير تقرير الأفراد")
+        self.assertEqual(routes["screen_070"]["routeKey"], "AddPerson")
+        self.assertIn("08:00", routes["screen_069"]["breadcrumbAr"])
+        self.assertNotIn("غير المحضرين", routes["screen_003"]["breadcrumbAr"])
+        scheduler = read("src/AlTamam.Application/Scheduling/AutoAttendanceService.cs")
+        self.assertIn("DefaultDueHour = 8", scheduler)
+        ui = read("src/AlTamam.WebUI/assets/js/functional-screens.js")
+        self.assertNotIn("const batchStatus=", ui)
+        self.assertNotIn("statusSelect.setAttribute", ui)
+        self.assertIn("const picked=await choose([", ui)
+        self.assertIn('person.committedAtUtc||"—"', ui)
+        backend = read("src/AlTamam.Application/Bridge/DailyMonthlyReadService.cs")
+        self.assertIn("ar.CommittedAtUtc", backend)
+        self.assertIn('["committedAtUtc"] = reader.IsDBNull(12)', backend)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
