@@ -443,14 +443,14 @@ jobs:
       - name: Stage byte-identical verified customer outputs in dist/portable and dist/installer
         shell: pwsh
         run: |
-          python build/stage-phase14-distributions.py artifacts dist $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA
+          python build/stage-phase14-distributions.py artifacts dist $env:DISPLAY_ARCH $env:GITHUB_SHA $env:ALTAMAM_SOURCE_HEAD_SHA "$env:RELEASE_VERSION"
           if ($LASTEXITCODE -ne 0) { throw 'Phase 14 distribution provenance or staging failed' }
       # One download contains ONE customer-facing version, never both.
       - name: Upload standalone Portable package for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Portable-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
-          path: dist/portable/AlTamam-Portable-${{ matrix.arch }}.zip
+          path: dist/portable/AlTamamDaily_${{ env.RELEASE_VERSION }}_Portable_${{ matrix.runtime }}.zip
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
@@ -458,7 +458,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AlTamam-Installer-${{ matrix.arch }}-rc-${{ env.RELEASE_VERSION }}
-          path: dist/installer/AlTamam-Installer-${{ matrix.arch }}.exe
+          path: dist/installer/AlTamamDaily_${{ env.RELEASE_VERSION }}_Setup_${{ matrix.runtime }}.exe
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
@@ -526,14 +526,14 @@ jobs:
         with: { pattern: "AlTamam-Installer-Windows-64bit-rc-*", merge-multiple: true, path: rc }
       - name: Stage installer next to cwd
         shell: pwsh
-        run: Copy-Item rc/AlTamam-Installer-Windows-64bit.exe .
+        run: Copy-Item "rc/AlTamamDaily_${{ env.RELEASE_VERSION }}_Setup_win-x64.exe" .
       - name: Installer silent install to fresh profile
         shell: pwsh
         run: |
           # 1) first run, 2) login, 3) attendance, 4) import/export,
           # 5) shutdown/reopen, 6) upgrade-in-place, 7) uninstall keeps DB/backups,
           # 8) reinstall sees preserved data, 9) backup+restore round-trip.
-          Start-Process -FilePath ".\AlTamam-Installer-Windows-64bit.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
+          Start-Process -FilePath ".\AlTamamDaily_${{ env.RELEASE_VERSION }}_Setup_win-x64.exe" -ArgumentList "/VERYSILENT /DIR=C:\AlTamamTest" -Wait
           if (-not (Test-Path "C:\AlTamamTest\AlTamam.DesktopHost.exe")) { throw "installer did not lay down exe" }
       - name: Automated acceptance driver (synthetic data only)
         # §22 audit 2026-10-23: Category=Acceptance tests DO NOT EXIST in the repo yet.
