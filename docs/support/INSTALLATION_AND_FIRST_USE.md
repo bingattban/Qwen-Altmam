@@ -3,11 +3,13 @@
 **Release status: candidate / NO-GO.** Use only verified TEST packages while final Phase 15 acceptance remains open. Never use production personnel data for release qualification.
 
 ## Choose the correct, authentic package
-- Windows 32-bit (x86): `AlTamam-Portable-Windows-32bit.zip` for direct run, or `AlTamam-Installer-Windows-32bit.exe` for setup.
-- Windows 64-bit (x64): `AlTamam-Portable-Windows-64bit.zip` for direct run, or `AlTamam-Installer-Windows-64bit.exe` for setup.
+- Windows 32-bit (x86): `AlTamamDaily_<VERSION>_Portable_win-x86.zip` for direct run, or `AlTamamDaily_<VERSION>_Setup_win-x86.exe` for setup.
+- Windows 64-bit (x64): `AlTamamDaily_<VERSION>_Portable_win-x64.zip` for direct run, or `AlTamamDaily_<VERSION>_Setup_win-x64.exe` for setup.
 - GitHub Actions uploads have run/version suffixes around their artifact **container** names; inspect the archive and checksum metadata for the actual filename.
 - Download each class and same-architecture `SHA256SUMS.txt` / `BUILD_METADATA.json` from the **same successful run** as the frozen source SHA. Run PowerShell `Get-FileHash -Algorithm SHA256 <file>` and compare to the actual checksums inside that metadata. Reject missing/changed files or wrong architecture.
 - This application is WPF/.NET 10, installed and run entirely locally. Its package contains a signed Microsoft WebView2 **offline** prerequisite installer. On machines lacking the runtime, follow the included local prerequisite instructions; do not assume an online download is permitted.
+
+`<VERSION>` is the exact metadata-verified CI or final version. Four real customer files and their own SHA-256 values must come from a successful same-SHA Windows Release run; GitHub artifact archive labels are not customer filenames. No final version is released before independent offline Windows acceptance and owner approval.
 
 ## Portable
 1. Extract the **complete ZIP** to a writable local folder; do not run an EXE from the compressed ZIP and do not remove bundled native DLLs, fonts, offline WebView2 files or license notices.

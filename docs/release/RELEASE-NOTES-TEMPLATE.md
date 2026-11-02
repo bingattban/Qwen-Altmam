@@ -22,10 +22,10 @@ tested Release workflow** (never from the outer GitHub artifact ZIP digest).
 
 | Windows class | Real CI file | SHA-256 (fill from run) | Bytes |
 |---|---|---|---|
-| x86 Portable | `AlTamam-Portable-Windows-32bit.zip` | {X86_PORTABLE_SHA256} | {X86_PORTABLE_BYTES} |
-| x86 Installer | `AlTamam-Installer-Windows-32bit.exe` | {X86_INSTALLER_SHA256} | {X86_INSTALLER_BYTES} |
-| x64 Portable | `AlTamam-Portable-Windows-64bit.zip` | {X64_PORTABLE_SHA256} | {X64_PORTABLE_BYTES} |
-| x64 Installer | `AlTamam-Installer-Windows-64bit.exe` | {X64_INSTALLER_SHA256} | {X64_INSTALLER_BYTES} |
+| x86 Portable | `AlTamamDaily_{VERSION}_Portable_win-x86.zip` | {X86_PORTABLE_SHA256} | {X86_PORTABLE_BYTES} |
+| x86 Installer | `AlTamamDaily_{VERSION}_Setup_win-x86.exe` | {X86_INSTALLER_SHA256} | {X86_INSTALLER_BYTES} |
+| x64 Portable | `AlTamamDaily_{VERSION}_Portable_win-x64.zip` | {X64_PORTABLE_SHA256} | {X64_PORTABLE_BYTES} |
+| x64 Installer | `AlTamamDaily_{VERSION}_Setup_win-x64.exe` | {X64_INSTALLER_SHA256} | {X64_INSTALLER_BYTES} |
 
 Check each with PowerShell: `Get-FileHash -Algorithm SHA256 -LiteralPath ".\PACKAGE"`.
 
@@ -58,4 +58,4 @@ upgrade, offline missing runtime, physical disk interruptions, SQLCipher
 recovery from independent Windows account, signing/license and P0/P1 triage.
 
 {OWNER_SIGNATURE_OR_PENDING} / {VERIFIER_SIGNATURE_OR_PENDING}
-See `docs/release/GO_NO_GO.md` and `docs/support/FINAL_VERIFICATION_CHECKLIST.md`.
+See `docs/release/GO_NO_GO.md`, `docs/release/SECTION11_VERIFICATION_2026-11-02.md` and `docs/support/FINAL_VERIFICATION_CHECKLIST.md`.

@@ -9,10 +9,12 @@ verifies their source provenance and streams identical bytes into final paths.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import shutil
 import sys
 from pathlib import Path
+from release_names import owner_filename
 
 
 def _load_verifier():
@@ -31,9 +33,11 @@ def stage(artifacts: Path, distribution: Path, arch: str,
     errors = verifier.verify_artifacts(artifacts, arch, checkout_sha, source_head_sha)
     if errors:
         raise ValueError("Phase 14 rejected source artifacts: " + "; ".join(errors))
+    metadata = json.loads((artifacts / "BUILD_METADATA.json").read_text(encoding="utf-8"))
+    version = metadata["version"]
     names = [
-        ("portable", f"AlTamam-Portable-{arch}.zip"),
-        ("installer", f"AlTamam-Installer-{arch}.exe"),
+        ("portable", owner_filename(version, arch, "Portable")),
+        ("installer", owner_filename(version, arch, "Installer")),
         ("metadata", "SHA256SUMS.txt"),
         ("metadata", "BUILD_METADATA.json"),
     ]

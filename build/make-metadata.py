@@ -6,6 +6,7 @@ Writes SHA256SUMS.txt and BUILD_METADATA.json into <artifacts-dir>. Fails if
 either required artifact is missing — CI must not mint metadata for partial runs.
 """
 import hashlib, json, os, subprocess, sys, datetime, re
+from release_names import owner_filename
 
 def sha256(path):
     h = hashlib.sha256()
@@ -37,7 +38,11 @@ def main() -> int:
         print("METADATA FAIL: invalid/stale tested checkout or PR head SHA")
         return 1
     runtime = "win-x86" if arch == "Windows-32bit" else "win-x64"
-    wanted = [f"AlTamam-Portable-{arch}.zip", f"AlTamam-Installer-{arch}.exe"]
+    try:
+        wanted = [owner_filename(version, arch, "Portable"),
+                  owner_filename(version, arch, "Installer")]
+    except ValueError as error:
+        print("METADATA FAIL:", error); return 2
     missing = [w for w in wanted if not os.path.isfile(os.path.join(art, w))]
     if missing:
         print("METADATA FAIL, missing artifacts:", missing); return 1

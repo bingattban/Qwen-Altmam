@@ -7,6 +7,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from release_names import owner_filename
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -28,8 +29,7 @@ def verify_artifacts(directory: Path, architecture: str, checkout_sha: str,
         return ["Unsupported architecture"]
     if not SHA.fullmatch(checkout_sha) or not SHA.fullmatch(source_head_sha):
         return ["Checkout/source head must each be exact 40-character Git SHA"]
-    wanted = [f"AlTamam-Portable-{architecture}.zip",
-              f"AlTamam-Installer-{architecture}.exe"]
+
     sum_path = directory / "SHA256SUMS.txt"
     metadata_path = directory / "BUILD_METADATA.json"
     try:
@@ -39,6 +39,11 @@ def verify_artifacts(directory: Path, architecture: str, checkout_sha: str,
         return [f"Missing or malformed checksums/metadata: {error}"]
     if not isinstance(metadata, dict):
         return ["BUILD_METADATA.json must be an object"]
+    try:
+        wanted = [owner_filename(metadata.get("version"), architecture, kind)
+                  for kind in ("Portable", "Installer")]
+    except ValueError as error:
+        return ["Invalid owner-approved package naming/version: " + str(error)]
     if metadata.get("commit") != checkout_sha:
         errors.append("Checkout commit does not match tested GitHub SHA")
     if metadata.get("sourceHeadSha") != source_head_sha:
@@ -61,7 +66,7 @@ def verify_artifacts(directory: Path, architecture: str, checkout_sha: str,
     if len(lines) != 2:
         errors.append("SHA256SUMS must contain exactly two lines")
     for line in lines:
-        match = re.fullmatch(r"([0-9a-f]{64})  (AlTamam-(?:Portable|Installer)-Windows-(?:32|64)bit\.(?:zip|exe))", line)
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.+-]+\.(?:zip|exe))", line)
         if not match:
             errors.append("Malformed SHA256SUMS record")
             continue
