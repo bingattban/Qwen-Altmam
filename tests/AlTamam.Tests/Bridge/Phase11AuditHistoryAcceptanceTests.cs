@@ -162,6 +162,143 @@ public sealed class Phase11AuditHistoryAcceptanceTests : IAsyncLifetime, IDispos
     }
 
     [Fact]
+    public async Task AuditOverlay_EditHideReturnActualNewAuditReceipt_NotOriginalTargetId_AndReplayIsStable()
+    {
+        var added=await new AdminConfigurationService(_db).CreateSiteAsync(
+            new JsonObject{["name"]="موقع اختبار إيصال تدقيق التعديل"},General,default);
+        Assert.True(added.Success,added.UserMessage);
+        var audit=new AuditOverlayService(_db);
+        var events=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="SITE_CREATE",["target"]="موقع اختبار إيصال تدقيق التعديل"
+        },default,General);
+        var original=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(events.Data)["items"])));
+        string targetId=original["auditEventId"]!.GetValue<string>();
+        var edit=new JsonObject {
+            ["auditEventId"]=targetId,["expectedOverlayVersion"]=0,
+            ["correctedDescription"]="وصف معدل باعتماد الإدارة",
+            ["reason"]="توضيح وصف القيد الظاهر دون تغيير الدليل الأصلي",
+            ["operationId"]="SEC08-OVERLAY-RECEIPT-EDIT-00001"
+        };
+        var changed=await audit.UpdateAuditPresentationAsync(edit,Admin,default);
+        Assert.True(changed.Success,changed.UserMessage);
+        var data=Assert.IsType<JsonObject>(changed.Data);
+        Assert.Equal(targetId,data["auditEventId"]!.GetValue<string>());
+        string metaId=data["operationAuditEventId"]!.GetValue<string>();
+        Assert.StartsWith("AUD-",metaId);
+        Assert.NotEqual(targetId,metaId);
+        Assert.Equal(metaId,changed.AuditEventId);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT OperationCode FROM AuditEvents WHERE AuditEventId=$id;";
+            q.Parameters.AddWithValue("$id",metaId);
+            Assert.Equal("UpdateAuditPresentation",q.ExecuteScalar()?.ToString());
+        }
+        var replay=await audit.UpdateAuditPresentationAsync((JsonObject)edit.DeepClone(),Admin,default);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.Equal(metaId,replay.AuditEventId);
+        Assert.Equal(metaId,Assert.IsType<JsonObject>(replay.Data)
+            ["operationAuditEventId"]!.GetValue<string>());
+
+        // Exercise the native C# handler AND WebView2 dispatcher, not only
+        // the underlying service: the target ID must never be mistaken for
+        // the ID of this newly audited hide operation.
+        var dispatcher=BridgeHandlerCatalog.Create(new BridgeSharedServices(_db));
+        var hideRequest=new JsonObject{
+            ["requestId"]="SEC08-OVERLAY-HIDE-BRIDGE-01",
+            ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+            ["action"]="DeleteAuditPresentation",
+            ["sessionNonce"]=General.SessionNonce,
+            ["payload"]=new JsonObject{
+                ["auditEventId"]=targetId,["expectedOverlayVersion"]=1,
+                ["reason"]="إخفاء العرض فقط مع إبقاء الدليل الأصلي",
+                ["operationId"]="SEC08-OVERLAY-RECEIPT-HIDE-00001"
+            }
+        };
+        var dispatched=await dispatcher.DispatchAsync(
+            hideRequest.ToJsonString(),LocalWebUiOrigin.BaseUrl,true,
+            nonce=>Task.FromResult<BridgePrincipal?>(
+                nonce==General.SessionNonce?General:null));
+        Assert.Equal(BridgeOutcomeKind.Success,dispatched.Kind);
+        var hide=dispatched.Response;
+        Assert.True(hide.Success,hide.UserMessage);
+        var hideData=Assert.IsType<JsonObject>(hide.Data);
+        Assert.Equal(targetId,hideData["auditEventId"]!.GetValue<string>());
+        Assert.NotEqual(targetId,hide.AuditEventId);
+        Assert.NotEqual(metaId,hide.AuditEventId);
+        Assert.Equal(hide.AuditEventId,
+            hideData["operationAuditEventId"]!.GetValue<string>());
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT COUNT(*) FROM AuditEvents WHERE TargetEntityId=$id AND OperationCode IN ('UpdateAuditPresentation','DeleteAuditPresentation');";
+            q.Parameters.AddWithValue("$id",targetId);
+            Assert.Equal(2L,Convert.ToInt64(q.ExecuteScalar()));
+        }
+        var details=await audit.GetAuditEntryDetailsAsync(new JsonObject{
+            ["auditEventId"]=targetId
+        },default);
+        Assert.True(details.Success,details.UserMessage);
+        Assert.True(Assert.IsType<JsonObject>(details.Data)["chainValid"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task AuditOverlay_StaleVersionAndMissingFieldsExposeStructuredErrors_NoExtraAudit()
+    {
+        var created=await new AdminConfigurationService(_db).CreateSiteAsync(
+            new JsonObject{["name"]="موقع اختبار تعارض إصدار السجل"},General,default);
+        Assert.True(created.Success,created.UserMessage);
+        var audit=new AuditOverlayService(_db);
+        var events=await audit.QueryAuditLogAsync(new JsonObject{
+            ["operation"]="SITE_CREATE",["target"]="موقع اختبار تعارض إصدار السجل"
+        },default,General);
+        string targetId=Assert.IsType<JsonObject>(Assert.Single(
+            Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(events.Data)["items"])))
+            ["auditEventId"]!.GetValue<string>();
+        var missing=await audit.UpdateAuditPresentationAsync(new JsonObject{
+            ["auditEventId"]=targetId,["expectedOverlayVersion"]=0,
+            ["operationId"]="SEC08-OVERLAY-BAD-FIELDS-00001"
+        },Admin,default);
+        Assert.False(missing.Success);
+        Assert.NotNull(missing.ValidationErrors?["reason"]);
+        var missingId=await audit.UpdateAuditPresentationAsync(new JsonObject{
+            ["reason"]="سبب صحيح",["correctedDescription"]="وصف جديد"
+        },Admin,default);
+        Assert.False(missingId.Success);
+        Assert.NotNull(missingId.ValidationErrors?["auditEventId"]);
+
+        var good=await audit.UpdateAuditPresentationAsync(new JsonObject{
+            ["auditEventId"]=targetId,["expectedOverlayVersion"]=0,
+            ["correctedDescription"]="تم اعتماد هذا الوصف",
+            ["reason"]="وصف معتمد لأجل الفحص",
+            ["operationId"]="SEC08-OVERLAY-STALENESS-GOOD-00001"
+        },Admin,default);
+        Assert.True(good.Success,good.UserMessage);
+
+        var stale=await audit.UpdateAuditPresentationAsync(new JsonObject{
+            ["auditEventId"]=targetId,["expectedOverlayVersion"]=0,
+            ["correctedDescription"]="محاولة كتابة قديمة",
+            ["reason"]="لا يسمح بإجراء تعديل قديم",
+            ["operationId"]="SEC08-OVERLAY-STALENESS-BAD-00001"
+        },General,default);
+        Assert.False(stale.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale,stale.Code);
+        Assert.Null(stale.Data);
+        Assert.Null(stale.AuditEventId);
+        Assert.Equal(0L,stale.ExpectedVersion);
+        Assert.Equal(1L,stale.ActualVersion);
+        Assert.Equal("OverlayVersionStale",
+            stale.ConflictInfo?["reason"]?.GetValue<string>());
+        Assert.Equal(targetId,stale.ConflictInfo?["auditEventId"]?.GetValue<string>());
+        using var c=_db.CreateOpenConnection();
+        using var count=c.CreateCommand();
+        count.CommandText="SELECT COUNT(*) FROM AuditLogPresentationEdits WHERE AuditEventId=$id;";
+        count.Parameters.AddWithValue("$id",targetId);
+        Assert.Equal(1L,Convert.ToInt64(count.ExecuteScalar()));
+    }
+
+    [Fact]
     public async Task EventTimeActorSnapshotsRemainUnchangedAfterAccountAndRosterRename()
     {
         using(var conn=_db.CreateOpenConnection())
