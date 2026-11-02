@@ -359,7 +359,24 @@ public sealed class AuditOverlayService
         string auditEventId = ReadString(payload, "auditEventId");
         string reason = ReadString(payload, "reason");
         string corrected = ReadString(payload, "correctedDescription");
-        long expectedVersion = ReadInt(payload, "expectedOverlayVersion", 0);
+        // Preserve the old omitted-version default (0), but NEVER silently
+        // coerce a supplied non-integer, negative or overflowing version to 0.
+        // Doing so could authorise an unwanted first overlay write.
+        long expectedVersion = 0;
+        if (payload["expectedOverlayVersion"] is JsonNode suppliedVersion)
+        {
+            try { expectedVersion = suppliedVersion.GetValue<int>(); }
+            catch
+            {
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "إصدار قيد السجل غير صالح؛ استخدم عدداً صحيحاً غير سالب.",
+                    "expectedOverlayVersion");
+            }
+            if (expectedVersion < 0)
+                return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                    "إصدار قيد السجل غير صالح؛ استخدم عدداً صحيحاً غير سالب.",
+                    "expectedOverlayVersion");
+        }
 
         if (string.IsNullOrWhiteSpace(auditEventId))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
