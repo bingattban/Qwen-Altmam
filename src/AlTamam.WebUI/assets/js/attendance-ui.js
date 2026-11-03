@@ -150,7 +150,7 @@
      return {outer,body};
    }
    async function load(){
-     if(loading)return;
+     if(loading)return false;
      loading=true;const current=++nonce;
      list.replaceChildren(make("p","جارٍ تحميل كشف القوة..."));
      try{
@@ -158,7 +158,7 @@
          businessDate:day,siteId:site.value,statusId:"__ELIGIBLE__",
          term:search.value.trim(),page:pageNo,pageSize:DAILY_PAGE_SIZE
        });
-       if(current!==nonce||!host.isConnected)return;
+       if(current!==nonce||!host.isConnected)return false;
        const d=response.data||{},t=table(fields);
        for(const p of d.items||[]){
          const tr=make("tr"),td=make("td"),cb=make("input");
@@ -195,7 +195,8 @@
        prev.disabled=pageNo<=1;next.disabled=!d.hasNext;
        pages.append(make("span","الإجمالي: "+(d.total||0)+" — صفحة "+pageNo+" (حتى "+DAILY_PAGE_SIZE+" اسم)"),prev,next);
        list.replaceChildren(t.outer,pages);
-     }catch(e){if(current===nonce)showError(list,e);}
+       return true;
+     }catch(e){if(current===nonce)showError(list,e);return false;}
      finally{loading=false;}
    }
    async function refreshDrafts(){
@@ -288,27 +289,67 @@
        if(typeof review!=="function")
          throw Error("تعذر فتح نافذة معاينة التمام؛ لا يمكن اعتماد التحضير دون مراجعتها.");
        const changing=data.mode==="revise";
-       const accepted=await review(data,{
+       const confirmationOptions={
          title:changing?"معاينة تغيير حالة التحضير":"معاينة التحضير",
          message:changing?
            "راجع الحالة السابقة والجديدة لكل فرد قبل تأكيد التغيير.":
            "راجع الأسماء والأرقام (ع) والحالات قبل اعتماد التحضير.",
          confirmLabel:changing?"تأكيد تغيير الحالة":"تأكيد وحفظ التحضير"
-       });
+       };
+       const accepted=await review(data,confirmationOptions);
        if(!accepted||!host.isConnected||previewVersion!==expectedPreviewVersion)return;
        const action=changing?"ReviseTodayAttendance":"SubmitAttendance";
-       // Stable intent for bridge retries: never use a fresh id inside an
-       // automatic retry of the same confirmed preview.
+       // Native SQLCipher receipt, not a closed modal, proves a durable write.
        const operationId=window.crypto?.randomUUID?.()||
          ("attendance-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2));
-       const saved=await bridge.invoke(action,{previewToken:data.previewToken,operationId});
-       if(!saved.data||!Number.isInteger(saved.data.count))
-         throw Error("لم يؤكد الخادم نجاح عملية التحضير.");
-       reset();pageNo=1;await load();
-       info.replaceChildren(make("p",changing?
-         "تم تأكيد تغيير حالة "+saved.data.count+" فرداً.":
-         "تم حفظ "+saved.data.count+" فرداً.","settings-success"));
-     }catch(e){
+       let submitting=false;
+       async function commitSamePreview(){
+         if(submitting||!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+         submitting=true;
+         info.replaceChildren(make("p","جارٍ تثبيت التحضير في قاعدة البيانات وتسجيل العملية..."));
+         try{
+           const saved=await bridge.invoke(action,
+             {previewToken:data.previewToken,operationId},{timeoutMs:120000});
+           if(!saved?.data||!Number.isInteger(saved.data.count)||
+              saved.data.count!==data.persons.length){
+             const mismatch=new Error("لا يمكن تأكيد نتيجة التحضير من إيصال الخدمة؛ راجع كشف اليوم قبل أي محاولة جديدة.");
+             mismatch.errorCode="BridgeResultMismatch";
+             throw mismatch;
+           }
+           if(!host.isConnected)return;
+           reset();pageNo=1;
+           info.replaceChildren(make("p",changing?
+             "تم تأكيد تغيير حالة "+saved.data.count+" فرداً.":
+             "تم حفظ "+saved.data.count+" فرداً.","settings-success"));
+           const refreshed=await load();
+           if(refreshed!==true&&host.isConnected)
+             info.appendChild(make("p",
+               "تم الحفظ فعلياً، لكن تعذر تحديث الكشف؛ استخدم زر تحديث لقراءة البيانات الجديدة.",
+               "admin-warning"));
+         }catch(error){
+           if(!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+           showError(info,error);
+           if(error?.errorCode==="BridgeTimeout"||error?.errorCode==="BridgeOffline"){
+             info.appendChild(make("p",
+               "نتيجة الحفظ غير مؤكدة بعد فقدان الاستجابة؛ أعد إرسال نفس الطلب فقط.",
+               "section-description"));
+             info.appendChild(button("إعادة مراجعة وتأكيد التحضير",async()=>{
+               if(submitting||!host.isConnected||previewVersion!==expectedPreviewVersion)return;
+               const reaffirmed=await review(data,confirmationOptions);
+               if(reaffirmed&&host.isConnected&&previewVersion===expectedPreviewVersion)
+                 await commitSamePreview();
+             }));
+           }else{
+             info.appendChild(make("p",
+               error?.errorCode==="BridgeResultMismatch"
+                 ?"النتيجة غير مؤكدة؛ تحقق من التحضير المحفوظ قبل إعادة المعاينة."
+                 :"رفضت الخدمة هذا الحفظ؛ أعد المعاينة بعد مراجعة البيانات.",
+               "section-description"));
+           }
+         }finally{submitting=false;}
+       }
+       await commitSamePreview();
+       }catch(e){
        if(host.isConnected&&previewVersion===expectedPreviewVersion)
          showError(info,e);
      }finally{previewButton.disabled=false;}

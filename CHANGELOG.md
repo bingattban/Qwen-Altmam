@@ -1,5 +1,10 @@
 # Changelog — Al-Tamam Daily (التمام اليومي)
 
+## Unreleased — Phase 15 attendance confirmation and safe retry (2026-11-03)
+- Require a real native commit count matching the preview before marking daily attendance saved; mismatched/absent receipts are uncertain, never successful.
+- Allow same-preview and same-operationId retry only for ambiguous bridge timeout/offline after a new explicit review. Definitive native failures require a fresh preview.
+- Display durable attendance success separately from a failed read-only roster refresh. No changes to SQLCipher, attendance/audit business rules, routes or UI theme; add JavaScript regression coverage.
+
 ## Unreleased — Phase 15 Excel-import confirmation safety (2026-11-03)
 - A committed import requires a real native batch receipt (nonnegative createdCount and nonempty importBatchId). Malformed successful responses are labeled uncertain, not fabricated success.
 - Only ambiguous bridge timeout/offline allows same-preview same-operationId retry. Definitive stale plan rejection requires new preview; in-flight and changed-plan confirms are guarded.
