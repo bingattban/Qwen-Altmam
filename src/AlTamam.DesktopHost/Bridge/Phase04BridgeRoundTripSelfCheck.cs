@@ -51,6 +51,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
               target.setAttribute("aria-live", "polite");
               document.body.appendChild(target);
               window.__phase04RealBridge = {status:"running"};
+              let probeStage = "first-use";
 
               async function expectRejected(action, payload, options, expected) {
                 try {
@@ -147,6 +148,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                 const businessDate=[dateNow.getFullYear(),
                   String(dateNow.getMonth()+1).padStart(2,"0"),
                   String(dateNow.getDate()).padStart(2,"0")].join("-");
+                probeStage = "PreviewInternalTransfer";
                 const previewTransfer=await api.invoke("PreviewInternalTransfer",{
                   businessDate,sourceSiteId:"SITE-UNSPECIFIED",
                   destinationSiteId:"SITE-PHASE15-E2E-DEST",personIds:[personId]
@@ -171,6 +173,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                 pressModal("إلغاء");
                 if(await cancelled!==false)
                   throw new Error("cancelled transfer was not rejected");
+                probeStage = "QueryMovementArchive";
                 const movementsBefore=await api.invoke("QueryMovementArchive",{
                   type:"internal",dateFrom:businessDate,dateTo:businessDate,
                   page:1,pageSize:10
@@ -183,16 +186,19 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("real transfer confirmation did not approve native mutation");
                 const intent={previewToken:transfer.previewToken,
                   operationId:"E2E-TRANSFER-"+crypto.randomUUID()};
+                probeStage = "CommitInternalTransfer";
                 const receipt=await api.invoke("CommitInternalTransfer",intent,
                   {timeoutMs:120000});
                 if(receipt.data?.count!==1||
                    receipt.data?.destinationName!==transfer.destinationName)
                   throw new Error("C# transfer did not return a complete matching receipt");
+                probeStage = "CommitInternalTransfer.replay";
                 const replay=await api.invoke("CommitInternalTransfer",intent,
                   {timeoutMs:120000});
                 if(replay.data?.count!==1||
                    replay.data?.destinationName!==transfer.destinationName)
                   throw new Error("identical lost-reply retry failed");
+                probeStage = "QueryMovementArchive";
                 const archive=await api.invoke("QueryMovementArchive",{
                   type:"internal",dateFrom:businessDate,dateTo:businessDate,
                   page:1,pageSize:10
@@ -267,7 +273,9 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   modalConfirmedTransfer:true};
               })().catch(error => {
                 window.__phase04RealBridge = {
-                  status:"failed",reason:String(error?.message || error)
+                  status:"failed",
+                  reason:probeStage + ": " + String(error?.errorCode || error?.name || "unknown")
+                    + " - " + String(error?.message || "no public message")
                 };
               });
               return "STARTED";
