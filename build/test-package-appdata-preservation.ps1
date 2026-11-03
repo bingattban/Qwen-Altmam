@@ -69,6 +69,7 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verify
                         "UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus",
                         "PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests",
                         "PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations",
+                        "PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher",
                         "PASS all 69 manifest routes opened in real Windows WebView2"
                     )) {
                         Assert-True ($text.Contains($required)) "Packaged native bridge evidence missing: $phase [$required]"
