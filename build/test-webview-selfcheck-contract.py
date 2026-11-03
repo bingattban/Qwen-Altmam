@@ -135,6 +135,12 @@ class WebViewSmokeContract(unittest.TestCase):
         self.assertIn("CommitInternalTransfer", bridge)
         self.assertIn("transferReview", bridge)
         self.assertIn("QueryMovementArchive", bridge)
+        # Do not lose the native operation that first failed behind a generic
+        # user-facing ValidationError. Only public stage/errorCode are logged.
+        self.assertIn('probeStage = "PreviewInternalTransfer"', bridge)
+        self.assertIn('probeStage = "CommitInternalTransfer"', bridge)
+        self.assertIn('probeStage = "QueryMovementArchive"', bridge)
+        self.assertIn('reason:probeStage + ": " +', bridge)
         self.assertIn("await Phase04BridgeRoundTripSelfCheck.RunAsync", HOST)
         self.assertIn("uri.IsDefaultPort && uri.UserInfo.Length == 0", HOST)
         self.assertIn("WaitForExit(240000)", driver)
