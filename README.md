@@ -127,11 +127,11 @@ python build/validate-layout.py publish/win-x64
 
 ## الوثائق المرجعية والحوكمة وإجراءات الإصدار
 
-* **المتطلبات الملزمة والوثائق المرجعية:** تتقدم [قرارات المالك](https://www.google.com/search?q=docs/requirements/OWNER_DECISIONS_2026-10-24.md) على أي تعليمات متعارضة مع الحفاظ على المراحل المعتمدة (`00–15`). لمزيد من التفاصيل راجع:
-  * [تتبع المتطلبات (REQUIREMENTS\_TRACEABILITY.md)](https://www.google.com/search?q=docs/requirements/REQUIREMENTS_TRACEABILITY.md)
-  * [جرد المسارات والشاشات (SCREEN\_MATRIX.csv)](https://www.google.com/search?q=docs/requirements/SCREEN_MATRIX.csv)
-  * [قرار المعمارية (ADR-0001.md)](https://www.google.com/search?q=docs/architecture/ADR-0001.md)
-  * [دليل التكامل المستمر والإصدار (docs/ci/README.md)](https://www.google.com/search?q=docs/ci/README.md)
+* **المتطلبات الملزمة والوثائق المرجعية:** تتقدم [قرارات المالك](docs/requirements/OWNER_DECISIONS_2026-10-24.md) على أي تعليمات متعارضة مع الحفاظ على المراحل المعتمدة (`00–15`). لمزيد من التفاصيل راجع:
+  * [تتبع المتطلبات (REQUIREMENTS\_TRACEABILITY.md)](docs/requirements/REQUIREMENTS_TRACEABILITY.md)
+  * [جرد المسارات والشاشات (SCREEN\_MATRIX.csv)](docs/requirements/SCREEN_MATRIX.csv)
+  * [قرار المعمارية (ADR-0001.md)](docs/architecture/ADR-0001.md)
+  * [دليل التكامل المستمر والإصدار (docs/ci/README.md)](docs/ci/README.md)
 * **الوضع الحالي للمشروع:** يحتوي هذا المستودع على برنامج Windows قابل للبناء، وجسر `JS↔C#` حقيقي، ومسارات إدارة وتحضير وتقارير واختبارات Windows آلية؛ غير أن نجاح البناء الآلي لا يعني الاستغناء عن القبول المستقل لكل مرحلة، خصوصاً اختبارات أمان الترحيل/الاستعادة وتجربة التشغيل على أجهزة Windows نظيفة.
 * **إجراءات المراجعة والإصدار (CI/CD):** يجري أي تحديث عبر `Feature Branch` و`Pull Request`. يعمل مسارا **Windows Core Build** و**Windows Release Packages** بالتوازي، وتُنفَّذ الفحوص والاختبارات داخل مسار الإصدار **قبل** تعبئة حزمتي `Portable ZIP` و`Installer EXE`. لا يُدمج أي طلب سحب إلا بعد نجاح المسارين على نفس بصمة الالتزام (`SHA`) وتوفر الحزم الفحصية، وتُختبر نسخة `main` بعد الدمج.
 * **حظر رفع البيانات الحقيقية أو المفاتيح:** يمنع رفع بيانات الأفراد أو ملفات قواعد البيانات (`.db`, `.sqlite`, `.db-wal`, `.db-shm`) أو مفاتيح `DPAPI` أو حزم الاسترداد (`.altrecovery`) أو الصادرات الشخصية (`.xlsx`, `.pdf`) إلى Git.
