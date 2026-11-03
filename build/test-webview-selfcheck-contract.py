@@ -20,11 +20,14 @@ class WebViewSmokeContract(unittest.TestCase):
             encoding="utf-8")
         match = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', bridge)
         self.assertIsNotNone(match, "real WebView2 bridge JavaScript is missing")
-        syntax = subprocess.run(["node", "--check", "-"], input=match.group(1),
-                                text=True, capture_output=True, timeout=20,
-                                check=False)
+        # Pass bytes, not locale-encoded text: Windows' cp1252 cannot represent
+        # the Arabic UI fixture. Node reads the UTF-8 byte stream unchanged.
+        syntax = subprocess.run(["node", "--check", "-"],
+                                input=match.group(1).encode("utf-8"),
+                                capture_output=True, timeout=20, check=False)
         self.assertEqual(syntax.returncode, 0,
-                         "Invalid embedded WebView2 JS (preflight): " + syntax.stderr)
+                         "Invalid embedded WebView2 JS (preflight): " +
+                         syntax.stderr.decode("utf-8", errors="replace"))
 
     def test_embedded_js_parser_must_not_use_locale_dependent_windows_encoding(self):
         # On GitHub Windows Python chooses cp1252 for subprocess text pipes.

@@ -5,6 +5,11 @@
 - Only ambiguous `BridgeTimeout`/`BridgeOffline` permits an explicit second human review and replay of the exact same previewToken and operationId. Definitive conflicts, changed selections and navigation never reuse the attempt.
 - A successfully committed change stays confirmed even if reloading the register fails. Added test-first dashboard/automatic-register regressions; no SQLCipher, role, theme, scheduler or other business-policy changes.
 
+## Unreleased — Phase 15 Windows UTF-8 browser syntax preflight (2026-11-03)
+- Fix the independent Windows Core and Release manifest preflights failing with Python `UnicodeEncodeError: cp1252` while passing Arabic JavaScript to `node --check`.
+- Encode the full embedded browser script to UTF-8 bytes explicitly and decode Node diagnostics as UTF-8. Add a regression that requires locale-independent Node stdin and real Arabic fixture content; retain all syntax rejection.
+- No runtime app source, production SQLCipher files, scheduler, installer or business rules are modified.
+
 ## Unreleased — Phase 15 real WebView2 E2E JavaScript syntax gate (2026-11-03)
 - Correct a duplicate `const before` declaration within the isolated Windows WebView2 transfer fixture that caused `ExecuteScriptAsync` to return `null` before any transfer was executed.
 - Run Node's actual JavaScript syntax parser over the embedded raw C# browser script in the mandatory preflight Python contract (Windows Core and Windows Release), so subsequent duplicate declarations fail before costly .NET tests and packaging.
