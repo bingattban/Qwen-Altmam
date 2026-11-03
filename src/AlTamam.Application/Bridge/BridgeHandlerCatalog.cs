@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json.Nodes;
 using AlTamam.Application.Roster;
 using AlTamam.Contracts.Bridge;
@@ -400,7 +401,9 @@ public static class BridgeHandlerCatalog
             Task.FromResult(Done(req, new JsonObject
             {
                 ["productNameAr"] = "التمام اليومي",
-                ["version"] = "0.4.0",
+                ["version"] = typeof(BridgeHandlerCatalog).Assembly
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                    .InformationalVersion.Split('+')[0] ?? "unknown",
                 ["offline"] = true,
                 ["bridgeProtocol"] = BridgeProtocol.ProtocolVersion
             })),

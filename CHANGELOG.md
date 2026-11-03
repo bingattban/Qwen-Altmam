@@ -1,5 +1,10 @@
 # Changelog — Al-Tamam Daily (التمام اليومي)
 
+## Unreleased — Phase 15 version and evidence corrections (2026-11-03)
+- Make GetApplicationVersion read the actual bridge assembly informational version, rather than a fixed 0.4.0. Supply the same RELEASE_VERSION to x86/x64 published assemblies and package metadata; fail packaging on mismatched published DLL product versions.
+- Add an authenticated bridge regression test for the displayed version. Repair five README links to local repository documents.
+- Refresh the Phase 15 gate with independently checked current-main Windows CI evidence. **No native destructive restore or production GO is authorized.**
+
 ## Unreleased — Phase 15 audit/handover work (2026-11-02)
 - Created an evidence-bound final GO/NO-GO register and reproducible installation, first-use, backup/recovery/migration and artifact-handover guidance.
 - Added a non-destructive Phase 15 static contract regression for retired/active routes and administrator-only commands; wired into Core/Release preflight. **This does not replace functional tests or clean-machine acceptance.**

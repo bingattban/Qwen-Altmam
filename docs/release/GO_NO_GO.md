@@ -2,6 +2,14 @@
 Date of review: 2026-11-02. Repository: bingattban/Qwen-Altmam.
 **Decision: NO-GO — not production-ready; owner signoff NOT GIVEN.**
 
+## Live baseline recheck — 2026-11-03 (before the next Phase 15 PR)
+- Current `main` commit: [927b36b372caa25edfeeac97eccd293bc11e5a25](https://github.com/bingattban/Qwen-Altmam/commit/927b36b372caa25edfeeac97eccd293bc11e5a25), PR #213 transfer confirmation and SQLCipher-derived Excel site naming merged.
+- [Windows Core run 41535312832](https://github.com/bingattban/Qwen-Altmam/actions/runs/41535312832): SUCCESS on that main SHA; 18 SQLCipher integration, 14 independent unit and 1,010 main-suite tests all passed (0 failures or skips).
+- [Windows Release run 41535313452](https://github.com/bingattban/Qwen-Altmam/actions/runs/41535313452): SUCCESS on same SHA; all required test jobs passed before packaging, real Windows-hosted WPF/WebView2 synthetic-bridge E2E succeeded, and x86/x64 portable/installer package and independent rehash jobs passed. Release candidate label `0.0.900-ci`. The real SHA-256 customer-file digest inventory is in the current-run downloadable `AlTamam-Phase15-FourPackage-Provenance-0.0.900-ci` artifact; do NOT substitute GitHub wrapper digests.
+- Current main runs also passed a 10,000-person, three-calendar-year synthetic SQLCipher benchmark evidence gate, but measured full Windows GUI Excel/report/import workflows and exact independent hardware acceptance remain incomplete.
+- 218 repository branches were listed at review; some old branches diverge and require owner review before any reuse or deletion. Reading the `main` branch-protection endpoint returned GitHub 403 (integration cannot access); no enforced protection was claimed.
+- **NO-GO remains:** independent clean and offline x86/x64 UAT, different-version upgrade, real interruption/cross-PC recovery, native restore authorization/activation, and owner production signoff remain outstanding. The following historical evidence is preserved for provenance and does not supersede this live recheck.
+
 ## Exact evidence and scope
 - Merged prerequisite: [PR #191](https://github.com/bingattban/Qwen-Altmam/pull/191), head `f65f2d4ca468aaf65d4b8825a93790f380a9db5f`, merged into main at `c599b9aae191be36cf1ef72193719f2ca2182d60`.
 - [Core PR run 41372987699](https://github.com/bingattban/Qwen-Altmam/actions/runs/41372987699): completed SUCCESS on PR head; .NET 10 integration 10/10, unit 14/14, main test suite 980/980, no failed/skipped; prepackage real Windows WPF/WebView2 UI probe passed. These are three distinct suites, not 1,004 independently reviewed acceptance scenarios.

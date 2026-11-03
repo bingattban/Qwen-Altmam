@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
@@ -109,6 +110,30 @@ public sealed class ThemeSettingsTests : IAsyncLifetime, IDisposable
         using var q=c.CreateCommand();
         q.CommandText="SELECT ActorUsernameSnapshot FROM AuditEvents WHERE OperationCode='THEME_CHANGE' ORDER BY rowid DESC LIMIT 1;";
         Assert.Equal(Actor.Username,await q.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task GetApplicationVersion_ReportsTheActualAssemblyInformationalVersion()
+    {
+        var dispatcher = BridgeHandlerCatalog.Create(new BridgeSharedServices(_db));
+        var request = new JsonObject {
+            ["requestId"] = Guid.NewGuid().ToString("N"),
+            ["protocolVersion"] = BridgeProtocol.ProtocolVersion,
+            ["action"] = "GetApplicationVersion",
+            ["sessionNonce"] = Actor.SessionNonce,
+            ["payload"] = new JsonObject()
+        };
+        var reply = await dispatcher.DispatchAsync(request.ToJsonString(),
+            LocalWebUiOrigin.BaseUrl, true,
+            nonce => Task.FromResult<BridgePrincipal?>(
+                nonce == Actor.SessionNonce ? Actor : null));
+        Assert.Equal(BridgeOutcomeKind.Success, reply.Kind);
+        string? expected = typeof(BridgeHandlerCatalog).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion.Split('+')[0];
+        Assert.False(string.IsNullOrWhiteSpace(expected));
+        Assert.Equal(expected,
+            ((JsonObject)reply.Response.Data!)["version"]!.GetValue<string>());
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;

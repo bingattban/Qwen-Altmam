@@ -316,8 +316,23 @@ jobs:
         run: >
           dotnet publish src/AlTamam.DesktopHost/AlTamam.DesktopHost.csproj
           -c $env:CONFIGURATION -r $env:RUNTIME --self-contained true
+          -p:Version=$env:RELEASE_VERSION
           -p:PublishSingleFile=false -p:DebugType=none -p:DebugSymbols=false
           -o $env:PUBLISH_DIR
+      - name: Verify shipped host and bridge informational versions equal release metadata
+        shell: pwsh
+        run: |
+          foreach ($dll in @('AlTamam.DesktopHost.dll', 'AlTamam.Application.dll')) {
+            $path = Join-Path $env:PUBLISH_DIR $dll
+            if (-not (Test-Path -LiteralPath $path)) { throw "Missing published versioned assembly: $dll" }
+            $actual = (Get-Item -LiteralPath $path).VersionInfo.ProductVersion
+            if ([string]::IsNullOrWhiteSpace($actual) -or
+                ($actual -ne $env:RELEASE_VERSION -and
+                 -not $actual.StartsWith("$($env:RELEASE_VERSION)+", [StringComparison]::Ordinal))) {
+              throw "Version mismatch in $dll; expected $env:RELEASE_VERSION, got '$actual'"
+            }
+            Write-Host "VERSION PASS: $dll -> $actual"
+          }
       - name: Remove WebView2 XML API documentation from distribution only
         shell: pwsh
         run: |
