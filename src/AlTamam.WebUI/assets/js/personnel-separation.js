@@ -144,31 +144,60 @@
           ["سبب الفصل",data.reason],
           ["الأثر","يخرج الفرد من كشف القوة النشطة وتظل بياناته التاريخية محفوظة."]
         ]};
+        // Native SQLCipher receipt, not closing the modal, establishes saved success.
+        // A response lost in transit may retry the exact same operationId only.
+        let submitting=false;
+        const confirmationDelay=Math.max(5,Number(data.minimumConfirmationSeconds)||5);
         async function commitSamePlan(){
+          if(submitting||!root.isConnected)return;
+          if(expected!==previewCounter||person?.personId!==entry.personId)
+            return error(feedback,new Error("تغيّر اختيار الفرد أثناء المعاينة؛ أعد المعاينة قبل الفصل."));
+          submitting=true;
+          preview.replaceChildren();
+          feedback.replaceChildren(el("p","جارٍ تثبيت الفصل في قاعدة البيانات وتسجيل العملية...","section-description"));
           try{
-            await api().invoke("CommitSeparation",{previewToken:data.previewToken,operationId});
+            const response=await api().invoke("CommitSeparation",
+              {previewToken:data.previewToken,operationId},{timeoutMs:120000});
+            if(!response?.data||response.data.separated!==true||
+               response.data.personId!==entry.personId||
+               typeof response.data.movementId!=="string"||!response.data.movementId){
+              const mismatch=new Error("لا يمكن تأكيد نتيجة الفصل من إيصال الخدمة؛ تحقق من الأرشيف قبل أي إجراء جديد.");
+              mismatch.errorCode="BridgeResultMismatch";
+              throw mismatch;
+            }
             if(!root.isConnected)return;
             clear();selected.replaceChildren();person=null;page=1;
             feedback.replaceChildren(el("p","تم تنفيذ الفصل وتسجيله في الأرشيف وسجل العمليات.","settings-success"));
+            // A subsequent refresh is separate from the already committed result.
             await search();
           }catch(error){
+            if(!root.isConnected)return;
             errorToUser(error);
-            // Recover from a lost response without changing the preview identity.
-            preview.replaceChildren(
-              button("✕ إغلاق",()=>preview.replaceChildren(),"btn btn-outline app-modal-close"),
-              button("إعادة مراجعة وتأكيد الفصل",async()=>{
-              if(await detailsReview(summary,{title:"معاينة فصل الفرد",
-                message:"المعاينة نفسها محفوظة للمحاولة الآمنة.",
-                confirmLabel:"تأكيد الفصل",danger:true}))
-                await commitSamePlan();
-            }));
-          }
+            if(error?.errorCode==="BridgeTimeout"||error?.errorCode==="BridgeOffline"){
+              preview.replaceChildren(
+                el("p","نتيجة الحفظ غير مؤكدة بعد فقدان الاستجابة. يُعاد إرسال نفس الطلب دون تكرار الفصل.","section-description"),
+                button("✕ إغلاق",()=>preview.replaceChildren(),"btn btn-outline app-modal-close"),
+                button("إعادة مراجعة وتأكيد الفصل",async()=>{
+                  if(submitting||expected!==previewCounter||person?.personId!==entry.personId)return;
+                  if(await detailsReview(summary,{title:"معاينة فصل الفرد",
+                    message:"المعاينة نفسها محفوظة للمحاولة الآمنة.",
+                    confirmLabel:"تأكيد الفصل",danger:true,delaySeconds:confirmationDelay}))
+                    await commitSamePlan();
+                }));
+            }else{
+              preview.replaceChildren(el("p",
+                error?.errorCode==="BridgeResultMismatch"
+                  ?"النتيجة غير مؤكدة؛ افحص أرشيف الفصل وسجل العمليات قبل إعادة المعاينة."
+                  :"رفضت الخدمة الفصل أو انتهت المعاينة؛ اطلب معاينة جديدة بعد مراجعة البيانات.",
+                "section-description"));
+            }
+          }finally{submitting=false;}
         }
         function errorToUser(err){error(feedback,err);}
         if(await detailsReview(summary,{title:"معاينة فصل الفرد",
           message:"راجع جميع التفاصيل. لن يُنفذ الفصل قبل انتهاء مهلة التأكيد.",
           confirmLabel:"تأكيد الفصل",danger:true,
-          delaySeconds:Math.max(5,Number(data.minimumConfirmationSeconds)||5)})){
+          delaySeconds:confirmationDelay})){
           if(expected!==previewCounter||!root.isConnected||person?.personId!==entry.personId)return;
           await commitSamePlan();
         }
