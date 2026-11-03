@@ -26,6 +26,20 @@ class WebViewSmokeContract(unittest.TestCase):
         self.assertEqual(syntax.returncode, 0,
                          "Invalid embedded WebView2 JS (preflight): " + syntax.stderr)
 
+    def test_embedded_js_parser_must_not_use_locale_dependent_windows_encoding(self):
+        # On GitHub Windows Python chooses cp1252 for subprocess text pipes.
+        # The Arabic browser fixture is not encodable as cp1252; force UTF-8.
+        import inspect
+        code = inspect.getsource(
+            self.test_real_webview_bridge_inline_javascript_must_parse_before_packaging)
+        self.assertTrue(
+            'input=match.group(1).encode("utf-8")' in code
+            or 'encoding="utf-8"' in code,
+            "The Node stdin pipe must explicitly use UTF-8; cp1252 fails on Arabic")
+        self.assertIn("وجهة نقل اختبارية", (
+            ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs"
+        ).read_text(encoding="utf-8"))
+
     def test_selfcheck_uses_isolated_temporary_profile_without_database(self):
         self.assertIn('webViewSelfCheck\n                ? Path.Combine(Path.GetTempPath()', HOST)
         self.assertIn('"AlTamam-WebView2-SelfCheck-" + Guid.NewGuid()', HOST)
