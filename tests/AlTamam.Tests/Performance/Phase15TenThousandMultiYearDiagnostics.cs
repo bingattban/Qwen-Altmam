@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Xml;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -197,6 +200,73 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
         Assert.Equal(CurrentMonthDays, savedDays.Count);
         Assert.Equal(Personnel.ToString(), payload["total"]!.ToString());
 
+        // Measure an actual native XLSX on the SAME encrypted SQLCipher fixture.
+        // Use the shipped streaming monthly exporter rather than a synthetic XML
+        // writer or a mock. Its 100-person pages must cover all 10,000 identities.
+        // This remains a runner-specific SERVICE benchmark, not full WPF GUI UAT.
+        string exportFolder = Path.Combine(Path.GetTempPath(),
+            "altamam-phase15-monthly-excel-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(exportFolder);
+        double excelElapsedMs;
+        long excelFileBytes;
+        string excelFileSha256;
+        int excelWorksheetRows = 0;
+        try
+        {
+            var exportRequest = new JsonObject
+            {
+                ["year"] = 2026, ["month"] = 10,
+                ["siteId"] = SyntheticFixtures.SiteId,
+                ["archiveMode"] = true,
+                ["consolidatedOnly"] = true,
+                ["directory"] = exportFolder,
+                ["fileName"] = "Phase15_10000_Monthly.xlsx"
+            };
+            var excelWatch = Stopwatch.StartNew();
+            var export = await new MonthlyExcelExportService(_db).ExportAsync(
+                exportRequest, CancellationToken.None);
+            excelWatch.Stop();
+            Assert.True(export.Success, export.UserMessage);
+            excelElapsedMs = Math.Round(excelWatch.Elapsed.TotalMilliseconds, 2);
+            var exportReceipt = Assert.IsType<JsonObject>(export.Data);
+            Assert.Equal((long)Personnel, exportReceipt["personCount"]!.GetValue<long>());
+            string workbookPath = exportReceipt["filePath"]!.GetValue<string>();
+            Assert.True(File.Exists(workbookPath));
+            Assert.Equal(exportFolder, Path.GetDirectoryName(workbookPath));
+            Assert.Empty(Directory.GetFiles(exportFolder, "*.part"));
+            using (var workbook = ZipFile.OpenRead(workbookPath))
+            {
+                var sheet = workbook.GetEntry("xl/worksheets/sheet1.xml");
+                Assert.NotNull(sheet);
+                using var stream = sheet!.Open();
+                using var xml = XmlReader.Create(stream,
+                    new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
+                const string spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                while (xml.ReadToFollowing("row", spreadsheet))
+                {
+                    excelWorksheetRows++;
+                    Assert.Equal(excelWorksheetRows,
+                        int.Parse(xml.GetAttribute("r")!,
+                            System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
+            Assert.Equal(Personnel + 3, excelWorksheetRows);
+            excelFileBytes = new FileInfo(workbookPath).Length;
+            Assert.True(excelFileBytes > 1_000, "Native 10k-person XLSX cannot be empty.");
+            using (var exportedFile = File.OpenRead(workbookPath))
+                excelFileSha256 = Convert.ToHexString(SHA256.HashData(exportedFile))
+                    .ToLowerInvariant();
+            Assert.Empty(Directory.GetFiles(exportFolder, "*.part"));
+        }
+        finally
+        {
+            // The benchmark never publishes synthetic personnel XLSX as a
+            // customer file and must not leave it on the Windows CI runner.
+            try { Directory.Delete(exportFolder, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
         var report = new
         {
             schema = "AlTamam.Phase15.ThreeYearSqlCipherDiagnostics.v1",
@@ -222,7 +292,13 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
             sourceHeadSha = Environment.GetEnvironmentVariable("ALTAMAM_SOURCE_HEAD_SHA") ?? "NOT_RECORDED",
             githubRunId = Environment.GetEnvironmentVariable("GITHUB_RUN_ID") ?? "NOT_RECORDED",
             fullGui10000People31DayEndToEnd = "NOT_EXECUTED",
-            excelExportThroughput = "NOT_EXECUTED",
+            excelExportThroughput = "MEASURED_SYNTHETIC_10000_PERSON_XLSX_NOT_FULL_GUI_ACCEPTANCE",
+            monthlyExcelExportPeople = Personnel,
+            monthlyExcelXlsxWorksheetRows = excelWorksheetRows,
+            monthlyExcelExportElapsedMs = excelElapsedMs,
+            monthlyExcelXlsxBytes = excelFileBytes,
+            monthlyExcelXlsxSha256 = excelFileSha256,
+            monthlyExcelNoPartialFiles = true,
             physicalPowerFailure = "NOT_EXECUTED",
         };
         string json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });

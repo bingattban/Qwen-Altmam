@@ -5,6 +5,11 @@
 - Only ambiguous `BridgeTimeout`/`BridgeOffline` permits an explicit second human review and replay of the exact same previewToken and operationId. Definitive conflicts, changed selections and navigation never reuse the attempt.
 - A successfully committed change stays confirmed even if reloading the register fails. Added test-first dashboard/automatic-register regressions; no SQLCipher, role, theme, scheduler or other business-policy changes.
 
+## Unreleased — Phase 15 measured 10,000-person monthly XLSX export (2026-11-03)
+- Extend the existing SQLCipher 10k-person / 550k-attendance-record Windows diagnostic to call the REAL production monthly XLSX exporter against the same synthetic data, not a mocked writer.
+- Check the actual native OpenXML workbook, every expected 10,003 worksheet rows, ten-thousand-person server receipt, no .part remainder, measured export time, file size and SHA-256. Delete the disposable test file after the run.
+- The strict performance-evidence verifier now requires these measured XLSX fields BEFORE any Windows packaging. Do not conflate a synthetic CI Excel service benchmark with a complete WPF GUI/user-workflow performance acceptance. No runtime product, SQLCipher schema, scheduling, UX or release naming changes.
+
 ## Unreleased — Phase 15 verified post-merge evidence refresh (2026-11-03)
 - Captured fixed `main` SHA `a48538b479d46580acffcbe5fe524a5b0c70d29c`, successful same-SHA Core/Release runs, the four real candidate customer-file SHA-256 values, the measured 10k/550k-row SQLCipher workload and the Windows smoke evidence.
 - Distinguished measured database diagnostics from **NOT EXECUTED** full GUI/Excel and clean/offline acceptance; recorded the enabled `main` ruleset and kept native restore and production owner signoff **NO-GO**.
