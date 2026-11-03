@@ -5,6 +5,11 @@
 - Only ambiguous `BridgeTimeout`/`BridgeOffline` permits an explicit second human review and replay of the exact same previewToken and operationId. Definitive conflicts, changed selections and navigation never reuse the attempt.
 - A successfully committed change stays confirmed even if reloading the register fails. Added test-first dashboard/automatic-register regressions; no SQLCipher, role, theme, scheduler or other business-policy changes.
 
+## Unreleased — Phase 15 verified post-merge evidence refresh (2026-11-03)
+- Captured fixed `main` SHA `a48538b479d46580acffcbe5fe524a5b0c70d29c`, successful same-SHA Core/Release runs, the four real candidate customer-file SHA-256 values, the measured 10k/550k-row SQLCipher workload and the Windows smoke evidence.
+- Distinguished measured database diagnostics from **NOT EXECUTED** full GUI/Excel and clean/offline acceptance; recorded the enabled `main` ruleset and kept native restore and production owner signoff **NO-GO**.
+- Updated the acceptance matrix and historical report pointers without changing runtime code or claiming that CI packaging constitutes independent production approval.
+
 ## Unreleased — Phase 15 attendance confirmation and safe retry (2026-11-03)
 - Require a real native commit count matching the preview before marking daily attendance saved; mismatched/absent receipts are uncertain, never successful.
 - Allow same-preview and same-operationId retry only for ambiguous bridge timeout/offline after a new explicit review. Definitive native failures require a fresh preview.

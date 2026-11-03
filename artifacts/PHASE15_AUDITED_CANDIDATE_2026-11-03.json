@@ -1,0 +1,90 @@
+{
+  "schema": "AlTamam.Phase15.AuditedCandidateEvidence.v1",
+  "status": "CI_CANDIDATE_ONLY_NOT_PRODUCTION_ACCEPTANCE",
+  "auditDate": "2026-11-03",
+  "sourceHeadSha": "a48538b479d46580acffcbe5fe524a5b0c70d29c",
+  "testedCheckoutSha": "a48538b479d46580acffcbe5fe524a5b0c70d29c",
+  "version": "0.0.909-ci",
+  "mergedPullRequest": 217,
+  "core": {
+    "runId": 41664059205,
+    "conclusion": "success"
+  },
+  "release": {
+    "runId": 41664059341,
+    "conclusion": "success",
+    "allTestsBeforePackaging": true,
+    "fourPackageAudit": "success",
+    "cleanMachineGate": "skipped",
+    "provenanceArtifactId": 13246124184,
+    "benchmarkArtifactId": 13245521886,
+    "windowsE2eArtifactId": 13245496941
+  },
+  "releaseFiles": [
+    {
+      "architecture": "Windows-32bit",
+      "class": "Portable",
+      "runtimeIdentifier": "win-x86",
+      "file": "AlTamamDaily_0.0.909-ci_Portable_win-x86.zip",
+      "bytes": 253081915,
+      "sha256": "1af3b3db1ed472e86599285b335171020e64f463934f6f91eb7dae7a2230a7f1"
+    },
+    {
+      "architecture": "Windows-32bit",
+      "class": "Installer",
+      "runtimeIdentifier": "win-x86",
+      "file": "AlTamamDaily_0.0.909-ci_Setup_win-x86.exe",
+      "bytes": 234400575,
+      "sha256": "7e27f8c485900b34d32e62031420d9863e97e31b60eba92c98acbcfb2faa9227"
+    },
+    {
+      "architecture": "Windows-64bit",
+      "class": "Portable",
+      "runtimeIdentifier": "win-x64",
+      "file": "AlTamamDaily_0.0.909-ci_Portable_win-x64.zip",
+      "bytes": 282693927,
+      "sha256": "ebc2e6d895a8260847eec141307d8c82efa57043a3b4dc75392a9e36a10208a1"
+    },
+    {
+      "architecture": "Windows-64bit",
+      "class": "Installer",
+      "runtimeIdentifier": "win-x64",
+      "file": "AlTamamDaily_0.0.909-ci_Setup_win-x64.exe",
+      "bytes": 263103904,
+      "sha256": "53d30faea6e2b503db61916e60eae85bbdaa29384091a9695cb153f0303b3c1e"
+    }
+  ],
+  "benchmark": {
+    "personsActive": 10000,
+    "historyMonthsPerPerson": 24,
+    "calendarYears": 3,
+    "attendanceRecords": 550000,
+    "grouped31DayElapsedMs": 360.67,
+    "productionMonthlyFirstPageElapsedMs": 848.02,
+    "workingSetBytes": 590577664,
+    "os": "Microsoft Windows NT 10.0.26100.0",
+    "fullGui10000People31DayEndToEnd": "NOT_EXECUTED",
+    "excelExportThroughput": "NOT_EXECUTED",
+    "physicalPowerFailure": "NOT_EXECUTED"
+  },
+  "windowsE2e": {
+    "realWpfWebView2ProcessExitedZero": true,
+    "all69CanonicalManifestRoutesOpened": true,
+    "syntheticSqlCipherBridgeRoundtrip": true,
+    "exhaustiveAllRolesAllNestedBusinessControls": "NOT_EXECUTED"
+  },
+  "protectionRuleset": {
+    "id": 26457705,
+    "name": "Protect-main-Core-Release",
+    "enforcement": "active",
+    "requiredStatusChecks": 7
+  },
+  "productionAcceptance": {
+    "independentCleanOfflineX86X64": "NOT_EXECUTED",
+    "genuineTwoVersionUpgrade": "NOT_EXECUTED",
+    "crossMachineEncryptedRecovery": "NOT_EXECUTED",
+    "realPowerLoss": "NOT_EXECUTED",
+    "nativeDestructiveRestoreEnabled": false
+  },
+  "ownerProductionApproval": false
+}
