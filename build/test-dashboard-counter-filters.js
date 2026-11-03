@@ -33,6 +33,7 @@ let transferCount=0,expandedRoster=false,approveReview=true;
 let discardApproved=false,discardPrompts=0;
 let deferAutoReview=false,releaseAutoReview=null;
 let approveStatusForm=true;
+let autoCommitFailure=null,autoCommitReceipt=null,failAutoRosterNext=false;
 const statusForms=[];
 let autoPeople=[{personId:"P3",name:"P3",serviceNumberA:"12345",
   siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
@@ -53,6 +54,7 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
        {statusId:"STS-ABSENT",name:"غياب",count:1,color:"#B42332"}]}};
    if(action==="QueryDailyRoster"&&payload.statusId==="__AUTO_PREPARED__"){
+     if(failAutoRosterNext){failAutoRosterNext=false;throw Error("roster refresh unavailable");}
      const matching=autoPeople.filter(p=>!payload.term||
        p.name.toLowerCase().includes(payload.term.toLowerCase())||
        p.serviceNumberA.includes(payload.term));
@@ -78,8 +80,11 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
          return{...person,previousStatusName:person.statusName,
            proposedStatusName:"موجود"};
        })}};
-   if(action==="ReviseTodayAttendance")
+   if(action==="ReviseTodayAttendance"){
+     if(autoCommitFailure){const failure=autoCommitFailure;autoCommitFailure=null;throw failure;}
+     if(autoCommitReceipt){const receipt=autoCommitReceipt;autoCommitReceipt=null;return{data:receipt};}
      return{data:{count:calls.filter(x=>x.action==="PreviewAttendanceChange").at(-1).payload.personIds.length}};
+   }
    if(action==="PreviewAttendanceChange" && payload.mode==="carry")
      return {data:{mode:"carry",businessDate:payload.businessDate,previewToken:"a".repeat(64),
        persons:[{personId:"P1",name:"P1",serviceNumberA:"12345",siteName:"غير محدد",
@@ -235,6 +240,55 @@ async function main(){
    "single change commits only after modal confirmation");
  assert.ok(readOnly.all().some(x=>x.textContent==="P3"),
    "auto-prepared register remains displayed following a successful revision");
+ // Definitive failures must not replay a stale preview or create false success.
+ const autoNotice=()=>readOnly.all().find(x=>x.className==="auto-attendance-feedback");
+ const retryAction=()=>autoNotice().all().find(x=>x.tag==="button"&&
+   x.textContent==="إعادة مراجعة وتأكيد تغيير الحالة");
+ autoCommitFailure=Object.assign(new Error("Stale preview"),{errorCode:"ConflictStale"});
+ let beforeAttempt=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await edit.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,beforeAttempt+1);
+ assert.ok(!retryAction(),"definitive ConflictStale cannot replay a consumed preview");
+ assert.ok(!autoNotice().all().some(x=>x.textContent.startsWith("تم اعتماد تغيير حالة")),
+   "stale preview must not report success");
+ // A wrong or malformed native receipt is not proof that any row was saved.
+ autoCommitReceipt={count:0};
+ await edit.handlers.click();await settle();
+ assert.ok(!retryAction(),"unverified native count cannot authorize replay");
+ assert.ok(!autoNotice().all().some(x=>x.textContent.startsWith("تم اعتماد تغيير حالة")),
+   "wrong native count must not report success");
+ autoCommitReceipt={count:1.5};
+ await edit.handlers.click();await settle();
+ assert.ok(!autoNotice().all().some(x=>x.textContent.startsWith("تم اعتماد تغيير حالة")),
+   "fractional native count must not report success");
+ // A lost reply may have committed; retry only the SAME preview and operationId
+ // after a fresh, explicit human review, never from a new native preview.
+ autoCommitFailure=Object.assign(new Error("response missing"),{errorCode:"BridgeTimeout"});
+ beforeAttempt=calls.filter(x=>x.action==="ReviseTodayAttendance").length;
+ await edit.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,beforeAttempt+1);
+ const lostPayload=calls.filter(x=>x.action==="ReviseTodayAttendance").at(-1).payload;
+ const retry=retryAction();
+ assert.ok(retry,"ambiguous timeout requires an explicit same-intent retry choice");
+ approveReview=false;
+ await retry.handlers.click();await settle();
+ assert.equal(calls.filter(x=>x.action==="ReviseTodayAttendance").length,beforeAttempt+1,
+   "declined replay review must not write");
+ approveReview=true;
+ failAutoRosterNext=true;
+ await retry.handlers.click();await settle();
+ const retried=calls.filter(x=>x.action==="ReviseTodayAttendance");
+ assert.equal(retried.length,beforeAttempt+2,
+   "approved retry calls native exactly once more");
+ assert.equal(retried.at(-1).payload.operationId,lostPayload.operationId,
+   "replay MUST preserve the initial operation id");
+ assert.equal(retried.at(-1).payload.previewToken,lostPayload.previewToken,
+   "replay MUST preserve the initial preview token");
+ assert.ok(autoNotice().all().some(x=>x.textContent.startsWith("تم اعتماد تغيير حالة")),
+   "confirmed native success persists after read-only roster refresh failure");
+ assert.ok(autoNotice().all().some(x=>x.textContent.includes("تحديث القائمة")),
+   "a failed read-only refresh must be reported separately");
+ assert.ok(!retryAction(),"completed intent must remove the retry action");
  // Multi-selection with one common new state must use ONE server transaction.
  autoPeople.push({personId:"P5",name:"P5",serviceNumberA:"12346",
    siteName:"غير محدد",statusId:"STS-ABSENT",statusName:"غياب",
