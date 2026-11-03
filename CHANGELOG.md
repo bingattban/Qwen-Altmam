@@ -5,6 +5,12 @@
 - Only ambiguous `BridgeTimeout`/`BridgeOffline` permits an explicit second human review and replay of the exact same previewToken and operationId. Definitive conflicts, changed selections and navigation never reuse the attempt.
 - A successfully committed change stays confirmed even if reloading the register fails. Added test-first dashboard/automatic-register regressions; no SQLCipher, role, theme, scheduler or other business-policy changes.
 
+## Unreleased — Phase 15 bounded native monthly XLSX batching (2026-11-03)
+- The 10k-person real monthly XLSX benchmark exposed expensive repeated SQLCipher COUNT and historical ordering across 100 separate 100-person read pages. Preserve the real exporter, date-specific attendance, movement and archived identity rules.
+- Add a native C# export-only monthly read path capped at 500 records per batch (below conservative SQLite variable limits), while leaving WebView2 interactive monthly requests capped at 100. Export now uses 20 bounded reads rather than 100 for 10k people.
+- Add test-first full historical person/snapshot parity between the existing 100-person UI projection and the larger server-only export projection. Re-run both protected Windows workflows; no GUI/theme, schema, restore, security or external API contract changes.
+- Synthetic Windows performance measurements are runner-specific; do not claim production throughput or independent offline GUI acceptance.
+
 ## Unreleased — Phase 15 measured 10,000-person monthly XLSX export (2026-11-03)
 - Extend the existing SQLCipher 10k-person / 550k-attendance-record Windows diagnostic to call the REAL production monthly XLSX exporter against the same synthetic data, not a mocked writer.
 - Check the actual native OpenXML workbook, every expected 10,003 worksheet rows, ten-thousand-person server receipt, no .part remainder, measured export time, file size and SHA-256. Delete the disposable test file after the run.

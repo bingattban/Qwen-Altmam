@@ -280,7 +280,18 @@ public sealed class DailyMonthlyReadService
         return BridgeHelpers.Ok(ordered);
     }
 
-    public async Task<BridgeResponse> MonthlyGridAsync(JsonObject? payload, CancellationToken ct)
+    // Browser-facing monthly navigation is always limited to 100 rows.
+    public Task<BridgeResponse> MonthlyGridAsync(JsonObject? payload, CancellationToken ct)
+        => MonthlyGridPageAsync(payload,ct,100);
+
+    // C# native XLSX exporter only. This is NOT a registered WebView2 bridge
+    // action and cannot raise the user's interactive limit. 500 placeholders
+    // also remain below SQLite's conservative 999-parameter compatibility floor.
+    public Task<BridgeResponse> MonthlyGridForExcelAsync(JsonObject? payload, CancellationToken ct)
+        => MonthlyGridPageAsync(payload,ct,500);
+
+    private async Task<BridgeResponse> MonthlyGridPageAsync(JsonObject? payload,
+        CancellationToken ct,int maxPageSize)
     {
         int year = ReadInt(payload, "year", 0), month = ReadInt(payload, "month", 0);
         if (year < 1900 || year > 2200 || month < 1 || month > 12)
@@ -292,7 +303,7 @@ public sealed class DailyMonthlyReadService
                 "البحث الشهري لا يتجاوز 100 حرف ولا يقبل أحرف التحكم.");
         string term = ArabicTextNormalizer.NormalizeForSearch(rawTerm);
         int page = Math.Clamp(ReadInt(payload, "page", 1), 1, 100000);
-        int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, 100);
+        int pageSize = Math.Clamp(ReadInt(payload, "pageSize", 50), 1, maxPageSize);
         var start = new DateOnly(year, month, 1);
         var next = start.AddMonths(1);
         int firstDay=ReadInt(payload,"dayFrom",1);
