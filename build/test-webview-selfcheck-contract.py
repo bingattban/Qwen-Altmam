@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Guard real x86/x64 WebView2 smoke tests against no-op or unbounded bypasses."""
 from pathlib import Path
+import re
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +13,19 @@ CORE = (ROOT / ".github/workflows/windows-ci.yml").read_text(encoding="utf-8")
 
 
 class WebViewSmokeContract(unittest.TestCase):
+    def test_real_webview_bridge_inline_javascript_must_parse_before_packaging(self):
+        # C# accepts raw JS strings without parsing them: duplicate const declarations
+        # make ExecuteScriptAsync return null at runtime. Fail CI before compilation.
+        bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(
+            encoding="utf-8")
+        match = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', bridge)
+        self.assertIsNotNone(match, "real WebView2 bridge JavaScript is missing")
+        syntax = subprocess.run(["node", "--check", "-"], input=match.group(1),
+                                text=True, capture_output=True, timeout=20,
+                                check=False)
+        self.assertEqual(syntax.returncode, 0,
+                         "Invalid embedded WebView2 JS (preflight): " + syntax.stderr)
+
     def test_selfcheck_uses_isolated_temporary_profile_without_database(self):
         self.assertIn('webViewSelfCheck\n                ? Path.Combine(Path.GetTempPath()', HOST)
         self.assertIn('"AlTamam-WebView2-SelfCheck-" + Guid.NewGuid()', HOST)
