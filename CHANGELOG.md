@@ -5,6 +5,12 @@
 - Only ambiguous `BridgeTimeout`/`BridgeOffline` permits an explicit second human review and replay of the exact same previewToken and operationId. Definitive conflicts, changed selections and navigation never reuse the attempt.
 - A successfully committed change stays confirmed even if reloading the register fails. Added test-first dashboard/automatic-register regressions; no SQLCipher, role, theme, scheduler or other business-policy changes.
 
+## Unreleased — Phase 15 full monthly Excel historical identity parity (2026-11-03)
+- Extend the synthetic SQLCipher 10,000-person fixture with **effective-dated persisted identity-history rows** for all personnel. The earlier fixture lacked these snapshots and its Excel export benchmark checked worksheet row count, not content.
+- After the real production XLSX export, stream-parse **every one of the 10,000 monthly rows** and verify ordinal, historical service number, historical Arabic name, site, and all 31 committed daily status cells against independent fixture truth. Also reject formula-bearing cells.
+- Preserve the existing measured export duration, file size and SHA-256 evidence, and require an explicit truthful `monthlyExcelHistoricalIdentityAndDailyValuesVerified` field in the pre-package CI verifier. No application runtime or business-rule changes.
+- This remains synthetic Windows CI service-level evidence, **not** independent offline Windows GUI acceptance or a production release approval.
+
 ## Unreleased — Phase 15 bounded native monthly XLSX batching (2026-11-03)
 - The 10k-person real monthly XLSX benchmark exposed expensive repeated SQLCipher COUNT and historical ordering across 100 separate 100-person read pages. Preserve the real exporter, date-specific attendance, movement and archived identity rules.
 - Add a native C# export-only monthly read path capped at 500 records per batch (below conservative SQLite variable limits), while leaving WebView2 interactive monthly requests capped at 100. Export now uses 20 bounded reads rather than 100 for 10k people.

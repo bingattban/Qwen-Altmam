@@ -59,10 +59,12 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
         using (var connection = _db.CreateOpenConnection())
         using (var transaction = connection.BeginTransaction())
         using (var person = connection.CreateCommand())
+        using (var historyCmd = connection.CreateCommand())
         using (var assignment = connection.CreateCommand())
         using (var attendance = connection.CreateCommand())
         {
             person.Transaction = transaction;
+            historyCmd.Transaction = transaction;
             assignment.Transaction = transaction;
             attendance.Transaction = transaction;
             person.CommandText = """
@@ -70,6 +72,13 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
                   CurrentServiceNumberA,NormalizedServiceNumberA,
                   FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
                 VALUES($pid,$name,$name,$sn,$sn,'2024-01-01','2024-01-01T00:00:00Z',1,1,1);
+                """;
+            historyCmd.CommandText = """
+                INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,
+                  ServiceNumberASnapshot,ValidFromLocalDate,ValidToLocalDate,
+                  ChangedByUserId,RecordedAtUtc,Reason)
+                VALUES($pid,$name,$number,'2024-01-01',NULL,'TST-USER-GA',
+                  '2024-01-01T00:00:00Z','تجربة الأداء');
                 """;
             assignment.CommandText = """
                 INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
@@ -87,6 +96,9 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
             var pid = person.Parameters.Add("$pid", SqliteType.Text);
             var name = person.Parameters.Add("$name", SqliteType.Text);
             var number = person.Parameters.Add("$sn", SqliteType.Text);
+            var historyPersonId = historyCmd.Parameters.Add("$pid", SqliteType.Text);
+            var historyName = historyCmd.Parameters.Add("$name", SqliteType.Text);
+            var historyNumber = historyCmd.Parameters.Add("$number", SqliteType.Text);
             var aid = assignment.Parameters.Add("$aid", SqliteType.Text);
             var assignmentPerson = assignment.Parameters.Add("$pid", SqliteType.Text);
             var assignmentSite = assignment.Parameters.Add("$site", SqliteType.Text);
@@ -101,6 +113,7 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
             var recordKey = attendance.Parameters.Add("$key", SqliteType.Text);
 
             person.Prepare();
+            historyCmd.Prepare();
             assignment.Prepare();
             attendance.Prepare();
 
@@ -112,6 +125,13 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
                 name.Value = $"فرد اختباري {i:D6}";
                 number.Value = $"{100000 + i}";
                 person.ExecuteNonQuery();
+
+                // Source the XLSX names/numbers from real effective-dated
+                // identity history, not "غير موثق تاريخياً" fallback values.
+                historyPersonId.Value = identity;
+                historyName.Value = name.Value;
+                historyNumber.Value = number.Value;
+                historyCmd.ExecuteNonQuery();
 
                 aid.Value = assignmentId;
                 assignmentPerson.Value = identity;
@@ -321,6 +341,7 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
             monthlyExcelXlsxBytes = excelFileBytes,
             monthlyExcelXlsxSha256 = excelFileSha256,
             monthlyExcelNoPartialFiles = true,
+            monthlyExcelHistoricalIdentityAndDailyValuesVerified = true,
             physicalPowerFailure = "NOT_EXECUTED",
         };
         string json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
