@@ -16,9 +16,14 @@ class El{
 const root=new El("main"),calls=[],writes=[],reviews=[];
 let approved=false, errorName="",expandedRoster=false,structuredFailure=null;
 let cancelConfirmed=false,confirmations=0,navigations=0;
+let badAttendanceReceipt=false,failNextRosterRead=false;
 const bridge={invoke:async(name,payload)=>{
  calls.push({name,payload});
  if(structuredFailure&&name===structuredFailure.action)throw structuredFailure.error;
+ if(name==="QueryDailyRoster"&&failNextRosterRead){
+   failNextRosterRead=false;
+   throw new Error("تعذر إعادة تحميل الكشف بعد الحفظ.");
+ }
  if(name==="QueryDailyRoster"&&expandedRoster){
     const all=Array.from({length:112},(_,i)=>({personId:"P"+(i+1),name:"فرد "+(i+1),
       serviceNumberA:String(100+i),siteName:"غير محدد",statusName:"غير محضر"}));
@@ -48,6 +53,8 @@ const bridge={invoke:async(name,payload)=>{
  if(name==="SubmitAttendance"||name==="ReviseTodayAttendance")
    writes.push({name,payload});
  if(!Object.hasOwn(data,name))throw Error("Unexpected action: "+name);
+ if((name==="SubmitAttendance"||name==="ReviseTodayAttendance")&&badAttendanceReceipt)
+   return {data:{count:0}};
  return {data:data[name]};
 }};
 const context={
@@ -232,6 +239,50 @@ async function main(){
   await one("العودة إلى إدارة القوة").handlers.click();await flush();
   assert.equal(navigations,1,"approved back confirmation may leave attendance");
   assert.equal(writes.length,committed,"cancel/back never saves attendance");
-  console.log("ATTENDANCE UI PASS: 100-person roster, preview and confirmed pending-selection cancellation");
+  // Definite native conflict cannot replay a stale preview.
+  await context.window.AltamamAttendance.render(root);
+  selects()[1].value="STS-PRESENT";
+  selects()[1].handlers.change();
+  await choose();
+  structuredFailure={action:"SubmitAttendance",error:Object.assign(
+    new Error("تغير سجل الفرد أثناء المعاينة."),{errorCode:"ConflictStale"})};
+  await one("معاينة التحضير").handlers.click();await flush();
+  assert.ok(root.all().some(x=>x.textContent.includes("تغير سجل الفرد")));
+  assert.equal(one("إعادة مراجعة وتأكيد التحضير"),undefined,
+    "a definitive native conflict cannot reuse its rejected preview");
+
+  // An apparently successful native envelope still requires a matching receipt.
+  structuredFailure=null;badAttendanceReceipt=true;
+  await one("معاينة التحضير").handlers.click();await flush();
+  assert.equal(one("إعادة مراجعة وتأكيد التحضير"),undefined);
+  assert.ok(root.all().some(x=>x.textContent.includes("لا يمكن تأكيد نتيجة التحضير")),
+    "mismatched count is uncertain rather than a false success");
+  badAttendanceReceipt=false;
+
+  // Lost response: replay exactly the same token and ID with fresh approval.
+  structuredFailure={action:"SubmitAttendance",error:Object.assign(
+    new Error("انتهت مهلة الحفظ."),{errorCode:"BridgeTimeout"})};
+  await one("معاينة التحضير").handlers.click();await flush();
+  const retry=one("إعادة مراجعة وتأكيد التحضير");
+  assert.ok(retry,"lost reply permits an idempotent same-intent retry");
+  const attempts=calls.filter(c=>c.name==="SubmitAttendance");
+  const first=attempts.at(-1).payload;
+  structuredFailure=null;
+  failNextRosterRead=true;
+  const previousReviews=reviews.length;
+  await retry.handlers.click();await flush();
+  const after=calls.filter(c=>c.name==="SubmitAttendance");
+  assert.equal(after.length,attempts.length+1);
+  assert.equal(after.at(-1).payload.previewToken,first.previewToken);
+  assert.equal(after.at(-1).payload.operationId,first.operationId,
+    "lost response replay uses the original native operationId");
+  assert.equal(reviews.length,previousReviews+1,
+    "replay still requires a new explicit modal approval");
+  assert.ok(root.all().some(x=>x.textContent.includes("تم حفظ 1 فرداً")),
+    "durable saved attendance survives read-only refresh failure");
+  assert.ok(root.all().some(x=>x.textContent.includes("تعذر تحديث الكشف")),
+    "a separate refresh warning must not undo saved success");
+
+  console.log("ATTENDANCE UI PASS: roster, native receipt, conflict, same-intent retry and refresh safety");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
