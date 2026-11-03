@@ -17,6 +17,7 @@ class Element {
 }
 const viewport=new Element("main"),calls=[];
 let committed=false,delayOutcome=false,finishOutcome=null;
+let nextImportCommitError=null,overrideImportReceipt=null;
 const sampleBatch={importBatchId:"IMP-TEST-1",fileName:"كشف_القوة.xlsx",
   totalRows:3,acceptedRows:2,rejectedRows:1,status:"COMMITTED",
   committedAtUtc:"2026-10-23T20:00:00Z"};
@@ -47,7 +48,11 @@ const bridge={invoke:async (name,body)=>{
     return {data};
   }
   if(!(name in responses)) throw Error("Unexpected bridge call "+name);
-  if(name==="CommitImport")committed=true;
+  if(name==="CommitImport"){
+    if(nextImportCommitError){const e=nextImportCommitError;nextImportCommitError=null;throw e;}
+    committed=true;
+    if(overrideImportReceipt){const value=overrideImportReceipt;overrideImportReceipt=null;return {data:value};}
+  }
   return {data:responses[name]};
 }};
 class FakeFileReader{
@@ -150,6 +155,37 @@ async function run(){
   assert.equal(calls.filter(x=>x.name==="CommitImport").at(-1).body.previewToken,
     "C".repeat(64));
   assert.ok(all().some(x=>x.textContent.includes("تم حفظ صفوف الرفض فقط")));
-  console.log("EXCEL IMPORT UI PASS: safe batch history, report XLSX, no implicit write, server token and size guard");
+  // Definitive stale plans may not be replayed after a native rejection.
+ await button("تحليل الملف").handlers.click();
+ nextImportCommitError=Object.assign(new Error("تغيرت خطة الاستيراد."),
+   {errorCode:"ImportPlanStale"});
+ await button("معاينة اعتماد صفوف الرفض فقط").handlers.click();
+ assert.ok(all().some(x=>x.textContent.includes("تغيرت خطة الاستيراد")));
+ assert.equal(button("إعادة معاينة واعتماد الخطة نفسها"),undefined,
+   "definitively rejected plan cannot be retried as a valid token");
+
+ // A successful transport response without a batch receipt is uncertain.
+ overrideImportReceipt={createdCount:0,importBatchId:""};
+ await button("معاينة اعتماد صفوف الرفض فقط").handlers.click();
+ assert.equal(button("إعادة معاينة واعتماد الخطة نفسها"),undefined);
+ assert.ok(all().some(x=>x.textContent.includes("لا يمكن تأكيد نتيجة الاستيراد")),
+   "missing receipt is never displayed as a successful committed batch");
+
+ // Ambiguous timeout may replay ONLY the originally confirmed intent.
+ nextImportCommitError=Object.assign(new Error("انتهت مهلة الاستجابة."),
+   {errorCode:"BridgeTimeout"});
+ await button("معاينة اعتماد صفوف الرفض فقط").handlers.click();
+ const retry=button("إعادة معاينة واعتماد الخطة نفسها");
+ assert.ok(retry,"lost response permits an idempotent retry");
+ const attempts=calls.filter(x=>x.name==="CommitImport");
+ const original=attempts.at(-1).body;
+ await retry.handlers.click();
+ const after=calls.filter(x=>x.name==="CommitImport");
+ assert.equal(after.length,attempts.length+1);
+ assert.equal(after.at(-1).body.previewToken,original.previewToken);
+ assert.equal(after.at(-1).body.operationId,original.operationId,
+   "retry keeps the original immutable operation ID");
+ assert.ok(all().some(x=>x.textContent.includes("تم حفظ صفوف الرفض فقط")));
+ console.log("EXCEL IMPORT UI PASS: safe history, stale rejection, real receipt, idempotent retry and size guard");
 }
 run().catch(e=>{console.error(e);process.exitCode=1;});

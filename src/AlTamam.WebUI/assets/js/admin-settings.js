@@ -606,31 +606,56 @@
             if(!accepted){previewToken="";return;}
             const token=previewToken;
             const operationId=makeOperationId();
+            // Only a native committed batch receipt establishes success. A
+            // lost reply may repeat the exact same confirmed plan and operationId.
+            let submitting=false;
+            const isCurrentPlan=()=>valid()&&current===serial&&previewToken===token;
             const commit=async()=>{
+              if(submitting||!isCurrentPlan())return;
+              submitting=true;
+              confirmBox.replaceChildren(warning("جارٍ حفظ الاستيراد وتسجيل الدفعة في قاعدة البيانات..."));
               try{
                 const done=await api().invoke("CommitImport",{previewToken:token,operationId,
-                  confirmNewSites:newSites.length>0,approvedSiteNames});
-                if(!valid())return;
-                if(!Number.isInteger(done.data?.createdCount))
-                  throw Error("لم يُؤكد الخادم نجاح الاستيراد.");
+                  confirmNewSites:newSites.length>0,approvedSiteNames},{timeoutMs:180000});
+                if(!valid()||current!==serial)return;
+                const receipt=done?.data;
+                if(!Number.isInteger(receipt?.createdCount)||receipt.createdCount<0||
+                   typeof receipt.importBatchId!=="string"||!receipt.importBatchId.trim()){
+                  const mismatch=new Error("لا يمكن تأكيد نتيجة الاستيراد من إيصال الدفعة؛ تحقق من سجل الاستيراد قبل إجراء جديد.");
+                  mismatch.errorCode="BridgeResultMismatch";
+                  throw mismatch;
+                }
                 previewToken="";
                 analysis.replaceChildren();
                 confirmBox.replaceChildren(node("p","settings-success",
-                  (done.data.createdCount===0?
+                  (receipt.createdCount===0?
                     "تم حفظ صفوف الرفض فقط دون إضافة أي فرد.":
-                    "تم إنشاء "+done.data.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق.")+
-                  " معرف الدفعة: "+(done.data.importBatchId||"—")));
+                    "تم إنشاء "+receipt.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق.")+
+                  " معرف الدفعة: "+receipt.importBatchId));
                 workbookToken="";
+                // The history refresh is read-only and has its own error panel;
+                // it cannot turn a committed batch into a falsely failed write.
                 await loadHistory();
               }catch(e){
+                if(!valid()||current!==serial)return;
                 errors(confirmBox,e);
-                // Retry the exact same preview if the response was lost.
-                confirmBox.appendChild(btn("إعادة معاينة واعتماد الخطة نفسها",async()=>{
-                  if(await detailsReview(details,{
-                    title:"إعادة مراجعة خطة الاستيراد",confirmLabel:"إعادة تأكيد الاستيراد"
-                  }))await commit();
-                }));
-              }
+                if(e?.errorCode==="BridgeTimeout"||e?.errorCode==="BridgeOffline"){
+                  confirmBox.appendChild(warning(
+                    "نتيجة الحفظ غير مؤكدة بعد فقدان الاستجابة؛ أعد إرسال نفس العملية فقط."));
+                  confirmBox.appendChild(btn("إعادة معاينة واعتماد الخطة نفسها",async()=>{
+                    if(submitting||!isCurrentPlan())return;
+                    if(await detailsReview(details,{
+                      title:"إعادة مراجعة خطة الاستيراد",
+                      confirmLabel:"إعادة تأكيد الاستيراد"
+                    }))await commit();
+                  }));
+                }else{
+                  confirmBox.appendChild(warning(
+                    e?.errorCode==="BridgeResultMismatch"
+                      ?"نتيجة الدفعة غير مؤكدة؛ افحص سجل الاستيراد قبل أي محاولة جديدة."
+                      :"رفضت الخدمة خطة الاستيراد؛ أعد المعاينة بعد مراجعة البيانات."));
+                }
+              }finally{submitting=false;}
             };
             await commit();
           }catch(e){errors(confirmBox,e);}
