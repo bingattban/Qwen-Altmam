@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Xml;
+using System.Xml.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -58,10 +59,12 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
         using (var connection = _db.CreateOpenConnection())
         using (var transaction = connection.BeginTransaction())
         using (var person = connection.CreateCommand())
+        using (var historyCmd = connection.CreateCommand())
         using (var assignment = connection.CreateCommand())
         using (var attendance = connection.CreateCommand())
         {
             person.Transaction = transaction;
+            historyCmd.Transaction = transaction;
             assignment.Transaction = transaction;
             attendance.Transaction = transaction;
             person.CommandText = """
@@ -69,6 +72,13 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
                   CurrentServiceNumberA,NormalizedServiceNumberA,
                   FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
                 VALUES($pid,$name,$name,$sn,$sn,'2024-01-01','2024-01-01T00:00:00Z',1,1,1);
+                """;
+            historyCmd.CommandText = """
+                INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,
+                  ServiceNumberASnapshot,ValidFromLocalDate,ValidToLocalDate,
+                  ChangedByUserId,RecordedAtUtc,Reason)
+                VALUES($pid,$name,$number,'2024-01-01',NULL,'TST-USER-GA',
+                  '2024-01-01T00:00:00Z','تجربة الأداء');
                 """;
             assignment.CommandText = """
                 INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,
@@ -86,6 +96,9 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
             var pid = person.Parameters.Add("$pid", SqliteType.Text);
             var name = person.Parameters.Add("$name", SqliteType.Text);
             var number = person.Parameters.Add("$sn", SqliteType.Text);
+            var historyPersonId = historyCmd.Parameters.Add("$pid", SqliteType.Text);
+            var historyName = historyCmd.Parameters.Add("$name", SqliteType.Text);
+            var historyNumber = historyCmd.Parameters.Add("$number", SqliteType.Text);
             var aid = assignment.Parameters.Add("$aid", SqliteType.Text);
             var assignmentPerson = assignment.Parameters.Add("$pid", SqliteType.Text);
             var assignmentSite = assignment.Parameters.Add("$site", SqliteType.Text);
@@ -100,6 +113,7 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
             var recordKey = attendance.Parameters.Add("$key", SqliteType.Text);
 
             person.Prepare();
+            historyCmd.Prepare();
             assignment.Prepare();
             attendance.Prepare();
 
@@ -111,6 +125,13 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
                 name.Value = $"فرد اختباري {i:D6}";
                 number.Value = $"{100000 + i}";
                 person.ExecuteNonQuery();
+
+                // Source the XLSX names/numbers from real effective-dated
+                // identity history, not "غير موثق تاريخياً" fallback values.
+                historyPersonId.Value = identity;
+                historyName.Value = name.Value;
+                historyNumber.Value = number.Value;
+                historyCmd.ExecuteNonQuery();
 
                 aid.Value = assignmentId;
                 assignmentPerson.Value = identity;
@@ -242,12 +263,33 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
                 using var xml = XmlReader.Create(stream,
                     new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
                 const string spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                XNamespace ns = spreadsheet;
                 while (xml.ReadToFollowing("row", spreadsheet))
                 {
                     excelWorksheetRows++;
+                    using var subtree = xml.ReadSubtree();
+                    var actualRow = XElement.Load(subtree);
                     Assert.Equal(excelWorksheetRows,
-                        int.Parse(xml.GetAttribute("r")!,
+                        int.Parse(actualRow.Attribute("r")!.Value,
                             System.Globalization.CultureInfo.InvariantCulture));
+                    Assert.Empty(actualRow.Descendants(ns + "f"));
+                    if (excelWorksheetRows <= 3) continue;
+                    // Full census of the historical snapshot and all 31 days,
+                    // independent of the SQL reader's own result collection.
+                    int personOrdinal = excelWorksheetRows - 3;
+                    string[] cells = actualRow.Elements(ns + "c")
+                        .Select(c => c.Element(ns + "is")?.Element(ns + "t")?.Value ?? "")
+                        .ToArray();
+                    Assert.Equal(35, cells.Length);
+                    Assert.Equal(personOrdinal.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture), cells[0]);
+                    Assert.Equal((100000 + personOrdinal).ToString(
+                        System.Globalization.CultureInfo.InvariantCulture), cells[1]);
+                    Assert.Equal($"فرد اختباري {personOrdinal:D6}", cells[2]);
+                    Assert.Equal("غير محدد", cells[3]);
+                    string statusName = personOrdinal % 5 == 0 ? "غياب" : "موجود";
+                    for (int day = 1; day <= CurrentMonthDays; day++)
+                        Assert.Equal(statusName, cells[day + 3]);
                 }
             }
             Assert.Equal(Personnel + 3, excelWorksheetRows);
@@ -299,6 +341,7 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
             monthlyExcelXlsxBytes = excelFileBytes,
             monthlyExcelXlsxSha256 = excelFileSha256,
             monthlyExcelNoPartialFiles = true,
+            monthlyExcelHistoricalIdentityAndDailyValuesVerified = true,
             physicalPowerFailure = "NOT_EXECUTED",
         };
         string json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });

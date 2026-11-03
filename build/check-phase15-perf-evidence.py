@@ -33,6 +33,7 @@ def verify(path: Path, checkout: str, head: str) -> list[str]:
         ("monthlyExcelExportPeople", 10_000),
         ("monthlyExcelXlsxWorksheetRows", 10_003),
         ("monthlyExcelNoPartialFiles", True),
+        ("monthlyExcelHistoricalIdentityAndDailyValuesVerified", True),
         ("physicalPowerFailure", "NOT_EXECUTED"),
     ):
         if data.get(key) != wanted:
