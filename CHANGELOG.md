@@ -1,5 +1,11 @@
 # Changelog — Al-Tamam Daily (التمام اليومي)
 
+## Unreleased — Phase 15 separation popup safety (2026-11-03)
+- Require a genuine native separation receipt (matching PersonId, nonempty MovementId and separated=true) before claiming success; show uncertain outcome if the receipt is malformed.
+- Retry the SAME operationId and preview token only after ambiguous timeout/offline; definitive native errors require a fresh preview. Preserve the five-second delay on replay.
+- Guard concurrent confirmation and stale-person selection while preserving the existing SQLCipher transaction, audit, historical records and UI appearance.
+- Extend the existing separation UI test with conflict, malformed receipt and lost-response retry cases; production NO-GO remains.
+
 ## Unreleased — Phase 15 version and evidence corrections (2026-11-03)
 - Make GetApplicationVersion read the actual bridge assembly informational version, rather than a fixed 0.4.0. Supply the same RELEASE_VERSION to x86/x64 published assemblies and package metadata; fail packaging on mismatched published DLL product versions.
 - Add an authenticated bridge regression test for the displayed version. Repair five README links to local repository documents.
