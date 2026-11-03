@@ -83,6 +83,42 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
     };
 
     [Fact]
+    public async Task TrustedMonthlyExcelRead_BatchesBeyondInteractiveHundredRowLimit_WithIdenticalSnapshots()
+    {
+        // UI navigation remains strictly capped at 100; ONLY the native
+        // server-side XLSX service may read a larger bounded SQLCipher page.
+        var read = new DailyMonthlyReadService(_db);
+        var request = Period("SITE-UNSPECIFIED");
+        request["page"] = 1;
+        request["pageSize"] = 500;
+        request["archiveMode"] = true;
+        var interactive = await read.MonthlyGridAsync(
+            (JsonObject)request.DeepClone(), CancellationToken.None);
+        var exportPage = await read.MonthlyGridForExcelAsync(
+            (JsonObject)request.DeepClone(), CancellationToken.None);
+        Assert.True(interactive.Success, interactive.UserMessage);
+        Assert.True(exportPage.Success, exportPage.UserMessage);
+        var ui = Assert.IsType<JsonObject>(interactive.Data);
+        var batch = Assert.IsType<JsonObject>(exportPage.Data);
+        var uiRows = Assert.IsType<JsonArray>(ui["items"]);
+        var batchRows = Assert.IsType<JsonArray>(batch["items"]);
+        Assert.Equal(100, uiRows.Count);
+        Assert.Equal(102, batchRows.Count); // 102 historical roster identities, >100
+        Assert.Equal(ui["total"]!.ToString(), batch["total"]!.ToString());
+        for (int i = 0; i < uiRows.Count; i++)
+        {
+            var uiRow = Assert.IsType<JsonObject>(uiRows[i]);
+            var excelRow = Assert.IsType<JsonObject>(batchRows[i]);
+            foreach (var field in new[] {"personId","name","serviceNumberA","siteName"})
+                Assert.Equal(uiRow[field]!.ToString(), excelRow[field]!.ToString());
+            Assert.Equal(uiRow["days"]!.ToJsonString(), excelRow["days"]!.ToJsonString());
+        }
+        Assert.Equal(
+            batchRows.Select(n => n!["personId"]!.ToString()).Distinct().Count(),
+            batchRows.Count);
+    }
+
+    [Fact]
     public async Task ExcelPreview_HasRealTotalsAndRejectsInvalidOrEmptyPeriods()
     {
         var excel = new MonthlyExcelExportService(_db);
