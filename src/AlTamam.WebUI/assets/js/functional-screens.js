@@ -485,29 +485,75 @@
         const review=window.AltamamDialog?.attendanceReview;
         if(typeof review!=="function")
           throw Error("نافذة المعاينة غير متاحة؛ لم يُحفظ أي تعديل.");
-        const accepted=await review(preview,{
+        const reviewOptions={
           title:bulk?"معاينة تغيير حالات المحضّرين تلقائياً":
             "معاينة تغيير حالة المحضّر تلقائياً",
           message:"راجع أسماء جميع الأفراد وأرقامهم ومواقعهم والحالة السابقة والجديدة؛ الإلغاء لا يحفظ شيئاً.",
           confirmLabel:"تأكيد واعتماد التغييرات"
-        });
+        };
+        const accepted=await review(preview,reviewOptions);
         if(!accepted||disposed)return;
         if(expectedVersion!==selectionVersion){
           showError(notice,new Error("تغيّر التحديد أثناء المعاينة؛ راجع الأسماء والحالات من جديد."));
           return;
         }
-        const saved=parseData(await bridge().invoke("ReviseTodayAttendance",{
+        // One explicit operator intent: do not mint a fresh id after a lost
+        // bridge reply. Native SQLCipher receipts make the SAME request safe to replay.
+        const commitPayload={
           previewToken:preview.previewToken,
           operationId:window.crypto?.randomUUID?.()||
             "AUTO-REV-"+Date.now()+"-"+Math.random().toString(36).slice(2)
-        }));
-        if(!saved||saved.count!==ids.length)
-          throw Error("لم يؤكد الخادم اعتماد جميع الأفراد المحددين.");
-        for(const id of ids)selected.delete(id);
-        selectionVersion++;
-        notice.replaceChildren(message("تم اعتماد تغيير حالة "+saved.count+
-          " فرداً، مع حفظ التعديل في سجل العمليات."));
-        if(!disposed)await load(); // Keep register visible after confirmation.
+        };
+        const commitSamePreview=async()=>{
+          const saved=parseData(await bridge().invoke("ReviseTodayAttendance",
+            commitPayload,{timeoutMs:120000}));
+          if(!saved||!Number.isInteger(saved.count)||saved.count!==ids.length)
+            throw Error("تعذر التحقق من إيصال اعتماد جميع الأفراد؛ راجع السجل قبل أي محاولة جديدة.");
+          for(const id of ids)selected.delete(id);
+          selectionVersion++;
+          notice.replaceChildren(message("تم اعتماد تغيير حالة "+saved.count+
+            " فرداً، مع حفظ التعديل في سجل العمليات."));
+          if(!disposed&&!await load())
+            notice.appendChild(message("تم الحفظ بنجاح، لكن تعذر تحديث القائمة؛ اضغط بحث لتحديثها.",true));
+        };
+        const handleCommitError=error=>{
+          if(disposed)return;
+          if(error?.errorCode!=="BridgeTimeout"&&error?.errorCode!=="BridgeOffline"){
+            showError(notice,error);
+            return;
+          }
+          notice.replaceChildren(message(
+            "انقطع رد التطبيق أثناء الحفظ، وقد تكون العملية نُفذت. لا تبدأ معاينة جديدة قبل التحقق؛ يمكنك إعادة تأكيد نفس العملية بأمان.",true));
+          const retry=button("إعادة مراجعة وتأكيد تغيير الحالة",async()=>{
+            if(disposed||busy)return;
+            if(expectedVersion!==selectionVersion){
+              showError(notice,new Error("تغيّر التحديد؛ راجع السجل قبل إعادة المحاولة."));
+              return;
+            }
+            busy=true;retry.disabled=true;updateSelected();
+            try{
+              const reapproved=await review(preview,{
+                ...reviewOptions,
+                title:"إعادة مراجعة تغيير الحالة بعد انقطاع الرد",
+                message:"قد تكون العملية نُفذت بالفعل. ستُعاد نفس المعاينة ونفس معرف العملية فقط، دون تكرار الحفظ.",
+                confirmLabel:"إعادة تأكيد نفس العملية"
+              });
+              if(!reapproved||disposed)return;
+              if(expectedVersion!==selectionVersion){
+                showError(notice,new Error("تغيّر التحديد أثناء إعادة المراجعة؛ لم تُرسل عملية جديدة."));
+                return;
+              }
+              await commitSamePreview();
+            }catch(retryError){handleCommitError(retryError);}
+            finally{
+              busy=false;updateSelected();
+              if(retry.isConnected)retry.disabled=false;
+            }
+          });
+          notice.appendChild(retry);
+        };
+        try{await commitSamePreview();}
+        catch(error){handleCommitError(error);}
       }catch(error){if(!disposed)showError(notice,error);}
       finally{busy=false;updateSelected();}
     }
@@ -603,8 +649,10 @@
         previous.disabled=page<=1;next.disabled=page*DAILY_PAGE_SIZE>=total;
         append(footer,previous,next);
         updateSelected();
+        return true;
       }catch(error){
         if(!disposed&&current===generation)showError(content,error);
+        return false;
       }
     }
     // Reading saved automatic attendance must work even when no new status
