@@ -23,6 +23,24 @@ internal static class Phase04BridgeRoundTripSelfCheck
         string supervisorPassword = "Abc123!" + Guid.NewGuid().ToString("N");
         string adminPassword = "Abc123!" + Guid.NewGuid().ToString("N");
 
+        // Create one active site in the disposable encrypted SQLCipher fixture.
+        // The actual user's AppData and configuration are never accessed here.
+        using (var fixtureConnection = database.CreateOpenConnection())
+        using (var createSite = fixtureConnection.CreateCommand())
+        {
+            createSite.CommandText = """
+                INSERT INTO Sites(SiteId,VisibleName,NormalizedName,IsSystemSite,
+                    ActiveFlag,CreatedAtUtc,RowVersion)
+                VALUES('SITE-PHASE15-E2E-DEST','وجهة نقل اختبارية',
+                    'وجهة نقل اختبارية',0,1,'2026-01-01T00:00:00Z',1);
+                INSERT INTO SiteNameHistory(SiteId,VisibleNameSnapshot,
+                    ValidFromLocalDate,ValidToLocalDate,ChangedByUserId,RecordedAtUtc)
+                VALUES('SITE-PHASE15-E2E-DEST','وجهة نقل اختبارية',
+                    '2026-01-01',NULL,'USR-SYSTEM','2026-01-01T00:00:00Z');
+                """;
+            createSite.ExecuteNonQuery();
+        }
+
         string javascript = """
             (() => {
               const api = window.AltamamBridge;
@@ -123,6 +141,66 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   siteId:"SITE-UNSPECIFIED"
                 },undefined,"DuplicateServiceNumber");
 
+                // Actual modal click -> native Windows WebView2 -> encrypted DB,
+                // including a cancelled preview, a confirmed commit, and replay.
+                const dateNow=new Date();
+                const businessDate=[dateNow.getFullYear(),
+                  String(dateNow.getMonth()+1).padStart(2,"0"),
+                  String(dateNow.getDate()).padStart(2,"0")].join("-");
+                const previewTransfer=await api.invoke("PreviewInternalTransfer",{
+                  businessDate,sourceSiteId:"SITE-UNSPECIFIED",
+                  destinationSiteId:"SITE-PHASE15-E2E-DEST",personIds:[personId]
+                });
+                const transfer=previewTransfer.data;
+                if(!transfer||typeof transfer.previewToken!=="string"||
+                   transfer.previewToken.length<32||transfer.count!==1||
+                   transfer.persons?.[0]?.personId!==personId||
+                   transfer.persons?.[0]?.serviceNumberA!=="00007192"||
+                   transfer.destinationName!=="وجهة نقل اختبارية")
+                  throw new Error("SQLCipher transfer preview did not match the fixture");
+                const review=window.AltamamDialog?.transferReview;
+                if(typeof review!=="function")
+                  throw new Error("real browser transfer modal is absent");
+                function pressModal(label){
+                  const button=[...document.querySelectorAll("#appModalBody button")]
+                    .find(x=>x.textContent.trim()===label);
+                  if(!button)throw new Error("transfer modal button missing: "+label);
+                  button.click();
+                }
+                const cancelled=review(transfer);
+                pressModal("إلغاء");
+                if(await cancelled!==false)
+                  throw new Error("cancelled transfer was not rejected");
+                const before=await api.invoke("QueryMovementArchive",{
+                  type:"internal",dateFrom:businessDate,dateTo:businessDate,
+                  page:1,pageSize:10
+                });
+                if(before.data?.total!==0)
+                  throw new Error("cancelled modal wrote a movement");
+                const approved=review(transfer);
+                pressModal("تأكيد النقل النهائي");
+                if(await approved!==true)
+                  throw new Error("real transfer confirmation did not approve native mutation");
+                const intent={previewToken:transfer.previewToken,
+                  operationId:"E2E-TRANSFER-"+crypto.randomUUID()};
+                const receipt=await api.invoke("CommitInternalTransfer",intent,
+                  {timeoutMs:120000});
+                if(receipt.data?.count!==1||
+                   receipt.data?.destinationName!==transfer.destinationName)
+                  throw new Error("C# transfer did not return a complete matching receipt");
+                const replay=await api.invoke("CommitInternalTransfer",intent,
+                  {timeoutMs:120000});
+                if(replay.data?.count!==1||
+                   replay.data?.destinationName!==transfer.destinationName)
+                  throw new Error("identical lost-reply retry failed");
+                const archive=await api.invoke("QueryMovementArchive",{
+                  type:"internal",dateFrom:businessDate,dateTo:businessDate,
+                  page:1,pageSize:10
+                });
+                if(archive.data?.total!==1||
+                   archive.data?.items?.[0]?.personId!==personId)
+                  throw new Error("transfer archive contains missing or duplicate movement");
+
                 const adminPerson = await api.invoke("CreatePerson",{
                   visibleName:"مسؤول اختبار ويندوز",serviceNumberA:"00007193",
                   siteId:"SITE-UNSPECIFIED"
@@ -185,7 +263,8 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     ?.textContent.includes("00007192"))
                   throw new Error("HTML output lost after authorization checks");
 
-                window.__phase04RealBridge = {status:"pass",personId};
+                window.__phase04RealBridge = {status:"pass",personId,
+                  modalConfirmedTransfer:true};
               })().catch(error => {
                 window.__phase04RealBridge = {
                   status:"failed",reason:String(error?.message || error)
@@ -218,6 +297,10 @@ internal static class Phase04BridgeRoundTripSelfCheck
                         status.RootElement.GetProperty("reason").GetString());
                 if (phase == "pass")
                 {
+                    if (!status.RootElement.TryGetProperty("modalConfirmedTransfer",
+                            out var transferFlag) || transferFlag.ValueKind != JsonValueKind.True)
+                        throw new InvalidOperationException(
+                            "Real browser skipped modal-confirmed transfer");
                     string personId = status.RootElement.GetProperty("personId").GetString()
                         ?? throw new InvalidOperationException("Missing tested PersonId");
                     using var connection = database.CreateOpenConnection();
@@ -243,6 +326,38 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     founder.CommandText = "SELECT COUNT(*) FROM Users WHERE Role=1 AND LinkedPersonId IS NULL;";
                     if (Convert.ToInt64(founder.ExecuteScalar()) != 1)
                         throw new InvalidOperationException("Founding account was incorrectly linked");
+                    using var transferMovement = connection.CreateCommand();
+                    transferMovement.CommandText = """
+                        SELECT COUNT(*) FROM PersonnelMovements
+                         WHERE PersonId=$person AND MovementType=1
+                           AND SourceSiteId='SITE-UNSPECIFIED'
+                           AND DestinationSiteId='SITE-PHASE15-E2E-DEST';
+                        """;
+                    transferMovement.Parameters.AddWithValue("$person",personId);
+                    if (Convert.ToInt64(transferMovement.ExecuteScalar()) != 1)
+                        throw new InvalidOperationException(
+                            "Native SQLCipher transfer did not persist exactly once");
+                    using var transferredAssignment = connection.CreateCommand();
+                    transferredAssignment.CommandText = """
+                        SELECT COUNT(*) FROM PersonAssignments
+                         WHERE PersonId=$person AND SiteId='SITE-PHASE15-E2E-DEST'
+                           AND ValidToLocalDate IS NULL;
+                        """;
+                    transferredAssignment.Parameters.AddWithValue("$person",personId);
+                    if (Convert.ToInt64(transferredAssignment.ExecuteScalar()) != 1)
+                        throw new InvalidOperationException(
+                            "Native current assignment does not match transfer destination");
+                    using var transferAudit = connection.CreateCommand();
+                    transferAudit.CommandText = """
+                        SELECT COUNT(*) FROM AuditEvents
+                         WHERE TargetEntityId=$person AND OperationCode='TRANSFER_INTERNAL';
+                        """;
+                    transferAudit.Parameters.AddWithValue("$person",personId);
+                    if (Convert.ToInt64(transferAudit.ExecuteScalar()) != 1)
+                        throw new InvalidOperationException(
+                            "Transfer audit missing or duplicated on operation replay");
+                    MainWindow.TraceWebViewSelfCheck(
+                        "PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher");
                     MainWindow.TraceWebViewSelfCheck(
                         "PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations");
                     return;
