@@ -1,5 +1,10 @@
 # Changelog — Al-Tamam Daily (التمام اليومي)
 
+## Unreleased — Phase 15 valid historical transfer fixture for Windows WebView2 (2026-11-03)
+- The real WPF/WebView2 modal transfer E2E was attempting to transfer a newly created person on the same date their first assignment began. SQLCipher correctly rejects closing an effective-dated interval on its starting day.
+- Seed a **separate**, historically eligible synthetic person, identity history and source assignment starting yesterday in the disposable encrypted test database; preserve the first-use new-person and role tests unchanged. Modal Cancel, Confirm, identical-idempotency replay, movement, destination assignment and transfer audit verification must all use the eligible person.
+- No production logic, SQLCipher trigger, migration, persisted user data, scheduling or release rules changed. All Windows checks and packages remain mandatory.
+
 ## Unreleased — Phase 15 automatic-register receipt and retry safety (2026-11-03)
 - The read-only automatic-prepared register now accepts a revision as saved only with a strict integer native receipt matching every selected PersonId; malformed/mismatched receipts remain uncertain.
 - Only ambiguous `BridgeTimeout`/`BridgeOffline` permits an explicit second human review and replay of the exact same previewToken and operationId. Definitive conflicts, changed selections and navigation never reuse the attempt.
