@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Guard real x86/x64 WebView2 smoke tests against no-op or unbounded bypasses."""
 from pathlib import Path
+import re
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +13,52 @@ CORE = (ROOT / ".github/workflows/windows-ci.yml").read_text(encoding="utf-8")
 
 
 class WebViewSmokeContract(unittest.TestCase):
+    def test_transfer_uses_preexisting_person_with_yesterday_assignment(self):
+        # A person created through the live first-use UI *today* has an assignment
+        # starting today, which SQLCipher must not close with a zero-day interval.
+        # Use a separate historical fixture without relaxing storage integrity.
+        bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(
+            encoding="utf-8")
+        self.assertIn('AddDays(-1).ToString("yyyy-MM-dd"', bridge)
+        self.assertIn("TST-PHASE15-MOVABLE", bridge)
+        self.assertIn("INSERT INTO PersonAssignments", bridge)
+        self.assertIn("INSERT INTO PersonIdentityHistory", bridge)
+        self.assertIn("personIds:[movableId]", bridge)
+        self.assertNotIn("personIds:[personId]", bridge)
+        self.assertIn("transferMovement.Parameters.AddWithValue(\"$person\",movableId)", bridge)
+        self.assertIn("transferredAssignment.Parameters.AddWithValue(\"$person\",movableId)", bridge)
+        self.assertIn("transferAudit.Parameters.AddWithValue(\"$person\",movableId)", bridge)
+
+    def test_real_webview_bridge_inline_javascript_must_parse_before_packaging(self):
+        # C# accepts raw JS strings without parsing them: duplicate const declarations
+        # make ExecuteScriptAsync return null at runtime. Fail CI before compilation.
+        bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(
+            encoding="utf-8")
+        match = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', bridge)
+        self.assertIsNotNone(match, "real WebView2 bridge JavaScript is missing")
+        # Pass bytes, not locale-encoded text: Windows' cp1252 cannot represent
+        # the Arabic UI fixture. Node reads the UTF-8 byte stream unchanged.
+        syntax = subprocess.run(["node", "--check", "-"],
+                                input=match.group(1).encode("utf-8"),
+                                capture_output=True, timeout=20, check=False)
+        self.assertEqual(syntax.returncode, 0,
+                         "Invalid embedded WebView2 JS (preflight): " +
+                         syntax.stderr.decode("utf-8", errors="replace"))
+
+    def test_embedded_js_parser_must_not_use_locale_dependent_windows_encoding(self):
+        # On GitHub Windows Python chooses cp1252 for subprocess text pipes.
+        # The Arabic browser fixture is not encodable as cp1252; force UTF-8.
+        import inspect
+        code = inspect.getsource(
+            self.test_real_webview_bridge_inline_javascript_must_parse_before_packaging)
+        self.assertTrue(
+            'input=match.group(1).encode("utf-8")' in code
+            or 'encoding="utf-8"' in code,
+            "The Node stdin pipe must explicitly use UTF-8; cp1252 fails on Arabic")
+        self.assertIn("وجهة نقل اختبارية", (
+            ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs"
+        ).read_text(encoding="utf-8"))
+
     def test_selfcheck_uses_isolated_temporary_profile_without_database(self):
         self.assertIn('webViewSelfCheck\n                ? Path.Combine(Path.GetTempPath()', HOST)
         self.assertIn('"AlTamam-WebView2-SelfCheck-" + Guid.NewGuid()', HOST)
@@ -94,6 +142,21 @@ class WebViewSmokeContract(unittest.TestCase):
         self.assertIn('TraceWebViewSelfCheck("UI-E2E PASS', HOST)
         self.assertIn('("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e")', driver)
         self.assertIn("PASS actual HTML-C#-SQLCipher-HTML roundtrip", driver)
+        self.assertIn("PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher", driver)
+        package = (ROOT / "build/test-package-appdata-preservation.ps1").read_text(encoding="utf-8")
+        self.assertIn("PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher", package)
+        bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(encoding="utf-8")
+        self.assertIn("PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher", bridge)
+        self.assertIn("PreviewInternalTransfer", bridge)
+        self.assertIn("CommitInternalTransfer", bridge)
+        self.assertIn("transferReview", bridge)
+        self.assertIn("QueryMovementArchive", bridge)
+        # Do not lose the native operation that first failed behind a generic
+        # user-facing ValidationError. Only public stage/errorCode are logged.
+        self.assertIn('probeStage = "PreviewInternalTransfer"', bridge)
+        self.assertIn('probeStage = "CommitInternalTransfer"', bridge)
+        self.assertIn('probeStage = "QueryMovementArchive"', bridge)
+        self.assertIn('reason:probeStage + ": " +', bridge)
         self.assertIn("await Phase04BridgeRoundTripSelfCheck.RunAsync", HOST)
         self.assertIn("uri.IsDefaultPort && uri.UserInfo.Length == 0", HOST)
         self.assertIn("WaitForExit(240000)", driver)

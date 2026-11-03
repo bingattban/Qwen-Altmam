@@ -1,9 +1,29 @@
 # Changelog — Al-Tamam Daily (التمام اليومي)
 
+## Unreleased — Phase 15 valid historical transfer fixture for Windows WebView2 (2026-11-03)
+- The real WPF/WebView2 modal transfer E2E was attempting to transfer a newly created person on the same date their first assignment began. SQLCipher correctly rejects closing an effective-dated interval on its starting day.
+- Seed a **separate**, historically eligible synthetic person, identity history and source assignment starting yesterday in the disposable encrypted test database; preserve the first-use new-person and role tests unchanged. Modal Cancel, Confirm, identical-idempotency replay, movement, destination assignment and transfer audit verification must all use the eligible person.
+- No production logic, SQLCipher trigger, migration, persisted user data, scheduling or release rules changed. All Windows checks and packages remain mandatory.
+
 ## Unreleased — Phase 15 automatic-register receipt and retry safety (2026-11-03)
 - The read-only automatic-prepared register now accepts a revision as saved only with a strict integer native receipt matching every selected PersonId; malformed/mismatched receipts remain uncertain.
 - Only ambiguous `BridgeTimeout`/`BridgeOffline` permits an explicit second human review and replay of the exact same previewToken and operationId. Definitive conflicts, changed selections and navigation never reuse the attempt.
 - A successfully committed change stays confirmed even if reloading the register fails. Added test-first dashboard/automatic-register regressions; no SQLCipher, role, theme, scheduler or other business-policy changes.
+
+## Unreleased — Phase 15 Windows UTF-8 browser syntax preflight (2026-11-03)
+- Fix the independent Windows Core and Release manifest preflights failing with Python `UnicodeEncodeError: cp1252` while passing Arabic JavaScript to `node --check`.
+- Encode the full embedded browser script to UTF-8 bytes explicitly and decode Node diagnostics as UTF-8. Add a regression that requires locale-independent Node stdin and real Arabic fixture content; retain all syntax rejection.
+- No runtime app source, production SQLCipher files, scheduler, installer or business rules are modified.
+
+## Unreleased — Phase 15 real WebView2 E2E JavaScript syntax gate (2026-11-03)
+- Correct a duplicate `const before` declaration within the isolated Windows WebView2 transfer fixture that caused `ExecuteScriptAsync` to return `null` before any transfer was executed.
+- Run Node's actual JavaScript syntax parser over the embedded raw C# browser script in the mandatory preflight Python contract (Windows Core and Windows Release), so subsequent duplicate declarations fail before costly .NET tests and packaging.
+- No application JavaScript, runtime business operation, SQLCipher data, installer or other application behavior changes.
+
+## Unreleased — Phase 15 real Windows modal transfer acceptance (2026-11-03)
+- Extend the existing isolated WPF/WebView2 + encrypted SQLCipher selfcheck to open the actual internal-transfer review modal, click Cancel and prove no movement, click final Confirm and verify the native receipt, then replay the identical idempotency intent safely.
+- Verify **exactly one** archived transfer, destination assignment and immutable TRANSFER_INTERNAL audit record in the disposable SQLCipher database. Require the trace marker for both pre-package Windows test flows and packaged x86/x64 Portable/Installer bridge checks.
+- This is a bounded synthetic CI acceptance subset, NOT a full independent clean/offline Windows or recovery signoff. No production business rule, UI style, schema or activation behavior changed.
 
 ## Unreleased — Phase 15 full monthly Excel historical identity parity (2026-11-03)
 - Extend the synthetic SQLCipher 10,000-person fixture with **effective-dated persisted identity-history rows** for all personnel. The earlier fixture lacked these snapshots and its Excel export benchmark checked worksheet row count, not content.

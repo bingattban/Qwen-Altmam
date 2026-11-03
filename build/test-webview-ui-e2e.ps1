@@ -32,7 +32,8 @@ try {
         $evidence -notmatch 'PASS bundled offline WebUI title verified' -or
         $evidence -notmatch 'PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests' -or
         $evidence -notmatch 'PASS all 69 manifest routes opened in real Windows WebView2' -or
-        $evidence -notmatch 'PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations') {
+        $evidence -notmatch 'PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations' -or
+        $evidence -notmatch 'PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher') {
         throw "UI-E2E FAIL: modal interaction or offline navigation evidence missing; $evidence"
     }
     # An evidence file is written only AFTER the native process exits 0 and all
@@ -62,6 +63,7 @@ try {
                 sqlCipherBridgeRoundtripAndForbiddenRequests = $true
                 all69CanonicalManifestRoutesOpened = $true
                 generalAdminAdminSupervisorBridgeRoleProbes = $true
+                modalConfirmedInternalTransferSqlCipher = $true
             }
             notExecutedByThisProbe = @(
                 "Every role exercising every nested screen business control",
