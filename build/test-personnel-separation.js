@@ -16,6 +16,7 @@ class Node {
 }
 const root=new Node("div"),calls=[],commits=[],timers=[];
 let confirmDecision=false,reasonDialogCalls=0;
+let nextCommitError=null,overrideCommitResult=null;
 const previews=[];
 const data={
  QueryPersons:{items:[{personId:"PERSON-1",displayName:"فرد من الكشف",serviceNumberA:"999",
@@ -23,7 +24,7 @@ const data={
  PreviewSeparation:{previewToken:"ONLY_SERVER_TOKEN",name:"فرد من الكشف",
     serviceNumberA:"999",siteName:"موقع مختبر",businessDate:"2026-10-23",
     reason:"سبب فصل مسجل",minimumConfirmationSeconds:5},
- CommitSeparation:{movementId:"MOV-1",separated:true},
+ CommitSeparation:{movementId:"MOV-1",personId:"PERSON-1",separated:true},
  QuerySites:[],
  QuerySeparationArchive:{items:[{movementId:"MOV-1",serviceNumberA:"999",
     name:"فرد مفصول",siteName:"موقع مختبر",date:"2026-10-23",
@@ -33,7 +34,11 @@ const data={
 };
 const api={invoke:async(name,payload)=>{
  calls.push(name);
- if(name==="CommitSeparation")commits.push(payload);
+ if(name==="CommitSeparation"){
+   commits.push(payload);
+   if(nextCommitError){const rejected=nextCommitError;nextCommitError=null;throw rejected;}
+   if(overrideCommitResult){const native=overrideCommitResult;overrideCommitResult=null;return {data:native};}
+ }
  if(!(name in data))throw Error("Unexpected bridge action "+name);
  return {data:data[name]};
 }};
@@ -90,6 +95,40 @@ async function run(){
    x[1]==="سبب فصل مسجل"));
  assert.equal(previews[2].options.confirmLabel,"إغلاق التفاصيل");
  assert.equal(commits.length,1,"opening or dismissing archived details never separates again");
- console.log("SEPARATION UI PASS: timed preview, secure commit, read-only archive details popup");
+ // A definitive native rejection must never offer an old-token replay.
+ byText("اختيار").handlers.click();
+ nextCommitError=Object.assign(new Error("تغيرت بيانات الفرد بعد المعاينة."),
+   {errorCode:"ConflictStale"});
+ await byText("تحديد سبب الفصل والمعاينة").handlers.click();
+ assert.ok(root.all().some(x=>x.textContent.includes("تغيرت بيانات الفرد")),
+   "native error remains visible without false success");
+ assert.equal(byText("إعادة مراجعة وتأكيد الفصل"),undefined,
+   "definitive stale errors may not retry an expired preview");
+
+ // A bridge success without a durable native receipt does not establish success.
+ overrideCommitResult={movementId:"",personId:"PERSON-1",separated:true};
+ await byText("تحديد سبب الفصل والمعاينة").handlers.click();
+ assert.equal(byText("إعادة مراجعة وتأكيد الفصل"),undefined,
+   "malformed receipt must not offer a replay");
+ assert.ok(root.all().some(x=>x.textContent.includes("لا يمكن تأكيد نتيجة الفصل")),
+   "malformed native receipt is explicitly uncertain");
+
+ // Lost reply retries only with original token and durable operation ID.
+ nextCommitError=Object.assign(new Error("انتهت مهلة الاستجابة."),
+   {errorCode:"BridgeTimeout"});
+ const beforeTimeout=commits.length;
+ await byText("تحديد سبب الفصل والمعاينة").handlers.click();
+ const retry=byText("إعادة مراجعة وتأكيد الفصل");
+ assert.ok(retry,"only ambiguous response loss permits same-intent retry");
+ const first=commits.at(-1);
+ await retry.handlers.click();
+ assert.equal(commits.length,beforeTimeout+2);
+ assert.equal(commits.at(-1).previewToken,first.previewToken);
+ assert.equal(commits.at(-1).operationId,first.operationId,
+   "a lost response retries the original operation without duplicating it");
+ assert.ok(previews.at(-1).options.delaySeconds>=5,
+   "mandatory five-second confirmation remains effective on retry");
+ assert.ok(root.all().some(x=>x.textContent.includes("تم تنفيذ الفصل")));
+ console.log("SEPARATION UI PASS: verified receipt, definitive rejection, guarded retry and archive");
 }
 run().catch(err=>{console.error(err);process.exitCode=1;});
