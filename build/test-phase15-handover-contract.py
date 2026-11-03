@@ -74,6 +74,38 @@ class Phase15Contract(unittest.TestCase):
         self.assertIn("SKIPPED", gate)
         self.assertIn("RestoreDatabaseAtomically", gate)
 
+    def test_audited_main_candidate_evidence_is_not_production_approval(self):
+        """Validate retained SHA evidence and explicitly independent acceptance."""
+        import re
+        proof = json.loads(read("artifacts/PHASE15_AUDITED_CANDIDATE_2026-11-03.json"))
+        sha = proof["sourceHeadSha"]
+        self.assertRegex(sha, r"^[0-9a-f]{40}$")
+        self.assertEqual(proof["testedCheckoutSha"], sha)
+        self.assertEqual(proof["status"], "CI_CANDIDATE_ONLY_NOT_PRODUCTION_ACCEPTANCE")
+        self.assertEqual(proof["version"], "0.0.909-ci")
+        self.assertEqual(proof["core"]["conclusion"], "success")
+        self.assertEqual(proof["release"]["conclusion"], "success")
+        self.assertEqual(proof["release"]["fourPackageAudit"], "success")
+        self.assertEqual(proof["release"]["cleanMachineGate"], "skipped")
+        packages = proof["releaseFiles"]
+        self.assertEqual(len(packages), 4)
+        self.assertEqual({(p["runtimeIdentifier"], p["class"]) for p in packages},
+                         {("win-x86", "Portable"), ("win-x86", "Installer"),
+                          ("win-x64", "Portable"), ("win-x64", "Installer")})
+        for package in packages:
+            self.assertRegex(package["sha256"], r"^[0-9a-f]{64}$")
+            self.assertGreater(package["bytes"], 1000000)
+        self.assertEqual(proof["benchmark"]["attendanceRecords"], 550000)
+        self.assertEqual(proof["benchmark"]["fullGui10000People31DayEndToEnd"], "NOT_EXECUTED")
+        self.assertEqual(proof["benchmark"]["excelExportThroughput"], "NOT_EXECUTED")
+        self.assertFalse(proof["ownerProductionApproval"])
+        for name in ("docs/release/GO_NO_GO.md",
+                     "docs/release/PHASE15_ACCEPTANCE_MATRIX.md"):
+            body = read(name)
+            self.assertIn(sha, body)
+            self.assertIn("NO-GO", body)
+            self.assertIn("NOT EXECUTED", body)
+
     def test_both_windows_preflights_fail_closed(self):
         for workflow in (".github/workflows/windows-ci.yml",
                          ".github/workflows/windows-release.yml"):
