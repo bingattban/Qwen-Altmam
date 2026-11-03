@@ -13,6 +13,22 @@ CORE = (ROOT / ".github/workflows/windows-ci.yml").read_text(encoding="utf-8")
 
 
 class WebViewSmokeContract(unittest.TestCase):
+    def test_transfer_uses_preexisting_person_with_yesterday_assignment(self):
+        # A person created through the live first-use UI *today* has an assignment
+        # starting today, which SQLCipher must not close with a zero-day interval.
+        # Use a separate historical fixture without relaxing storage integrity.
+        bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(
+            encoding="utf-8")
+        self.assertIn('AddDays(-1).ToString("yyyy-MM-dd"', bridge)
+        self.assertIn("TST-PHASE15-MOVABLE", bridge)
+        self.assertIn("INSERT INTO PersonAssignments", bridge)
+        self.assertIn("INSERT INTO PersonIdentityHistory", bridge)
+        self.assertIn("personIds:[movableId]", bridge)
+        self.assertNotIn("personIds:[personId]", bridge)
+        self.assertIn("transferMovement.Parameters.AddWithValue(\"$person\",movableId)", bridge)
+        self.assertIn("transferredAssignment.Parameters.AddWithValue(\"$person\",movableId)", bridge)
+        self.assertIn("transferAudit.Parameters.AddWithValue(\"$person\",movableId)", bridge)
+
     def test_real_webview_bridge_inline_javascript_must_parse_before_packaging(self):
         # C# accepts raw JS strings without parsing them: duplicate const declarations
         # make ExecuteScriptAsync return null at runtime. Fail CI before compilation.
