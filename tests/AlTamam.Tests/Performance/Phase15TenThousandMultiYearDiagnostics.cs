@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Xml;
+using System.Xml.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -242,12 +243,33 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
                 using var xml = XmlReader.Create(stream,
                     new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
                 const string spreadsheet = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                XNamespace ns = spreadsheet;
                 while (xml.ReadToFollowing("row", spreadsheet))
                 {
                     excelWorksheetRows++;
+                    using var subtree = xml.ReadSubtree();
+                    var actualRow = XElement.Load(subtree);
                     Assert.Equal(excelWorksheetRows,
-                        int.Parse(xml.GetAttribute("r")!,
+                        int.Parse(actualRow.Attribute("r")!.Value,
                             System.Globalization.CultureInfo.InvariantCulture));
+                    Assert.Empty(actualRow.Descendants(ns + "f"));
+                    if (excelWorksheetRows <= 3) continue;
+                    // Full census of the historical snapshot and all 31 days,
+                    // independent of the SQL reader's own result collection.
+                    int personOrdinal = excelWorksheetRows - 3;
+                    string[] cells = actualRow.Elements(ns + "c")
+                        .Select(c => c.Element(ns + "is")?.Element(ns + "t")?.Value ?? "")
+                        .ToArray();
+                    Assert.Equal(35, cells.Length);
+                    Assert.Equal(personOrdinal.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture), cells[0]);
+                    Assert.Equal((100000 + personOrdinal).ToString(
+                        System.Globalization.CultureInfo.InvariantCulture), cells[1]);
+                    Assert.Equal($"فرد اختباري {personOrdinal:D6}", cells[2]);
+                    Assert.Equal("غير محدد", cells[3]);
+                    string statusName = personOrdinal % 5 == 0 ? "غياب" : "موجود";
+                    for (int day = 1; day <= CurrentMonthDays; day++)
+                        Assert.Equal(statusName, cells[day + 3]);
                 }
             }
             Assert.Equal(Personnel + 3, excelWorksheetRows);
