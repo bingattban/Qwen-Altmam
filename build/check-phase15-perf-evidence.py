@@ -29,7 +29,10 @@ def verify(path: Path, checkout: str, head: str) -> list[str]:
         ("actualCheckoutSha", checkout),
         ("sourceHeadSha", head),
         ("fullGui10000People31DayEndToEnd", "NOT_EXECUTED"),
-        ("excelExportThroughput", "NOT_EXECUTED"),
+        ("excelExportThroughput", "MEASURED_SYNTHETIC_10000_PERSON_XLSX_NOT_FULL_GUI_ACCEPTANCE"),
+        ("monthlyExcelExportPeople", 10_000),
+        ("monthlyExcelXlsxWorksheetRows", 10_003),
+        ("monthlyExcelNoPartialFiles", True),
         ("physicalPowerFailure", "NOT_EXECUTED"),
     ):
         if data.get(key) != wanted:
@@ -39,6 +42,12 @@ def verify(path: Path, checkout: str, head: str) -> list[str]:
         value = data.get(key)
         if not isinstance(value, (int, float)) or not (0 < value < 1e13):
             issues.append("absent or impossible measured value: " + key)
+    for key in ("monthlyExcelExportElapsedMs", "monthlyExcelXlsxBytes"):
+        value = data.get(key)
+        if not isinstance(value, (int, float)) or not (0 < value < 1e13):
+            issues.append("absent or impossible measured Excel value: " + key)
+    if not re.fullmatch(r"[0-9a-f]{64}", str(data.get("monthlyExcelXlsxSha256", ""))):
+        issues.append("missing full native XLSX SHA-256 from the measured export")
     if "Windows" not in str(data.get("os")):
         issues.append("benchmark did not run on Windows")
     if not str(data.get("githubRunId", "")).isdigit():
