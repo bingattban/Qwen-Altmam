@@ -187,7 +187,10 @@ public sealed class MonthlyExcelExportService
                     w.WriteEndElement();
                     w.WriteEndElement();
                 });
-                // Excel sheet is streamed, one bounded 100-person SQLCipher page at a time.
+                // Export-only 500-person SQLCipher batches reduce repeated COUNT/
+                // historical-name sorting. Browser MonthlyGridAsync stays capped
+                // at 100, and each exported cell still comes from the same
+                // production historical projection and movement/attendance rules.
                 var entry = archive.CreateEntry("xl/worksheets/sheet1.xml", CompressionLevel.Optimal);
                 using var target = entry.Open();
                 using var writer = XmlWriter.Create(target, new XmlWriterSettings
@@ -221,10 +224,10 @@ public sealed class MonthlyExcelExportService
                 for (int pageNumber = 1; rowNumber < total; pageNumber++)
                 {
                     ct.ThrowIfCancellationRequested();
-                    var data = await _read.MonthlyGridAsync(new JsonObject
+                    var data = await _read.MonthlyGridForExcelAsync(new JsonObject
                     {
                         ["year"] = year, ["month"] = month, ["siteId"] = site,
-                        ["term"] = term, ["archiveMode"] = true, ["page"] = pageNumber, ["pageSize"] = 100
+                        ["term"] = term, ["archiveMode"] = true, ["page"] = pageNumber, ["pageSize"] = 500
                     }, ct).ConfigureAwait(false);
                     if (!data.Success) throw new IOException("تعذر قراءة الصفحة المطلوبة من سجل التمام.");
                     var items = (JsonArray)((JsonObject)data.Data!)["items"]!;
