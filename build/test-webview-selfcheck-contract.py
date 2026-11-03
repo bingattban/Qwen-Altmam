@@ -95,6 +95,7 @@ class WebViewSmokeContract(unittest.TestCase):
         self.assertIn('("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e")', driver)
         self.assertIn("PASS actual HTML-C#-SQLCipher-HTML roundtrip", driver)
         self.assertIn("PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher", driver)
+        package = (ROOT / "build/test-package-appdata-preservation.ps1").read_text(encoding="utf-8")
         self.assertIn("PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher", package)
         bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(encoding="utf-8")
         self.assertIn("PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher", bridge)

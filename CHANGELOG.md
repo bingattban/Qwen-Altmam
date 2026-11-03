@@ -5,6 +5,11 @@
 - Only ambiguous `BridgeTimeout`/`BridgeOffline` permits an explicit second human review and replay of the exact same previewToken and operationId. Definitive conflicts, changed selections and navigation never reuse the attempt.
 - A successfully committed change stays confirmed even if reloading the register fails. Added test-first dashboard/automatic-register regressions; no SQLCipher, role, theme, scheduler or other business-policy changes.
 
+## Unreleased — Phase 15 real Windows modal transfer acceptance (2026-11-03)
+- Extend the existing isolated WPF/WebView2 + encrypted SQLCipher selfcheck to open the actual internal-transfer review modal, click Cancel and prove no movement, click final Confirm and verify the native receipt, then replay the identical idempotency intent safely.
+- Verify **exactly one** archived transfer, destination assignment and immutable TRANSFER_INTERNAL audit record in the disposable SQLCipher database. Require the trace marker for both pre-package Windows test flows and packaged x86/x64 Portable/Installer bridge checks.
+- This is a bounded synthetic CI acceptance subset, NOT a full independent clean/offline Windows or recovery signoff. No production business rule, UI style, schema or activation behavior changed.
+
 ## Unreleased — Phase 15 full monthly Excel historical identity parity (2026-11-03)
 - Extend the synthetic SQLCipher 10,000-person fixture with **effective-dated persisted identity-history rows** for all personnel. The earlier fixture lacked these snapshots and its Excel export benchmark checked worksheet row count, not content.
 - After the real production XLSX export, stream-parse **every one of the 10,000 monthly rows** and verify ordinal, historical service number, historical Arabic name, site, and all 31 committed daily status cells against independent fixture truth. Also reject formula-bearing cells.

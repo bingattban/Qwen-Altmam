@@ -63,6 +63,7 @@ try {
                 sqlCipherBridgeRoundtripAndForbiddenRequests = $true
                 all69CanonicalManifestRoutesOpened = $true
                 generalAdminAdminSupervisorBridgeRoleProbes = $true
+                modalConfirmedInternalTransferSqlCipher = $true
             }
             notExecutedByThisProbe = @(
                 "Every role exercising every nested screen business control",
