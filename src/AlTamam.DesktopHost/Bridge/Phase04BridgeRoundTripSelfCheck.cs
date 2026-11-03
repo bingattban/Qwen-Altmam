@@ -171,11 +171,11 @@ internal static class Phase04BridgeRoundTripSelfCheck
                 pressModal("إلغاء");
                 if(await cancelled!==false)
                   throw new Error("cancelled transfer was not rejected");
-                const before=await api.invoke("QueryMovementArchive",{
+                const movementsBefore=await api.invoke("QueryMovementArchive",{
                   type:"internal",dateFrom:businessDate,dateTo:businessDate,
                   page:1,pageSize:10
                 });
-                if(before.data?.total!==0)
+                if(movementsBefore.data?.total!==0)
                   throw new Error("cancelled modal wrote a movement");
                 const approved=review(transfer);
                 pressModal("تأكيد النقل النهائي");
