@@ -49,6 +49,17 @@ class ReminderContract(unittest.TestCase):
         self.assertIn("window.AltamamReminders.start()", module)
         self.assertIn("GetCurrentSession", module)
 
+    def test_redirecting_standalone_screen_must_not_load_reminders(self):
+        # Redirect-only pages already hand off to the canonical main window.
+        # Starting an extra script/stylesheet and authentication poll before
+        # location.replace causes redundant I/O on the 69-route Windows E2E.
+        # True standalone pages must continue to load and display reminders.
+        module = (UI / "assets/js/screen-module.js").read_text(encoding="utf-8")
+        self.assertIn("window.__altamamRedirectToMain = true;", module)
+        self.assertIn("if (window.__altamamRedirectToMain) return;", module)
+        self.assertIn('window.location.replace(relative.split("#")[0]', module)
+        self.assertIn('new URL("reminders.js",source)', module)
+
     def test_browser_module_is_syntax_checked_and_top_right(self):
         path = UI / "assets/js/reminders.js"
         js = path.read_text(encoding="utf-8")
