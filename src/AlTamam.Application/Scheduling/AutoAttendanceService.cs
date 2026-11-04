@@ -282,6 +282,21 @@ public sealed class AutoAttendanceService
                          reader.GetString(3), reader.GetString(4)));
             }
 
+            // A bounded leave/permission always overrides carry-forward inside its dates.
+            // Expired bounded statuses are NEVER copied from yesterday.
+            var dated=new Dictionary<string,(string StatusId,string EndDate)>(StringComparer.Ordinal);
+            using(var q=connection.CreateCommand())
+            {
+                q.Transaction=tx;
+                q.CommandText="""
+                    SELECT PersonId,StatusId,EndLocalDate FROM AttendanceDateRanges
+                    WHERE EndedAtUtc IS NULL AND StartLocalDate<=$date AND EndLocalDate>=$date;
+                    """;
+                q.Parameters.AddWithValue("$date",Iso(businessDate));
+                using var reader=await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while(await reader.ReadAsync(ct).ConfigureAwait(false))
+                    dated.Add(reader.GetString(0),(reader.GetString(1),reader.GetString(2)));
+            }
             foreach (var person in people)
             {
                 if (transferredToday.Contains(person.PersonId))
@@ -296,7 +311,24 @@ public sealed class AutoAttendanceService
                 }
 
                 string statusId, statusName, statusSymbol, statusColor;
-                if (!previousStatuses.TryGetValue(person.PersonId, out var previous))
+                if(dated.TryGetValue(person.PersonId,out var scheduled))
+                {
+                    using var state=connection.CreateCommand();state.Transaction=tx;
+                    state.CommandText="""
+                        SELECT VisibleName,ShortSymbol,ChosenColorHex
+                        FROM AttendanceStatusDefinitions WHERE StatusId=$id AND ActiveFlag=1;
+                        """;
+                    state.Parameters.AddWithValue("$id",scheduled.StatusId);
+                    using var r=await state.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                    if(!await r.ReadAsync(ct).ConfigureAwait(false))
+                    {skipNoYesterday++;continue;}
+                    statusId=scheduled.StatusId;
+                    statusName=r.GetString(0);
+                    statusSymbol=r.GetString(1);
+                    statusColor=r.GetString(2);
+                }
+                else if (!previousStatuses.TryGetValue(person.PersonId, out var previous) ||
+                    previous.Id is "STS-LEAVE" or "STS-PERMISSION")
                 {
                     if (configuredDefault is null)
                     {
@@ -305,6 +337,9 @@ public sealed class AutoAttendanceService
                         skipNoYesterday++;
                         continue;
                     }
+                    // Never revive an expired range via a configured default.
+                    if(configuredDefault.Value.Id is "STS-LEAVE" or "STS-PERMISSION")
+                    {skipNoYesterday++;continue;}
                     statusId = configuredDefault.Value.Id;
                     statusName = configuredDefault.Value.Name;
                     statusSymbol = configuredDefault.Value.Symbol;

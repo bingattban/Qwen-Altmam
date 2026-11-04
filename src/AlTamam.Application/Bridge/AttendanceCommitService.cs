@@ -143,6 +143,8 @@ public sealed class AttendanceCommitService
         string siteFilter=Read(payload,"siteId"),mode=Read(payload,"mode");
         string reason=Read(payload,"reason");
         var ids=PersonIds(payload);
+        if(!AttendanceDateRangePolicy.TryParse(payload,statusId,Today(),out var rangeStart,out var rangeEnd,out var rangeError))
+            return Fail(BridgeErrorCodes.ValidationError,rangeError,"rangeStartDate");
         if(date!=Today())return Fail(BridgeErrorCodes.HistoricDayLocked,
             "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.",
             "businessDate");
@@ -230,7 +232,9 @@ public sealed class AttendanceCommitService
         {
             ["businessDate"]=date,["statusId"]=statusId,["statusName"]=status.Value.Name,
             ["statusSymbol"]=status.Value.Symbol,["statusColor"]=status.Value.Color,
-            ["mode"]=mode,["reason"]=reason,["persons"]=people
+            ["mode"]=mode,["reason"]=reason,["persons"]=people,
+            ["rangeStartDate"]=AttendanceDateRangePolicy.RequiresRange(statusId)?rangeStart:null,
+            ["rangeEndDate"]=AttendanceDateRangePolicy.RequiresRange(statusId)?rangeEnd:null
         };
         string token=BridgePreviewTokens.Issue(_db,_time,"ATTENDANCE-"+mode,actor.UserId,
             sealedData,0,ct);
@@ -287,6 +291,8 @@ public sealed class AttendanceCommitService
                 return Fail(BridgeErrorCodes.HistoricDayLocked,"المعاينة ليست صالحة لليوم الحالي.");
             if(await Closed(c,t,date,ct).ConfigureAwait(false))
                 return Fail(BridgeErrorCodes.HistoricDayLocked,"تم إغلاق اليوم بعد إنشاء المعاينة.");
+            if(!AttendanceDateRangePolicy.TryParse(info,statusId,Today(),out var rangeStart,out var rangeEnd,out var rangeError))
+                return Fail(BridgeErrorCodes.ValidationError,rangeError,"rangeStartDate");
             var status=await Status(c,t,statusId,ct).ConfigureAwait(false);
             if(status is null)return Fail(BridgeErrorCodes.CustomStatusInactive,
                 "الحالة توقفت عن العمل بعد المعاينة.");
@@ -334,6 +340,40 @@ public sealed class AttendanceCommitService
             }
             if(conflicts.Count>0)
                 return AttendanceConflictDetails.Reject(BridgeErrorCodes.ConflictStale,conflicts);
+            // Refuse overlapping future schedules before consuming the preview.
+            foreach(var person in snapshots)
+            {
+                using var overlap=c.CreateCommand();overlap.Transaction=t;
+                overlap.CommandText="""
+                    SELECT EXISTS(SELECT 1 FROM AttendanceDateRanges
+                      WHERE PersonId=$person AND EndedAtUtc IS NULL
+                        AND StartLocalDate <= $end AND EndLocalDate >= $start);
+                    """;
+                overlap.Parameters.AddWithValue("$person",person.PersonId);
+                overlap.Parameters.AddWithValue("$start",date);
+                overlap.Parameters.AddWithValue("$end",
+                    AttendanceDateRangePolicy.RequiresRange(statusId)?rangeEnd:date);
+                // A same-day revision can replace an existing range, but never
+                // silently overwrite another future schedule.
+                if(Convert.ToInt32(await overlap.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
+                {
+                    using var existing=c.CreateCommand();existing.Transaction=t;
+                    existing.CommandText="""
+                        SELECT StartLocalDate,EndLocalDate FROM AttendanceDateRanges
+                        WHERE PersonId=$person AND EndedAtUtc IS NULL
+                          AND StartLocalDate <= $end AND EndLocalDate >= $start LIMIT 1;
+                        """;
+                    existing.Parameters.AddWithValue("$person",person.PersonId);
+                    existing.Parameters.AddWithValue("$start",date);
+                    existing.Parameters.AddWithValue("$end",
+                        AttendanceDateRangePolicy.RequiresRange(statusId)?rangeEnd:date);
+                    using var r=await existing.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                    if(await r.ReadAsync(ct).ConfigureAwait(false) &&
+                       (!revise || r.GetString(0)!=date))
+                        return Fail(BridgeErrorCodes.ValidationError,
+                            "توجد مدة إجازة أو إذن متداخلة لهذا الفرد؛ راجع المدة السابقة.");
+                }
+            }
             long? consumed=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,t,token,
                 "ATTENDANCE-"+mode,actor.UserId,0,ct).ConfigureAwait(false);
             if(consumed!=0)return Fail(BridgeErrorCodes.ConflictStale,
@@ -385,6 +425,37 @@ public sealed class AttendanceCommitService
                 cmd.Parameters.AddWithValue("$now",now);
                 int affected=await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 if(affected!=1)throw new InvalidOperationException("Attendance concurrency conflict.");
+                // End today's prior period when a human explicitly changes status.
+                if(revise)
+                {
+                    using var expire=c.CreateCommand();expire.Transaction=t;
+                    expire.CommandText="""
+                        UPDATE AttendanceDateRanges SET EndedAtUtc=$now
+                        WHERE PersonId=$person AND EndedAtUtc IS NULL
+                          AND StartLocalDate=$date;
+                        """;
+                    expire.Parameters.AddWithValue("$now",now);
+                    expire.Parameters.AddWithValue("$person",person.PersonId);
+                    expire.Parameters.AddWithValue("$date",date);
+                    await expire.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                }
+                if(AttendanceDateRangePolicy.RequiresRange(statusId))
+                {
+                    using var range=c.CreateCommand();range.Transaction=t;
+                    range.CommandText="""
+                        INSERT INTO AttendanceDateRanges
+                        (RangeId,PersonId,StatusId,StartLocalDate,EndLocalDate,CreatedAtUtc,CreatedByUserId)
+                        VALUES($id,$person,$status,$start,$end,$now,$actor);
+                        """;
+                    range.Parameters.AddWithValue("$id",Guid.NewGuid().ToString("N"));
+                    range.Parameters.AddWithValue("$person",person.PersonId);
+                    range.Parameters.AddWithValue("$status",statusId);
+                    range.Parameters.AddWithValue("$start",rangeStart);
+                    range.Parameters.AddWithValue("$end",rangeEnd);
+                    range.Parameters.AddWithValue("$now",now);
+                    range.Parameters.AddWithValue("$actor",actor.UserId);
+                    await range.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                }
                 if(revise)
                 {
                     using var revision=c.CreateCommand();revision.Transaction=t;
@@ -412,7 +483,9 @@ public sealed class AttendanceCommitService
                     actor.UserId,actor.Username,actor.Username,"Person",person.PersonId,person.Name,
                     new JsonObject{["statusId"]=person.PreviousStatus,["statusName"]=person.PreviousName}.ToJsonString(),
                     new JsonObject{["statusId"]=statusId,["statusName"]=status.Value.Name,
-                        ["date"]=date,["serviceNumberA"]=person.Number,["site"]=person.SiteName}.ToJsonString(),
+                        ["date"]=date,["serviceNumberA"]=person.Number,["site"]=person.SiteName,
+                        ["rangeStartDate"]=AttendanceDateRangePolicy.RequiresRange(statusId)?rangeStart:null,
+                        ["rangeEndDate"]=AttendanceDateRangePolicy.RequiresRange(statusId)?rangeEnd:null}.ToJsonString(),
                     revise?"تعديل تحضير اليوم بسبب: "+reason:"تحضير اليوم",
                     revise?reason:null,date,corr,ct).ConfigureAwait(false);
                 auditEventIds.Add(auditEventId);

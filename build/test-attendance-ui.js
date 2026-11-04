@@ -36,7 +36,9 @@ const bridge={invoke:async(name,payload)=>{
    QuerySites:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}],
    GetActiveAttendanceStatuses:[
       {statusId:"STS-PRESENT",displayName:"موجود",color:"#22AA55"},
-      {statusId:"STS-ABSENT",displayName:"غياب",color:"#BB3355"}],
+      {statusId:"STS-ABSENT",displayName:"غياب",color:"#BB3355"},
+      {statusId:"STS-LEAVE",displayName:"إجازة",color:"#22C55E"},
+      {statusId:"STS-PERMISSION",displayName:"إذن",color:"#EAB308"}],
    QueryDailyRoster:{total:2,hasNext:false,items:[
       {personId:"P1",name:"شخص تجريبي",serviceNumberA:"12345",siteName:"غير محدد",
        statusName:"غير محضر",statusColor:"#22AA55"},
@@ -90,6 +92,24 @@ async function main(){
    x.style.borderColor==="#22AA55"),
    "saved current status uses its real color on the roster");
  assert.equal(writes.length,0,"no write on load");
+ selects()[1].value="STS-LEAVE";selects()[1].handlers.change();
+ const dateFields=root.all().filter(x=>x.tag==="input"&&x.type==="date");
+ assert.equal(dateFields.length,2,"leave exposes two dates");
+ assert.equal(dateFields[0].required,true);
+ await choose();
+ await one("معاينة التحضير").handlers.click();await flush();
+ assert.equal(calls.filter(x=>x.name==="PreviewAttendanceChange").length,0,
+   "missing end date cannot preview");
+ dateFields[1].value=dateFields[0].value;
+ dateFields[1].handlers.change();
+ await one("معاينة التحضير").handlers.click();await flush();
+ const periodPreview=calls.filter(x=>x.name==="PreviewAttendanceChange").at(-1);
+ assert.equal(periodPreview.payload.rangeStartDate,dateFields[0].value);
+ assert.equal(periodPreview.payload.rangeEndDate,dateFields[1].value);
+ selects()[1].value="STS-PRESENT";selects()[1].handlers.change();
+ assert.equal(root.all().find(x=>x.className.includes("attendance-range-fields")).hidden,true);
+ assert.equal(dateFields[0].required,false);
+
  selects()[1].value="STS-PRESENT";
  selects()[1].handlers.change();
  assert.ok(root.all().some(x=>x.className.includes("attendance-status-preview") &&

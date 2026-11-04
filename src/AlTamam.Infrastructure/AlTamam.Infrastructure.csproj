@@ -18,5 +18,6 @@
     <EmbeddedResource Include="Persistence/Migrations/V011_PermanentFoundingRoleAndAccountRoster.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V012_AutoAttendanceOutcomeCounts.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V013_MovementAttendanceImmutableKeys.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/V014_AttendanceDateRanges.sql" />
   </ItemGroup>
 </Project>

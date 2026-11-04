@@ -8,7 +8,7 @@ namespace AlTamam.Infrastructure.Persistence;
 public sealed class AlTamamDbContext : IDisposable
 {
     /// <summary>Highest known schema (V013 protects movement types and committed attendance keys).</summary>
-    public const int CurrentSchemaVersion = 13;
+    public const int CurrentSchemaVersion = 14;
 
     /// <summary>The canonical, ordered migration set shipped with this build.</summary>
     public static readonly SchemaMigration[] CanonicalMigrations =
@@ -26,6 +26,7 @@ public sealed class AlTamamDbContext : IDisposable
         new(11, "V011_PermanentFoundingRoleAndAccountRoster", "AlTamam.Infrastructure.Persistence.Migrations.V011_PermanentFoundingRoleAndAccountRoster.sql"),
         new(12, "V012_AutoAttendanceOutcomeCounts", "AlTamam.Infrastructure.Persistence.Migrations.V012_AutoAttendanceOutcomeCounts.sql"),
         new(13, "V013_MovementAttendanceImmutableKeys", "AlTamam.Infrastructure.Persistence.Migrations.V013_MovementAttendanceImmutableKeys.sql"),
+        new(14, "V014_AttendanceDateRanges", "AlTamam.Infrastructure.Persistence.Migrations.V014_AttendanceDateRanges.sql"),
     ];
     private readonly string _databasePath;
     private readonly string _databaseKey;

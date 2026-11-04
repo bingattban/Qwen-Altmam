@@ -60,6 +60,31 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
     [Fact]
+    public async Task LeaveAndPermissionRequireValidDatesAndCommitBoundedPeriod()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var ids=new[]{"TST-ATTEND-P1"};
+        foreach(var status in new[]{"STS-LEAVE","STS-PERMISSION"})
+        {
+            var missing=await service.PreviewAsync(Payload("initial",status,ids),Actor,CancellationToken.None);
+            Assert.False(missing.Success);
+            var reversed=Payload("initial",status,ids);
+            reversed["rangeStartDate"]=Today();
+            reversed["rangeEndDate"]=DateOnly.Parse(Today()).AddDays(-1).ToString("yyyy-MM-dd");
+            Assert.False((await service.PreviewAsync(reversed,Actor,CancellationToken.None)).Success);
+        }
+        var valid=Payload("initial","STS-LEAVE",ids);
+        valid["rangeStartDate"]=Today();
+        valid["rangeEndDate"]=DateOnly.Parse(Today()).AddDays(3).ToString("yyyy-MM-dd");
+        var preview=await service.PreviewAsync(valid,Actor,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        Assert.Equal(1L,Count("AttendanceDateRanges"));
+        Assert.Equal(1L,Count("AttendanceRecords"));
+    }
+    [Fact]
     public async Task BulkCommitAndRevision_AuditAtomicAndOneTimePreview()
     {
         var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
