@@ -337,9 +337,13 @@ public sealed class PersonnelMovementService
                 ["sourceSite"]=reader.GetString(5),["destination"]=reader.GetString(6),
                 ["date"]=reader.GetString(7),["committedAtUtc"]=reader.GetString(8)
             });
+        reader.Close();
+        var customColumns=await RosterCustomFieldProjection.AttachAsync(
+            c,rows.OfType<JsonObject>(),ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["items"]=rows,["page"]=page,["pageSize"]=size,
+            ["items"]=rows,["customColumns"]=customColumns,
+            ["page"]=page,["pageSize"]=size,
             ["total"]=total,["hasNext"]=(long)page*size<total
         });
     }
