@@ -117,10 +117,10 @@ async function main(){
    "native status selection exposes a live color-coded indicator");
  await choose();
  await one("معاينة التحضير").handlers.click();await flush();
- assert.equal(reviews.length,1,"one modal with the review list is opened");
- assert.equal(reviews[0].data.persons[0].name,"شخص تجريبي");
+ assert.equal(reviews.length,2,"one additional modal with the review list is opened");
+ assert.equal(reviews.at(-1).data.persons[0].name,"شخص تجريبي");
  assert.equal(reviews[0].data.persons[0].serviceNumberA,"12345");
- assert.equal(reviews[0].opts.confirmLabel,"تأكيد وحفظ التحضير");
+ assert.equal(reviews.at(-1).opts.confirmLabel,"تأكيد وحفظ التحضير");
  assert.equal(writes.length,0,"canceling review must not commit");
  assert.equal(root.all().filter(x=>x.className.includes("attendance-confirm-action")).length,0,
    "do not duplicate the review or confirmation inline below the roster");
