@@ -260,10 +260,11 @@ async function main(){
       String(d.getDate()).padStart(2,"0")].join("-");
     periodInputs[0].value=stamp(new Date());
     periodInputs[1].value=stamp(new Date(Date.now()+2*86400000));
+    const expectedFrom=periodInputs[0].value, expectedTo=periodInputs[1].value;
     await one("معاينة التحضير").handlers.click();await flush();
     const periodCall=calls.filter(x=>x.name==="PreviewAttendanceChange").at(-1).payload;
-    assert.equal(periodCall.periodFrom,periodInputs[0].value);
-    assert.equal(periodCall.periodTo,periodInputs[1].value);
+    assert.equal(periodCall.periodFrom,expectedFrom);
+    assert.equal(periodCall.periodTo,expectedTo);
     await context.window.AltamamAttendance.render(root);
   }
   selects()[1].value="STS-PRESENT";
