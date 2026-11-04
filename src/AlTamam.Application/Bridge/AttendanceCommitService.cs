@@ -369,7 +369,7 @@ public sealed class AttendanceCommitService
                         AttendanceDateRangePolicy.RequiresRange(statusId)?rangeEnd:date);
                     using var r=await existing.ExecuteReaderAsync(ct).ConfigureAwait(false);
                     if(await r.ReadAsync(ct).ConfigureAwait(false) &&
-                       (!revise || (AttendanceDateRangePolicy.RequiresRange(statusId) && r.GetString(0)!=date)))
+                       (!revise || (AttendanceDateRangePolicy.RequiresRange(statusId) && r.GetString(0)>date)))
                         return Fail(BridgeErrorCodes.ValidationError,
                             "توجد مدة إجازة أو إذن متداخلة لهذا الفرد؛ راجع المدة السابقة.");
                 }
@@ -425,14 +425,15 @@ public sealed class AttendanceCommitService
                 cmd.Parameters.AddWithValue("$now",now);
                 int affected=await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 if(affected!=1)throw new InvalidOperationException("Attendance concurrency conflict.");
-                // End today's prior period when a human explicitly changes status.
+                // A manual revision ends any period covering the current day, even one
+                // that started earlier. Historical attendance records remain intact.
                 if(revise)
                 {
                     using var expire=c.CreateCommand();expire.Transaction=t;
                     expire.CommandText="""
                         UPDATE AttendanceDateRanges SET EndedAtUtc=$now
                         WHERE PersonId=$person AND EndedAtUtc IS NULL
-                          AND StartLocalDate=$date;
+                          AND StartLocalDate<=$date AND EndLocalDate>=$date;
                         """;
                     expire.Parameters.AddWithValue("$now",now);
                     expire.Parameters.AddWithValue("$person",person.PersonId);
