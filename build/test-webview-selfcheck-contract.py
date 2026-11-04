@@ -112,7 +112,16 @@ class WebViewSmokeContract(unittest.TestCase):
 
     def test_phase14_real_packaged_sqlcipher_bridge_is_mandatory_on_x86_and_x64(self):
         package = (ROOT / "build/test-package-appdata-preservation.ps1").read_text(encoding="utf-8")
-        self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e") 180', package)
+        # Different bounded processes, same customer-facing packaged binary:
+        # bridge/SQLCipher/UI must pass AND all 69 routes must really navigate.
+        # A single 180s process previously timed out on win-x86 after the bridge
+        # passed, without ever finishing the 69-route evidence gate.
+        self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e") 180', package)
+        self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-route-e2e") 120', package)
+        self.assertIn('Assert-True ($routeEvidence.Contains("PASS all 69 manifest routes opened in real Windows WebView2"))', package)
+        self.assertIn('Assert-True ($routeEvidence.Contains("PASS bundled offline WebUI title verified"))', package)
+        self.assertIn('if ((syntheticDatabase is not null && !splitRoutes) || routesOnly)', HOST)
+        self.assertIn('await Phase04ManifestRouteSelfCheck.RunAsync(', HOST)
         self.assertIn('Run-PackagedWebViewChecked $portableExe "Portable ZIP" $true', package)
         self.assertIn('Run-PackagedWebViewChecked $installedExe "Installer" $true', package)
         self.assertIn("PASS actual HTML-C#-SQLCipher-HTML roundtrip", package)
