@@ -241,6 +241,29 @@ async function main(){
   assert.equal(writes.length,committed,"cancel/back never saves attendance");
   // Definite native conflict cannot replay a stale preview.
   await context.window.AltamamAttendance.render(root);
+  // Date-bound statuses must show a two-field panel directly below the chosen status,
+  // reject missing dates before any preview, and never affect ordinary statuses.
+  for (const periodStatus of ["STS-LEAVE","STS-PERMISSION"]) {
+    selects()[1].value = periodStatus;
+    selects()[1].handlers.change();
+    const periodInputs = root.all().filter(x=>x.tag==="input"&&x.type==="date");
+    assert.equal(periodInputs.length,2,"date range must be visible for "+periodStatus);
+    assert.ok(periodInputs.every(x=>x.required===true),"both dates required");
+    const previewsBefore=calls.filter(x=>x.name==="PreviewAttendanceChange").length;
+    await choose();
+    await one("معاينة التحضير").handlers.click();await flush();
+    assert.equal(calls.filter(x=>x.name==="PreviewAttendanceChange").length,previewsBefore,
+      "missing range must not reach native preview");
+    const stamp=d=>[d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),
+      String(d.getDate()).padStart(2,"0")].join("-");
+    periodInputs[0].value=stamp(new Date());
+    periodInputs[1].value=stamp(new Date(Date.now()+2*86400000));
+    await one("معاينة التحضير").handlers.click();await flush();
+    const periodCall=calls.filter(x=>x.name==="PreviewAttendanceChange").at(-1).payload;
+    assert.equal(periodCall.periodFrom,periodInputs[0].value);
+    assert.equal(periodCall.periodTo,periodInputs[1].value);
+    await context.window.AltamamAttendance.render(root);
+  }
   selects()[1].value="STS-PRESENT";
   selects()[1].handlers.change();
   await choose();
