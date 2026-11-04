@@ -51,6 +51,7 @@
     "CreateVerifiedBackup",
     "RestoreDatabaseAtomically",
     "UpdateBackupSchedule",
+    "ConfigureAutoMonthlyExcel",
     "CommitFullReset",
     "SetTheme",
     "SetClosedDayCorrectionPolicy",
