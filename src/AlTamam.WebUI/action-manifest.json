@@ -2608,6 +2608,31 @@
           "payload"
         ]
       }
+    },
+    {
+      "action": "ConfigureAutoMonthlyExcel",
+      "owningService": "SettingsBackupService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "Unauthorized",
+        "ScheduleUnavailable",
+        "ValidationError"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
     }
   ]
 }
