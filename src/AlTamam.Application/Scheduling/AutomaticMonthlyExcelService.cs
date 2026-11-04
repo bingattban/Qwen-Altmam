@@ -80,7 +80,14 @@ public sealed class AutomaticMonthlyExcelService
                 DateTimeStyles.None, out _))
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "وقت التصدير يجب أن يكون 24 ساعة بصيغة HH:mm.");
-        if (directory.Length > 0 && !OutputDirectorySettings.IsUsableDirectory(directory, _db.DatabasePath))
+        // An operator must always be able to SWITCH OFF an existing schedule,
+        // even if its previously chosen drive has since become disconnected.
+        // New paths are still checked even when saving them while disabled.
+        var beforeValidation = await ReadAsync(ct).ConfigureAwait(false);
+        bool changedDirectory = !string.Equals(directory, beforeValidation.Directory,
+            StringComparison.OrdinalIgnoreCase);
+        if (directory.Length > 0 && (enabled || changedDirectory) &&
+            !OutputDirectorySettings.IsUsableDirectory(directory, _db.DatabasePath))
             return BridgeHelpers.Error(BridgeErrorCodes.ScheduleUnavailable,
                 "مجلد تصدير التمام غير متاح أو غير قابل للكتابة، اختر مجلداً محلياً صالحاً.");
         if (enabled && directory.Length == 0)
