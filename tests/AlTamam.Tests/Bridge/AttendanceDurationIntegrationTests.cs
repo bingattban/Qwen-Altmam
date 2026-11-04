@@ -187,6 +187,63 @@ public sealed class AttendanceDurationIntegrationTests : IAsyncLifetime, IDispos
         Assert.Equal("STS-PRESENT", Status("TST-PERIOD-P1", Today.AddDays(1)));
     }
 
+    [Fact]
+    public async Task ManualTomorrowWins_OverStillActivePeriod_AndFutureRangeCannotOverlap()
+    {
+        var saved=await Commit(Request("STS-LEAVE","initial",3));
+        Assert.True(saved.Success,saved.UserMessage);
+        var another=await new AttendanceCommitService(_db,new SyntheticDaytimeClock())
+            .PreviewAsync(Request("STS-PERMISSION","initial",2,1),Actor,default);
+        Assert.True(another.Success,another.UserMessage);
+        var token=Token(another);
+        var refused=await new AttendanceCommitService(_db,new SyntheticDaytimeClock())
+            .CommitAsync(new JsonObject { ["previewToken"]=token,
+                ["operationId"]="duration-overlap-future-0001" },Actor,false,default);
+        Assert.False(refused.Success);
+        Assert.Equal(1L,Count("AttendanceStatusPeriods"));
+
+        // Manual records are never overwritten by the 08:00 job.
+        using(var c = _db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO AttendanceRecords(
+                    PersonId,AttendanceLocalDate,StatusId,
+                    StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                    AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                    Source,CreatedByUserId,CommittedAtUtc,RevisionNumber,IdempotencyKey)
+                VALUES('TST-PERIOD-P1',$date,'STS-ABSENT','غياب','غ','#EF4444',
+                    'TST-PERIOD-A1','SITE-UNSPECIFIED','غير محدد','manual',
+                    'TST-PERIOD-ADMIN','2026-01-01T00:00:00Z',1,'TST-PERIOD-EXPLICIT');
+                """;
+            cmd.Parameters.AddWithValue("$date",Iso(Today.AddDays(1)));
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var run=await new AutoAttendanceService(_db,new SyntheticDaytimeClock())
+            .RunForDateAsync(Today.AddDays(1),false);
+        Assert.Equal(1,run.SkippedManualCount);
+        Assert.Equal("STS-ABSENT",Status("TST-PERIOD-P1",Today.AddDays(1)));
+    }
+
+    [Fact]
+    public async Task ClosedMonthOrDismissedPerson_PreventsScheduledStatusWriting()
+    {
+        Assert.True((await Commit(Request("STS-PERMISSION","initial",3,1))).Success);
+        using(var c = _db.CreateOpenConnection())
+        using(var disable = c.CreateCommand())
+        {
+            disable.CommandText="""
+                UPDATE Persons SET ActiveFlag=0,OrganizationalStatus=2
+                WHERE PersonId='TST-PERIOD-P1';
+                """;
+            await disable.ExecuteNonQueryAsync();
+        }
+        var run=await new AutoAttendanceService(_db,new SyntheticDaytimeClock())
+            .RunForDateAsync(Today.AddDays(1),false);
+        Assert.False(run.BlockedClosedDay);
+        Assert.Null(Status("TST-PERIOD-P1",Today.AddDays(1)));
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {
