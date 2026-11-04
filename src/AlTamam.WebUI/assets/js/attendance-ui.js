@@ -83,6 +83,37 @@
    const statusColors=new Map();
    const colorPreview=make("span","اختر الحالة لعرض لونها","attendance-status-preview");
    colorPreview.setAttribute("aria-live","polite");
+   const periodPanel=make("section",undefined,"attendance-period-fields card");
+   const periodGrid=make("div",undefined,"attendance-period-grid");
+   const periodFrom=make("input"),periodTo=make("input");
+   periodFrom.type="date";periodTo.type="date";
+   periodFrom.className="form-control";periodTo.className="form-control";
+   periodFrom.required=true;periodTo.required=true;
+   periodFrom.min=day;periodTo.min=day;
+   periodFrom.setAttribute("aria-label","من تاريخ");
+   periodTo.setAttribute("aria-label","إلى تاريخ");
+   const fromLabel=make("label","من تاريخ *","attendance-period-label");
+   const toLabel=make("label","إلى تاريخ *","attendance-period-label");
+   fromLabel.appendChild(periodFrom);toLabel.appendChild(periodTo);
+   periodGrid.append(fromLabel,toLabel);
+   periodPanel.append(make("h3","مدة الإجازة أو الإذن","section-title"),
+     periodGrid,make("p","المدة تشمل تاريخ البداية والنهاية؛ لا تغير التمام اليدوي السابق.","section-description"));
+   periodPanel.hidden=true;
+   const needsPeriod=()=>status.value==="STS-LEAVE"||status.value==="STS-PERMISSION";
+   function periodData(){
+     if(!needsPeriod())return {};
+     if(!periodFrom.value||!periodTo.value)
+       throw new Error("تاريخا البداية والنهاية إجباريان للإجازة والإذن.");
+     if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(periodFrom.value)||
+        !/^\\d{4}-\\d{2}-\\d{2}$/.test(periodTo.value)||
+        periodFrom.value<day||periodTo.value<periodFrom.value)
+       throw new Error("اختر مدة صحيحة تبدأ اليوم أو بعده ولا تسبق نهايتها بدايتها.");
+     return {periodFrom:periodFrom.value,periodTo:periodTo.value};
+   }
+   periodFrom.addEventListener("change",()=>{
+     periodTo.min=periodFrom.value||day;clearReview();
+   });
+   periodTo.addEventListener("change",clearReview);
    const draftPanel=make("section",undefined,"card attendance-drafts attendance-drafts-modal");
    draftPanel.hidden=true;
    draftPanel.setAttribute("role","dialog");
@@ -111,13 +142,21 @@
    let pageNo=1,loading=false,nonce=0,previewVersion=0;
    const summary=()=>choice.textContent="الأفراد المحددون: "+selected.size+" من 100";
    const clearReview=()=>{previewVersion++;};
-   const reset=()=>{selected.clear();activeDraftId=null;clearReview();summary();};
+   const reset=()=>{
+     selected.clear();activeDraftId=null;
+     periodFrom.value="";periodTo.value="";periodTo.min=day;
+     clearReview();summary();
+   };
    mode.addEventListener("change",()=>{
      clearReview();
      previewButton.textContent=mode.value==="revise"?"معاينة تغيير الحالة":"معاينة التحضير";
    });
+   function updatePeriodVisibility(){
+     periodPanel.hidden=!needsPeriod();
+     if(!needsPeriod()){periodFrom.value="";periodTo.value="";}
+   }
    status.addEventListener("change",()=>{
-     clearReview();
+     clearReview();updatePeriodVisibility();
      const color=statusColors.get(status.value);
      colorPreview.textContent=color?
        "الحالة: "+(Array.from(status.children).find(x=>x.value===status.value)?.textContent||""):
@@ -136,7 +175,7 @@
      search.value="";pageNo=1;void load();
    });
    filters.append(site,status,colorPreview,mode,search,searchButton,clearSearch);
-   header.append(filters,choice,info,list);
+   header.append(filters,periodPanel,choice,info,list);
    host.appendChild(draftPanel);
    host.insertBefore(header,draftPanel);
    const fields=["تحديد","الرقم (ع)","الاسم","الموقع","الحالة الحالية"];
@@ -224,6 +263,10 @@
            if(!availableStatus||!availableSite)
              return showError(info,new Error("حالة المسودة أو موقعها لم يعودا متاحين."));
            site.value=draft.siteId||"";status.value=draft.targetStatusId;
+           updatePeriodVisibility();
+           periodFrom.value=draft.periodFrom||"";
+           periodTo.value=draft.periodTo||"";
+           periodTo.min=periodFrom.value||day;
            mode.value="initial";previewButton.textContent="معاينة التحضير";
            selected.clear();draft.selectedPersonIds.forEach(id=>selected.add(id));
            activeDraftId=draft.draftId;pageNo=1;clearReview();summary();
@@ -247,10 +290,11 @@
    async function saveDraft(){
      if(!status.value||selected.size<1||selected.size>100)
        return showError(info,new Error("اختر حالة وواحداً إلى 100 فرد لحفظ المسودة."));
+     let range;try{range=periodData();}catch(error){return showError(info,error);}
      saveDraftButton.disabled=true;
      try{
        const payload={businessDate:day,siteId:site.value||"",targetStatusId:status.value,
-         selectedPersonIds:Array.from(selected).sort()};
+         selectedPersonIds:Array.from(selected).sort(),...range};
        if(activeDraftId)payload.draftId=activeDraftId;
        const result=await bridge.invoke("SaveAttendanceDraft",payload);
        if(!result.data||!result.data.draftId)throw Error("لم يؤكد الخادم حفظ المسودة.");
@@ -273,13 +317,14 @@
    async function preview(){
      if(!status.value||selected.size===0)
        return showError(info,new Error("اختر الحالة والأفراد."));
+     let range;try{range=periodData();}catch(error){return showError(info,error);}
      clearReview();info.replaceChildren();
      const expectedPreviewVersion=previewVersion;
      previewButton.disabled=true;
      try{
        const r=await bridge.invoke("PreviewAttendanceChange",{
          businessDate:day,statusId:status.value,siteId:site.value,
-         personIds:Array.from(selected).sort(),mode:mode.value
+         personIds:Array.from(selected).sort(),mode:mode.value,...range
        });
        if(!host.isConnected||previewVersion!==expectedPreviewVersion)return;
        const data=r.data||{};
@@ -291,9 +336,13 @@
        const changing=data.mode==="revise";
        const confirmationOptions={
          title:changing?"معاينة تغيير حالة التحضير":"معاينة التحضير",
-         message:changing?
-           "راجع الحالة السابقة والجديدة لكل فرد قبل تأكيد التغيير.":
-           "راجع الأسماء والأرقام (ع) والحالات قبل اعتماد التحضير.",
+         message:range.periodFrom?
+           "راجع الأفراد قبل اعتماد "+data.statusName+" من "+range.periodFrom+
+             " إلى "+range.periodTo+
+             (data.scheduledOnly?"؛ تبدأ الحالة مستقبلاً دون تغيير تمام اليوم.":"."):
+           changing?
+             "راجع الحالة السابقة والجديدة لكل فرد قبل تأكيد التغيير.":
+             "راجع الأسماء والأرقام (ع) والحالات قبل اعتماد التحضير.",
          confirmLabel:changing?"تأكيد تغيير الحالة":"تأكيد وحفظ التحضير"
        };
        const accepted=await review(data,confirmationOptions);
@@ -318,8 +367,12 @@
            }
            if(!host.isConnected)return;
            reset();pageNo=1;
-           info.replaceChildren(make("p",changing?
-             "تم تأكيد تغيير حالة "+saved.data.count+" فرداً.":
+           info.replaceChildren(make("p",saved.data.scheduledOnly?
+             "تمت جدولة "+saved.data.count+" فرداً من "+saved.data.periodFrom+
+               " إلى "+saved.data.periodTo+" دون تغيير تمام اليوم.":
+             range.periodFrom?"تم اعتماد "+saved.data.count+" فرداً بمدة من "+
+               saved.data.periodFrom+" إلى "+saved.data.periodTo+".":
+             changing?"تم تأكيد تغيير حالة "+saved.data.count+" فرداً.":
              "تم حفظ "+saved.data.count+" فرداً.","settings-success"));
            const refreshed=await load();
            if(refreshed!==true&&host.isConnected)

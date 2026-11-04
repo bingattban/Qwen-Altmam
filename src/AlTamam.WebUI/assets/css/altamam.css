@@ -2368,3 +2368,11 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
     justify-content:space-between;flex-wrap:wrap
   }
 }
+
+/* Phase 16 — mandatory Leave/Permission date span; respects existing theme. */
+.attendance-period-fields{margin:10px 0 14px;padding:14px 16px;max-width:720px;border-inline-start:3px solid var(--accent-teal);}
+.attendance-period-fields[hidden]{display:none!important;}
+.attendance-period-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.attendance-period-label{display:flex;flex-direction:column;gap:6px;font-weight:600;}
+.attendance-period-label input{width:100%;min-height:35px;}
+@media(max-width:580px){.attendance-period-grid{grid-template-columns:1fr;}}
