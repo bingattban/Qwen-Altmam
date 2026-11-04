@@ -136,7 +136,7 @@ async function main(){
  choices[2].value="revise";choices[2].handlers.change();
  assert.ok(one("معاينة تغيير الحالة"));
  assert.equal(root.all().filter(x=>x.tag==="input"&&
-   !["checkbox","search"].includes(x.type)).length,0,
+   !["checkbox","search","date"].includes(x.type)).length,0,
    "routine status revision must not require a reason; the search box stays usable");
  await choose();
  await one("معاينة تغيير الحالة").handlers.click();await flush();

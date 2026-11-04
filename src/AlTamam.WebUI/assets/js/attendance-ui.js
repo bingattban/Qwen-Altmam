@@ -107,8 +107,6 @@
      }
      return true;
    };
-   rangeStart.addEventListener("change",clearReview);
-   rangeEnd.addEventListener("change",clearReview);
    const choice=make("span","لم يتم تحديد أسماء");
    const statusColors=new Map();
    const colorPreview=make("span","اختر الحالة لعرض لونها","attendance-status-preview");
@@ -141,6 +139,8 @@
    let pageNo=1,loading=false,nonce=0,previewVersion=0;
    const summary=()=>choice.textContent="الأفراد المحددون: "+selected.size+" من 100";
    const clearReview=()=>{previewVersion++;};
+   rangeStart.addEventListener("change",clearReview);
+   rangeEnd.addEventListener("change",clearReview);
    const reset=()=>{selected.clear();activeDraftId=null;clearReview();summary();};
    mode.addEventListener("change",()=>{
      clearReview();
