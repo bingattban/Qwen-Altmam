@@ -700,6 +700,26 @@ public static class BridgeHandlerCatalog
             var result=await svc.ConfigureBackupScheduleAsync(req.Payload,principal!,ct).ConfigureAwait(false);
             return result with {RequestId=req.RequestId};
         },
+        "ConfigureAutoMonthlyExcel" => async (req,principal,ct) =>
+        {
+            var svc = new AlTamam.Application.Scheduling.AutomaticMonthlyExcelService(
+                services.Db,services.Time);
+            var request = req.Payload?.DeepClone() as JsonObject ?? new JsonObject();
+            if (request["choose"]?.ToString()=="true")
+            {
+                if (services.PickOutputDirectoryAsync is null)
+                    return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                        "منتقي مجلدات Windows غير متاح."));
+                var current=await svc.ReadAsync(ct).ConfigureAwait(false);
+                string? selected=await services.PickOutputDirectoryAsync(current.Directory);
+                if (selected is null)
+                    return Fail(req,BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                        "أُلغي اختيار المجلد دون تغيير الإعدادات."));
+                request["directory"]=selected;
+            }
+            var result=await svc.ConfigureAsync(request,principal!,ct).ConfigureAwait(false);
+            return result with {RequestId=req.RequestId};
+        },
         "VerifyBackup" => async(req,principal,ct) =>
         {
             string? path;
