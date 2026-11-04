@@ -610,9 +610,11 @@
         if(!result||!Array.isArray(result.items))
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
         visiblePeople=result.items;
+        const customColumns=window.AltamamRosterColumns?.columns(result)||[];
         const tb=createTable([{label:"تحديد"},{label:"الرقم"},{label:"الرقم (ع)"},
           {label:"الاسم"},{label:"الموقع"},{label:"تاريخ التحضير"},
-          {label:"مصدر التحضير"},{label:"وقت الاعتماد UTC"},{label:"الحالة المحفوظة"},{label:"الإجراء"}]);
+          {label:"مصدر التحضير"},{label:"وقت الاعتماد UTC"},{label:"الحالة المحفوظة"},
+          ...customColumns.map(col=>({label:col.caption})),{label:"الإجراء"}]);
         content.replaceChildren(tb.wrap);
         result.items.forEach((person,i)=>{
           const row=el("tr");
@@ -637,6 +639,8 @@
             person.autoSource||"مصدر غير موثق",person.committedAtUtc||"—",
             person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
+          for(const value of window.AltamamRosterColumns?.values(person,customColumns)||[])
+            row.appendChild(el("td","roster-custom-cell",value||"—"));
           const action=el("td");action.appendChild(button("اختيار الحالة والمعاينة",
             ()=>void editAutoStatuses([person],null)));
           row.appendChild(action);
@@ -764,8 +768,10 @@
           card.style.borderRight="4px solid "+item.color;
         counters.appendChild(card);
       }
+      const customColumns=window.AltamamRosterColumns?.columns(rows)||[];
       const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},{label:"الاسم"},
-        {label:"الموقع"},{label:"الحالة"}]);
+        {label:"الموقع"},{label:"الحالة"},
+        ...customColumns.map(col=>({label:col.caption}))]);
       tableHost.replaceChildren(tb.wrap);
       (rows.items||[]).forEach((person,i)=>{
         const tr=el("tr");
@@ -786,11 +792,13 @@
           }
           tr.appendChild(td);
         });
+        for(const value of window.AltamamRosterColumns?.values(person,customColumns)||[])
+          tr.appendChild(el("td","roster-custom-cell",value||"—"));
         tb.body.appendChild(tr);
       });
       if(!(rows.items||[]).length) {
         const tr=el("tr"),td=el("td","","لا توجد بيانات مطابقة للفلاتر المحددة.");
-        td.colSpan=5;tr.appendChild(td);tb.body.appendChild(tr);
+        td.colSpan=5+customColumns.length;tr.appendChild(td);tb.body.appendChild(tr);
       }
       pager(tableHost,STATE.dayPage,rows.total||0,DAILY_PAGE_SIZE,p=>{STATE.dayPage=p;renderDashboard();});
     } catch(e) { if(STATE.dashboardEpoch===epoch)showError(feedback,e); }
@@ -1238,10 +1246,12 @@
           el("span","","هذا سجل تاريخي للشهر المحدد، وليس عداد القوة النشطة اليوم.")
         );
       }
+      const customColumns=window.AltamamRosterColumns?.columns(grid)||[];
       const cols=[{label:"الرقم",cls:"pinned fixed-one"},
         {label:"الرقم (ع)",cls:"pinned fixed-two"},
         {label:"الاسم",cls:"pinned fixed-three"},
-        {label:"الموقع",cls:"pinned fixed-four"}];
+        {label:"الموقع",cls:"pinned fixed-four"},
+        ...customColumns.map(col=>({label:col.caption,cls:"roster-custom-cell"}))];
       const currentDay=period===current?now.getDate():null;
       // Always keep real calendar order. A highlighted current day is NOT sticky:
       // it scrolls naturally between earlier and later days.
@@ -1299,6 +1309,8 @@
             td.title=String(v??"");
             tr.appendChild(td);
           });
+        for(const value of window.AltamamRosterColumns?.values(person,customColumns)||[])
+          tr.appendChild(el("td","roster-custom-cell",value||"—"));
         for(const day of days){
           const date=period+"-"+String(day).padStart(2,"0");
           const info=(person.days||{})[date];

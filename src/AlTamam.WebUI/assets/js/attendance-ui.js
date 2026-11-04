@@ -189,7 +189,9 @@
          term:search.value.trim(),page:pageNo,pageSize:DAILY_PAGE_SIZE
        });
        if(current!==nonce||!host.isConnected)return false;
-       const d=response.data||{},t=table(fields);
+       const d=response.data||{};
+       const customColumns=window.AltamamRosterColumns?.columns(d)||[];
+       const t=table([...fields,...customColumns.map(col=>col.caption)]);
        for(const p of d.items||[]){
          const tr=make("tr"),td=make("td"),cb=make("input");
          cb.type="checkbox";cb.checked=selected.has(p.personId);
@@ -213,10 +215,12 @@
            }
          }
          stateCell.appendChild(statePill);tr.appendChild(stateCell);
+         for(const value of window.AltamamRosterColumns?.values(p,customColumns)||[])
+           tr.appendChild(make("td",value||"—"));
          t.body.appendChild(tr);
        }
        if(!t.body.children.length){
-         const tr=make("tr"),td=make("td","لا يوجد أفراد");td.colSpan=5;
+         const tr=make("tr"),td=make("td","لا يوجد أفراد");td.colSpan=fields.length+customColumns.length;
          tr.appendChild(td);t.body.appendChild(tr);
        }
        const pages=make("div",undefined,"functional-pager");

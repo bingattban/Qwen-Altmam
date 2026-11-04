@@ -207,9 +207,13 @@ public sealed class DailyMonthlyReadService
                 ["transferDay"] = !reader.IsDBNull(7)
             });
         }
+        reader.Close();
+        var customColumns = await RosterCustomFieldProjection.AttachAsync(
+            connection, rows.OfType<JsonObject>(), ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["items"] = rows, ["total"] = total, ["page"] = page,
+            ["items"] = rows, ["customColumns"] = customColumns,
+            ["total"] = total, ["page"] = page,
             ["pageSize"] = pageSize, ["hasNext"] = (long)page * pageSize < total
         });
     }
@@ -529,8 +533,11 @@ public sealed class DailyMonthlyReadService
         }
         var rows = new JsonArray();
         foreach (var person in people) rows.Add(person.Row);
+        var customColumns = await RosterCustomFieldProjection.AttachAsync(
+            connection, people.Select(p => p.Row), ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
+            ["customColumns"] = customColumns,
             ["year"] = year, ["month"] = month,
             ["daysInMonth"] = DateTime.DaysInMonth(year, month),
             ["dayFrom"]=window.FirstDay,["dayTo"]=window.LastDay,

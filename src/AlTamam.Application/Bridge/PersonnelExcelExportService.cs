@@ -160,10 +160,33 @@ public sealed class PersonnelExcelExportService
     private static string[] Record(JsonNode? node,params string[] fields)
         => fields.Select(key => Val(node,key)).ToArray();
 
+    // A person field belongs to the PERSON category, not to a dated event.
+    // Preserve the existing column order and append the SAME visible headings
+    // to any worksheet whose first column is a person report ordinal.
+    private static void AppendRosterColumns(Sheet sheet,
+        IReadOnlyList<RosterCustomFieldProjection.Column> columns,
+        IReadOnlyDictionary<string,string[]> valuesByOrdinal)
+    {
+        if(columns.Count == 0)return;
+        sheet.Rows[0]=sheet.Rows[0].Concat(columns.Select(c=>c.Caption)).ToArray();
+        for(int i=1;i<sheet.Rows.Count;i++)
+        {
+            string[] row=sheet.Rows[i];
+            var values=row.Length>0&&valuesByOrdinal.TryGetValue(row[0],out var stored)
+                ? stored : Enumerable.Repeat("",columns.Count).ToArray();
+            sheet.Rows[i]=row.Concat(values).ToArray();
+        }
+    }
+
     private async Task<List<Sheet>> ReportSheetsAsync(JsonObject payload,
         string[] ids,CancellationToken ct)
     {
         var service=new PersonnelReportService(_db);
+        IReadOnlyList<RosterCustomFieldProjection.Column> customColumns;
+        using(var customConn=_db.CreateOpenConnection())
+            customColumns=await RosterCustomFieldProjection.VisibleAsync(
+                customConn,ct).ConfigureAwait(false);
+        var valuesByOrdinal=new Dictionary<string,string[]>(StringComparer.Ordinal);
         var summary=Start("ملخص التقرير","رقم الفرد في التقرير","الرقم (ع)","الاسم","حالة القيد",
             "تاريخ الإدراج","عدد أيام التحضير","عدد الحركات","الفترة من","الفترة إلى",
             "حالات التحضير وأعداد الأيام");
@@ -205,6 +228,9 @@ public sealed class PersonnelExcelExportService
                 var data=(JsonObject)response.Data!;
                  var person=(JsonObject)data["person"]!;
                 string name=Val(person,"name"),number=Val(person,"serviceNumberA");
+                if(page==1)
+                    valuesByOrdinal[sectionNumber]=customColumns.Select(column=>
+                        RosterCustomFieldProjection.Cell(person,column)).ToArray();
                 if(page==1)
                     summary.Add(sectionNumber,number,name,
                         Val(person,"active")=="true"?"نشط":"مؤرشف",
@@ -336,6 +362,9 @@ public sealed class PersonnelExcelExportService
             }
             sheets.Add(calendar);
         }
+        foreach(var sheet in sheets)
+            if(sheet.Name!="الإجمالي اليومي")
+                AppendRosterColumns(sheet,customColumns,valuesByOrdinal);
         return sheets;
     }
 
@@ -353,6 +382,10 @@ public sealed class PersonnelExcelExportService
                 "نوع النقل","من موقع","إلى جهة","تاريخ النقل","زمن الاعتماد");
         var svc=new PersonnelMovementService(_db);
         var sep=new PersonnelSeparationService(_db);
+        using var customConn=_db.CreateOpenConnection();
+        var customColumns=await RosterCustomFieldProjection.VisibleAsync(
+            customConn,ct).ConfigureAwait(false);
+        var valuesByOrdinal=new Dictionary<string,string[]>(StringComparer.Ordinal);
         // Workbook-local ordinals preserve distinct persons without exposing PersonId.
         var archiveOrdinals=new Dictionary<string,int>(StringComparer.Ordinal);
         int page=1;
@@ -377,7 +410,10 @@ public sealed class PersonnelExcelExportService
             var data=(JsonObject)response.Data!;
             if(Number(data,"total")>MaxExportEvents)
                 throw new InvalidDataException("الأرشيف يتجاوز حجم تصدير واحد؛ ضيّق نطاق البحث أو الفترة.");
-            foreach(var row in Array(data,"items")??new JsonArray())
+            var archiveRows=Array(data,"items")??new JsonArray();
+            await RosterCustomFieldProjection.AttachAsync(
+                customConn,archiveRows.OfType<JsonObject>(),ct,customColumns).ConfigureAwait(false);
+            foreach(var row in archiveRows)
             {
                 string key=Val(row,"personId");
                 if(!archiveOrdinals.TryGetValue(key,out int sequence))
@@ -386,6 +422,8 @@ public sealed class PersonnelExcelExportService
                     archiveOrdinals[key]=sequence;
                 }
                 string section=sequence.ToString(CultureInfo.InvariantCulture);
+                valuesByOrdinal[section]=customColumns.Select(column=>
+                    RosterCustomFieldProjection.Cell(row as JsonObject,column)).ToArray();
                 if(dismissal)
                     sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
                         "siteName","reason","date","committedAtUtc","actorDisplay")).ToArray());
@@ -398,6 +436,7 @@ public sealed class PersonnelExcelExportService
         }
         if(sheet.Rows.Count==1)
             throw new InvalidDataException("لا توجد عمليات مطابقة في هذا الأرشيف لتصديرها.");
+        AppendRosterColumns(sheet,customColumns,valuesByOrdinal);
         return [sheet];
     }
 

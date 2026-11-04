@@ -229,8 +229,11 @@ public sealed class PersonnelReportService
                 ["statusId"]=entry.Key.StatusId,
                 ["statusName"]=entry.Key.Snapshot,["count"]=entry.Value
             });
+        var customColumns = await RosterCustomFieldProjection.AttachAsync(
+            connection, people.Values, ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
+            ["customColumns"]=customColumns,
             ["mode"]="group",["personCount"]=ids.Count,
             ["dateFrom"]=from,["dateTo"]=to,
             ["siteId"]=filters.SiteId,["statusId"]=filters.StatusId,
@@ -591,8 +594,11 @@ public sealed class PersonnelReportService
                     ["siteName"]=r.GetString(3),
                     ["createdAtUtc"]=r.GetString(4)
                 });
+        var customColumns = await RosterCustomFieldProjection.AttachAsync(
+            conn, new[] { identity }, ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
+            ["customColumns"]=customColumns,
             ["person"]=identity,["dateFrom"]=filters.From,["dateTo"]=filters.To,
             ["siteId"]=filters.SiteId,["statusId"]=filters.StatusId,
             ["movementType"]=filters.MovementType,

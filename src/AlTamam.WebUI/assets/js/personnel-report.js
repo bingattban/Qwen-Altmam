@@ -255,7 +255,10 @@
        pager.append(el("span","صفحة الملخص اليومي: "+summaryPage),previous,following);
        calendar.appendChild(pager);report.appendChild(calendar);
        const perPerson=card("تفصيل كل فرد في المجموعة — دون دمج السجلات المتشابهة");
-       const t=table(["الرقم (ع)","اسم الفرد","نوع السجل","أيام التحضير","التنقلات","الحالات","التفاصيل"]);
+       const customColumns=window.AltamamRosterColumns?.columns(data)||[];
+       const t=table(["الرقم (ع)","اسم الفرد","نوع السجل","أيام التحضير",
+         "التنقلات","الحالات",
+         ...(window.AltamamRosterColumns?.headings(customColumns)||[]),"التفاصيل"]);
        for(const person of data.persons){
          const tr=el("tr");
          const kind=person.active?"نشط":person.organizationalStatus===3?
@@ -263,7 +266,8 @@
          const states=(person.statusTotals||[])
            .map(x=>x.statusName+" ("+x.count+")").join("، ")||"لا توجد";
          [person.serviceNumberA,person.name,kind,person.attendanceTotal,
-           person.movementTotal,states]
+           person.movementTotal,states,
+           ...(window.AltamamRosterColumns?.values(person,customColumns)||[])]
            .forEach(x=>tr.appendChild(el("td",x)));
          const action=el("td");
          action.appendChild(btn("عرض سجل الفرد",()=>{
@@ -289,7 +293,9 @@
        });
        if(ticket!==serial||!root.isConnected)return;
        const items=reply.data?.items||[];
-       const t=table(["اختيار","الرقم (ع)","الاسم","حالة السجل","الموقع","التقرير"]);
+       const customColumns=window.AltamamRosterColumns?.columns(reply.data)||[];
+       const t=table(["اختيار","الرقم (ع)","الاسم","حالة السجل","الموقع",
+         ...(window.AltamamRosterColumns?.headings(customColumns)||[]),"التقرير"]);
        for(const person of items){
          const tr=el("tr");
          const selectCell=el("td");
@@ -306,7 +312,8 @@
          const lifecycle=person.active?"نشط":person.organizationalStatus===3?
            "مفصول — سجل تاريخي":person.organizationalStatus===2?
            "منقول خارجيًا — سجل تاريخي":"مؤرشف — سجل تاريخي";
-         [person.serviceNumberA,person.displayName,lifecycle,person.siteName]
+         [person.serviceNumberA,person.displayName,lifecycle,person.siteName,
+           ...(window.AltamamRosterColumns?.values(person,customColumns)||[])]
            .forEach(v=>tr.appendChild(el("td",v)));
          const cell=el("td");
          cell.appendChild(btn("عرض التقرير",()=>{
@@ -317,7 +324,7 @@
        }
        if(!items.length){
          const tr=el("tr"),cell=el("td","لا يوجد فرد مطابق للبحث");
-         cell.colSpan=6;tr.appendChild(cell);t.body.appendChild(tr);
+         cell.colSpan=6+customColumns.length;tr.appendChild(cell);t.body.appendChild(tr);
        }
        results.replaceChildren(t.wrap);
      }catch(e){if(ticket===serial&&root.isConnected)alert(results,e);}
@@ -365,7 +372,17 @@
          el("p","الاسم: "+person.name+" — الرقم (ع): "+person.serviceNumberA),
          el("p","تاريخ الإدراج: "+person.firstRecordedDate),
          el("p","حالة الفرد: "+(person.active?"ضمن القوة النشطة":"غير نشط أو مؤرشف"))
-       );report.appendChild(identity);
+       );
+       const customColumns=window.AltamamRosterColumns?.columns(d)||[];
+       if(customColumns.length){
+         const fields=el("div",undefined,"person-current-roster-fields");
+         fields.appendChild(el("p","الأعمدة الشخصية الحالية (ليست قيماً تاريخية):"));
+         for(const col of customColumns)
+           fields.appendChild(el("p",col.caption+": "+
+             (window.AltamamRosterColumns?.value(person,col)||"—")));
+         identity.appendChild(fields);
+       }
+       report.appendChild(identity);
        const totals=card("إجمالي أيام الحالات المسجلة");
        rows(totals,["الحالة","عدد الأيام","أول يوم","آخر يوم"],d.statusTotals,
          x=>[x.statusName,x.count,x.firstDate,x.lastDate],

@@ -86,10 +86,14 @@
           page,pageSize:100
         });
         if(token!==seq||!root.isConnected)return;
-        const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","اختيار"]);
+        const data=response.data||{};
+        const customColumns=window.AltamamRosterColumns?.columns(data)||[];
+        const t=table(["الرقم (ع)","الاسم","الموقع",
+          ...(window.AltamamRosterColumns?.headings(customColumns)||[]),"اختيار"]);
         for(const entry of data.items||[]){
           if(entry.active===false)continue;
-          const tr=row(t.body,[entry.serviceNumberA,entry.displayName,entry.siteName]);
+          const tr=row(t.body,[entry.serviceNumberA,entry.displayName,entry.siteName,
+            ...(window.AltamamRosterColumns?.values(entry,customColumns)||[])]);
           const td=el("td");
           td.appendChild(button("اختيار",()=>{
             person=entry;clear();feedback.replaceChildren();
@@ -108,7 +112,7 @@
         }
         if(!t.body.children.length){
           const tr=el("tr"),cell=el("td","لا يوجد أفراد مطابقون للبحث.");
-          cell.colSpan=4;tr.appendChild(cell);t.body.appendChild(tr);
+          cell.colSpan=4+customColumns.length;tr.appendChild(cell);t.body.appendChild(tr);
         }
         const pager=el("div",undefined,"functional-pager");
         const previous=button("السابق",()=>{page--;search();});
@@ -245,17 +249,21 @@
           term:query.value.trim(),siteId:sites.value,page,pageSize:100
         });
         if(request!==sequence||!root.isConnected)return;
-        const data=response.data||{},t=table(["الرقم (ع)","الاسم","الموقع","تاريخ الفصل واليوم","سبب الفصل","التفاصيل"]);
+        const data=response.data||{};
+        const customColumns=window.AltamamRosterColumns?.columns(data)||[];
+        const t=table(["الرقم (ع)","الاسم","الموقع","تاريخ الفصل واليوم","سبب الفصل",
+          ...(window.AltamamRosterColumns?.headings(customColumns)||[]),"التفاصيل"]);
         for(const entry of data.items||[]){
           const tr=row(t.body,[entry.serviceNumberA,entry.name,entry.siteName,
-            fullDate(entry.date),entry.reason]);
+            fullDate(entry.date),entry.reason,
+            ...(window.AltamamRosterColumns?.values(entry,customColumns)||[])]);
           const td=el("td");
           td.appendChild(button("عرض",()=>details(entry.movementId)));
           tr.appendChild(td);
         }
         if(!t.body.children.length){
           const tr=el("tr"),td=el("td","لا توجد حالات فصل مسجلة مطابقة.");
-          td.colSpan=6;tr.appendChild(td);t.body.appendChild(tr);
+          td.colSpan=6+customColumns.length;tr.appendChild(td);t.body.appendChild(tr);
         }
         const paginator=el("div",undefined,"functional-pager");
         const prev=button("السابق",()=>{page--;load();});

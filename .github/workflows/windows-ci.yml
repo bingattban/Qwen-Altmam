@@ -117,6 +117,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Attendance UI smoke failed' }
           node build/test-table-experience.js
           if ($LASTEXITCODE -ne 0) { throw 'Global tables and search usability regression' }
+          node build/test-roster-columns-global.js
+          if ($LASTEXITCODE -ne 0) { throw 'Shared personnel roster columns and Excel propagation regression' }
           node build/test-attendance-drafts.js
           if ($LASTEXITCODE -ne 0) { throw 'Attendance draft UI regression' }
           node build/test-personnel-movements.js
