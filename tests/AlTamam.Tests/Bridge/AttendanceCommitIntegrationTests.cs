@@ -85,6 +85,39 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
         Assert.Equal(1L,Count("AttendanceRecords"));
     }
     [Fact]
+    public async Task DatedLeaveAutoAttendance_ExpiresWithoutCarryingLeaveForward()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var ids=new[]{"TST-ATTEND-P1"};
+        var start=DateOnly.Parse(Today());
+        var payload=Payload("initial","STS-LEAVE",ids);
+        payload["rangeStartDate"]=Today();
+        payload["rangeEndDate"]=start.AddDays(1).ToString("yyyy-MM-dd");
+        var preview=await service.PreviewAsync(payload,Actor,CancellationToken.None);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var scheduler=new AlTamam.Application.Scheduling.AutoAttendanceService(_db,new SyntheticDaytimeClock());
+        var within=await scheduler.RunForDateAsync(start.AddDays(1),false);
+        Assert.False(within.BlockedClosedDay);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1' AND AttendanceLocalDate=$date;";
+            q.Parameters.AddWithValue("$date",start.AddDays(1).ToString("yyyy-MM-dd"));
+            Assert.Equal("STS-LEAVE",q.ExecuteScalar() as string);
+        }
+        var after=await scheduler.RunForDateAsync(start.AddDays(2),false);
+        Assert.False(after.BlockedClosedDay);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1' AND AttendanceLocalDate=$date;";
+            q.Parameters.AddWithValue("$date",start.AddDays(2).ToString("yyyy-MM-dd"));
+            Assert.NotEqual("STS-LEAVE",q.ExecuteScalar() as string);
+        }
+    }
+    [Fact]
     public async Task BulkCommitAndRevision_AuditAtomicAndOneTimePreview()
     {
         var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
