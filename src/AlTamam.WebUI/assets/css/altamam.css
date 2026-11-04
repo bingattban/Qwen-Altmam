@@ -2368,3 +2368,24 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
     justify-content:space-between;flex-wrap:wrap
   }
 }
+
+/* Bounded leave/permission: a compact RTL date pair below status selection. */
+.admin-attendance-host .attendance-range-fields:not([hidden]){
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;margin-block:12px;padding:14px;
+  border:1px solid var(--border-color);border-radius:12px;
+  background:var(--bg-surface)
+}
+.admin-attendance-host .attendance-range-fields[hidden]{display:none!important}
+.admin-attendance-host .attendance-range-fields>.section-title{grid-column:1/-1;margin:0}
+.admin-attendance-host .attendance-range-fields>label{
+  display:flex;flex-direction:column;gap:6px;font-weight:700;min-width:0
+}
+.admin-attendance-host .attendance-range-fields input[type="date"]{
+  width:100%;min-width:0;min-height:35px;box-sizing:border-box;
+  padding:6px 10px;border:1px solid var(--border-color);border-radius:8px;
+  background:var(--bg-surface);color:var(--text-main);font:inherit
+}
+@media(max-width:600px){
+  .admin-attendance-host .attendance-range-fields:not([hidden]){grid-template-columns:1fr}
+}
