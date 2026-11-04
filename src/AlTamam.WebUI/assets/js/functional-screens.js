@@ -141,6 +141,7 @@
   }
 
   async function loginGate() {
+    window.AltamamReminders?.stop();
     dismissAutoPrepared();
     const container=view(); if(!container)return;
     container.classList.toggle("daily-dashboard",false);
@@ -265,6 +266,7 @@
           throw new Error("لم يرجع خادم المصادقة جلسة صالحة.");
         bridge().setSessionNonce(result.sessionNonce);
         STATE.session=result;
+        window.AltamamReminders?.start();
         void window.AltamamTheme?.sync();
         window.AltamamIdleGuard?.start(true,logout);
         pass.input.value="";
@@ -1395,6 +1397,7 @@
       const state=parseData(await bridge().invoke("GetCurrentSession",{}));
       if(state && state.sessionNonce) {
         STATE.session=state;
+        window.AltamamReminders?.start();
         void window.AltamamTheme?.sync();
         window.AltamamIdleGuard?.start(false,logout);
         document.querySelector(".app-sidebar").hidden=false;
@@ -1414,6 +1417,7 @@
   }
 
   async function logout(){
+    window.AltamamReminders?.stop();
     dismissAutoPrepared();
     try { await bridge().invoke("Logout",{}); }
     catch(e) { /* Do not continue using a possibly expired session. */ }
@@ -1460,6 +1464,6 @@
       // Administration refreshes its own nested screen after a write; keep its context.
      if(sections.has(section)&&section!=="admin"&&STATE.session)render(section);
     }
-    if(name==="SessionEnded"){dismissAutoPrepared();window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);window.AltamamTheme?.clearAuthorization();loginGate();}
+    if(name==="SessionEnded"){window.AltamamReminders?.stop();dismissAutoPrepared();window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);window.AltamamTheme?.clearAuthorization();loginGate();}
   });
 })();

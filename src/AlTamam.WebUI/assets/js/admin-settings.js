@@ -16,7 +16,7 @@
   const sections = [
     {key:"force",title:"إدارة القوة",children:[
       ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
-      ["separation","الفصل"],["personReport","التقرير"],
+      ["separation","الفصل"],["personReport","التقرير"],["reminders","التنبيهات"],
       ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]]},
     {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
@@ -300,6 +300,11 @@
     page.appendChild(grid);
   }
   function renderDetail(screen,sourceRoute=null) {
+    if(screen==="reminders" && window.AltamamReminders){
+      const page=start("الإدارة / إدارة القوة / التنبيهات");
+      window.AltamamReminders.render(page);
+      return;
+    }
     if(screen==="attendance" && window.AltamamAttendance)
       return window.AltamamAttendance.render(target());
     if(["transferInternal","transferExternal","archiveInternal","archiveExternal","archiveAll"].includes(screen) && window.AltamamMovements){

@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using AlTamam.DesktopHost.Reminders;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
 using Microsoft.Web.WebView2.Core;
@@ -123,6 +124,8 @@ public sealed class DesktopBridgeGateway
         core.WebMessageReceived += OnWebMessageReceived;
     }
 
+    private readonly LocalReminderService _reminderService = new();
+
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         using var admitted = _operations.TryEnter();
@@ -136,6 +139,16 @@ public sealed class DesktopBridgeGateway
             string originUri = e.Source;
             bool isMainFrame = string.Equals(originUri, core.Source,
                 StringComparison.OrdinalIgnoreCase);
+            // An authenticated, strictly origin-checked side channel stores optional
+            // reminders outside SQLCipher without changing the canonical 103 actions.
+            string? reminderReply = await _reminderService.TryHandleAsync(
+                raw, originUri, isMainFrame,
+                nonce => _services.ResolveSessionAsync(nonce)).ConfigureAwait(true);
+            if (reminderReply is not null)
+            {
+                core.PostWebMessageAsString(reminderReply);
+                return;
+            }
             var result = await _dispatcher.DispatchAsync(
                 raw,
                 originUri,

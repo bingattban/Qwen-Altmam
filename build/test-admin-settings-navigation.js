@@ -250,17 +250,25 @@ async function run() {
   controller.renderAdmin(admin);
   assert.equal(byDataset("adminSection").length,5,"five primary administrative cards");
   assert.equal(byDataset("adminScreen").length,0,"no nested options on main admin page");
+  // All three authorized levels see optional reminders under force.
+  for(const role of ["GeneralAdministration","OrdinaryAdministration","Supervisor"]){
+    controller.renderAdmin({role,username:"reminder-check"});
+    byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+    assert.ok(byDataset("adminScreen").some(x=>x.dataset.adminScreen==="reminders"),
+      role+" must have the reminder screen under personnel management");
+  }
+  controller.renderAdmin(admin);
   assert.deepEqual(byDataset("adminSection").map(x=>x.dataset.adminSection),
     ["force","config","sheets","users","audit"]);
   byDataset("adminSection")[0].handlers.click();
   assert.equal(byDataset("adminSection").length,0,"top-level cards hidden in subgroup");
   assert.deepEqual(byDataset("adminScreen").map(x=>x.dataset.adminScreen),
-    ["attendance","persons","transfers","separation","personReport","closedCorrection"]);
+    ["attendance","persons","transfers","separation","personReport","reminders","closedCorrection"]);
   byDataset("adminScreen")[0].handlers.click();
   assert.equal(byDataset("adminScreen").length,0,"only selected detail page is visible");
   assert.ok(buttonNamed("العودة إلى إدارة القوة"),"back from detail to parent");
   buttonNamed("العودة إلى إدارة القوة").handlers.click();
-  assert.equal(byDataset("adminScreen").length,6,"archive must be nested under the separation screen");
+  assert.equal(byDataset("adminScreen").length,7,"archive must be nested under the separation screen");
   buttonNamed("العودة إلى الإدارة").handlers.click();
   assert.equal(byDataset("adminSection").length,5,"return to clean admin landing");
 
