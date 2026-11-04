@@ -197,8 +197,8 @@
       due.value = item?.dueLocal || localStamp(new Date(Date.now() + 10 * 60000));
       grid.append(labeled("اسم التنبيه", name), labeled("موضوع التنبيه", subject),
         labeled("وقت التنبيه (اليوم / الشهر / الساعة / الدقيقة)", due));
-      const save = button(item ? "حفظ التعديل" : "حفظ التنبيه", () => form.requestSubmit(),
-        "btn btn-primary");
+      const save = element("button", "btn btn-primary",
+        item ? "حفظ التعديل" : "حفظ التنبيه");
       save.type = "submit";
       form.append(grid, save);
       form.addEventListener("submit", async event => {

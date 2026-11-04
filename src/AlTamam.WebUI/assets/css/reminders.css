@@ -24,7 +24,7 @@
 .reminder-list-date{color:var(--text-muted);font-size:12px;}
 .reminder-list-actions{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;}
 .reminder-toast-host{
-  position: fixed;top:78px;right:18px;z-index:1100;
+  position: fixed;top:78px;right: 18px;z-index:1100;
   width:min(370px,calc(100vw - 36px));max-height:calc(100vh - 100px);
   overflow-y:auto;display:grid;gap:10px;pointer-events:none;
 }
