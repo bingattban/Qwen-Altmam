@@ -107,6 +107,7 @@ jobs:
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
+          python build/test-local-reminders-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows real WebView2 smoke-test contract failed' }
           node build/test-phase04-bridge-schema.js
           if ($LASTEXITCODE -ne 0) { throw 'Phase 04 typed request/response schema drift failed' }

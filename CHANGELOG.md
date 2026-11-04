@@ -1,5 +1,11 @@
 # Changelog — Al-Tamam Daily (التمام اليومي)
 
+## Unreleased — Local administration/personnel reminders (2026-11-04)
+- Add a nested «التنبيهات» screen within الإدارة / إدارة القوة, shared by GeneralAdministration, OrdinaryAdministration and Supervisor. Add / edit / delete a named reminder, subject and precise local day/month/hour/minute; blue active and red expired entries.
+- Authenticated native WebView2 side channel backed by an atomically replaced, bounded local UTF-8 JSON file under %LOCALAPPDATA%\AlTamam\Reminders\reminders.json. No SQLCipher schema, AppSettings or audit event writes. No internet, remote scheduler, additional top-level section or new canonical route.
+- When the application is relaunched, only reminders whose effective due time preceded this launch are delivered without sound on the next authenticated poll. Reminders due while running ring through native Windows SystemSounds, present a nonmodal top-right notification with dismiss and exact 5-minute snooze, and preserve delivery state across restarts.
+- Test-first offline contract runs in parallel Windows Core / Windows Release preflights. This is an optional personal alert feature; it does not change 08:00 attendance, 20:00 lock, 16:00 backups or the closed-day policy. Physical Windows acceptance remains separate.
+
 ## Unreleased — Phase 15 valid historical transfer fixture for Windows WebView2 (2026-11-03)
 - The real WPF/WebView2 modal transfer E2E was attempting to transfer a newly created person on the same date their first assignment began. SQLCipher correctly rejects closing an effective-dated interval on its starting day.
 - Seed a **separate**, historically eligible synthetic person, identity history and source assignment starting yesterday in the disposable encrypted test database; preserve the first-use new-person and role tests unchanged. Modal Cancel, Confirm, identical-idempotency replay, movement, destination assignment and transfer audit verification must all use the eligible person.

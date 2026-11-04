@@ -15,6 +15,7 @@ internal sealed class LocalReminderService
 {
     private const string Channel = "altamam.reminders.v1";
     private const string Stamp = "yyyy-MM-ddTHH:mm";
+    private const string SnoozeStamp = "yyyy-MM-ddTHH:mm:ss";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true
@@ -23,14 +24,16 @@ internal sealed class LocalReminderService
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly DateTime _startedLocal = DateTime.Now;
 
-    private sealed class ReminderFile
+    public sealed class ReminderFile
     {
+        public ReminderFile() { }
         public int SchemaVersion { get; set; } = 1;
         public List<Reminder> Items { get; set; } = [];
     }
 
-    private sealed class Reminder
+    public sealed class Reminder
     {
+        public Reminder() { }
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Subject { get; set; } = "";
@@ -51,7 +54,7 @@ internal sealed class LocalReminderService
     }
 
     private static bool TryLocalDate(string value, out DateTime date) =>
-        DateTime.TryParseExact(value, Stamp, CultureInfo.InvariantCulture,
+        DateTime.TryParseExact(value, [Stamp, SnoozeStamp], CultureInfo.InvariantCulture,
             DateTimeStyles.None, out date);
 
     private static object Error(string message) => new { ok = false, error = message };
@@ -224,7 +227,7 @@ internal sealed class LocalReminderService
             else if (command == "snooze")
             {
                 if (existing.Completed) return Error("لا يمكن تأجيل تنبيه منتهٍ.");
-                existing.SnoozedUntilLocal = DateTime.Now.AddMinutes(5).ToString(Stamp,
+                existing.SnoozedUntilLocal = DateTime.Now.AddMinutes(5).ToString(SnoozeStamp,
                     CultureInfo.InvariantCulture);
                 existing.Delivered = false;
             }
