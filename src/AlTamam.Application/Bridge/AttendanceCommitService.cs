@@ -37,6 +37,48 @@ public sealed class AttendanceCommitService
     }
     private static BridgeResponse Fail(string code,string message,string? field=null)=>
         BridgeHelpers.Error(code,message,field);
+    private static bool IsPeriodStatus(string statusId) =>
+        statusId is "STS-LEAVE" or "STS-PERMISSION";
+
+    private static bool TryPeriodDates(string from, string to, string today,
+        out DateOnly start, out DateOnly finish)
+    {
+        bool valid = DateOnly.TryParseExact(from, "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out start)
+            && DateOnly.TryParseExact(to, "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out finish)
+            && DateOnly.TryParseExact(today, "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var current)
+            && start >= current && finish >= start;
+        return valid;
+    }
+
+    // Read the effective interval under the same SQLCipher transaction as a
+    // save. The current-day period may be superseded by an approved new manual
+    // status; future overlapping schedules must be rejected before mutations.
+    private static async Task<bool> HasConflictingPeriodAsync(
+        SqliteConnection c, SqliteTransaction tx, string personId,
+        string from, string to, string today, bool replaceToday, CancellationToken ct)
+    {
+        using var cmd=c.CreateCommand(); cmd.Transaction=tx;
+        cmd.CommandText="""
+            SELECT EXISTS(SELECT 1 FROM AttendanceStatusPeriods old
+            WHERE old.PersonId=$person AND old.FromLocalDate <= $to
+              AND old.ToLocalDate >= $from
+              AND (old.CancelledFromLocalDate IS NULL OR old.CancelledFromLocalDate > $from)
+              AND NOT ($replace=1 AND old.FromLocalDate <= $today
+                       AND old.ToLocalDate >= $today
+                       AND (old.CancelledFromLocalDate IS NULL OR
+                            old.CancelledFromLocalDate > $today)));
+            """;
+        cmd.Parameters.AddWithValue("$person",personId);
+        cmd.Parameters.AddWithValue("$from",from);
+        cmd.Parameters.AddWithValue("$to",to);
+        cmd.Parameters.AddWithValue("$today",today);
+        cmd.Parameters.AddWithValue("$replace",replaceToday ? 1 : 0);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0;
+    }
+
     private static string[] PersonIds(JsonObject? data)
     {
         if(data?["personIds"] is not JsonArray a)return [];
@@ -142,6 +184,20 @@ public sealed class AttendanceCommitService
         string date=Read(payload,"businessDate"), statusId=Read(payload,"statusId");
         string siteFilter=Read(payload,"siteId"),mode=Read(payload,"mode");
         string reason=Read(payload,"reason");
+        string periodFrom=Read(payload,"periodFrom"),periodTo=Read(payload,"periodTo");
+        bool timed=IsPeriodStatus(statusId);
+        bool scheduledOnly=false;
+        if(timed)
+        {
+            if(!TryPeriodDates(periodFrom,periodTo,Today(),out var start,out _))
+                return Fail(BridgeErrorCodes.ValidationError,
+                    "حالتا إجازة وإذن تتطلبان تاريخ بداية اليوم أو بعده وتاريخ نهاية لا يسبق البداية.",
+                    string.IsNullOrWhiteSpace(periodFrom) ? "periodFrom" : "periodTo");
+            scheduledOnly=periodFrom!=Today();
+        }
+        else if(periodFrom.Length>0 || periodTo.Length>0)
+            return Fail(BridgeErrorCodes.ValidationError,
+                "تحديد المدة متاح للإجازة والإذن فقط.","periodFrom");
         var ids=PersonIds(payload);
         if(date!=Today())return Fail(BridgeErrorCodes.HistoricDayLocked,
             "يسمح التحضير من هذه الشاشة لليوم الحالي فقط، وليس للتواريخ السابقة أو القادمة.",
@@ -201,21 +257,21 @@ public sealed class AttendanceCommitService
                 firstError??=BridgeErrorCodes.TransferDayAttendanceForbidden;
                 continue;
             }
-            if(mode=="initial" && s.PreviousRevision!=0)
+            if(!scheduledOnly && mode=="initial" && s.PreviousRevision!=0)
             {
                 conflicts.Add(AttendanceConflictDetails.Known(s.PersonId,s.Name,s.Number,
                     "الحالة «"+s.PreviousName+"» مسجلة بالفعل اليوم؛ استخدم تغيير الحالة."));
                 firstError??=BridgeErrorCodes.AlreadyPrepared;
                 continue;
             }
-            if(mode=="revise" && s.PreviousRevision==0)
+            if(!scheduledOnly && mode=="revise" && s.PreviousRevision==0)
             {
                 conflicts.Add(AttendanceConflictDetails.Known(s.PersonId,s.Name,s.Number,
                     "لا توجد حالة تمّام سابقة لهذا اليوم حتى تُعدّل."));
                 firstError??=BridgeErrorCodes.ValidationError;
                 continue;
             }
-            if(mode=="revise" && s.PreviousStatus==statusId)
+            if(!scheduledOnly && mode=="revise" && s.PreviousStatus==statusId)
             {
                 conflicts.Add(AttendanceConflictDetails.Known(s.PersonId,s.Name,s.Number,
                     "الحالة «"+status.Value.Name+"» هي نفسها الحالة المعتمدة؛ لم تُنشأ مراجعة مكررة."));
@@ -230,7 +286,10 @@ public sealed class AttendanceCommitService
         {
             ["businessDate"]=date,["statusId"]=statusId,["statusName"]=status.Value.Name,
             ["statusSymbol"]=status.Value.Symbol,["statusColor"]=status.Value.Color,
-            ["mode"]=mode,["reason"]=reason,["persons"]=people
+            ["mode"]=mode,["reason"]=reason,["persons"]=people,
+            ["periodFrom"]=timed?periodFrom:null,
+            ["periodTo"]=timed?periodTo:null,
+            ["scheduledOnly"]=scheduledOnly
         };
         string token=BridgePreviewTokens.Issue(_db,_time,"ATTENDANCE-"+mode,actor.UserId,
             sealedData,0,ct);
@@ -282,6 +341,15 @@ public sealed class AttendanceCommitService
                 }};
             var info=JsonNode.Parse(data) as JsonObject;
             string date=Read(info,"businessDate"),statusId=Read(info,"statusId");
+            string periodFrom=Read(info,"periodFrom"),periodTo=Read(info,"periodTo");
+            bool timed=IsPeriodStatus(statusId);
+            if(timed && !TryPeriodDates(periodFrom,periodTo,Today(),out _,out _))
+                return Fail(BridgeErrorCodes.ValidationError,
+                    "انتهت صلاحية تواريخ الإجازة أو الإذن؛ أعد المعاينة.","periodFrom");
+            if(!timed && (periodFrom.Length>0||periodTo.Length>0))
+                return Fail(BridgeErrorCodes.ValidationError,
+                    "لا تضاف مدة إلى الحالات الأخرى.","periodFrom");
+            bool scheduledOnly=timed && periodFrom!=date;
             if(info?["persons"] is not JsonArray selected || selected.Count==0 ||
                selected.Count>100 || date!=Today() || Read(info,"mode")!=mode)
                 return Fail(BridgeErrorCodes.HistoricDayLocked,"المعاينة ليست صالحة لليوم الحالي.");
@@ -317,13 +385,13 @@ public sealed class AttendanceCommitService
                         "تغيرت الحالة أو الموقع بعد المعاينة؛ أعد تحميل الكشف."));
                     continue;
                 }
-                if(!revise && revision!=0)
+                if(!scheduledOnly && !revise && revision!=0)
                 {
                     conflicts.Add(AttendanceConflictDetails.Known(current.PersonId,
                         current.Name,current.Number,"تم تحضير الفرد مسبقاً بعد المعاينة."));
                     continue;
                 }
-                if(revise && (revision==0||current.PreviousStatus==statusId))
+                if(!scheduledOnly && revise && (revision==0||current.PreviousStatus==statusId))
                 {
                     conflicts.Add(AttendanceConflictDetails.Known(current.PersonId,
                         current.Name,current.Number,
@@ -334,6 +402,16 @@ public sealed class AttendanceCommitService
             }
             if(conflicts.Count>0)
                 return AttendanceConflictDetails.Reject(BridgeErrorCodes.ConflictStale,conflicts);
+            // Resolve all interval overlap conflicts BEFORE consuming the
+            // preview or cancelling any existing period. Rejected bulk
+            // requests never partially change other persons' schedules.
+            if(timed)
+                foreach(var person in snapshots)
+                    if(await HasConflictingPeriodAsync(c,t,person.PersonId,
+                        periodFrom,periodTo,date,!scheduledOnly,ct).ConfigureAwait(false))
+                        return Fail(BridgeErrorCodes.ConflictStale,
+                            "توجد مدة إجازة أو إذن متداخلة لأحد الأفراد؛ غيّر المدة أو حالته الحالية.",
+                            "periodFrom");
             long? consumed=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,t,token,
                 "ATTENDANCE-"+mode,actor.UserId,0,ct).ConfigureAwait(false);
             if(consumed!=0)return Fail(BridgeErrorCodes.ConflictStale,
@@ -346,6 +424,43 @@ public sealed class AttendanceCommitService
             var auditEventIds=new JsonArray();
             foreach(var person in snapshots)
             {
+                if(!scheduledOnly)
+                {
+                    // A deliberate same-day status selection supersedes an
+                    // ongoing period for subsequent days, with cancellation
+                    // retained as an auditable effective-date marker.
+                    using var stop=c.CreateCommand();stop.Transaction=t;
+                    stop.CommandText="""
+                        UPDATE AttendanceStatusPeriods SET CancelledFromLocalDate=$date
+                        WHERE PersonId=$person AND FromLocalDate <= $date
+                          AND ToLocalDate >= $date
+                          AND (CancelledFromLocalDate IS NULL OR CancelledFromLocalDate > $date);
+                        """;
+                    stop.Parameters.AddWithValue("$date",date);
+                    stop.Parameters.AddWithValue("$person",person.PersonId);
+                    await stop.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                }
+                if(timed)
+                {
+                    using var period=c.CreateCommand();period.Transaction=t;
+                    period.CommandText="""
+                        INSERT INTO AttendanceStatusPeriods(
+                            PeriodId,PersonId,StatusId,FromLocalDate,ToLocalDate,
+                            CancelledFromLocalDate,CreatedAtUtc,CreatedByUserId,CorrelationId)
+                        VALUES($id,$person,$status,$from,$to,NULL,$now,$actor,$corr);
+                        """;
+                    period.Parameters.AddWithValue("$id","PER-" + Guid.NewGuid().ToString("N"));
+                    period.Parameters.AddWithValue("$person",person.PersonId);
+                    period.Parameters.AddWithValue("$status",statusId);
+                    period.Parameters.AddWithValue("$from",periodFrom);
+                    period.Parameters.AddWithValue("$to",periodTo);
+                    period.Parameters.AddWithValue("$now",now);
+                    period.Parameters.AddWithValue("$actor",actor.UserId);
+                    period.Parameters.AddWithValue("$corr",corr);
+                    await period.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                }
+                if(!scheduledOnly)
+                {
                 using var cmd=c.CreateCommand();cmd.Transaction=t;
                 if(!revise)
                 {
@@ -406,22 +521,34 @@ public sealed class AttendanceCommitService
                     revision.Parameters.AddWithValue("$now",now);
                     await revision.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 }
+                } // Today's committed attendance; future schedules do not rewrite today.
                 string auditEventId=await BridgeAuditWriter.WriteAsync(c,t,_time,
-                    revise?"ATTENDANCE_REVISE":"ATTENDANCE_COMMIT",
-                    revise?"تعديل التحضير":"اعتماد التحضير",
+                    scheduledOnly?"ATTENDANCE_PERIOD_SCHEDULE":
+                        revise?"ATTENDANCE_REVISE":"ATTENDANCE_COMMIT",
+                    scheduledOnly?"جدولة إجازة أو إذن":
+                        revise?"تعديل التحضير":"اعتماد التحضير",
                     actor.UserId,actor.Username,actor.Username,"Person",person.PersonId,person.Name,
                     new JsonObject{["statusId"]=person.PreviousStatus,["statusName"]=person.PreviousName}.ToJsonString(),
                     new JsonObject{["statusId"]=statusId,["statusName"]=status.Value.Name,
-                        ["date"]=date,["serviceNumberA"]=person.Number,["site"]=person.SiteName}.ToJsonString(),
-                    revise?"تعديل تحضير اليوم بسبب: "+reason:"تحضير اليوم",
-                    revise?reason:null,date,corr,ct).ConfigureAwait(false);
+                        ["date"]=scheduledOnly?periodFrom:date,
+                        ["periodFrom"]=timed?periodFrom:null,
+                        ["periodTo"]=timed?periodTo:null,
+                        ["scheduledOnly"]=scheduledOnly,
+                        ["serviceNumberA"]=person.Number,["site"]=person.SiteName}.ToJsonString(),
+                    scheduledOnly?"جدولة الحالة من "+periodFrom+" إلى "+periodTo:
+                        timed?"تحضير بمدة من "+periodFrom+" إلى "+periodTo:
+                        revise?"تعديل تحضير اليوم بسبب: "+reason:"تحضير اليوم",
+                    revise?reason:null,scheduledOnly?periodFrom:date,corr,ct).ConfigureAwait(false);
                 auditEventIds.Add(auditEventId);
             }
             string primaryAuditEventId=auditEventIds[0]!.GetValue<string>();
             var result=new JsonObject
             {
-                ["count"]=snapshots.Count,["date"]=date,["statusId"]=statusId,
-                ["revised"]=revise,
+                ["count"]=snapshots.Count,["date"]=scheduledOnly?periodFrom:date,
+                ["statusId"]=statusId,["revised"]=revise && !scheduledOnly,
+                ["scheduledOnly"]=scheduledOnly,
+                ["periodFrom"]=timed?periodFrom:null,
+                ["periodTo"]=timed?periodTo:null,
                 // For bulk commits, AuditEventId identifies one real event;
                 // auditEventIds carries the complete one-to-one person/event set.
                 ["auditEventId"]=primaryAuditEventId,
