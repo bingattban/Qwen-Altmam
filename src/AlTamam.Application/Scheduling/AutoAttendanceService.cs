@@ -282,6 +282,36 @@ public sealed class AutoAttendanceService
                          reader.GetString(3), reader.GetString(4)));
             }
 
+            // V014: resolve all active person-bound periods in ONE indexed
+            // SQLCipher read. Status is effective only through its inclusive
+            // end date and stops at a manual cancellation boundary. The
+            // existing roster/transfer/manual/closure gates still win.
+            var periods = new Dictionary<string,
+                (string Id, string Name, string Symbol, string Color)>(StringComparer.Ordinal);
+            using (var ranges = connection.CreateCommand())
+            {
+                ranges.Transaction = tx;
+                ranges.CommandText = """
+                    SELECT r.PersonId, s.StatusId, s.VisibleName, s.ShortSymbol,
+                           s.ChosenColorHex
+                    FROM AttendanceStatusPeriods r
+                    JOIN AttendanceStatusDefinitions s ON s.StatusId=r.StatusId
+                        AND s.ActiveFlag=1
+                    JOIN Persons p ON p.PersonId=r.PersonId AND p.ActiveFlag=1
+                        AND p.OrganizationalStatus=1
+                    WHERE r.FromLocalDate <= $date AND r.ToLocalDate >= $date
+                      AND (r.CancelledFromLocalDate IS NULL
+                           OR r.CancelledFromLocalDate > $date);
+                    """;
+                ranges.Parameters.AddWithValue("$date", Iso(businessDate));
+                using var reader = await ranges.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
+                    if (!periods.TryAdd(reader.GetString(0), (reader.GetString(1),
+                        reader.GetString(2), reader.GetString(3), reader.GetString(4))))
+                        throw new InvalidDataException(
+                            "Two overlapping effective attendance status periods detected.");
+            }
+
             foreach (var person in people)
             {
                 if (transferredToday.Contains(person.PersonId))
@@ -296,27 +326,42 @@ public sealed class AutoAttendanceService
                 }
 
                 string statusId, statusName, statusSymbol, statusColor;
-                if (!previousStatuses.TryGetValue(person.PersonId, out var previous))
+                if (periods.TryGetValue(person.PersonId, out var period))
                 {
-                    if (configuredDefault is null)
-                    {
-                        // Do not block other people who have a valid previous-day status.
-                        // A person without yesterday or a configured fallback stays unprepared.
-                        skipNoYesterday++;
-                        continue;
-                    }
-                    statusId = configuredDefault.Value.Id;
-                    statusName = configuredDefault.Value.Name;
-                    statusSymbol = configuredDefault.Value.Symbol;
-                    statusColor = configuredDefault.Value.Color;
-                    defaulted++;
+                    // A valid dated period beats yesterday's status. A committed
+                    // manual entry for this date was skipped above and prevails.
+                    statusId = period.Id;
+                    statusName = period.Name;
+                    statusSymbol = period.Symbol;
+                    statusColor = period.Color;
                 }
-                else
+                else if (previousStatuses.TryGetValue(person.PersonId, out var previous)
+                         && previous.Id is not ("STS-LEAVE" or "STS-PERMISSION"))
                 {
+                    // Do not extend an expired leave/permission merely because
+                    // it was yesterday's recorded status.
                     statusId = previous.Id;
                     statusName = previous.Name;
                     statusSymbol = previous.Symbol;
                     statusColor = previous.Color;
+                }
+                else if (configuredDefault is { } fallback
+                         && fallback.Id is not ("STS-LEAVE" or "STS-PERMISSION"))
+                {
+                    // Even a legacy default of Leave/Permission must not
+                    // generate an unbounded period without required dates.
+                    statusId = fallback.Id;
+                    statusName = fallback.Name;
+                    statusSymbol = fallback.Symbol;
+                    statusColor = fallback.Color;
+                    defaulted++;
+                }
+                else
+                {
+                    // No date-covered period, non-period yesterday state or
+                    // permitted fallback: leave the day unprepared.
+                    skipNoYesterday++;
+                    continue;
                 }
 
                 using var insert = connection.CreateCommand();
