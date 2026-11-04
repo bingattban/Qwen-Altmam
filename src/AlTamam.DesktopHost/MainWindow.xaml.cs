@@ -557,6 +557,16 @@ public partial class MainWindow : Window
             {
                 await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase).ConfigureAwait(true);
                 TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
+            }
+            // Packaged acceptance can run the two real browser suites in distinct
+            // bounded processes on slow x86 runners. Ordinary pre-package E2E
+            // retains the original combined coverage without changing production.
+            bool splitRoutes = Environment.GetCommandLineArgs().Contains(
+                "--webview-split-route-e2e", StringComparer.Ordinal);
+            bool routesOnly = Environment.GetCommandLineArgs().Contains(
+                "--webview-route-e2e", StringComparer.Ordinal);
+            if ((syntheticDatabase is not null && !splitRoutes) || routesOnly)
+            {
                 await Phase04ManifestRouteSelfCheck.RunAsync(
                     core, ResolveBundledWebUiRoot()).ConfigureAwait(true);
                 TraceWebViewSelfCheck("PASS all 69 manifest routes opened in real Windows WebView2");

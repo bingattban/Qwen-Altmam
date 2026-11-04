@@ -27,6 +27,7 @@ internal static class Phase04ManifestRouteSelfCheck
             throw new InvalidOperationException("Phase 04 must preserve the exact 69 route catalog");
 
         var ids = new HashSet<string>(StringComparer.Ordinal);
+        int navigated = 0;
         foreach (var screen in screens.EnumerateArray())
         {
             string id = screen.GetProperty("screenId").GetString()
@@ -68,6 +69,12 @@ internal static class Phase04ManifestRouteSelfCheck
                     .ConfigureAwait(true);
                 if (!targetStarted)
                     throw new InvalidOperationException("Route was not navigated: " + id);
+                navigated++;
+                // Diagnostics only: expose meaningful progress when a Windows
+                // x86 runner is unusually slow, without weakening navigation.
+                if (navigated % 10 == 0 || navigated == screens.GetArrayLength())
+                    AlTamam.DesktopHost.MainWindow.TraceWebViewSelfCheck(
+                        $"Manifest route navigation {navigated}/69 passed (last: {id})");
             }
             catch (TimeoutException ex)
             {
