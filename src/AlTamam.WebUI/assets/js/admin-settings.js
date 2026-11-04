@@ -2432,6 +2432,84 @@
         "المجلد الحالي غير متاح؛ اختر مجلداً محلياً قابلاً للكتابة."));
       grid.appendChild(backup);
 
+      // Optional NATIVE Windows scheduler: unlike the independent SQLCipher
+      // backup schedule this exports monthly Excel, not database snapshots.
+      const monthlyCfg=info.autoMonthlyExcel||{};
+      const autoExcel=settingsCard("التصدير التلقائي للتمام اليومي","▤");
+      autoExcel.classList.add("settings-monthly-excel-panel");
+      autoExcel.appendChild(node("p","settings-copy",
+        "الخيار متوقف افتراضياً. عند تفعيله يُنشئ البرنامج مجلد «تمام شهر» للشهر الحالي، وداخله ملف Excel للقوة الكلية وملف لكل موقع. تتحدث الملفات يومياً بحسب التمام الشهري، ويُستكمل ما فات عند إعادة تشغيل البرنامج."));
+      const monthlyStatus=node("p","section-description",
+        monthlyCfg.enabled?"التصدير مفعّل؛ آخر يوم مكتمل: "+
+          (monthlyCfg.lastSuccessDate||"لم يتم إنشاء ملفات بعد"):
+          "التصدير التلقائي متوقف.");
+      autoExcel.appendChild(monthlyStatus);
+      if(monthlyCfg.lastFailure)
+        autoExcel.appendChild(warning("آخر محاولة تصدير لم تكتمل: "+monthlyCfg.lastFailure));
+      if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
+        const enableLabel=node("label","admin-input");
+        const enabled=node("input");enabled.type="checkbox";
+        enabled.checked=monthlyCfg.enabled===true;
+        enabled.setAttribute("aria-label","تفعيل التصدير التلقائي للتمام اليومي");
+        enableLabel.append(node("span","","تفعيل التصدير التلقائي للتمام اليومي"),enabled);
+        const options=node("div","settings-monthly-excel-options");
+        const directory=field("مجلد التصدير التلقائي للتمام اليومي",monthlyCfg.directory||"");
+        directory.input.readOnly=true;
+        directory.input.setAttribute("aria-label","المجلد المختار للتصدير الشهري التلقائي");
+        const clock=node("input","form-control");
+        clock.type="time";clock.value=monthlyCfg.exportTime||"21:00";
+        clock.setAttribute("aria-label","وقت التصدير التلقائي للتمام اليومي");
+        const clockLabel=node("label","admin-input");
+        clockLabel.append(node("span","","وقت التصدير اليومي بتوقيت Windows المحلي"),clock);
+        const output=node("div","settings-feedback");
+        output.setAttribute("aria-live","polite");
+        const refreshVisibility=()=>{options.hidden=!enabled.checked;};
+        enabled.addEventListener("change",refreshVisibility);
+        const chooseMonthly=btn("اختيار مجلد التصدير من Windows",async()=>{
+          chooseMonthly.disabled=true;
+          try{
+            const reply=await api().invoke("ConfigureAutoMonthlyExcel",{
+              enabled:enabled.checked,exportTime:clock.value,
+              directory:directory.input.value,choose:true,operationId:makeOperationId()
+            });
+            if(token!==currentRequest)return;
+            const state=reply.data||{};
+            directory.input.value=state.directory||"";
+            monthlyStatus.textContent=state.enabled
+              ?"التصدير مفعّل؛ سيُنشئ Windows ملفات الشهر ثم يحدثها تلقائياً."
+              :"حُفظ مجلد التصدير مع بقاء الجدولة متوقفة.";
+            output.replaceChildren(node("p","settings-success",
+              "تم اختيار مجلد التصدير: "+directory.input.value));
+          }catch(e){if(token===currentRequest)errors(output,e);}
+          finally{chooseMonthly.disabled=false;}
+        },"btn btn-outline settings-action");
+        const saveMonthly=btn("حفظ إعدادات التصدير التلقائي",async()=>{
+          if(!await dialogs.confirm("هل تؤكد "+(enabled.checked?"تفعيل":"إيقاف")+
+            " التصدير التلقائي للتمام اليومي؟"))return;
+          saveMonthly.disabled=true;
+          try{
+            const reply=await api().invoke("ConfigureAutoMonthlyExcel",{
+              enabled:enabled.checked,exportTime:clock.value,
+              directory:directory.input.value,operationId:makeOperationId()
+            });
+            if(token!==currentRequest)return;
+            const state=reply.data||{};
+            directory.input.value=state.directory||"";
+            monthlyStatus.textContent=state.enabled
+              ?"التصدير مفعل الساعة "+state.exportTime+
+                 "؛ ملفات كل شهر تُحدّث عند الاستحقاق ويُستكمل ما فات بعد تشغيل البرنامج."
+              :"التصدير التلقائي متوقف، ولن تُحذف أي ملفات Excel سابقة.";
+            output.replaceChildren(node("p","settings-success",
+              "تم حفظ الإعدادات المستقلة في قاعدة البيانات."));
+          }catch(e){if(token===currentRequest)errors(output,e);}
+          finally{saveMonthly.disabled=false;}
+        },"btn btn-primary settings-action");
+        options.append(directory.wrap,chooseMonthly,clockLabel,saveMonthly,output);
+        autoExcel.append(enableLabel,options);
+        refreshVisibility();
+      }
+      grid.appendChild(autoExcel);
+
       const integrity=settingsCard("سلامة قاعدة البيانات","◇");
       integrity.classList.add("settings-integrity-panel");
       integrity.appendChild(node("p","settings-copy",
