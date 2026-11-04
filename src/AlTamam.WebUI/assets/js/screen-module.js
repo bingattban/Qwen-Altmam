@@ -31,6 +31,10 @@ document.addEventListener("DOMContentLoaded", function () {
   const relative = link?.getAttribute?.("href");
   if(typeof relative!=="string" || !/^(?:\.\.\/)+index\.html#[^#]*$/.test(relative))
     return; // Fail closed rather than navigating an unverified origin.
+  // This document is about to leave for its canonical authenticated owner.
+  // The owner boots reminders itself; loading a second copy during the handoff
+  // adds needless script/CSS fetches and native polling to each redirected page.
+  window.__altamamRedirectToMain = true;
   window.location.replace(relative.split("#")[0]+"#"+encodeURIComponent(key));
 });
 
@@ -42,6 +46,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const source = document.currentScript?.src;
   if(!source)return;
   document.addEventListener("DOMContentLoaded",function(){
+    if (window.__altamamRedirectToMain) return;
     if(!window.AltamamBridge?.hasBridge?.())return;
     const css=document.createElement("link");
     css.rel="stylesheet";
