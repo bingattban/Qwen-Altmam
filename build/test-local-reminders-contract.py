@@ -41,6 +41,14 @@ class ReminderContract(unittest.TestCase):
         self.assertIn("window.AltamamReminders?.start()", (UI / "assets/js/functional-screens.js").read_text(encoding="utf-8"))
         self.assertIn("window.AltamamReminders?.stop()", (UI / "assets/js/functional-screens.js").read_text(encoding="utf-8"))
 
+    def test_unacknowledged_due_alerts_survive_page_navigation(self):
+        source = (HOST / "Reminders/LocalReminderService.cs").read_text(encoding="utf-8")
+        module = (UI / "assets/js/screen-module.js").read_text(encoding="utf-8")
+        self.assertIn("item.Delivered || due < _startedLocal", source)
+        self.assertIn('new URL("reminders.js"', module)
+        self.assertIn("window.AltamamReminders.start()", module)
+        self.assertIn("GetCurrentSession", module)
+
     def test_browser_module_is_syntax_checked_and_top_right(self):
         path = UI / "assets/js/reminders.js"
         js = path.read_text(encoding="utf-8")
