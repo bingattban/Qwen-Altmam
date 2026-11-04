@@ -125,7 +125,8 @@
         "CommitAdministrativeAttendanceCatchUp",
         "SetClosedDayCorrectionPolicy",
         "PreviewClosedDayCorrection",
-        "CommitClosedDayCorrection"
+        "CommitClosedDayCorrection",
+        "ConfigureAutoMonthlyExcel"
       ]
     },
     "sessionNonce": {
@@ -2094,6 +2095,25 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "ConfigureAutoMonthlyExcel"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_ConfigureAutoMonthlyExcel"
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -3684,6 +3704,37 @@
       },
       "required": [
         "operationId"
+      ],
+      "additionalProperties": true
+    },
+    "payload_ConfigureAutoMonthlyExcel": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "exportTime": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        },
+        "directory": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "choose": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "operationId",
+        "enabled",
+        "exportTime"
       ],
       "additionalProperties": true
     }
