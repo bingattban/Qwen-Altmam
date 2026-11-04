@@ -8,7 +8,7 @@ using AlTamam.Infrastructure.Persistence;
 namespace AlTamam.DesktopHost.Reminders;
 
 /// <summary>
-/// Optional local-only personal reminders. Never opens SQLCipher, writes AuditEvents,
+/// Optional local-only personal reminders. Never opens SQLCipher or writes any audit ledger entries,
 /// or changes the application scheduler. Calls require a live native user session.
 /// </summary>
 internal sealed class LocalReminderService
