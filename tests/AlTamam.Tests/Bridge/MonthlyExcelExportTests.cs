@@ -119,6 +119,62 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task AddedPersonColumn_PropagatesToMonthlyScreenAndActualExcelWorkbook()
+    {
+        // Test the actual persisted definition, immutable PersonId values, and
+        // native XLSX cells, rather than only checking a source-code reference.
+        using (var connection = _db.CreateOpenConnection())
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO CustomFieldDefinitions(
+                    FieldDefinitionId,TechnicalKey,ArabicCaption,FieldType,
+                    DisplayOrder,IsSystemProtected,VisibleFlag,ActiveFlag,CreatedAtUtc)
+                VALUES('FLD-GLOBAL-TEST','custom_global_test','المؤهل العلمي',1,
+                    5,0,1,1,'2026-10-01T07:00:00Z');
+                INSERT INTO CustomFieldValues(
+                    PersonId,FieldDefinitionId,FieldValueText,UpdatedAtUtc)
+                VALUES('TST-EX-0','FLD-GLOBAL-TEST','بكالوريوس',
+                    '2026-10-01T07:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        var grid = await new DailyMonthlyReadService(_db).MonthlyGridAsync(new JsonObject
+        {
+            ["year"]=2026,["month"]=10,["siteId"]="SITE-UNSPECIFIED",
+            ["page"]=1,["pageSize"]=100,["archiveMode"]=true
+        },CancellationToken.None);
+        Assert.True(grid.Success,grid.UserMessage);
+        var data = Assert.IsType<JsonObject>(grid.Data);
+        var columns = Assert.IsType<JsonArray>(data["customColumns"]);
+        var col = Assert.Single(columns);
+        Assert.Equal("FLD-GLOBAL-TEST",col!["columnId"]!.GetValue<string>());
+        Assert.Equal("المؤهل العلمي",col["caption"]!.GetValue<string>());
+        var person = Assert.IsType<JsonArray>(data["items"]).OfType<JsonObject>()
+            .Single(p=>p["personId"]!.GetValue<string>()=="TST-EX-0");
+        Assert.Equal("بكالوريوس",person["customFields"]!["FLD-GLOBAL-TEST"]!.GetValue<string>());
+
+        var result = await new MonthlyExcelExportService(_db).ExportAsync(
+            Period("SITE-UNSPECIFIED"),CancellationToken.None);
+        Assert.True(result.Success,result.UserMessage);
+        var name = ((JsonObject)result.Data!)["filePath"]!.GetValue<string>();
+        _exports.Add(name);
+        using var archive = ZipFile.OpenRead(name);
+        using var stream = archive.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+        var xml = XDocument.Load(stream);
+        XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        var rows = xml.Descendants(ns+"row").ToArray();
+        var headers = rows[2].Descendants(ns+"t").Select(x=>x.Value).ToArray();
+        Assert.Equal("المؤهل العلمي",headers[4]); // after the four fixed columns
+        var personRow = rows.Skip(3).First(row=>row.Descendants(ns+"t")
+            .Any(x=>x.Value=="91000"));
+        var cells = personRow.Descendants(ns+"t").Select(x=>x.Value).ToArray();
+        Assert.Equal("بكالوريوس",cells[4]);
+        Assert.Empty(xml.Descendants(ns+"f")); // new values cannot become formulas
+    }
+
+    [Fact]
     public async Task ExcelPreview_HasRealTotalsAndRejectsInvalidOrEmptyPeriods()
     {
         var excel = new MonthlyExcelExportService(_db);
