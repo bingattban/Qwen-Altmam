@@ -113,7 +113,7 @@
    periodFrom.addEventListener("change",()=>{
      periodTo.min=periodFrom.value||day;clearReview();
    });
-   periodTo.addEventListener("change",clearReview);
+   periodTo.addEventListener("change",()=>clearReview());
    const draftPanel=make("section",undefined,"card attendance-drafts attendance-drafts-modal");
    draftPanel.hidden=true;
    draftPanel.setAttribute("role","dialog");
