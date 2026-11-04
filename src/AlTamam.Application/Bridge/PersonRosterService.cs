@@ -112,9 +112,12 @@ public sealed class PersonRosterService
             });
         }
 
+        reader.Close();
+        var customColumns = await RosterCustomFieldProjection.AttachAsync(
+            connection, items.OfType<JsonObject>(), ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["items"] = items,
+            ["items"] = items, ["customColumns"] = customColumns,
             ["count"] = items.Count,
             ["total"] = total,
             ["page"] = page,
@@ -171,6 +174,10 @@ public sealed class PersonRosterService
                 ["recordedAtUtc"] = histReader.GetString(5)
             });
         summary["identityHistory"] = history;
+        histReader.Close();
+        var customColumns = await RosterCustomFieldProjection.AttachAsync(
+            connection, new[] { summary }, ct).ConfigureAwait(false);
+        summary["customColumns"] = customColumns;
         return BridgeHelpers.Ok(summary);
     }
 
