@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Media;
 using System.Text;
 using System.Text.Json;
@@ -103,7 +104,7 @@ internal sealed class LocalReminderService
 
     /// <summary>Returns null only for messages belonging to the canonical application bridge.</summary>
     public async Task<string?> TryHandleAsync(string raw, string origin, bool isMainFrame,
-        Func<string?, Task<BridgePrincipal?>> authenticate, CancellationToken ct = default)
+        Func<string, Task<BridgePrincipal?>> authenticate, CancellationToken ct = default)
     {
         if (raw.Length > 24 * 1024) return null;
         try
