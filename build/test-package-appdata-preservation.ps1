@@ -41,10 +41,11 @@ function Run-Checked([string]$file, [string[]]$arguments, [int]$timeoutSeconds =
     }
 }
 
-# Cold WebView2 startup on win-x86 Windows runners is sometimes slow.  Keep
-# the SAME real navigation/title/exit-code gate as release pre-package checks,
-# with at most two independent attempts (the host creates a fresh profile).
-# Never accept a nonzero exit or timeout as success; surface the native phases.
+# Keep full real-browser coverage in the shipped Portable and Installer binaries.
+# On win-x86 the SQLCipher bridge suite and 69 real route navigations can EACH
+# succeed yet exceed a shared 180-second process budget. Give each suite its
+# OWN bounded process and verify both exit codes and their native trace evidence.
+# Never accept a timeout, nonzero exit, or missing route as success.
 function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verifyNativeBridge = $false) {
     Assert-True (Test-Path -LiteralPath $file -PathType Leaf) "Executable absent: $file"
     $originalTrace = [Environment]::GetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE")
@@ -53,7 +54,9 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verify
         for ($attempt = 1; $attempt -le 2; $attempt++) {
             $trace = Join-Path $work ("webview-" + ($phase -replace '[^A-Za-z0-9]', '-') +
                 "-attempt-" + $attempt + ".log")
-            Remove-Item -LiteralPath $trace -Force -ErrorAction SilentlyContinue
+            $routeTrace = Join-Path $work ("webview-routes-" + ($phase -replace '[^A-Za-z0-9]', '-') +
+                "-attempt-" + $attempt + ".log")
+            Remove-Item -LiteralPath $trace, $routeTrace -Force -ErrorAction SilentlyContinue
             $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $trace
             Write-Host "PACKAGED WEBVIEW: $phase ($ExpectedArch), attempt $attempt of 2"
             try {
@@ -62,7 +65,7 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verify
                     # bridge -> isolated encrypted SQLCipher -> HTML roundtrip.
                     # --webview-selfcheck uses a fresh TEMP profile and DATABASE;
                     # no production user data, passwords or DPAPI key is touched.
-                    Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e") 180
+                    Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e") 180
                     Assert-True (Test-Path -LiteralPath $trace -PathType Leaf) "No packaged native bridge trace: $phase"
                     $text = Get-Content -LiteralPath $trace -Raw
                     foreach ($required in @(
@@ -70,10 +73,19 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verify
                         "PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests",
                         "PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations",
                         "PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher",
-                        "PASS all 69 manifest routes opened in real Windows WebView2"
+                        "PASS bundled offline WebUI title verified"
                     )) {
                         Assert-True ($text.Contains($required)) "Packaged native bridge evidence missing: $phase [$required]"
                     }
+                    # Mandatory independent execution of ALL 69 real WebView2
+                    # navigations in the same shipped binary, with a fresh
+                    # temporary profile. Do not reuse/forge bridge evidence.
+                    $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $routeTrace
+                    Run-Checked $file @("--webview-selfcheck","--webview-route-e2e") 120
+                    Assert-True (Test-Path -LiteralPath $routeTrace -PathType Leaf) "No packaged 69-route trace: $phase"
+                    $routeEvidence = Get-Content -LiteralPath $routeTrace -Raw
+                    Assert-True ($routeEvidence.Contains("PASS all 69 manifest routes opened in real Windows WebView2")) "69 real packaged routes missing: $phase"
+                    Assert-True ($routeEvidence.Contains("PASS bundled offline WebUI title verified")) "Packaged route browser title missing: $phase"
                 }
                 else {
                     Run-Checked $file @("--webview-selfcheck") 90
@@ -91,6 +103,14 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verify
                 }
                 else {
                     Write-Host "PACKAGED WEBVIEW TRACE: no native trace was produced"
+                }
+                if (Test-Path -LiteralPath $routeTrace -PathType Leaf) {
+                    Get-Content -LiteralPath $routeTrace | ForEach-Object {
+                        Write-Host "PACKAGED ROUTES TRACE: $_"
+                    }
+                }
+                elseif ($verifyNativeBridge) {
+                    Write-Host "PACKAGED ROUTES TRACE: no route trace was produced"
                 }
             }
             if ($passed) { break }
