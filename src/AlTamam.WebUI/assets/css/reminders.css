@@ -1,0 +1,47 @@
+/* Small optional reminders extension; keeps four primary sections and theme variables. */
+.reminders-screen{display:grid;gap:16px;min-height:200px;}
+.reminder-tabs{display:flex;flex-wrap:wrap;gap:10px;}
+.reminder-tabs .reminder-selected{background:var(--accent-teal-soft);border-color:var(--accent-teal);color:var(--text-main);}
+.reminder-form{display:grid;gap:14px;max-width:780px;}
+.reminder-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;}
+.reminder-form-grid label:nth-child(2){grid-column:1 / -1;}
+.reminder-form-grid textarea{min-height:90px;resize:vertical;}
+.reminder-feedback{min-height:1.5em;color:var(--status-positive);}
+.reminder-feedback-error{color:var(--critical);}
+.reminder-screen-body{display:grid;gap:12px;}
+.reminder-list-item{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;
+  padding:14px 16px;border:1px solid var(--border-subtle);
+  border-right:4px solid #2563EB;border-radius:var(--radius);
+  background:var(--bg-surface);
+}
+.reminder-list-item.reminder-expired{border-right-color:#DC2626;}
+.reminder-list-title{font-size:17px;color:#2563EB;overflow-wrap:anywhere;}
+.reminder-expired .reminder-list-title{color:#DC2626;}
+.reminder-state{font-size:12px;color:#2563EB;font-weight:bold;}
+.reminder-expired .reminder-state{color:#DC2626;}
+.reminder-list-subject,.reminder-list-date{grid-column:1/-1;white-space:pre-wrap;overflow-wrap:anywhere;}
+.reminder-list-date{color:var(--text-muted);font-size:12px;}
+.reminder-list-actions{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;}
+.reminder-toast-host{
+  position: fixed;top:78px;right:18px;z-index:1100;
+  width:min(370px,calc(100vw - 36px));max-height:calc(100vh - 100px);
+  overflow-y:auto;display:grid;gap:10px;pointer-events:none;
+}
+.reminder-toast{
+  padding:16px;background:var(--bg-surface);color:var(--text-main);
+  border:1px solid var(--border-color);border-right:4px solid #2563EB;
+  border-radius:12px;box-shadow:0 10px 30px rgba(15,41,66,.2);
+  pointer-events:auto;text-align:right;overflow-wrap:anywhere;
+}
+.reminder-toast-title{display:block;font-family:"AlTamam Cairo","AlTamam Tajawal",sans-serif;
+  font-size:18px;font-weight:700;color:var(--text-main);}
+.reminder-toast-subject{white-space:pre-wrap;font-size:15px;line-height:1.8;margin:8px 0;}
+.reminder-toast-time{color:var(--text-muted);display:block;}
+.reminder-toast-status{color:var(--critical);font-size:12px;}
+.reminder-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.reminder-actions .btn{flex:1 1 auto;}
+@media(max-width:540px){
+  .reminder-toast-host{top:68px;right:12px;width:calc(100vw - 24px);}
+  .reminder-form-grid{grid-template-columns:1fr;}
+}
