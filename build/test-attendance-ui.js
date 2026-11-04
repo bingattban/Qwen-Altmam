@@ -36,6 +36,8 @@ const bridge={invoke:async(name,payload)=>{
    QuerySites:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}],
    GetActiveAttendanceStatuses:[
       {statusId:"STS-PRESENT",displayName:"موجود",color:"#22AA55"},
+      {statusId:"STS-LEAVE",displayName:"إجازة",color:"#22C55E"},
+      {statusId:"STS-PERMISSION",displayName:"إذن",color:"#EAB308"},
       {statusId:"STS-ABSENT",displayName:"غياب",color:"#BB3355"}],
    QueryDailyRoster:{total:2,hasNext:false,items:[
       {personId:"P1",name:"شخص تجريبي",serviceNumberA:"12345",siteName:"غير محدد",
@@ -115,9 +117,9 @@ async function main(){
  choices[1].value="STS-ABSENT";
  choices[2].value="revise";choices[2].handlers.change();
  assert.ok(one("معاينة تغيير الحالة"));
- assert.equal(root.all().filter(x=>x.tag==="input"&&
-   !["checkbox","search"].includes(x.type)).length,0,
-   "routine status revision must not require a reason; the search box stays usable");
+ assert.equal(root.all().filter(x=>x.className.includes("attendance-period-fields")&&
+   !x.hidden).length,0,
+   "routine status revision must not expose date fields; search remains usable");
  await choose();
  await one("معاينة تغيير الحالة").handlers.click();await flush();
  assert.equal(reviews.at(-1).opts.confirmLabel,"تأكيد تغيير الحالة");

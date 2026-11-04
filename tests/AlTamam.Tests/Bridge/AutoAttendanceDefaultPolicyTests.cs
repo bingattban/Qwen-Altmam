@@ -389,17 +389,18 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         var selected=await new AutoAttendancePolicyService(_db).SetAsync(
             Selection("STS-PERMISSION","AUTO-SET-DEFAULT-00002"),Admin,default);
         Assert.True(selected.Success,selected.UserMessage);
-        // A subsequent day copies P1 and P3 from yesterday, and uses the
-        // configured fallback for P2, without rewriting yesterday's ledger.
+        // Date-bound statuses cannot be auto-defaulted without an interval.
+        // P2 stays unprepared even when an old setting points to Permission.
         var next=await service.RunForDateAsync(Date.AddDays(1),false);
-        Assert.Equal(3,next.CopiedCount);
-        Assert.Contains("منها 1 بالحالة الافتراضية",next.SummaryArabic);
-        Assert.Equal(6L,Count("AttendanceRecords"));
+        Assert.Equal(2,next.CopiedCount);
+        Assert.Equal(1,next.SkippedNoYesterdayCount);
+        Assert.Equal(0,next.DefaultedCount);
+        Assert.Equal(5L,Count("AttendanceRecords"));
         Assert.Equal(2L,Count("AutoAttendanceRuns"));
         Assert.Equal(3L,Count("AuditEvents"));
         var secondReplay=await service.RunForDateAsync(Date.AddDays(1),false);
         Assert.True(secondReplay.WasAlreadyCompleted);
-        Assert.Equal(6L,Count("AttendanceRecords"));
+        Assert.Equal(5L,Count("AttendanceRecords"));
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;
