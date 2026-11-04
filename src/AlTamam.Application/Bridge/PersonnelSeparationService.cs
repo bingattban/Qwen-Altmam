@@ -276,9 +276,13 @@ public sealed class PersonnelSeparationService
                 ["actorUserId"]=reader.GetString(8),
                 ["actorDisplay"]=reader.GetString(9)
             });
+        reader.Close();
+        var customColumns=await RosterCustomFieldProjection.AttachAsync(
+            c,items.OfType<JsonObject>(),ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
-            ["items"]=items,["page"]=page,["pageSize"]=size,["total"]=total,
+            ["items"]=items,["customColumns"]=customColumns,
+            ["page"]=page,["pageSize"]=size,["total"]=total,
             ["hasNext"]=(long)page*size<total
         });
     }
