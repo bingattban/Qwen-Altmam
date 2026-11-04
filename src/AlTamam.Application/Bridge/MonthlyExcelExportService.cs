@@ -154,6 +154,13 @@ public sealed class MonthlyExcelExportService
         string destination = Path.Combine(directory, basename);
         string partial = destination + ".part";
         progress?.Invoke(0,checked((int)total));
+        // Use the SAME saved, ordered column definitions as the visible
+        // roster. Displayed values are current person attributes, not
+        // retroactively fabricated historical snapshots.
+        IReadOnlyList<RosterCustomFieldProjection.Column> customColumns;
+        using (var columnsConnection = _db.CreateOpenConnection())
+            customColumns = await RosterCustomFieldProjection.VisibleAsync(
+                columnsConnection, ct).ConfigureAwait(false);
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -218,6 +225,7 @@ public sealed class MonthlyExcelExportService
                     site.Length == 0 ? "جميع المواقع" : site, "البحث:",
                     term.Length == 0 ? "جميع الأفراد" : term });
                 var headings = new List<string> { "م", "الرقم (ع)", "الاسم", "الموقع" };
+                headings.AddRange(customColumns.Select(column => column.Caption));
                 for (int d = 1; d <= days; d++) headings.Add(d.ToString("00", CultureInfo.InvariantCulture));
                 WriteRow(writer, 3, headings);
                 long rowNumber = 0;
@@ -243,6 +251,8 @@ public sealed class MonthlyExcelExportService
                             person["name"]?.GetValue<string>() ?? "",
                             person["siteName"]?.GetValue<string>() ?? ""
                         };
+                        foreach (var custom in customColumns)
+                            cols.Add(RosterCustomFieldProjection.Cell(person,custom));
                         var entries = (JsonObject)person["days"]!;
                         for (int d = 1; d <= days; d++)
                         {
