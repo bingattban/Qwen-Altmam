@@ -541,7 +541,7 @@ public sealed class BridgeSharedServices
     {
         using var connection = _db.CreateOpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson FROM AttendanceDrafts WHERE CreatedByUserId = $u ORDER BY UpdatedAtUtc DESC;";
+        cmd.CommandText = "SELECT DraftId, BusinessDate, SiteId, TargetStatusId, UpdatedAtUtc, SelectedPersonIdsJson, PeriodFromLocalDate, PeriodToLocalDate FROM AttendanceDrafts WHERE CreatedByUserId = $u ORDER BY UpdatedAtUtc DESC;";
         cmd.Parameters.AddWithValue("$u", userId);
         var rows = new JsonArray();
         using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -553,7 +553,9 @@ public sealed class BridgeSharedServices
                 ["siteId"] = reader.IsDBNull(2) ? null : reader.GetString(2),
                 ["targetStatusId"] = reader.GetString(3),
                 ["updatedAtUtc"] = reader.GetString(4),
-                ["selectedPersonIds"] = JsonNode.Parse(reader.GetString(5))
+                ["selectedPersonIds"] = JsonNode.Parse(reader.GetString(5)),
+                ["periodFrom"] = reader.IsDBNull(6) ? null : reader.GetString(6),
+                ["periodTo"] = reader.IsDBNull(7) ? null : reader.GetString(7)
             });
         return Ok(rows);
     }
@@ -562,6 +564,25 @@ public sealed class BridgeSharedServices
     {
         string businessDate = GetRequired(payload, "businessDate");
         string targetStatusId = GetRequired(payload, "targetStatusId");
+        bool timed = targetStatusId is "STS-LEAVE" or "STS-PERMISSION";
+        string from=payload["periodFrom"]?.ToString()?.Trim()??"";
+        string to=payload["periodTo"]?.ToString()?.Trim()??"";
+        if(timed)
+        {
+            if(!DateOnly.TryParseExact(from,"yyyy-MM-dd",
+                   System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.None,out var start)
+                || !DateOnly.TryParseExact(to,"yyyy-MM-dd",
+                   System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.None,out var end)
+                || start < DateOnly.FromDateTime(_time.GetLocalNow().DateTime)
+                || end < start)
+                return Error(BridgeErrorCodes.ValidationError,
+                    "مسودة الإجازة أو الإذن تتطلب تاريخ بداية ونهاية صالحين.");
+        }
+        else if(from.Length>0 || to.Length>0)
+            return Error(BridgeErrorCodes.ValidationError,
+                "تحديد مدة المسودة متاح للإجازة والإذن فقط.");
         JsonArray selected = payload["selectedPersonIds"] as JsonArray
             ?? throw new BridgeProtocolException(BridgeErrorCodes.ValidationError, "قائمة الأفراد المطلوبة مفقودة.");
         if (selected.Count is < 1 or > 100 || selected.Any(p => p is null ||
@@ -577,15 +598,18 @@ public sealed class BridgeSharedServices
         {
             using var cmd = connection.CreateCommand();
             cmd.Transaction = tx;
-            cmd.CommandText = @"INSERT INTO AttendanceDrafts (DraftId, BusinessDate, SiteId, TargetStatusId, SelectedPersonIdsJson, CreatedByUserId, UpdatedAtUtc)
-                                VALUES ($id, $date, $site, $status, $json, $user, $now)
+            cmd.CommandText = @"INSERT INTO AttendanceDrafts (DraftId, BusinessDate, SiteId, TargetStatusId, SelectedPersonIdsJson, CreatedByUserId, UpdatedAtUtc, PeriodFromLocalDate, PeriodToLocalDate)
+                                VALUES ($id, $date, $site, $status, $json, $user, $now, $from, $to)
                                 ON CONFLICT(DraftId) DO UPDATE SET BusinessDate=$date, SiteId=$site, TargetStatusId=$status,
-                                                                   SelectedPersonIdsJson=$json, UpdatedAtUtc=$now
+                                                                   SelectedPersonIdsJson=$json, UpdatedAtUtc=$now,
+                                                                   PeriodFromLocalDate=$from, PeriodToLocalDate=$to
                                 WHERE AttendanceDrafts.CreatedByUserId = $user;";
             cmd.Parameters.AddWithValue("$id", draftId);
             cmd.Parameters.AddWithValue("$date", businessDate);
             cmd.Parameters.AddWithValue("$site", payload["siteId"]?.GetValue<string>() ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("$status", targetStatusId);
+            cmd.Parameters.AddWithValue("$from", timed ? from : (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("$to", timed ? to : (object)DBNull.Value);
             cmd.Parameters.AddWithValue("$json", json);
             cmd.Parameters.AddWithValue("$user", userId);
             cmd.Parameters.AddWithValue("$now", _time.GetUtcNow().ToString("O"));
