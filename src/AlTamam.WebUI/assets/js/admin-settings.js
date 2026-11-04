@@ -1648,9 +1648,11 @@
         const data=response.data||{};
         const activeTotal=all?.data?.total??data.total??0;
         activeTotalNumber.textContent="("+activeTotal+")";
+        const customColumns=window.AltamamRosterColumns?.columns(data)||[];
+        const customHeadings=window.AltamamRosterColumns?.headings(customColumns)||[];
         const t=table(canRemove
-          ?["تحديد","الرقم (ع)","الاسم","الموقع","إجراء"]
-          :["الرقم (ع)","الاسم","الموقع","إجراء"]);
+          ?["تحديد","الرقم (ع)","الاسم","الموقع",...customHeadings,"إجراء"]
+          :["الرقم (ع)","الاسم","الموقع",...customHeadings,"إجراء"]);
         for(const person of data.items||[]){
           const row=node("tr");
           if(canRemove){
@@ -1672,6 +1674,8 @@
           }
           for(const value of [person.serviceNumberA,person.displayName,person.siteName])
             row.appendChild(node("td","",value));
+          for(const value of window.AltamamRosterColumns?.values(person,customColumns)||[])
+            row.appendChild(node("td","roster-custom-cell",value||"—"));
           const actions=node("td","admin-row-buttons");
           actions.appendChild(btn("تعديل الاسم والرقم",()=>editPerson(person)));
           // The native manifest independently restricts ArchivePersons to
@@ -1681,7 +1685,7 @@
             actions.appendChild(btn("إزالة من القوة",()=>archivePerson(person)));
           row.appendChild(actions);t.body.appendChild(row);
         }
-        empty(t.body,canRemove?5:4,"لا توجد أسماء مطابقة.");
+        empty(t.body,(canRemove?5:4)+customColumns.length,"لا توجد أسماء مطابقة.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
         prev.disabled=state.page<=1;next.disabled=!data.hasNext;
