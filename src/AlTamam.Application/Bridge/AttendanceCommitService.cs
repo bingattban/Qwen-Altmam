@@ -369,7 +369,7 @@ public sealed class AttendanceCommitService
                         AttendanceDateRangePolicy.RequiresRange(statusId)?rangeEnd:date);
                     using var r=await existing.ExecuteReaderAsync(ct).ConfigureAwait(false);
                     if(await r.ReadAsync(ct).ConfigureAwait(false) &&
-                       (!revise || (AttendanceDateRangePolicy.RequiresRange(statusId) && r.GetString(0)>date)))
+                       (!revise || (AttendanceDateRangePolicy.RequiresRange(statusId) && string.CompareOrdinal(r.GetString(0),date)>0)))
                         return Fail(BridgeErrorCodes.ValidationError,
                             "توجد مدة إجازة أو إذن متداخلة لهذا الفرد؛ راجع المدة السابقة.");
                 }
