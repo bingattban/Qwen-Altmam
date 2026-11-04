@@ -81,7 +81,7 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         Assert.False(unknown.Success);
         Assert.Equal(BridgeErrorCodes.CustomStatusInactive,unknown.ErrorCode);
 
-        var selection=Selection("STS-PERMISSION","AUTO-SET-DEFAULT-00001");
+        var selection=Selection("STS-PRESENT","AUTO-SET-DEFAULT-00001");
         var saved=await policy.SetAsync(selection,Admin,default);
         Assert.True(saved.Success,saved.UserMessage);
         var retry=await policy.SetAsync((JsonObject)selection.DeepClone(),Admin,default);
@@ -91,15 +91,15 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
 
         var restored=Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data);
         Assert.True(restored["configured"]!.GetValue<bool>());
-        Assert.Equal("STS-PERMISSION",restored["defaultStatusId"]!.GetValue<string>());
+        Assert.Equal("STS-PRESENT",restored["defaultStatusId"]!.GetValue<string>());
 
         var disabled=await new AdminConfigurationService(_db).DeactivateStatusAsync(
-            new JsonObject{["statusId"]="STS-PERMISSION",["expectedRevision"]=1L},Admin,default);
+            new JsonObject{["statusId"]="STS-PRESENT",["expectedRevision"]=1L},Admin,default);
         Assert.False(disabled.Success);
         Assert.Contains("الحالة الافتراضية",disabled.UserMessage);
         using var connection=_db.CreateOpenConnection();
         using var q=connection.CreateCommand();
-        q.CommandText="SELECT ActiveFlag FROM AttendanceStatusDefinitions WHERE StatusId='STS-PERMISSION';";
+        q.CommandText="SELECT ActiveFlag FROM AttendanceStatusDefinitions WHERE StatusId='STS-PRESENT';";
         Assert.Equal(1L,Convert.ToInt64(q.ExecuteScalar()));
     }
 
@@ -203,7 +203,7 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         Assert.Equal(2L,Count("AuditEvents"));
         Assert.Equal(2L,Count("MutationReceipts"));
         var approved=await policy.SetAsync(Selection(
-            "STS-PERMISSION","TST-INDEPENDENT-GOOD-DEFAULT1"),Admin,default);
+            "STS-PRESENT","TST-INDEPENDENT-GOOD-DEFAULT1"),Admin,default);
         Assert.True(approved.Success,approved.UserMessage);
         Assert.Equal(3L,Count("AuditEvents"));
         Assert.Equal(3L,Count("MutationReceipts"));
@@ -233,7 +233,7 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         Assert.False(stored["configured"]!.GetValue<bool>());
         Assert.Equal(2L,Count("AuditEvents"));
         Assert.Equal(2L,Count("MutationReceipts"));
-        var approved=await policy.SetAsync(Selection("STS-PERMISSION",
+        var approved=await policy.SetAsync(Selection("STS-PRESENT",
             "CLOCK-DEFAULT-APPROVED-001"),Admin,default);
         Assert.True(approved.Success,approved.UserMessage);
         Assert.Equal(3L,Count("AuditEvents"));
@@ -250,7 +250,7 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         var locked = new JsonObject {
             ["dailyLockTimeLocal"]="19:10", ["operationId"]="SEC08-LOCK-AUDIT-RECEIPT-001"
         };
-        var fallback = Selection("STS-PERMISSION","SEC08-STATUS-AUDIT-RECEIPT-001");
+        var fallback = Selection("STS-PRESENT","SEC08-STATUS-AUDIT-RECEIPT-001");
 
         var first = await policy.SetScheduleAsync(due, Admin, default);
         var second = await policy.SetScheduleAsync(locked, Admin, default);
@@ -311,6 +311,44 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         Assert.NotNull(invalidStatus.ValidationErrors?["statusId"]);
         Assert.Equal(0L, Count("AuditEvents"));
         Assert.Equal(0L, Count("MutationReceipts"));
+    }
+
+
+    [Theory]
+    [InlineData("STS-LEAVE")]
+    [InlineData("STS-PERMISSION")]
+    public async Task DateBoundStatusCannotBeConfiguredAsUndatedFallback(string statusId)
+    {
+        var policy = new AutoAttendancePolicyService(_db);
+        var rejected = await policy.SetAsync(
+            Selection(statusId,"RANGE-FALLBACK-BLOCKED-"+statusId),Admin,default);
+        Assert.False(rejected.Success);
+        Assert.Equal(BridgeErrorCodes.ValidationError,rejected.ErrorCode);
+        Assert.NotNull(rejected.ValidationErrors?["statusId"]);
+        Assert.Equal(0L,Count("MutationReceipts"));
+        Assert.Equal(0L,Count("AuditEvents"));
+        Assert.False(Assert.IsType<JsonObject>((await policy.GetAsync(default)).Data)
+            ["configured"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task LegacyUndatedPermissionFallbackIsVisibleButNeverReportedApplicable()
+    {
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('AutoAttendanceDefaultStatusId','STS-PERMISSION','2026-10-15T00:00:00Z');
+                """;
+            await q.ExecuteNonQueryAsync();
+        }
+        var policy = Assert.IsType<JsonObject>(
+            (await new AutoAttendancePolicyService(_db).GetAsync(default)).Data);
+        Assert.Equal("STS-PERMISSION",policy["defaultStatusId"]!.GetValue<string>());
+        Assert.False(policy["configured"]!.GetValue<bool>());
+        Assert.Contains("مدة",policy["note"]!.GetValue<string>());
+        Assert.Equal(0L,Count("AuditEvents"));
     }
 
     [Fact]
@@ -387,7 +425,7 @@ public sealed class AutoAttendanceDefaultPolicyTests : IAsyncLifetime, IDisposab
         Assert.Equal(1L,Count("AutoAttendanceRuns"));
 
         var selected=await new AutoAttendancePolicyService(_db).SetAsync(
-            Selection("STS-PERMISSION","AUTO-SET-DEFAULT-00002"),Admin,default);
+            Selection("STS-PRESENT","AUTO-SET-DEFAULT-00002"),Admin,default);
         Assert.True(selected.Success,selected.UserMessage);
         // A subsequent day copies P1 and P3 from yesterday, and uses the
         // configured fallback for P2, without rewriting yesterday's ledger.
