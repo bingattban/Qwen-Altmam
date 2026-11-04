@@ -80,7 +80,8 @@ public sealed class ManualCarryForwardService
                    current.RecordId,
                    previous.StatusId, previous.StatusNameSnapshot,
                    previous.StatusSymbolSnapshot, previous.StatusColorSnapshot,
-                   def.StatusId, def.VisibleName, def.ShortSymbol, def.ChosenColorHex
+                   def.StatusId, def.VisibleName, def.ShortSymbol, def.ChosenColorHex,
+                   ranged.StatusId, ranged.VisibleName, ranged.ShortSymbol, ranged.ChosenColorHex
             FROM Persons p
             JOIN PersonAssignments a ON a.PersonId=p.PersonId
                 AND a.ValidFromLocalDate <= $date
@@ -93,6 +94,11 @@ public sealed class ManualCarryForwardService
             LEFT JOIN AppSettings setting ON setting.SettingKey=$setting
             LEFT JOIN AttendanceStatusDefinitions def
                 ON def.StatusId=setting.SettingValue AND def.ActiveFlag=1
+            LEFT JOIN AttendanceStatusPeriods ap ON ap.PersonId=p.PersonId
+                AND ap.FromLocalDate <= $date AND ap.ToLocalDate >= $date
+                AND (ap.CancelledFromLocalDate IS NULL OR ap.CancelledFromLocalDate > $date)
+            LEFT JOIN AttendanceStatusDefinitions ranged
+                ON ranged.StatusId=ap.StatusId AND ranged.ActiveFlag=1
             WHERE p.PersonId=$id AND p.ActiveFlag=1 AND p.OrganizationalStatus=1
                 AND p.FirstRecordedLocalDate <= $date
                 AND NOT EXISTS(SELECT 1 FROM PersonnelMovements m
@@ -113,10 +119,16 @@ public sealed class ManualCarryForwardService
             return (null, label + ": سبق تحضيره اليوم");
         if (siteFilter.Length > 0 && reader.GetString(3) != siteFilter)
             return (null, label + ": لا ينتمي إلى الموقع المختار");
-        bool fallback = reader.IsDBNull(6);
-        if (fallback && reader.IsDBNull(10))
-            return (null, label + ": لا توجد حالة في أمس ولم تحدد الإدارة حالة افتراضية نشطة");
-        int offset = fallback ? 10 : 6;
+        // Prefer a live, bounded period. Never revive an expired Leave/Permission
+        // through yesterday carry-forward, including an unbounded legacy default.
+        bool covered = !reader.IsDBNull(14);
+        string previousId = reader.IsDBNull(6) ? "" : reader.GetString(6);
+        bool fallback = !covered &&
+            (reader.IsDBNull(6) || previousId is "STS-LEAVE" or "STS-PERMISSION");
+        if (fallback && (reader.IsDBNull(10) ||
+                reader.GetString(10) is "STS-LEAVE" or "STS-PERMISSION"))
+            return (null, label + ": انتهت مدة الإجازة أو الإذن؛ اختر حالة بتاريخ صالح");
+        int offset = covered ? 14 : fallback ? 10 : 6;
         var choice = new Selection(personId, name, number,
             reader.GetString(2), reader.GetString(3), reader.GetString(4),
             reader.GetString(offset), reader.GetString(offset+1),
