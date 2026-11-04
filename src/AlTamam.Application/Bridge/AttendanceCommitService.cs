@@ -43,6 +43,10 @@ public sealed class AttendanceCommitService
     private static bool TryPeriodDates(string from, string to, string today,
         out DateOnly start, out DateOnly finish)
     {
+        // Both out values must be initialized even when short-circuit
+        // validation rejects a missing or malformed first date.
+        start = default;
+        finish = default;
         bool valid = DateOnly.TryParseExact(from, "yyyy-MM-dd",
             CultureInfo.InvariantCulture, DateTimeStyles.None, out start)
             && DateOnly.TryParseExact(to, "yyyy-MM-dd",
