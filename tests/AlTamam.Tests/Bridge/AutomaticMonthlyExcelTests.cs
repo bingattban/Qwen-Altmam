@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
+using AlTamam.Application.Bridge;
 using AlTamam.Application.Scheduling;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
@@ -155,6 +156,8 @@ public sealed class AutomaticMonthlyExcelTests : IAsyncLifetime, IDisposable
         Assert.False(await svc.RunIfDueAsync());
         Assert.Equal(before,Directory.GetFiles(_folder,"*.xlsx",SearchOption.AllDirectories).Length);
     }
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     public void Dispose()
     {
