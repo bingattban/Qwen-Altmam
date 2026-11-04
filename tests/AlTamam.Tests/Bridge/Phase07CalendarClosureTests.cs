@@ -160,7 +160,7 @@ public sealed class Phase07CalendarClosureTests : IAsyncLifetime, IDisposable
             cmd.CommandText = """
                 UPDATE AttendanceStatusDefinitions SET ActiveFlag=0 WHERE StatusId='STS-ABSENT';
                 INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
-                VALUES('AutoAttendanceDefaultStatusId','STS-PERMISSION','2026-10-14T00:00:00Z');
+                VALUES('AutoAttendanceDefaultStatusId','STS-PRESENT','2026-10-14T00:00:00Z');
                 """;
             await cmd.ExecuteNonQueryAsync();
         }
@@ -171,7 +171,36 @@ public sealed class Phase07CalendarClosureTests : IAsyncLifetime, IDisposable
         Assert.Equal(1L, Count("AttendanceRecords",
             "AttendanceLocalDate='2026-10-14' AND StatusId='STS-ABSENT'"));
         Assert.Equal(1L, Count("AttendanceRecords",
-            "AttendanceLocalDate='2026-10-15' AND StatusId='STS-PERMISSION'"));
+            "AttendanceLocalDate='2026-10-15' AND StatusId='STS-PRESENT'"));
+    }
+
+
+    [Fact]
+    public async Task LegacyPermissionFallbackWithoutDate_DoesNotFabricatePermission()
+    {
+        // Pre-upgrade installations may retain a formerly allowed permission default.
+        // Neither a deactivated yesterday status nor the legacy setting grants permission
+        // without an actual dated interval: leave existing historical attendance intact.
+        using (var c = _db.CreateOpenConnection())
+        using (var cmd = c.CreateCommand())
+        {
+            cmd.CommandText = """
+                UPDATE AttendanceStatusDefinitions SET ActiveFlag=0 WHERE StatusId='STS-ABSENT';
+                INSERT INTO AppSettings(SettingKey,SettingValue,UpdatedAtUtc)
+                VALUES('AutoAttendanceDefaultStatusId','STS-PERMISSION','2026-10-14T00:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var scheduler = new AutoAttendanceService(_db, _time);
+        var result = await scheduler.RunForDateAsync(new DateOnly(2026, 10, 15), false);
+        Assert.Equal(0, result.CopiedCount);
+        Assert.Equal(0, result.DefaultedCount);
+        Assert.Equal(1, result.SkippedNoYesterdayCount);
+        Assert.Equal(0L, Count("AttendanceRecords",
+            "AttendanceLocalDate='2026-10-15'"));
+        Assert.Equal(1L, Count("AttendanceRecords",
+            "AttendanceLocalDate='2026-10-14' AND StatusId='STS-ABSENT'"));
+        Assert.True((await scheduler.RunForDateAsync(new DateOnly(2026, 10, 15), false)).WasAlreadyCompleted);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

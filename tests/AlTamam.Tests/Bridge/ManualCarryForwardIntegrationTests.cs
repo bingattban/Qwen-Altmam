@@ -82,10 +82,12 @@ public sealed class ManualCarryForwardIntegrationTests : IAsyncLifetime, IDispos
         cmd.CommandText = "SELECT COUNT(*) FROM "+table;
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
+    // Carry-forward fallback must be an ordinary undated status. Leave/permission
+    // now require an explicit person-bound range and are invalid as defaults.
     private async Task ConfigureDefaultAsync()
     {
         var result = await new AutoAttendancePolicyService(_db,_clock).SetAsync(
-            new JsonObject {["statusId"]="STS-PERMISSION",["operationId"]="CARRY-SET-DEFAULT-0001"},
+            new JsonObject {["statusId"]="STS-PRESENT",["operationId"]="CARRY-SET-DEFAULT-0001"},
             Actor,default);
         Assert.True(result.Success,result.UserMessage);
     }
@@ -110,7 +112,7 @@ public sealed class ManualCarryForwardIntegrationTests : IAsyncLifetime, IDispos
         var summary = Assert.IsType<JsonObject>(preview.Data);
         var people = Assert.IsType<JsonArray>(summary["persons"]);
         Assert.Equal("STS-ABSENT",people[0]!["proposedStatusId"]!.GetValue<string>());
-        Assert.Equal("STS-PERMISSION",people[1]!["proposedStatusId"]!.GetValue<string>());
+        Assert.Equal("STS-PRESENT",people[1]!["proposedStatusId"]!.GetValue<string>());
         Assert.True(people[1]!["usedDefault"]!.GetValue<bool>());
         Assert.Equal(2L,Count("AttendanceRecords")); // preview only
         var committed = await service.CommitAsync(Commit(summary),Actor,default);
@@ -127,7 +129,7 @@ public sealed class ManualCarryForwardIntegrationTests : IAsyncLifetime, IDispos
         Assert.Equal(new[]
         {
             ("TST-CARRY-P1","STS-ABSENT"),
-            ("TST-CARRY-P2","STS-PERMISSION"),
+            ("TST-CARRY-P2","STS-PRESENT"),
             ("TST-CARRY-P3","STS-PRESENT")
         },actual);
         var replay = await service.CommitAsync(Commit(summary),Actor,default);
@@ -199,6 +201,63 @@ public sealed class ManualCarryForwardIntegrationTests : IAsyncLifetime, IDispos
         Assert.False(blocked.Success);
         Assert.Equal(2L,Count("AttendanceRecords"));
     }
+
+    [Fact]
+    public async Task ExpiredLeaveYesterday_FallsBackToAnOrdinaryStatus()
+    {
+        await ConfigureDefaultAsync();
+        using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.CommandText="""
+                UPDATE AttendanceRecords
+                SET StatusId='STS-LEAVE',StatusNameSnapshot='إجازة',
+                    StatusSymbolSnapshot='ج',StatusColorSnapshot='#22C55E'
+                WHERE PersonId='TST-CARRY-P1' AND AttendanceLocalDate=$yesterday;
+                """;
+            cmd.Parameters.AddWithValue("$yesterday",Yesterday);
+            Assert.Equal(1,await cmd.ExecuteNonQueryAsync());
+        }
+        var preview=await new ManualCarryForwardService(_db,_clock)
+            .PreviewAsync(Selection("TST-CARRY-P1"),Actor,default);
+        Assert.True(preview.Success,preview.UserMessage);
+        var proposed=((JsonArray)((JsonObject)preview.Data!)["persons"]!)[0]!;
+        Assert.Equal("STS-PRESENT",proposed["proposedStatusId"]!.GetValue<string>());
+        Assert.True(proposed["usedDefault"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task ActivePermissionRange_WinsOverYesterdayDuringManualCarry()
+    {
+        using(var c=_db.CreateOpenConnection())
+        using(var cmd=c.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO AttendanceDateRanges
+                  (RangeId,PersonId,StatusId,StartLocalDate,EndLocalDate,
+                   CreatedAtUtc,CreatedByUserId)
+                VALUES('TST-CARRY-RANGE-P1','TST-CARRY-P1','STS-PERMISSION',
+                       $yesterday,$today,'2026-01-01T00:00:00Z','TST-USER');
+                """;
+            cmd.Parameters.AddWithValue("$yesterday",Yesterday);
+            cmd.Parameters.AddWithValue("$today",Today);
+            Assert.Equal(1,await cmd.ExecuteNonQueryAsync());
+        }
+        var service=new ManualCarryForwardService(_db,_clock);
+        var preview=await service.PreviewAsync(Selection("TST-CARRY-P1"),Actor,default);
+        Assert.True(preview.Success,preview.UserMessage);
+        var proposed=((JsonArray)((JsonObject)preview.Data!)["persons"]!)[0]!;
+        Assert.Equal("STS-PERMISSION",proposed["proposedStatusId"]!.GetValue<string>());
+        Assert.False(proposed["usedDefault"]!.GetValue<bool>());
+        var saved=await service.CommitAsync(Commit((JsonObject)preview.Data!),Actor,default);
+        Assert.True(saved.Success,saved.UserMessage);
+        using var check=_db.CreateOpenConnection();
+        using var q=check.CreateCommand();
+        q.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-CARRY-P1' AND AttendanceLocalDate=$date;";
+        q.Parameters.AddWithValue("$date",Today);
+        Assert.Equal("STS-PERMISSION",q.ExecuteScalar() as string);
+    }
+
     public Task DisposeAsync()=>Task.CompletedTask;
     public void Dispose(){_db?.Dispose();SyntheticFixtures.DeleteTempDatabase(_path);}
 }

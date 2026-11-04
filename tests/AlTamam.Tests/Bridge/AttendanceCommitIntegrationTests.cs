@@ -60,6 +60,64 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
         return Convert.ToInt64(cmd.ExecuteScalar());
     }
     [Fact]
+    public async Task LeaveAndPermissionRequireValidDatesAndCommitBoundedPeriod()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var ids=new[]{"TST-ATTEND-P1"};
+        foreach(var status in new[]{"STS-LEAVE","STS-PERMISSION"})
+        {
+            var missing=await service.PreviewAsync(Payload("initial",status,ids),Actor,CancellationToken.None);
+            Assert.False(missing.Success);
+            var reversed=Payload("initial",status,ids);
+            reversed["rangeStartDate"]=Today();
+            reversed["rangeEndDate"]=DateOnly.Parse(Today()).AddDays(-1).ToString("yyyy-MM-dd");
+            Assert.False((await service.PreviewAsync(reversed,Actor,CancellationToken.None)).Success);
+        }
+        var valid=Payload("initial","STS-LEAVE",ids);
+        valid["rangeStartDate"]=Today();
+        valid["rangeEndDate"]=DateOnly.Parse(Today()).AddDays(3).ToString("yyyy-MM-dd");
+        var preview=await service.PreviewAsync(valid,Actor,CancellationToken.None);
+        Assert.True(preview.Success,preview.UserMessage);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        Assert.Equal(1L,Count("AttendanceDateRanges"));
+        Assert.Equal(1L,Count("AttendanceRecords"));
+    }
+    [Fact]
+    public async Task DatedLeaveAutoAttendance_ExpiresWithoutCarryingLeaveForward()
+    {
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var ids=new[]{"TST-ATTEND-P1"};
+        var start=DateOnly.Parse(Today());
+        var payload=Payload("initial","STS-LEAVE",ids);
+        payload["rangeStartDate"]=Today();
+        payload["rangeEndDate"]=start.AddDays(1).ToString("yyyy-MM-dd");
+        var preview=await service.PreviewAsync(payload,Actor,CancellationToken.None);
+        var saved=await service.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,false,CancellationToken.None);
+        Assert.True(saved.Success,saved.UserMessage);
+        var scheduler=new AlTamam.Application.Scheduling.AutoAttendanceService(_db,new SyntheticDaytimeClock());
+        var within=await scheduler.RunForDateAsync(start.AddDays(1),false);
+        Assert.False(within.BlockedClosedDay);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1' AND AttendanceLocalDate=$date;";
+            q.Parameters.AddWithValue("$date",start.AddDays(1).ToString("yyyy-MM-dd"));
+            Assert.Equal("STS-LEAVE",q.ExecuteScalar() as string);
+        }
+        var after=await scheduler.RunForDateAsync(start.AddDays(2),false);
+        Assert.False(after.BlockedClosedDay);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1' AND AttendanceLocalDate=$date;";
+            q.Parameters.AddWithValue("$date",start.AddDays(2).ToString("yyyy-MM-dd"));
+            Assert.NotEqual("STS-LEAVE",q.ExecuteScalar() as string);
+        }
+    }
+    [Fact]
     public async Task BulkCommitAndRevision_AuditAtomicAndOneTimePreview()
     {
         var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
@@ -454,6 +512,57 @@ public sealed class AttendanceCommitIntegrationTests : IAsyncLifetime,IDisposabl
             repeated.ConflictInfo?["reason"]?.GetValue<string>());
         Assert.Equal(1L,Count("AttendanceRecords"));
         Assert.Equal(1L,Count("AuditEvents"));
+    }
+
+
+    [Fact]
+    public async Task ManualRevision_StopsAnExistingPeriodThatBeganYesterday()
+    {
+        var today=Today();
+        var yesterday=DateOnly.Parse(today).AddDays(-1).ToString("yyyy-MM-dd");
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO AttendanceDateRanges
+                  (RangeId,PersonId,StatusId,StartLocalDate,EndLocalDate,
+                   CreatedAtUtc,CreatedByUserId)
+                VALUES('TST-ATTEND-CROSS-DAY','TST-ATTEND-P1','STS-LEAVE',
+                       $from,$end,$now,'TST-ATTEND-USER');
+                INSERT INTO AttendanceRecords(PersonId,AttendanceLocalDate,StatusId,
+                   StatusNameSnapshot,StatusSymbolSnapshot,StatusColorSnapshot,
+                   AssignmentIdAtEffectiveDate,SiteIdAtEffectiveDate,SiteNameSnapshot,
+                   Source,CreatedByUserId,CommittedAtUtc,RevisionNumber,IdempotencyKey)
+                VALUES('TST-ATTEND-P1',$today,'STS-LEAVE','إجازة','ج','#22C55E',
+                   'TST-ATTEND-A1','SITE-UNSPECIFIED','غير محدد',
+                   '08h-auto','TST-ATTEND-USER',$now,1,'TST-PERIOD-REVISION-1');
+                """;
+            q.Parameters.AddWithValue("$from",yesterday);
+            q.Parameters.AddWithValue("$today",today);
+            q.Parameters.AddWithValue("$end",DateOnly.Parse(today).AddDays(3).ToString("yyyy-MM-dd"));
+            q.Parameters.AddWithValue("$now",DateTimeOffset.UtcNow.ToString("O"));
+            await q.ExecuteNonQueryAsync();
+        }
+        var service=new AttendanceCommitService(_db,new SyntheticDaytimeClock());
+        var preview=await service.PreviewAsync(
+            Payload("revise","STS-PRESENT",["TST-ATTEND-P1"]),Actor,default);
+        var revised=await service.CommitAsync(new JsonObject{["previewToken"]=Token(preview)},
+            Actor,true,default);
+        Assert.True(revised.Success,revised.UserMessage);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="SELECT COUNT(*) FROM AttendanceDateRanges WHERE PersonId='TST-ATTEND-P1' AND EndedAtUtc IS NULL;";
+            Assert.Equal(0L,Convert.ToInt64(q.ExecuteScalar()));
+        }
+        var next=DateOnly.Parse(today).AddDays(1);
+        await new AlTamam.Application.Scheduling.AutoAttendanceService(_db,new SyntheticDaytimeClock())
+            .RunForDateAsync(next,false);
+        using var verify=_db.CreateOpenConnection();
+        using var check=verify.CreateCommand();
+        check.CommandText="SELECT StatusId FROM AttendanceRecords WHERE PersonId='TST-ATTEND-P1' AND AttendanceLocalDate=$date;";
+        check.Parameters.AddWithValue("$date",next.ToString("yyyy-MM-dd"));
+        Assert.Equal("STS-PRESENT",check.ExecuteScalar() as string);
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;

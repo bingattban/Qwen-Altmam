@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Application.Attendance;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
 
@@ -82,10 +83,12 @@ public sealed class AutoAttendancePolicyService
         {
             ["defaultStatusId"]=id,
             ["defaultStatusName"]=name,
-            ["configured"]=id is not null && active,
+            ["configured"]=id is not null && active && !AttendanceDateRangePolicy.RequiresRange(id),
             ["dueTimeLocal"]=await ReadClockAsync(_db,DueTimeKey,DefaultDueTime,ct),
             ["dailyLockTimeLocal"]=await ReadClockAsync(_db,LockTimeKey,DefaultLockTime,ct),
-            ["note"]="إذا لم توجد حالة لليوم السابق تُستخدم الحالة الافتراضية المعتمدة من الإدارة."
+            ["note"]=id is not null && AttendanceDateRangePolicy.RequiresRange(id)
+                ? "الحالة الافتراضية المحفوظة هي إجازة أو إذن وتتطلب مدة من وإلى؛ لن تطبق دون مدة. اختر حالة عادية من الإعدادات."
+                : "إذا لم توجد حالة لليوم السابق تُستخدم الحالة الافتراضية المعتمدة من الإدارة."
         });
     }
 
@@ -100,6 +103,12 @@ public sealed class AutoAttendancePolicyService
         if(statusId.Length is <1 or >128)
             return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                 "اختر حالة تحضير نشطة من الإعدادات.", "statusId");
+        // A default has no from/to dates. It cannot assign indefinite leave
+        // or permission while the daily attendance API requires bounded dates.
+        if(AttendanceDateRangePolicy.RequiresRange(statusId))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "الإجازة والإذن تتطلبان مدة من وإلى في التمام اليومي، ولا يمكن اختيارهما حالة افتراضية دون مدة.",
+                "statusId");
         return await _db.ExecuteInWriteTransactionAsync(async(c,t)=>
         {
             var (replay,receipt)=await MutationIdempotency.StartAsync(

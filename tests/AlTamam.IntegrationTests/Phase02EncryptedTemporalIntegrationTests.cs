@@ -531,7 +531,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
     }
 
     [Fact]
-    public async Task Section09_V012ToV013_PreservesOriginal20hLedgerAndCreatesEncryptedRescue()
+    public async Task Section09_V012ToCurrent_PreservesOriginal20hLedgerAndCreatesEncryptedRescue()
     {
         // A genuine V012 SQLCipher database is upgraded through the shipped
         // migration runner. No synthetic fake SHA rows and no production data.
@@ -560,7 +560,7 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
         {
             await migrated.InitializeAsync();
             using var c = migrated.CreateOpenConnection();
-            Assert.Equal(13,
+            Assert.Equal(AlTamamDbContext.CurrentSchemaVersion,
                 AlTamam.Infrastructure.Persistence.Migrations.SchemaMigrationRunner.GetCurrentVersion(c));
             Assert.Equal(originalPin,
                 Value(c, "SELECT Sha256 FROM SchemaVersions WHERE SchemaVersion=12;"));
@@ -570,10 +570,13 @@ public sealed class Phase02EncryptedTemporalIntegrationTests : IAsyncLifetime, I
                 Value(c, "SELECT CopiedCount FROM AutoAttendanceRuns WHERE BusinessDate='2025-01-20';"));
             Assert.Equal("0",
                 Value(c, "SELECT COUNT(*) FROM AutoAttendanceRuns WHERE JobKey LIKE 'AUTO08H-%';"));
+            Assert.Equal("1", Value(c,
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='AttendanceDateRanges';"));
             Assert.Equal("ok", Value(c, "PRAGMA integrity_check;"));
         }
         string rescueDir = path + ".migration-backups";
-        string rescue = Assert.Single(Directory.GetFiles(rescueDir, "pre-migration-v012-to-v013-*.db"));
+        string rescue = Assert.Single(Directory.GetFiles(rescueDir,
+            $"pre-migration-v012-to-v{AlTamamDbContext.CurrentSchemaVersion:D3}-*.db"));
         Assert.False(ReadHeader(rescue).SequenceEqual("SQLite format 3\0"u8.ToArray()));
         using var snapshot = new AlTamamDbContext(rescue, _key, useConnectionPooling: false);
         using var restored = snapshot.CreateOpenConnection();

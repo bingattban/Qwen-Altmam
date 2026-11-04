@@ -99,12 +99,12 @@ def verify(f: dict) -> list[str]:
         errors.append("screen inventory: expected 69 canonical routes")
     if f["action_count"] != 103 or f["unique_actions"] != 103:
         errors.append("action inventory: expected 103 unique canonical actions")
-    if f["registered_migrations"] != list(range(1, 14)):
-        errors.append("migration registration: expected contiguous V001–V013")
-    if sorted(f["embedded_migrations"]) != list(range(1, 14)):
-        errors.append("migration resources: every V001–V013 SQL file must ship")
-    if f["schema_version"] != 13:
-        errors.append("migration current schema version must match V013")
+    if f["registered_migrations"] != list(range(1, 15)):
+        errors.append("migration registration: expected contiguous V001–V014")
+    if sorted(f["embedded_migrations"]) != list(range(1, 15)):
+        errors.append("migration resources: every V001–V014 SQL file must ship")
+    if f["schema_version"] != 14:
+        errors.append("migration current schema version must match V014")
     if f["sqlcipher_version"] != "2.1.10":
         errors.append("SQLCipher provider changed without approved migration")
     if f["destructive_restore_wired"]:
@@ -146,7 +146,7 @@ def main() -> int:
         for error in errors:
             print(" -", error)
         return 1
-    print("PHASE 00–02 GUARD PASS: 69 routes, 103 actions, 8 projects, 2 gated Windows workflows, V001–V013, SQLCipher pinned, restore disabled.")
+    print("PHASE 00–02 GUARD PASS: 69 routes, 103 actions, 8 projects, 2 gated Windows workflows, V001–V014, SQLCipher pinned, restore disabled.")
     print("This is a source/CI invariant check, NOT clean-machine or destructive restore acceptance.")
     return 0
 

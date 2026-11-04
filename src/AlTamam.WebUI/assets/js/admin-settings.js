@@ -2196,15 +2196,20 @@
           if(token!==currentRequest)return;
           const policy=policyResult.data||{};
           const choices=Array.isArray(statusResult.data)?statusResult.data:[];
-          for(const entry of choices){
+          // Bounded statuses cannot serve as timeless 08:00 fallbacks.
+          const eligibleChoices=choices.filter(x=>
+            x.statusId!=="STS-LEAVE" && x.statusId!=="STS-PERMISSION");
+          for(const entry of eligibleChoices){
             const option=node("option","",entry.displayName);
             option.value=entry.statusId;picker.appendChild(option);
           }
           picker.value=policy.defaultStatusId||"";
-          if(!choices.some(x=>x.statusId===picker.value))picker.value="";
+          if(!eligibleChoices.some(x=>x.statusId===picker.value))picker.value="";
           automatic.appendChild(node("p","section-description",
             policy.configured?"الحالة المعتمدة حالياً: "+policy.defaultStatusName:
-              "لم تُحدد حالة افتراضية بعد؛ لن تُنشأ حالة دون مرجع حتى تختارها الإدارة."));
+              (policy.defaultStatusId==="STS-LEAVE"||policy.defaultStatusId==="STS-PERMISSION")
+                ?(policy.note||"الإجازة والإذن تحتاجان مدة محددة؛ اختر حالة افتراضية عادية.")
+                :"لم تُحدد حالة افتراضية بعد؛ لن تُنشأ حالة دون مرجع حتى تختارها الإدارة."));
           const scheduledTime=node("input","form-control");
           scheduledTime.type="time";scheduledTime.required=true;
           scheduledTime.value=policy.dueTimeLocal||"08:00";
