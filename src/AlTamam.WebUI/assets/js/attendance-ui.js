@@ -104,8 +104,8 @@
      if(!needsPeriod())return {};
      if(!periodFrom.value||!periodTo.value)
        throw new Error("تاريخا البداية والنهاية إجباريان للإجازة والإذن.");
-     if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(periodFrom.value)||
-        !/^\\d{4}-\\d{2}-\\d{2}$/.test(periodTo.value)||
+     if(!/^\d{4}-\d{2}-\d{2}$/.test(periodFrom.value)||
+        !/^\d{4}-\d{2}-\d{2}$/.test(periodTo.value)||
         periodFrom.value<day||periodTo.value<periodFrom.value)
        throw new Error("اختر مدة صحيحة تبدأ اليوم أو بعده ولا تسبق نهايتها بدايتها.");
      return {periodFrom:periodFrom.value,periodTo:periodTo.value};

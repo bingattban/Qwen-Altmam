@@ -111,6 +111,8 @@
           ["تاريخ التحضير",options.review.date],
           ["نوع العملية",options.review.mode==="revise"?"تغيير الحالة":"تحضير أو اعتماد"],
           ["الحالة المستهدفة",options.review.status||"بحسب الفرد"],
+          ...(options.review.periodFrom?[["من تاريخ",options.review.periodFrom],
+            ["إلى تاريخ",options.review.periodTo]]:[]),
           ["عدد المحددين",options.review.persons.length]
         ].forEach(([label,value])=>{
           const property=make("div","app-preview-property");
@@ -389,7 +391,8 @@
         message:opts.message||"راجع الأفراد وحالاتهم قبل الاعتماد.",
         confirmLabel:opts.confirmLabel||"تأكيد وحفظ التحضير",
         review:{date:review.businessDate||"",status:review.statusName||"",
-          mode:review.mode||"",persons:review.persons}}).then(result=>result===true);
+          mode:review.mode||"",persons:review.persons,
+          periodFrom:review.periodFrom||"",periodTo:review.periodTo||""}}).then(result=>result===true);
     },
     alert:(message,opts={})=>show({title:opts.title||"تنبيه",message,confirmLabel:"حسناً"})
   });
