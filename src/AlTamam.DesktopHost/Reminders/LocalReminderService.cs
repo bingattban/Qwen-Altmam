@@ -167,8 +167,12 @@ internal sealed class LocalReminderService
             if (command == "poll")
             {
                 var now = DateTime.Now;
+                // A delivered but unacknowledged alert remains visible after
+                // navigating between main and standalone pages or restarting.
+                // Only the FIRST timely delivery rings; subsequent presentations
+                // are silent and must never steal focus or affect business work.
                 var notifications = data.Items.Where(item =>
-                    !item.Completed && !item.Delivered &&
+                    !item.Completed &&
                     TryLocalDate(item.SnoozedUntilLocal ?? item.DueLocal, out var due) &&
                     due <= now).OrderBy(item => item.SnoozedUntilLocal ?? item.DueLocal,
                         StringComparer.Ordinal).ToList();
@@ -180,11 +184,12 @@ internal sealed class LocalReminderService
                     return new
                     {
                         item.Id, item.Name, item.Subject, item.DueLocal,
-                        silent = due < _startedLocal
+                        silent = item.Delivered || due < _startedLocal
                     };
                 }).ToArray();
+                bool saveDeliveryState = notifications.Any(item => !item.Delivered);
                 foreach (var item in notifications) item.Delivered = true;
-                await SaveAsync(data, ct).ConfigureAwait(false);
+                if (saveDeliveryState) await SaveAsync(data, ct).ConfigureAwait(false);
                 if (shown.Any(item => !item.silent))
                 {
                     try { SystemSounds.Exclamation.Play(); } catch { /* never block operations */ }

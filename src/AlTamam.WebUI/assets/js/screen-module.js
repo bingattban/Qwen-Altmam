@@ -33,3 +33,31 @@ document.addEventListener("DOMContentLoaded", function () {
     return; // Fail closed rather than navigating an unverified origin.
   window.location.replace(relative.split("#")[0]+"#"+encodeURIComponent(key));
 });
+
+
+// Keep reminders alive while the user visits any standalone application screen.
+// The canonical GetCurrentSession action still validates the native user session.
+// All notification data stays in the independent JSON file; never in WebView storage.
+(function enableStandaloneReminders(){
+  const source = document.currentScript?.src;
+  if(!source)return;
+  document.addEventListener("DOMContentLoaded",function(){
+    if(!window.AltamamBridge?.hasBridge?.())return;
+    const css=document.createElement("link");
+    css.rel="stylesheet";
+    css.href=new URL("../css/reminders.css",source).href;
+    document.head.appendChild(css);
+    const script=document.createElement("script");
+    script.src=new URL("reminders.js",source).href;
+    script.addEventListener("load",async function(){
+      try {
+        const current=await window.AltamamBridge.invoke("GetCurrentSession",{});
+        if(current?.data?.sessionNonce && window.AltamamReminders)
+          window.AltamamReminders.start();
+      } catch {
+        // Logged-out standalone screens must not display personal notifications.
+      }
+    });
+    document.head.appendChild(script);
+  });
+})();
