@@ -147,12 +147,12 @@ public sealed class AttendanceDurationIntegrationTests : IAsyncLifetime, IDispos
         for (int i = 1; i <= 2; i++)
         {
             var result = await schedule.RunForDateAsync(Today.AddDays(i), false);
-            Assert.True(result.WasCommitted);
+            Assert.False(result.BlockedClosedDay);
             Assert.Equal(status, Status("TST-PERIOD-P1", Today.AddDays(i)));
             Assert.Equal(status, Status("TST-PERIOD-P2", Today.AddDays(i)));
         }
         var expiry = await schedule.RunForDateAsync(Today.AddDays(3), false);
-        Assert.True(expiry.WasCommitted);
+        Assert.False(expiry.BlockedClosedDay);
         Assert.Equal("STS-PRESENT", Status("TST-PERIOD-P1", Today.AddDays(3)));
         Assert.Equal("STS-PRESENT", Status("TST-PERIOD-P2", Today.AddDays(3)));
     }
