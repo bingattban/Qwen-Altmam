@@ -173,6 +173,9 @@ const bridge = {
       },
       UpdatePersonIdentity:{personId:"TST-ACTIVE-1"},
       SearchPersons: {items:[{personId:"TST-CLOSED-P1",displayName:"اختبار",serviceNumberA:"C-1"}]},
+      SearchActivePersonsForAccount: {items:[{personId:"TST-ACTIVE-1",
+        displayName:"فرد في القوة",serviceNumberA:"91001",organizationalStatus:1,
+        revision:1,siteName:"غير محدد"}],count:1},
       SetClosedDayCorrectionPolicy: {enabled:true},
       PreviewClosedDayCorrection: {previewToken:"T".repeat(64),requiresExplicitConfirmation:true,
         personName:"اختبار",serviceNumberA:"C-1",siteName:"غير محدد",
@@ -572,7 +575,20 @@ async function run() {
     "account form must render both password and matching confirmation");
   const selection=addUserForm.all().find(x=>x.tag==="select"&&
     x.attrs["aria-label"]==="اختر فرداً من الكشف");
+  const accountSearch=addUserForm.all().find(x=>x.tag==="label"&&
+    x.children[0]?.textContent==="بحث عن فرد بالاسم أو الرقم (ع)");
+  accountSearch.all().find(x=>x.tag==="input").value="  ۹۱۰۰۱  ";
+  await buttonNamed("البحث في كشف القوة").handlers.click();
+  const searchCall=calls.filter(x=>x.name==="SearchActivePersonsForAccount").at(-1);
+  assert.equal(searchCall.body.term,"۹۱۰۰۱","account picker trims without corrupting Persian digits");
+  assert.equal(searchCall.body.take,30,"account picker preserves bounded native search contract");
+  const found=selection.children.find(x=>x.value==="TST-ACTIVE-1");
+  assert.ok(found,"native DTO fields render a selectable immutable PersonId");
+  assert.equal(found.dataset.serviceNumberA,"91001");
+  assert.ok(found.textContent.includes("فرد في القوة"));
   selection.value="TST-ACTIVE-1";
+  selection.handlers.change();
+  assert.ok(addUserForm.all().some(x=>x.textContent==="الرقم (ع): 91001"));
   const usernameField=addUserForm.all().find(x=>x.tag==="label"&&
     x.children[0]?.textContent==="اسم المستخدم");
   assert.ok(usernameField,"a dedicated username field is required");
