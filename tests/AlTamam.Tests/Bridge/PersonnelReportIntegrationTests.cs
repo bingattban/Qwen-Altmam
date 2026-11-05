@@ -579,11 +579,12 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
                 (JsonObject)filters.DeepClone(), role: role);
             Assert.Equal(BridgeOutcomeKind.Success, result.Kind);
             Assert.True(result.Response.Success, result.Response.UserMessage);
+            var actual = Assert.IsType<JsonObject>(result.Response.Data);
             Assert.True(JsonNode.DeepEquals(
                 JsonNode.Parse(expected.ToJsonString()),
-                JsonNode.Parse(result.Response.Data!.ToJsonString())));
+                JsonNode.Parse(actual.ToJsonString())));
             Assert.Equal("TST-REPORT-1",
-                result.Response.Data["person"]!["personId"]!.GetValue<string>());
+                actual["person"]!["personId"]!.GetValue<string>());
         }
         using var connection = _db.CreateOpenConnection();
         using var command = connection.CreateCommand();
