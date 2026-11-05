@@ -38,6 +38,11 @@ jobs:
         run: |
           pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
+      - name: Package process watchdog native regression before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./build/test-package-process-watchdog.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Package process watchdog regression failed' }
       - name: Phase 13 evidence contract guard before lengthy Windows tests
         shell: pwsh
         run: |

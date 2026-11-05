@@ -9,7 +9,10 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $paths = @(
     "build/test-webview-ui-e2e.ps1",
     "tests/AlTamam.WindowsE2E/Validate-Phase13Evidence.ps1",
-    "tooling/perf/Collect-Phase13WindowsFacts.ps1"
+    "tooling/perf/Collect-Phase13WindowsFacts.ps1",
+    "build/package-process-watchdog.ps1",
+    "build/test-package-process-watchdog.ps1",
+    "build/test-package-appdata-preservation.ps1"
 )
 foreach ($relative in $paths) {
     $file = Join-Path $root $relative

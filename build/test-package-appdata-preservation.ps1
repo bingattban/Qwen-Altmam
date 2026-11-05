@@ -25,20 +25,9 @@ function Hash-OrAbsent([string]$path) {
     return "<ABSENT>"
 }
 
+. (Join-Path $PSScriptRoot "package-process-watchdog.ps1")
 function Run-Checked([string]$file, [string[]]$arguments, [int]$timeoutSeconds = 210) {
-    Assert-True (Test-Path -LiteralPath $file -PathType Leaf) "Executable absent: $file"
-    $process = Start-Process -FilePath $file -ArgumentList $arguments -PassThru
-    try {
-        if (-not $process.WaitForExit($timeoutSeconds * 1000)) {
-            $process.Kill($true)
-            $process.WaitForExit()
-            throw "Timed out after $timeoutSeconds seconds: $file"
-        }
-        Assert-True ($process.ExitCode -eq 0) "Exit code $($process.ExitCode) from $file"
-    }
-    finally {
-        $process.Dispose()
-    }
+    Invoke-CheckedPackageProcess -FilePath $file -Arguments $arguments -TimeoutSeconds $timeoutSeconds
 }
 
 # Keep full real-browser coverage in the shipped Portable and Installer binaries.
