@@ -260,7 +260,7 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
             Assert.Equal(1, row["organizationalStatus"]!.GetValue<int>());
             Assert.Equal(1L, row["revision"]!.GetValue<long>());
             Assert.False(string.IsNullOrWhiteSpace(row["siteName"]!.GetValue<string>()));
-            Assert.Equal(1, result.Response.Data!["count"]!.GetValue<int>());
+            Assert.Equal(1, Assert.IsType<JsonObject>(result.Response.Data)["count"]!!.GetValue<int>());
         }
     }
 
@@ -288,7 +288,7 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
             var answer = await Call(action, new JsonObject { ["term"]="حد اختبار", ["take"]=take });
             var rows = Items(answer);
             Assert.Equal(expected, rows.Count);
-            Assert.Equal(expected, answer.Response.Data!["count"]!.GetValue<int>());
+            Assert.Equal(expected, Assert.IsType<JsonObject>(answer.Response.Data)["count"]!!.GetValue<int>());
             Assert.Equal(Enumerable.Range(1,expected).Select(i=>$"R01-LIMIT-{i:000}"),
                 rows.Select(row=>row!["personId"]!.GetValue<string>()));
         }
@@ -332,7 +332,7 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
         Assert.Equal(BridgeErrorCodes.MissingData, missing.Response.ErrorCode);
         var empty = await Call(action,new JsonObject { ["term"]="لا يوجد مطابق" });
         Assert.Empty(Items(empty));
-        Assert.Equal(0,empty.Response.Data!["count"]!.GetValue<int>());
+        Assert.Equal(0,Assert.IsType<JsonObject>(empty.Response.Data)["count"]!!.GetValue<int>());
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
