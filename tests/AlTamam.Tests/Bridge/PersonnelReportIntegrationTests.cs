@@ -325,7 +325,8 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         "TST-REPORT-ROLE", "test-report-user", UserRole.Supervisor, ReportNonce);
 
     private Task<BridgeDispatchResult> DispatchReportAlias(
-        string action, JsonObject payload, string nonce = ReportNonce)
+        string action, JsonObject payload, string nonce = ReportNonce,
+        UserRole role = UserRole.Supervisor)
     {
         var request = new JsonObject
         {
@@ -337,7 +338,7 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         };
         var dispatcher = BridgeHandlerCatalog.Create(new BridgeSharedServices(_db));
         return dispatcher.DispatchAsync(request.ToJsonString(), LocalWebUiOrigin.BaseUrl,
-            true, n => Task.FromResult<BridgePrincipal?>(n == ReportNonce ? ReportPrincipal : null));
+            true, n => Task.FromResult<BridgePrincipal?>(n == ReportNonce ? ReportPrincipal with { Role = role } : null));
     }
 
     [Theory]
@@ -545,6 +546,52 @@ public sealed class PersonnelReportIntegrationTests : IAsyncLifetime,IDisposable
         Assert.Contains(dates,x=>x!["date"]!.GetValue<string>()=="2026-01-16" &&
             x["statusName"]!.GetValue<string>()=="موجود" &&
             x["count"]!.GetValue<long>()==49);
+    }
+
+
+    [Theory]
+    [InlineData(UserRole.GeneralAdministration)]
+    [InlineData(UserRole.OrdinaryAdministration)]
+    [InlineData(UserRole.Supervisor)]
+    public async Task R01HistoricalAliases_MatchNativeCanonicalFilteredDtoForEveryReadRole(UserRole role)
+    {
+        var filters = new JsonObject
+        {
+            ["personId"] = "TST-REPORT-1",
+            ["dateFrom"] = "2026-01-16", ["dateTo"] = "2026-01-16",
+            ["siteId"] = "SITE-UNSPECIFIED", ["statusId"] = "STS-ABSENT"
+        };
+        // Compare two native dispatch paths, then assert independently known SQL
+        // fixture facts so shared incorrect or empty output cannot pass parity.
+        var canonical = await DispatchReportAlias("BuildPersonLifetimeReport",
+            (JsonObject)filters.DeepClone(), role: role);
+        Assert.True(canonical.Response.Success, canonical.Response.UserMessage);
+        var expected = Assert.IsType<JsonObject>(canonical.Response.Data);
+        Assert.Equal(1L, expected["attendanceTotal"]!.GetValue<long>());
+        var day = Assert.IsType<JsonObject>(
+            Assert.Single(Assert.IsType<JsonArray>(expected["attendance"])));
+        Assert.Equal("2026-01-16", day["date"]!.GetValue<string>());
+        Assert.Equal("غياب", day["statusName"]!.GetValue<string>());
+        foreach (string action in new[] { "QueryPersonAttendanceTimeline",
+            "QueryPersonAttendanceTotals", "QueryPersonOperationsTimeline" })
+        {
+            var result = await DispatchReportAlias(action,
+                (JsonObject)filters.DeepClone(), role: role);
+            Assert.Equal(BridgeOutcomeKind.Success, result.Kind);
+            Assert.True(result.Response.Success, result.Response.UserMessage);
+            var actual = Assert.IsType<JsonObject>(result.Response.Data);
+            Assert.True(JsonNode.DeepEquals(
+                JsonNode.Parse(expected.ToJsonString()),
+                JsonNode.Parse(actual.ToJsonString())));
+            Assert.Equal("TST-REPORT-1",
+                actual["person"]!["personId"]!.GetValue<string>());
+        }
+        using var connection = _db.CreateOpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM AttendanceRecords;";
+        Assert.Equal(3L, Convert.ToInt64(await command.ExecuteScalarAsync()));
+        command.CommandText = "SELECT COUNT(*) FROM AuditEvents;";
+        Assert.Equal(0L, Convert.ToInt64(await command.ExecuteScalarAsync()));
     }
 
     public Task DisposeAsync()=>Task.CompletedTask;
