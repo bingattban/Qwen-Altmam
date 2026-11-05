@@ -52,7 +52,7 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
     }
 
     private async Task<BridgeDispatchResult> Call(string action, JsonObject? payload = null,
-        bool authenticated = true)
+        bool authenticated = true, UserRole role = UserRole.GeneralAdministration)
     {
         var envelope = new JsonObject
         {
@@ -65,7 +65,7 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
         return await _dispatcher.DispatchAsync(envelope.ToJsonString(), LocalWebUiOrigin.BaseUrl,
             isMainFrame: true,
             nonce => Task.FromResult<BridgePrincipal?>(
-                authenticated && nonce == Nonce ? Actor : null));
+                authenticated && nonce == Nonce ? Actor with { Role = role } : null));
     }
 
     private static JsonArray Items(BridgeDispatchResult answer)
@@ -242,6 +242,97 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
         }));
         Assert.Single(valid);
         Assert.Equal("TST-LOOKUP-A", valid[0]!["personId"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("1234")]
+    [InlineData("١٢٣٤")]
+    [InlineData("۱۲۳۴")]
+    public async Task Search_DigitScriptsPreserveExactIdentityAndUiProjection(string term)
+    {
+        foreach (string action in new[] { "SearchPersons", "SearchActivePersonsForAccount" })
+        {
+            var result = await Call(action, new JsonObject { ["term"] = term, ["take"] = 30 });
+            var row = Assert.IsType<JsonObject>(Assert.Single(Items(result)));
+            Assert.Equal("TST-LOOKUP-A", row["personId"]!.GetValue<string>());
+            Assert.Equal("أحمد النُور", row["displayName"]!.GetValue<string>());
+            Assert.Equal("1234", row["serviceNumberA"]!.GetValue<string>());
+            Assert.Equal(1, row["organizationalStatus"]!.GetValue<int>());
+            Assert.Equal(1L, row["revision"]!.GetValue<long>());
+            Assert.False(string.IsNullOrWhiteSpace(row["siteName"]!.GetValue<string>()));
+            Assert.Equal(1, Assert.IsType<JsonObject>(result.Response.Data)["count"]!.GetValue<int>());
+        }
+    }
+
+    [Theory]
+    [InlineData("SearchPersons")]
+    [InlineData("SearchActivePersonsForAccount")]
+    public async Task Search_ResultCapDefaultsAndTieOrderingAreStable(string action)
+    {
+        using (var connection = _db.CreateOpenConnection())
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<205)
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                    CurrentServiceNumberA,NormalizedServiceNumberA,FirstRecordedLocalDate,
+                    FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
+                SELECT printf('R01-LIMIT-%03d',i),'حد اختبار','حد اختبار',
+                    printf('981%04d',i),printf('981%04d',i),
+                    '2026-10-01','2026-10-01T01:00:00Z',1,1,1 FROM n;
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        foreach (var (take, expected) in new[] { (1,1), (30,30), (0,25), (-1,25), (999,200) })
+        {
+            var answer = await Call(action, new JsonObject { ["term"]="حد اختبار", ["take"]=take });
+            var rows = Items(answer);
+            Assert.Equal(expected, rows.Count);
+            Assert.Equal(expected, Assert.IsType<JsonObject>(answer.Response.Data)["count"]!.GetValue<int>());
+            Assert.Equal(Enumerable.Range(1,expected).Select(i=>$"R01-LIMIT-{i:000}"),
+                rows.Select(row=>row!["personId"]!.GetValue<string>()));
+        }
+        Assert.Equal(25, Items(await Call(action, new JsonObject { ["term"]="حد اختبار" })).Count);
+    }
+
+    [Theory]
+    [InlineData(UserRole.GeneralAdministration)]
+    [InlineData(UserRole.OrdinaryAdministration)]
+    [InlineData(UserRole.Supervisor)]
+    public async Task Search_RoleBoundaryDistinguishesHistoryFromAccountPicker(UserRole role)
+    {
+        Assert.Single(Items(await Call("SearchPersons",
+            new JsonObject { ["term"]="5678" }, role:role)));
+        var picker = await Call("SearchActivePersonsForAccount",
+            new JsonObject { ["term"]="1234" }, role:role);
+        if (role == UserRole.Supervisor)
+        {
+            Assert.Equal(BridgeOutcomeKind.Forbidden, picker.Kind);
+            Assert.False(picker.Response.Success);
+            Assert.Equal(BridgeErrorCodes.Unauthorized, picker.Response.ErrorCode);
+            Assert.Null(picker.Response.Data);
+        }
+        else Assert.Single(Items(picker));
+    }
+
+    [Theory]
+    [InlineData("SearchPersons")]
+    [InlineData("SearchActivePersonsForAccount")]
+    public async Task Search_InvalidTermsFailAndNoMatchesReturnAnEmptyEnvelope(string action)
+    {
+        foreach (string term in new[] { new string('ا',101), "احمد\n", "ـً" })
+        {
+            var invalid = await Call(action,new JsonObject { ["term"]=term });
+            Assert.False(invalid.Response.Success);
+            Assert.Equal(BridgeErrorCodes.ValidationError, invalid.Response.ErrorCode);
+            Assert.Null(invalid.Response.Data);
+        }
+        var missing = await Call(action,new JsonObject { ["term"]="  " });
+        Assert.False(missing.Response.Success);
+        Assert.Equal(BridgeErrorCodes.MissingData, missing.Response.ErrorCode);
+        var empty = await Call(action,new JsonObject { ["term"]="لا يوجد مطابق" });
+        Assert.Empty(Items(empty));
+        Assert.Equal(0,Assert.IsType<JsonObject>(empty.Response.Data)["count"]!.GetValue<int>());
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
