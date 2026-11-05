@@ -278,7 +278,7 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
                     CurrentServiceNumberA,NormalizedServiceNumberA,FirstRecordedLocalDate,
                     FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
                 SELECT printf('R01-LIMIT-%03d',i),'حد اختبار','حد اختبار',
-                    printf('R01%04d',i),printf('R01%04d',i),
+                    printf('981%04d',i),printf('981%04d',i),
                     '2026-10-01','2026-10-01T01:00:00Z',1,1,1 FROM n;
                 """;
             await cmd.ExecuteNonQueryAsync();
