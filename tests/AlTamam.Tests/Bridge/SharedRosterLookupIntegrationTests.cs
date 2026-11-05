@@ -209,6 +209,41 @@ public sealed class SharedRosterLookupIntegrationTests : IAsyncLifetime, IDispos
         }
     }
 
+
+    [Theory]
+    [InlineData("SearchPersons")]
+    [InlineData("SearchActivePersonsForAccount")]
+    public async Task Search_MalformedTakeFailsClosedAtTheRealSqlCipherBridge(string action)
+    {
+        // The former TryInt helper silently converted malformed values to the
+        // default limit and returned a successful search. A malformed request
+        // must fail before reading any person data.
+        foreach (JsonNode invalidTake in new JsonNode[]
+        {
+            JsonValue.Create("not-an-integer")!,
+            JsonValue.Create(true)!,
+            new JsonArray(JsonValue.Create(1))
+        })
+        {
+            var denied = await Call(action, new JsonObject
+            {
+                ["term"] = "احمد", ["take"] = invalidTake.DeepClone()
+            });
+            Assert.False(denied.Response.Success);
+            Assert.Equal(BridgeErrorCodes.ValidationError, denied.Response.ErrorCode);
+            Assert.Null(denied.Response.Data);
+        }
+
+        // Valid callers still reach the native SQLCipher search with the
+        // original output DTO, PersonId, and bounded result semantics.
+        var valid = Items(await Call(action, new JsonObject
+        {
+            ["term"] = "احمد", ["take"] = 1
+        }));
+        Assert.Single(valid);
+        Assert.Equal("TST-LOOKUP-A", valid[0]!["personId"]!.GetValue<string>());
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {

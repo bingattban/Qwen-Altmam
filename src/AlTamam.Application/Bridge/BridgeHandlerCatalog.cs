@@ -319,7 +319,16 @@ public static class BridgeHandlerCatalog
         "SearchPersons" or "SearchActivePersonsForAccount" => async (req, principal, ct) =>
         {
             string term = req.Payload?["term"]?.GetValue<string>() ?? "";
-            int take = TryInt(req.Payload?["take"], 25);
+            int take = 25;
+            if (req.Payload?["take"] is JsonNode requestedTake)
+            {
+                try { take = requestedTake.GetValue<int>(); }
+                catch (Exception ex) when (ex is InvalidOperationException or FormatException or System.Text.Json.JsonException)
+                {
+                    return Fail(req, BridgeSharedServices.Error(BridgeErrorCodes.ValidationError,
+                        "عدد نتائج البحث يجب أن يكون عدداً صحيحاً."));
+                }
+            }
             BridgeResponse inner = await services.SearchPersonsAsync(term, take, ct,
                 activeOnly: req.Action == "SearchActivePersonsForAccount").ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
@@ -869,12 +878,6 @@ public static class BridgeHandlerCatalog
                 BridgeErrorCodes.MissingData,
                 $"الإجراء '{req.Action}' معتمد في العقد لكنه يُنفَّذ في مراحله المخصصة؛ لا تتوفر بياناته بعد.")))
     };
-
-    private static int TryInt(JsonNode? node, int fallback)
-    {
-        try { return node?.GetValue<int>() ?? fallback; }
-        catch { return fallback; }
-    }
 
     private static object SessionData(BridgePrincipal principal) => new JsonObject
     {
