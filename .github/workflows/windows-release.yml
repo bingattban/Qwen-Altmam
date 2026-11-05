@@ -63,6 +63,11 @@ jobs:
         run: |
           pwsh -NoProfile -File ./build/check-powershell-test-syntax.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Invalid PowerShell QA script syntax' }
+      - name: Package process watchdog native regression before expensive tests
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -NonInteractive -File ./build/test-package-process-watchdog.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Package process watchdog regression failed' }
       - name: Phase 13 evidence contract guard before lengthy Windows tests
         shell: pwsh
         run: |
@@ -287,6 +292,8 @@ jobs:
     name: Publish and package (${{ matrix.arch }}) after tests
     needs: build-test
     runs-on: windows-latest
+    # Hard fail-closed cap for each architecture; all real package tests remain mandatory.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
