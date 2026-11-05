@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private DesktopBridgeGateway? _gateway;
     private Scheduling.EightPmSchedulerService? _scheduler;
     private Scheduling.AutomaticBackupSchedulerService? _backupScheduler;
+    private Scheduling.AutomaticMonthlyExcelSchedulerService? _autoMonthlyExcelScheduler;
 
     // Diagnostics are written only for the explicit CI smoke-test flag; production
     // startup never creates a trace file or changes its persistent browser profile.
@@ -77,6 +78,8 @@ public partial class MainWindow : Window
                     await _scheduler.DisposeAsync();
                 if (_backupScheduler is not null)
                     await _backupScheduler.DisposeAsync();
+                if (_autoMonthlyExcelScheduler is not null)
+                    await _autoMonthlyExcelScheduler.DisposeAsync();
             }
             finally
             {
@@ -164,7 +167,8 @@ public partial class MainWindow : Window
     private sealed record PreparedServices(
         AlTamamDbContext Database, DesktopBridgeGateway Gateway,
         Scheduling.EightPmSchedulerService Scheduler,
-        Scheduling.AutomaticBackupSchedulerService BackupScheduler);
+        Scheduling.AutomaticBackupSchedulerService BackupScheduler,
+        Scheduling.AutomaticMonthlyExcelSchedulerService AutoMonthlyExcelScheduler);
 
     /// <summary>
     /// SQLCipher key validation, migrations and bridge construction are independent of WPF.
@@ -200,7 +204,9 @@ public partial class MainWindow : Window
                 new Scheduling.EightPmSchedulerService(attendance,
                     tokenRetention: new AlTamam.Application.Scheduling.PreviewTokenRetentionService(database)),
                 new Scheduling.AutomaticBackupSchedulerService(
-                    new AlTamam.Application.Scheduling.AutomaticBackupService(database)));
+                    new AlTamam.Application.Scheduling.AutomaticBackupService(database)),
+                new Scheduling.AutomaticMonthlyExcelSchedulerService(
+                    new AlTamam.Application.Scheduling.AutomaticMonthlyExcelService(database)));
         }
         catch
         {
@@ -307,6 +313,7 @@ public partial class MainWindow : Window
                 }).Task;
                 _scheduler = ready.Scheduler;
                 _backupScheduler = ready.BackupScheduler;
+                _autoMonthlyExcelScheduler = ready.AutoMonthlyExcelScheduler;
             }
         }
         catch
@@ -374,6 +381,7 @@ public partial class MainWindow : Window
                 _startupViewModel.PanelVisibility = Visibility.Collapsed;
                 _scheduler?.Start(); // start catch-up after UI is ready; never delay first paint
                 _backupScheduler?.Start(); // independent verified automatic snapshots
+                _autoMonthlyExcelScheduler?.Start(); // opted-in independent monthly XLSX
                 return;
             }
             if (!_recoveredOnce)

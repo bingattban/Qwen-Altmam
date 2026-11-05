@@ -106,7 +106,7 @@ public sealed class BridgeRbacMatrixTests
         }
     }
 
-    /// <summary>103 actions × 4 caller identities (GA/OA/SV/unauthenticated) = 412 cases.</summary>
+    /// <summary>104 actions × 4 caller identities (GA/OA/SV/unauthenticated) = 416 cases.</summary>
     public static IEnumerable<object[]> AllActionsByRole()
     {
         foreach (var meta in ActionManifest.All)
@@ -119,10 +119,10 @@ public sealed class BridgeRbacMatrixTests
     }
 
     [Fact]
-    public void ManifestMirror_ContainsAll103DeclaredActions()
+    public void ManifestMirror_ContainsAll104DeclaredActions()
     {
-        Assert.Equal(103, ActionManifest.All.Length);
-        Assert.Equal(103, ActionManifest.All.Select(a => a.Action).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(104, ActionManifest.All.Length);
+        Assert.Equal(104, ActionManifest.All.Select(a => a.Action).Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]
@@ -181,6 +181,7 @@ public sealed class BridgeRbacMatrixTests
     [InlineData("CommitExternalTransfer")]
     [InlineData("RemoveSiteAndReassignCurrentPersons")]
     [InlineData("UpdateBackupSchedule")]
+    [InlineData("ConfigureAutoMonthlyExcel")]
     public async Task DangerousActions_SupervisorFollowsCanonicalRoles_UnauthenticatedAlwaysDenied(string action)
     {
         var dispatcher = BuildAuditedDispatcher(out List<string> executed);

@@ -108,16 +108,29 @@ public sealed class MonthlyExcelExportService
     public async Task<BridgeResponse> ExportAsync(JsonObject? input, CancellationToken ct,
         Action<int,int>? progress=null)
     {
-        // All Sites produces one consolidated workbook plus a separate workbook
-        // for every historically represented site. Single-site exports are unchanged.
+        // Manual exports keep their original unique-name/no-clobber contract.
         if(input is not null && (input["siteId"]?.ToString()??"").Length==0 &&
            input["consolidatedOnly"]?.ToString()!="true")
             return await ExportAllSitesAsync(input,ct,progress).ConfigureAwait(false);
+        return await ExportSingleAsync(input,ct,progress,allowEmpty:false).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Native scheduler-only entry point. Empty sites still get a valid XLSX
+    /// with the SAME headers, including all current custom roster columns.
+    /// Never routed as a WebView2 action and never changes manual export rules.
+    /// </summary>
+    public Task<BridgeResponse> ExportScheduledSingleAsync(JsonObject input,CancellationToken ct)
+        => ExportSingleAsync(input,ct,null,allowEmpty:true);
+
+    private async Task<BridgeResponse> ExportSingleAsync(JsonObject? input,CancellationToken ct,
+        Action<int,int>? progress,bool allowEmpty)
+    {
         var preview = await PreviewAsync(input, ct).ConfigureAwait(false);
         if (!preview.Success) return preview;
         var previewData = (JsonObject)preview.Data!;
         long total = previewData["personCount"]!.GetValue<long>();
-        if (total == 0)
+        if (total == 0 && !allowEmpty)
             return BridgeHelpers.Error(BridgeErrorCodes.MissingData, "لا توجد أسماء في الشهر والموقع المحددين للتصدير.");
         int year = previewData["year"]!.GetValue<int>();
         int month = previewData["month"]!.GetValue<int>();
