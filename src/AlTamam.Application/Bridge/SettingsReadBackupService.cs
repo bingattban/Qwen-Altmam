@@ -38,6 +38,8 @@ public sealed class SettingsReadBackupService
         string? lastDate=await backup.LastSuccessfulDateAsync(ct).ConfigureAwait(false);
         string theme=await Setting("Theme","light",ct);
         string lastBackupFailure=await Setting("AutoBackupLastFailure","",ct);
+        var monthlyExcel=await new AlTamam.Application.Scheduling.AutomaticMonthlyExcelService(_db,_time)
+            .ReadAsync(ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
             ["username"]=person.Username,["role"]=person.Role.ToString(),
@@ -55,6 +57,7 @@ public sealed class SettingsReadBackupService
                 : enabled
                     ? "النسخ اليومي مفعل أثناء تشغيل البرنامج. آخر نسخة ناجحة: "+(lastDate??"لم يتم إنشاء نسخة بعد")
                     : "النسخ التلقائي متوقف؛ فعّله من الإعدادات بعد اختيار مجلد صالح.",
+            ["autoMonthlyExcel"]=AlTamam.Application.Scheduling.AutomaticMonthlyExcelService.AsJson(monthlyExcel),
             ["theme"]=theme
         });
     }

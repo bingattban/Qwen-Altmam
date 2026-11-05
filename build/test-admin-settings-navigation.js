@@ -845,7 +845,12 @@ async function run() {
   const titles=visible().filter(x=>x.className.includes("settings-panel-title"))
     .map(x=>x.textContent);
   assert.deepEqual(titles,["الحساب والبرنامج","أوقات التحضير التلقائي وقفل التمام اليومي","النسخ الاحتياطي",
-    "سلامة قاعدة البيانات","التحقق من النسخ والاستعادة"]);
+    "التصدير التلقائي للتمام اليومي","سلامة قاعدة البيانات","التحقق من النسخ والاستعادة"]);
+   const monthlyToggle=visible().find(x=>x.tag==="input"&&
+     x.attrs["aria-label"]==="تفعيل التصدير التلقائي للتمام اليومي");
+   assert.ok(monthlyToggle,"settings must expose the independent monthly Excel option");
+   assert.equal(monthlyToggle.checked,false,
+     "automatic monthly Excel is OFF until the operator explicitly enables it");
   const fallback=visible().find(x=>x.tag==="select"&&
     x.attrs["aria-label"]==="الحالة الافتراضية عند عدم وجود تحضير أمس");
   assert.ok(fallback,"administrators can choose the 08:00 fallback status");

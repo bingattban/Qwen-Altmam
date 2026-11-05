@@ -108,7 +108,7 @@ def main() -> None:
     check(public_matrix.returncode == 1,
           "canonical public SCREEN_MATRIX.csv must remain committable")
 
-    check(len(actions) == 103, "action manifest drift")
+    check(len(actions) == 104, "action manifest drift")
     for section, title in sections.items():
         tag = re.search(
             r'<button\b[^>]*id="navBtn-' + re.escape(section)

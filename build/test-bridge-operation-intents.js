@@ -30,7 +30,7 @@ vm.runInNewContext(source,context,{filename:"bridge-client.js"});
 const bridge=window.AltamamBridge;
 (async()=>{
   const mutations=manifest.actions.filter(a=>a.isMutating&&a.action!=="Logout");
-  assert.equal(mutations.length,42,"all 42 current mutation actions covered");
+  assert.equal(mutations.length,43,"all 43 current mutation actions covered");
   for(const {action} of mutations){
     const payload={example:"value"};
     await bridge.invoke(action,payload);

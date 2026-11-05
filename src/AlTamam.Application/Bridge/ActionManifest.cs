@@ -6,7 +6,7 @@ public sealed record BridgeActionMetadata(string Action, string OwningService, s
 
 public static class ActionManifest
 {
-    /// <summary>All 103 canonical actions with owning service and allowed roles.</summary>
+    /// <summary>All 104 canonical actions with owning service and allowed roles.</summary>
     public static readonly BridgeActionMetadata[] All = new BridgeActionMetadata[]
     {
         new("GetProvisioningState", "AuthenticationService", new[] { "Unauthenticated", "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
@@ -112,6 +112,7 @@ public static class ActionManifest
         new("CommitFullReset", "SettingsBackupService", new[] { "GeneralAdministration" }, true),
         new("SetTheme", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, true),
         new("GetApplicationVersion", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration", "Supervisor" }, false),
+        new("ConfigureAutoMonthlyExcel", "SettingsBackupService", new[] { "GeneralAdministration", "OrdinaryAdministration" }, true),
     };
 
     public static BridgeActionMetadata? Find(string action) =>

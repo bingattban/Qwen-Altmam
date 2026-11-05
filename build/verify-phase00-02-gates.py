@@ -97,8 +97,8 @@ def verify(f: dict) -> list[str]:
     errors = []
     if f["screen_count"] != 69 or f["declared_screen_count"] != 69:
         errors.append("screen inventory: expected 69 canonical routes")
-    if f["action_count"] != 103 or f["unique_actions"] != 103:
-        errors.append("action inventory: expected 103 unique canonical actions")
+    if f["action_count"] != 104 or f["unique_actions"] != 104:
+        errors.append("action inventory: expected 104 unique canonical actions")
     if f["registered_migrations"] != list(range(1, 15)):
         errors.append("migration registration: expected contiguous V001–V014")
     if sorted(f["embedded_migrations"]) != list(range(1, 15)):
@@ -146,7 +146,7 @@ def main() -> int:
         for error in errors:
             print(" -", error)
         return 1
-    print("PHASE 00–02 GUARD PASS: 69 routes, 103 actions, 8 projects, 2 gated Windows workflows, V001–V014, SQLCipher pinned, restore disabled.")
+    print("PHASE 00–02 GUARD PASS: 69 routes, 104 actions, 8 projects, 2 gated Windows workflows, V001–V014, SQLCipher pinned, restore disabled.")
     print("This is a source/CI invariant check, NOT clean-machine or destructive restore acceptance.")
     return 0
 
