@@ -5,6 +5,9 @@ using Xunit;
 
 namespace AlTamam.Tests.Persistence;
 
+// ClearAllPools() affects every SQLCipher connection in the test process.
+// Run all tests that clear global pools in one non-parallel xUnit collection.
+[Collection("SQLCipherGlobalPool")]
 public sealed class StagedRestorePreparationTests : IDisposable
 {
     private readonly string _folder=Path.Combine(Path.GetTempPath(),

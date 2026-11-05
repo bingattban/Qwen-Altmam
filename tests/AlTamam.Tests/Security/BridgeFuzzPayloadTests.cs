@@ -33,7 +33,11 @@ public sealed class BridgeFuzzPayloadTests : IDisposable, IAsyncLifetime
 
     public BridgeFuzzPayloadTests()
     {
-        _db = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex);
+        // One independently owned physical SQLCipher connection per operation:
+        // unrelated restore tests may legitimately clear the process-wide pool.
+        // Keep the real encrypted bridge pipeline and all fuzz assertions enabled.
+        _db = new AlTamamDbContext(_dbPath, SyntheticFixtures.TestKeyHex,
+            useConnectionPooling: false);
         _db.InitializeAsync().GetAwaiter().GetResult();
         _services = new BridgeSharedServices(_db);
         _dispatcher = BridgeHandlerCatalog.Create(_services);

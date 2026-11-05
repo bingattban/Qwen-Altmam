@@ -140,6 +140,45 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
     }
 
     [Fact]
+    public async Task AddedPersonColumn_AppearsInActualIndividualAndGroupExcel()
+    {
+        using(var conn=_db.CreateOpenConnection())
+        using(var cmd=conn.CreateCommand())
+        {
+            cmd.CommandText="""
+                INSERT INTO CustomFieldDefinitions(
+                    FieldDefinitionId,TechnicalKey,ArabicCaption,FieldType,
+                    DisplayOrder,IsSystemProtected,VisibleFlag,ActiveFlag,CreatedAtUtc)
+                VALUES('FLD-PERSON-EXCEL','custom_person_excel','التخصص',1,
+                    5,0,1,1,'2026-10-01T00:00:00Z');
+                INSERT INTO CustomFieldValues(
+                    PersonId,FieldDefinitionId,FieldValueText,UpdatedAtUtc)
+                VALUES('TST-XLSX-NEW','FLD-PERSON-EXCEL','هندسة',
+                    '2026-10-07T08:00:00Z');
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var svc=new PersonnelExcelExportService(_db);
+        foreach(bool group in new[]{false,true})
+        {
+            var request=new JsonObject{
+                ["mode"]="report",["exportId"]=Guid.NewGuid().ToString("N"),
+                ["dateFrom"]="2026-10-01",["dateTo"]="2026-10-26"
+            };
+            if(group)
+                request["personIds"]=new JsonArray("TST-XLSX-OLD","TST-XLSX-NEW");
+            else
+                request["personId"]="TST-XLSX-NEW";
+            var exported=await svc.ExportAsync(request,Actor,CancellationToken.None);
+            Assert.True(exported.Success,exported.UserMessage);
+            using var archive=ZipFile.OpenRead(File(Assert.IsType<JsonObject>(exported.Data)));
+            var rows=Rows(archive,1).ToArray();
+            Assert.Contains("التخصص",Text(rows[0]));
+            Assert.Contains(rows.Skip(1),row=>Text(row).Contains("هندسة"));
+        }
+    }
+
+    [Fact]
     public async Task GroupWorkbook_UsesIndependentDisplayOrdinalsWithoutExposingPersonId_ExportAudited()
     {
         var svc=new PersonnelExcelExportService(_db);

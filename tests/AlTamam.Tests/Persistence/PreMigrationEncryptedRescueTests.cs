@@ -11,6 +11,8 @@ namespace AlTamam.Tests.Persistence;
 /// reopenable pre-migration rescue image BEFORE any schema migration executes.
 /// These run on the same Windows runner as the full release test suite.
 /// </summary>
+// Clearing SQLite pools during cleanup must not dispose another test's connection.
+[Collection("SQLCipherGlobalPool")]
 public sealed class PreMigrationEncryptedRescueTests : IDisposable
 {
     private readonly string _path = SyntheticFixtures.CreateTempDatabasePath();
