@@ -106,7 +106,9 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
         Assert.Null(loginFailure);
         var supervisorActor = Assert.IsType<BridgePrincipal>(supervisorPrincipal);
         string afterSupervisorLogin = Evidence();
-        var supervisor = await Call(supervisorActor, Intent());
+        // Supervisors may create sites under the current catalog policy.
+        // Account creation is the genuinely forbidden write for this role.
+        var supervisor = await Call(supervisorActor, Intent(), "CreateUserAccount");
         Assert.Equal(BridgeOutcomeKind.Forbidden, supervisor.Kind);
         foreach (var result in new[] { invalid, supervisor, stale, expired })
         {
@@ -124,10 +126,11 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
         ["name"]="موقع يجب ألا يحفظ", ["operationId"]=Guid.NewGuid().ToString("N")
     };
 
-    private Task<BridgeDispatchResult> Call(BridgePrincipal actor, JsonObject payload)
+    private Task<BridgeDispatchResult> Call(BridgePrincipal actor, JsonObject payload,
+        string action = "CreateSite")
         => _dispatcher.DispatchAsync(new JsonObject {
             ["requestId"]=Guid.NewGuid().ToString("N"), ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
-            ["action"]="CreateSite", ["sessionNonce"]=actor.SessionNonce, ["payload"]=payload
+            ["action"]=action, ["sessionNonce"]=actor.SessionNonce, ["payload"]=payload.DeepClone()
         }.ToJsonString(), LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
 
     private string Evidence()
