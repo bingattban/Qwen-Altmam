@@ -16,7 +16,6 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
     private BridgeSharedServices _services = null!;
     private WebView2BridgeDispatcher _dispatcher = null!;
     private BridgePrincipal _admin = null!;
-    private BridgePrincipal _supervisor = null!;
 
     public async Task InitializeAsync()
     {
@@ -45,10 +44,6 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
             ["passwordConfirmation"]="Synthetic123", ["personId"]="TST-R01-SUP", ["role"]="Supervisor"
         }, _admin, default);
         Assert.True(account.Success, account.UserMessage);
-        var (supervisor, denied) = await _services.AuthenticateAsync(
-            "r01-native-supervisor", "Synthetic123", default);
-        Assert.Null(denied);
-        _supervisor = Assert.IsType<BridgePrincipal>(supervisor);
         _dispatcher = BridgeHandlerCatalog.Create(_services);
     }
 
@@ -93,16 +88,26 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
             ["name"]=new JsonObject(), ["operationId"]=Guid.NewGuid().ToString("N")
         });
         Assert.False(invalid.Response.Success);
-        var supervisor = await Call(_supervisor, Intent());
-        Assert.Equal(BridgeOutcomeKind.Forbidden, supervisor.Kind);
         var stalePayload = Intent();
         stalePayload["expectedRevision"]=1L;
         stalePayload["baseRevision"]=2L;
         var stale = await Call(_admin, stalePayload);
         Assert.Equal(BridgeErrorCodes.ConflictStale, stale.Response.ErrorCode);
+        Assert.Equal(before, Evidence());
+        // Explicit logout is required before switching accounts. Its legitimate
+        // audit event belongs outside the rejected-request evidence snapshot.
         await _services.RevokeSessionAsync(_admin.SessionNonce);
+        string afterLogout = Evidence();
         var expired = await Call(_admin, Intent());
         Assert.Equal(BridgeErrorCodes.SessionExpired, expired.Response.ErrorCode);
+        Assert.Equal(afterLogout, Evidence());
+        var (supervisorPrincipal, loginFailure) = await _services.AuthenticateAsync(
+            "r01-native-supervisor", "Synthetic123", default);
+        Assert.Null(loginFailure);
+        var supervisorActor = Assert.IsType<BridgePrincipal>(supervisorPrincipal);
+        string afterSupervisorLogin = Evidence();
+        var supervisor = await Call(supervisorActor, Intent());
+        Assert.Equal(BridgeOutcomeKind.Forbidden, supervisor.Kind);
         foreach (var result in new[] { invalid, supervisor, stale, expired })
         {
             Assert.False(result.Response.Success);
@@ -111,7 +116,7 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
             Assert.True(result.Response.InvalidationEvents is null ||
                 result.Response.InvalidationEvents.Count == 0);
         }
-        Assert.Equal(before, Evidence());
+        Assert.Equal(afterSupervisorLogin, Evidence());
         Assert.True(_db.HasValidIntegrity());
     }
 
