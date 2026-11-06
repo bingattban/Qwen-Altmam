@@ -82,3 +82,18 @@ Failed baseline 4f6bb47e10f9212af51cc75f823a59aaa2861131: Core 42283506732 and R
 correctly rejected Supervisor account search with Unauthorized. The new test had the wrong
 role expectation. Correct only the test to preserve the manifest policy; packaging was blocked.
 Corrected native Windows execution remains pending; local syntax/contract preflights pass.
+
+## Packaged x86 timeout investigation (#244)
+
+Head cd615e71e5f871a1dc43aad56a068afeef04d687: Windows Core 42286724207 succeeded.
+Release 42286724221 passed pre-package tests and native browser recovery, but the packaged
+win-x86 Portable native bridge process hit the exact 180-second watchdog in both attempts
+(job 128137835771); the trace ended after UI modal checks, without an internal exception or
+bridge-success marker. This proves a timeout, not its precise slow internal operation.
+Increase only the expanded packaged native suite's bounded budget to 300 seconds, retain
+two attempts, process-tree termination, nonzero-exit rejection and every required evidence
+marker. Independent 69-route process remains bounded at 120 seconds. Add public stage-only
+native traces during the bridge probe to localize a repeat timeout; no credentials or payloads.
+This is test-harness calibration, not a production performance fix or successful x86 claim.
+Local inline-JS/contract preflight passes. Corrected x86/x64 native execution is pending CI;
+merge remains blocked until Core, Release, four actual packages and provenance all pass.

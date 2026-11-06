@@ -73,6 +73,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
               document.body.appendChild(target);
               window.__phase04RealBridge = {status:"running"};
               let probeStage = "first-use";
+              Object.defineProperty(window.__phase04RealBridge, "stage", {get: () => probeStage});
 
               async function expectRejected(action, payload, options, expected) {
                 try {
@@ -411,6 +412,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
         if (started != "\"STARTED\"")
             throw new InvalidOperationException("Phase 04 WebView2 bridge probe did not initialize: " + started);
 
+        string? lastStage = null;
         for (int attempt = 0; attempt < 200; attempt++)
         {
             string raw = await core.ExecuteScriptAsync(
@@ -420,6 +422,15 @@ internal static class Phase04BridgeRoundTripSelfCheck
             {
                 using var status = JsonDocument.Parse(statusJson);
                 string? phase = status.RootElement.GetProperty("status").GetString();
+                if (phase == "running" && status.RootElement.TryGetProperty("stage", out var stage))
+                {
+                    string? currentStage = stage.GetString();
+                    if (currentStage != lastStage)
+                    {
+                        MainWindow.TraceWebViewSelfCheck("Bridge probe stage: " + currentStage);
+                        lastStage = currentStage;
+                    }
+                }
                 if (phase == "failed")
                     throw new InvalidOperationException(
                         "Phase 04 real HTML/native/SQLCipher probe failed: " +
