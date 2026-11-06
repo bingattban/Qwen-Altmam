@@ -138,8 +138,8 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
         var rows = statusRoot.GetProperty("data");
         Assert.Equal(JsonValueKind.Array, rows.ValueKind);
         Assert.NotEmpty(rows.EnumerateArray());
-        var present = Assert.Single(rows.EnumerateArray().Where(
-            row => row.GetProperty("statusId").GetString() == "STS-PRESENT"));
+        var present = Assert.Single(rows.EnumerateArray(),
+            row => row.GetProperty("statusId").GetString() == "STS-PRESENT");
         Assert.False(string.IsNullOrWhiteSpace(present.GetProperty("displayName").GetString()));
         Assert.Equal(JsonValueKind.String, present.GetProperty("color").ValueKind);
         Assert.True(present.GetProperty("active").GetBoolean());
