@@ -131,6 +131,28 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     !sites.data.some(item => item.siteId === "SITE-UNSPECIFIED"))
                   throw new Error("real SQLCipher seeded sites missing");
 
+                probeStage = "r01-status-contract";
+                const activeStatuses = await api.invoke("GetActiveAttendanceStatuses",{});
+                if (!Array.isArray(activeStatuses.data) || !activeStatuses.data.length)
+                  throw new Error("active status response is not a nonempty array");
+                const statusPick = document.createElement("select");
+                statusPick.id = "r01-native-status-picker";
+                for (const status of activeStatuses.data) {
+                  if (typeof status.statusId !== "string" ||
+                      typeof status.displayName !== "string" ||
+                      typeof status.color !== "string" || status.active !== true)
+                    throw new Error("active status UI fields do not match native serialization");
+                  const option = document.createElement("option");
+                  option.value = status.statusId;
+                  option.textContent = status.displayName;
+                  statusPick.appendChild(option);
+                }
+                target.appendChild(statusPick);
+                statusPick.value = "STS-PRESENT";
+                if (statusPick.value !== "STS-PRESENT" || !statusPick.selectedOptions[0]?.textContent)
+                  throw new Error("native status did not render as selectable HTML");
+                const r01StatusVerified = true;
+
                 const preview = await api.invoke("PreviewArchivedIdentity",{
                   visibleName:"فرد اختبار التكامل",serviceNumberA:"00007192",
                   siteId:"SITE-UNSPECIFIED"
@@ -153,6 +175,30 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   x.personId === personId && x.serviceNumberA === "00007192");
                 if (!saved) throw new Error("SQLCipher person not visible after native commit");
 
+                probeStage = "r01-search-contract";
+                for (const [action, term] of [
+                  ["SearchPersons", "٠٠٠٠٧١٩٢"],
+                  ["SearchActivePersonsForAccount", "۰۰۰۰۷۱۹۲"]
+                ]) {
+                  const found = await api.invoke(action,{term,take:30});
+                  if (!Array.isArray(found.data?.items) || found.data.count !== 1 ||
+                      found.data.items.length !== 1)
+                    throw new Error(action + " items/count mismatch");
+                  const person = found.data.items[0];
+                  if (person.personId !== personId || person.serviceNumberA !== "00007192" ||
+                      person.displayName !== "فرد اختبار التكامل" || person.organizationalStatus !== 1)
+                    throw new Error(action + " lost immutable person identity");
+                  const pick = document.createElement("select");
+                  pick.id = "r01-native-" + action;
+                  const option = document.createElement("option");
+                  option.value = person.personId;
+                  option.textContent = person.displayName + " — " + person.serviceNumberA;
+                  pick.appendChild(option);
+                  document.body.appendChild(pick);
+                  if (pick.value !== personId || !pick.selectedOptions[0]?.textContent.includes("00007192"))
+                    throw new Error(action + " native person did not render in HTML");
+                }
+                const r01SearchVerified = true;
                 target.textContent = saved.displayName + " — " + saved.serviceNumberA;
                 if (!target.textContent.includes("00007192") ||
                     !target.isConnected)
@@ -294,7 +340,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("HTML output lost after authorization checks");
 
                 window.__phase04RealBridge = {status:"pass",personId,movableId,
-                  modalConfirmedTransfer:true};
+                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified};
               })().catch(error => {
                 window.__phase04RealBridge = {
                   status:"failed",
@@ -333,6 +379,10 @@ internal static class Phase04BridgeRoundTripSelfCheck
                             out var transferFlag) || transferFlag.ValueKind != JsonValueKind.True)
                         throw new InvalidOperationException(
                             "Real browser skipped modal-confirmed transfer");
+                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified" })
+                        if (!status.RootElement.TryGetProperty(flag, out var checkedFlag) ||
+                            checkedFlag.ValueKind != JsonValueKind.True)
+                            throw new InvalidOperationException("Real browser skipped R01 contract probe: " + flag);
                     string personId = status.RootElement.GetProperty("personId").GetString()
                         ?? throw new InvalidOperationException("Missing tested PersonId");
                     string movableId = status.RootElement.GetProperty("movableId").GetString()
