@@ -66,12 +66,14 @@ class Section08Contract(unittest.TestCase):
         declared = {a["action"] for a in json.loads(ACTIONS.read_text(encoding="utf-8"))["actions"]}
         native = handlers(CATALOG.read_text(encoding="utf-8"))
         # A new fallback MUST be reviewed rather than silently declared done.
-        self.assertEqual(declared - native, {"RestoreDatabaseAtomically"})
+        self.assertEqual(declared, native)
         called, _ = ui_calls()
         self.assertNotIn("RestoreDatabaseAtomically", called)
         source = CATALOG.read_text(encoding="utf-8")
         self.assertIn("BridgeErrorCodes.MissingData", source)
-        self.assertIn('''الإجراء '{req.Action}' معتمد''', source)
+        self.assertIn('"RestoreDatabaseAtomically" =>', source)
+        self.assertIn("الاستعادة الفعلية معطلة", source)
+        self.assertIn("_ => throw new InvalidOperationException", source)
 
     def test_auto_operation_id_registry_matches_canonical_mutating_actions(self):
         manifest = json.loads(ACTIONS.read_text(encoding="utf-8"))["actions"]
