@@ -74,7 +74,13 @@ def collect(root: Path) -> dict:
         "current_schema_pin_verified": bool(re.search(
             r"if\s*\(hasVersionTable\)\s*new\s+SchemaMigrationRunner\(CanonicalMigrations\)\.VerifyRecordedHashes\(connection\)", db)),
         "destructive_restore_wired": bool(
-            re.search(r'"RestoreDatabaseAtomically"\s*=>', bridge)),
+            re.search(r'"RestoreDatabaseAtomically"\s*=>', bridge)) and not bool(
+            re.search(
+                r'"RestoreDatabaseAtomically"\s*=>\s*\(req, principal, ct\)\s*=>\s*'
+                r'Task\.FromResult\(Fail\(req, BridgeSharedServices\.Error\(\s*'
+                r'BridgeErrorCodes\.MissingData,\s*'
+                r'"الاستعادة الفعلية معطلة حتى اكتمال اعتماد الاستعادة الآمنة؛ لم يتم تعديل البيانات\."\)\)\),',
+                bridge)),
         "offline_contract": (
             actions.get("offlineModeEnforced") is True and
             actions.get("allowExternalNetwork") is False and

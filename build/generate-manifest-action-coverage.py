@@ -25,8 +25,10 @@ def render_coverage():
     )
     wired = {name for arm in arms for name in re.findall(r'"([A-Za-z]\w+)"', arm)}
     canonical = {a["action"] for a in actions}
-    if len(canonical) != len(actions) or canonical - wired != {"RestoreDatabaseAtomically"}:
+    disabled = {"RestoreDatabaseAtomically"}
+    if len(canonical) != len(actions) or canonical != wired:
         raise ValueError("Unexpected missing/duplicate C# action; review manifest and restore gate.")
+    wired -= disabled  # Explicit refusal is not an enabled business handler.
     groups = defaultdict(list)
     for action in actions:
         groups[action["owningService"]].append(action)

@@ -9,10 +9,9 @@ namespace AlTamam.Application.Bridge;
 
 /// <summary>
 /// Builds the complete dispatcher registration set from the canonical action manifest.
-/// Phase 04 wires authentic handlers for the shared-screen actions (provisioning, authentication,
-/// session, sites, statuses, person search, drafts). Every other canonical action is registered with
-/// its manifest ownership metadata and a truthful "not yet implemented" response — so unknown actions
-/// are rejected while known-but-unwired actions fail honestly instead of pretending success.
+/// Every action must resolve to an explicit handler; missing implementations fail
+/// during registration. Destructive restore has an explicit rejection handler and
+/// remains intentionally disabled until its separate native acceptance gate passes.
 /// </summary>
 public static class BridgeHandlerCatalog
 {
@@ -874,9 +873,12 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.QueryAuditPresentationChangesAsync(req.Payload ?? new JsonObject(), ct, principal).ConfigureAwait(false);
             return inner.Success ? Done(req, inner.Data) : Fail(req, inner);
         },
-        _ => (req, principal, ct) => Task.FromResult(Fail(req, BridgeSharedServices.Error(
+        "RestoreDatabaseAtomically" => (req, principal, ct) =>
+            Task.FromResult(Fail(req, BridgeSharedServices.Error(
                 BridgeErrorCodes.MissingData,
-                $"الإجراء '{req.Action}' معتمد في العقد لكنه يُنفَّذ في مراحله المخصصة؛ لا تتوفر بياناته بعد.")))
+                "الاستعادة الفعلية معطلة حتى اكتمال اعتماد الاستعادة الآمنة؛ لم يتم تعديل البيانات."))),
+        _ => throw new InvalidOperationException(
+            $"No concrete bridge handler is registered for action '{action}'.")
     };
 
     private static object SessionData(BridgePrincipal principal) => new JsonObject
