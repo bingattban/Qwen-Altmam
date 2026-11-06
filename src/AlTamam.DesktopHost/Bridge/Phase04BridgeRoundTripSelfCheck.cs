@@ -335,12 +335,46 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   operationId:"phase04-denied-closed-day-0001"
                 },undefined,"Unauthorized");
                 await malformedVersion(nonce);
+
+                // Exercise revoked sessions through the shipped browser client,
+                // then prove a fresh login recovers without reloading WebView2.
+                probeStage = "r01-session-recovery";
+                await api.invoke("Logout",{});
+                for (const action of ["GetActiveAttendanceStatuses",
+                  "SearchPersons","SearchActivePersonsForAccount"]) {
+                  api.setSessionNonce(nonce);
+                  await expectRejected(action,{term:"00007192",take:30},
+                    undefined,"SessionExpired");
+                }
+                api.setSessionNonce(null);
+                const recoveredLogin = await api.invoke("AuthenticateLocalUser",{
+                  username:"phase04-supervisor",password:__SUPERVISOR_PASSWORD__
+                });
+                const recoveredNonce = recoveredLogin.data?.sessionNonce;
+                if (!/^[0-9a-fA-F]{32}$/.test(recoveredNonce || "") || recoveredNonce === nonce)
+                  throw new Error("fresh login did not replace revoked browser session");
+                api.setSessionNonce(recoveredNonce);
+                const recoveredStatuses = await api.invoke("GetActiveAttendanceStatuses",{});
+                if (!Array.isArray(recoveredStatuses.data) ||
+                    !recoveredStatuses.data.some(status => status.statusId === "STS-PRESENT"))
+                  throw new Error("status reading did not recover after login");
+                for (const action of ["SearchPersons","SearchActivePersonsForAccount"]) {
+                  const recovered = await api.invoke(action,{term:"٠٠٠٠٧١٩٢",take:30});
+                  if (recovered.data?.count !== 1 || recovered.data?.items?.length !== 1 ||
+                      recovered.data.items[0].personId !== personId)
+                    throw new Error(action + " did not recover the original person identity");
+                  const empty = await api.invoke(action,{term:"999999999999",take:30});
+                  if (!Array.isArray(empty.data?.items) ||
+                      empty.data.items.length !== 0 || empty.data.count !== 0)
+                    throw new Error(action + " empty result retained stale person data");
+                }
+                const r01SessionRecoveryVerified = true;
                 if (!document.getElementById("phase04-real-sqlcipher-roundtrip")
                     ?.textContent.includes("00007192"))
                   throw new Error("HTML output lost after authorization checks");
 
                 window.__phase04RealBridge = {status:"pass",personId,movableId,
-                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified};
+                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified};
               })().catch(error => {
                 window.__phase04RealBridge = {
                   status:"failed",
@@ -379,7 +413,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                             out var transferFlag) || transferFlag.ValueKind != JsonValueKind.True)
                         throw new InvalidOperationException(
                             "Real browser skipped modal-confirmed transfer");
-                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified" })
+                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified" })
                         if (!status.RootElement.TryGetProperty(flag, out var checkedFlag) ||
                             checkedFlag.ValueKind != JsonValueKind.True)
                             throw new InvalidOperationException("Real browser skipped R01 contract probe: " + flag);
