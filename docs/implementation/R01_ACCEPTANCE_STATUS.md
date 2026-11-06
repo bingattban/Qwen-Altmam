@@ -35,8 +35,8 @@ The fixture includes archived/new identities sharing a personnel number; existin
 retain independent identity ordinals, historical snapshots, formula safety and export audit checks.
 Synthetic resolved principal is used here; this is not a real-login WebView2 E2E test.
 
-Local JS report and Section08 preflight checks pass. New native extension: NOT EXECUTED locally
-(dependency restore unavailable), awaiting Windows CI. No production changes or defect claim.
+Local JS report and Section08 preflight checks pass. Native extension passed Windows Core 42272876295 and Release 42272876264 on
+76f458af113c9bffe1f6cbf2a4de8b49520d6424, with four-package provenance verification. No production changes or defect claim.
 Full schema validation, all-action gate and complete historical Excel parity are not implied
 by this narrow aggregate/row-count comparison.
 
@@ -47,3 +47,13 @@ Reads require correct results without business mutation; writes require durable 
 audit and replay safety; disabled commands require truthful safe refusal.
 Do not activate restore, remove historical aliases or change owner policies to close a checklist.
 Merge each final head only after Core, Release, four outputs and provenance pass.
+
+## Next native-connected browser slice (pending)
+
+Phase04BridgeRoundTripSelfCheck now invokes GetActiveAttendanceStatuses, SearchPersons and
+SearchActivePersonsForAccount from the shipped JavaScript bridge in real WebView2. It checks
+status field shapes and selectable HTML, Arabic/Persian-digit person identity and items/count,
+and rendered HTML options. C# rejects a pass result missing either new probe flag.
+This is a real JS/native/SQLCipher round trip in the disposable fixture, not full attendance or
+admin-settings screen workflow acceptance. Local JavaScript syntax and 11 self-check guards pass;
+Windows execution of this extension is pending. R01 is not complete.
