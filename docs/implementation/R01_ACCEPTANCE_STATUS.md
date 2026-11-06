@@ -69,9 +69,16 @@ Phase04BridgeRoundTripSelfCheck; no production behavior or optimization changes.
 Acceptance: revoke the real Supervisor session; each of GetActiveAttendanceStatuses,
 SearchPersons and SearchActivePersonsForAccount must reject its old nonce with SessionExpired.
 Log in again without reloading WebView2; require a different nonce, known active status,
-original stable PersonId for Arabic-digit search, and empty items/count for a no-match query
-on both search actions. C# requires the browser recovery flag before accepting success.
+original stable PersonId for Arabic-digit Supervisor SearchPersons, and Unauthorized for
+Supervisor SearchActivePersonsForAccount. Then log out and authenticate OrdinaryAdministration
+before checking identity and empty items/count on both search actions. C# requires the browser recovery flag before accepting success.
 Local validation: python build/test-webview-selfcheck-contract.py (11 checks, including
 embedded JS syntax) and python build/test-section08-bridge-contract.py (6 checks) pass.
 These preflights do not execute native recovery; Windows CI remains required.
 Full screen-consumer failure isolation, all-action gate and schema/Excel matrix remain open.
+
+Failed baseline 4f6bb47e10f9212af51cc75f823a59aaa2861131: Core 42283506732 and Release
+42283506612 passed 1060 main tests plus 18 integration and 14 unit tests, then real WebView2
+correctly rejected Supervisor account search with Unauthorized. The new test had the wrong
+role expectation. Correct only the test to preserve the manifest policy; packaging was blocked.
+Corrected native Windows execution remains pending; local syntax/contract preflights pass.
