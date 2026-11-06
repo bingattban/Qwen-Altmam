@@ -358,6 +358,23 @@ internal static class Phase04BridgeRoundTripSelfCheck
                 if (!Array.isArray(recoveredStatuses.data) ||
                     !recoveredStatuses.data.some(status => status.statusId === "STS-PRESENT"))
                   throw new Error("status reading did not recover after login");
+                await expectRejected("SearchActivePersonsForAccount",
+                  {term:"00007192",take:30},undefined,"Unauthorized");
+                const supervisorRecovered = await api.invoke("SearchPersons",
+                  {term:"٠٠٠٠٧١٩٢",take:30});
+                if (supervisorRecovered.data?.count !== 1 ||
+                    supervisorRecovered.data?.items?.[0]?.personId !== personId)
+                  throw new Error("Supervisor search did not recover the original identity");
+                await api.invoke("Logout",{});
+                api.setSessionNonce(null);
+                probeStage = "r01-admin-search-recovery";
+                const recoveredAdmin = await api.invoke("AuthenticateLocalUser",{
+                  username:"phase13-admin",password:__ADMIN_PASSWORD__
+                });
+                const recoveredAdminNonce = recoveredAdmin.data?.sessionNonce;
+                if (!/^[0-9a-fA-F]{32}$/.test(recoveredAdminNonce || ""))
+                  throw new Error("ordinary Admin recovery session missing");
+                api.setSessionNonce(recoveredAdminNonce);
                 for (const action of ["SearchPersons","SearchActivePersonsForAccount"]) {
                   const recovered = await api.invoke(action,{term:"٠٠٠٠٧١٩٢",take:30});
                   if (recovered.data?.count !== 1 || recovered.data?.items?.length !== 1 ||
