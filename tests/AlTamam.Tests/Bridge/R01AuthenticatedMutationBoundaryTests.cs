@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
 using AlTamam.Contracts.Bridge;
@@ -120,6 +121,62 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
         }
         Assert.Equal(afterSupervisorLogin, Evidence());
         Assert.True(_db.HasValidIntegrity());
+    }
+
+
+    [Fact]
+    public async Task NativeReadWire_MatchesStatusArraySearchItemsAndExpiredErrorContract()
+    {
+        // DesktopBridgeGateway uses JsonSerializerDefaults.Web for responses.
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var statuses = await Call(_admin, new JsonObject(), "GetActiveAttendanceStatuses");
+        Assert.True(statuses.Response.Success, statuses.Response.UserMessage);
+        using var statusDocument = JsonDocument.Parse(JsonSerializer.Serialize(statuses.Response, options));
+        var statusRoot = statusDocument.RootElement;
+        Assert.Equal(statuses.Response.RequestId, statusRoot.GetProperty("requestId").GetString());
+        Assert.Equal("OK", statusRoot.GetProperty("code").GetString());
+        var rows = statusRoot.GetProperty("data");
+        Assert.Equal(JsonValueKind.Array, rows.ValueKind);
+        Assert.NotEmpty(rows.EnumerateArray());
+        var present = Assert.Single(rows.EnumerateArray(),
+            row => row.GetProperty("statusId").GetString() == "STS-PRESENT");
+        Assert.False(string.IsNullOrWhiteSpace(present.GetProperty("displayName").GetString()));
+        Assert.Equal(JsonValueKind.String, present.GetProperty("color").ValueKind);
+        Assert.True(present.GetProperty("active").GetBoolean());
+        Assert.True(present.GetProperty("version").GetInt64() >= 1);
+        Assert.Equal(0L, present.GetProperty("todayCount").GetInt64());
+        Assert.Equal(JsonValueKind.Null, statusRoot.GetProperty("auditEventId").ValueKind);
+
+        var search = await Call(_admin, new JsonObject {
+            ["term"]="۹۸۷۶۵۴", ["take"]=30
+        }, "SearchPersons");
+        Assert.True(search.Response.Success, search.Response.UserMessage);
+        using var searchDocument = JsonDocument.Parse(JsonSerializer.Serialize(search.Response, options));
+        var data = searchDocument.RootElement.GetProperty("data");
+        Assert.Equal(JsonValueKind.Object, data.ValueKind);
+        Assert.Equal(1, data.GetProperty("count").GetInt32());
+        var person = Assert.Single(data.GetProperty("items").EnumerateArray());
+        Assert.Equal("TST-R01-SUP", person.GetProperty("personId").GetString());
+        Assert.Equal("مشرف اختباري", person.GetProperty("displayName").GetString());
+        Assert.Equal("987654", person.GetProperty("serviceNumberA").GetString());
+        Assert.Equal(1, person.GetProperty("organizationalStatus").GetInt32());
+        Assert.Equal(1L, person.GetProperty("revision").GetInt64());
+        Assert.Equal("غير محدد", person.GetProperty("siteName").GetString());
+
+        await _services.RevokeSessionAsync(_admin.SessionNonce);
+        string before = Evidence();
+        var denied = await Call(_admin, new JsonObject { ["term"]="987654" }, "SearchPersons");
+        using var errorDocument = JsonDocument.Parse(JsonSerializer.Serialize(denied.Response, options));
+        var error = errorDocument.RootElement;
+        Assert.False(error.GetProperty("success").GetBoolean());
+        Assert.Equal("SessionExpired", error.GetProperty("code").GetString());
+        Assert.Equal(error.GetProperty("code").GetString(), error.GetProperty("errorCode").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(error.GetProperty("messageAr").GetString()));
+        Assert.Equal(error.GetProperty("messageAr").GetString(), error.GetProperty("userMessage").GetString());
+        Assert.False(error.TryGetProperty("data", out _));
+        Assert.Equal(JsonValueKind.Null, error.GetProperty("auditEventId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, error.GetProperty("invalidationEvents").ValueKind);
+        Assert.Equal(before, Evidence());
     }
 
     private static JsonObject Intent() => new() {
