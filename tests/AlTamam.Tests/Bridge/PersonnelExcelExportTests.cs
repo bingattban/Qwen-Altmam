@@ -188,6 +188,26 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             ["personIds"]=new JsonArray("TST-XLSX-OLD","TST-XLSX-NEW"),
             ["dateFrom"]="2026-10-01",["dateTo"]="2026-10-26"
         };
+        var report = await new PersonnelReportService(_db).ReportAsync(
+            (JsonObject)request.DeepClone(), CancellationToken.None);
+        Assert.True(report.Success, report.UserMessage);
+        var canonical = Assert.IsType<JsonObject>(report.Data);
+        Assert.Equal(2L, canonical["attendanceTotal"]!.GetValue<long>());
+        var dispatcher = BridgeHandlerCatalog.Create(new BridgeSharedServices(_db));
+        foreach (string action in new[] { "BuildPersonLifetimeReport",
+            "QueryPersonAttendanceTimeline", "QueryPersonAttendanceTotals",
+            "QueryPersonOperationsTimeline" })
+        {
+            var envelope = new JsonObject {
+                ["requestId"]=Guid.NewGuid().ToString("N"), ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
+                ["action"]=action, ["sessionNonce"]=Actor.SessionNonce, ["payload"]=request.DeepClone()
+            };
+            var native = await dispatcher.DispatchAsync(envelope.ToJsonString(),
+                LocalWebUiOrigin.BaseUrl, true,
+                nonce => Task.FromResult<BridgePrincipal?>(nonce == Actor.SessionNonce ? Actor : null));
+            Assert.True(native.Response.Success, native.Response.UserMessage);
+            Assert.True(JsonNode.DeepEquals(canonical, Assert.IsType<JsonObject>(native.Response.Data)));
+        }
         var preview=await svc.PreviewReportAsync(request,CancellationToken.None);
         Assert.True(preview.Success,preview.UserMessage);
         var p=Assert.IsType<JsonObject>(preview.Data);
@@ -221,11 +241,12 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
                 }
             });
             Assert.Equal("إجمالي المجموعة",people[3][0]);
-            Assert.Equal("2",people[3][5]);
+            Assert.Equal(canonical["attendanceTotal"]!.GetValue<long>().ToString(
+                System.Globalization.CultureInfo.InvariantCulture), people[3][5]);
             Assert.Contains("غياب (1)",people[3][9]);
             Assert.Contains("موجود (1)",people[3][9]);
             var history=Rows(zip,2).Select(Text).ToArray();
-            Assert.Equal(3,history.Length);
+            Assert.Equal(canonical["attendanceTotal"]!.GetValue<long>(), (long)history.Length - 1);
             XNamespace spreadsheet="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
             var dateCell=Rows(zip,2).Skip(1).First()
                 .Elements(spreadsheet+"c").ElementAt(3);
