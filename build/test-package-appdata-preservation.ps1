@@ -54,9 +54,10 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verify
                     # bridge -> isolated encrypted SQLCipher -> HTML roundtrip.
                     # --webview-selfcheck uses a fresh TEMP profile and DATABASE;
                     # no production user data, passwords or DPAPI key is touched.
-                    # Expanded R01 recovery adds two real password verifications; retain
-                    # a bounded five-minute process and all mandatory success evidence.
-                    Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e") 300
+                    # Use the measured architecture-specific cap for BOTH actual
+                    # customer binaries. All mandatory success evidence stays required.
+                    $bridgeTimeoutSeconds = Get-PackagedBridgeTimeoutSeconds -Runtime $ExpectedArch
+                    Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e") $bridgeTimeoutSeconds
                     Assert-True (Test-Path -LiteralPath $trace -PathType Leaf) "No packaged native bridge trace: $phase"
                     $text = Get-Content -LiteralPath $trace -Raw
                     foreach ($required in @(

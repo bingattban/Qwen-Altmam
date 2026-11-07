@@ -2,6 +2,7 @@
 
 **R01 is OPEN.** Successful incremental PRs are not full phase acceptance.
 Current verified baseline: merged #252, `13305e98e79863720703cb3713466367ab123796`.
+Post-merge push release 42391468076 failed x86 packaged E2E; bounded-budget repair pending Windows verification (see investigation below).
 Do not start a different corrective package or label this application production-ready.
 
 ## Verified Windows baseline
@@ -199,3 +200,41 @@ Windows Core/Release plus all four x86/x64 Portable/Installer artifacts and
 independent hashes on the final new PR head are required before merge.
 Windows WPF/package execution is NOT claimed locally. Full enabled-action,
 per-role/error/consumer and Excel parity requirements still keep R01 OPEN.
+
+
+## Post-merge x86 package timeout investigation and bounded budget repair
+
+The owner-reported push release `42391468076` on merged #252 commit
+`13305e98e79863720703cb3713466367ab123796` passed its full tests and x64 package
+job. The x86 Portable actual UI/native/SQLCipher process reached UI-E2E PASS,
+then exceeded the 300-second external cap on BOTH attempts; it never reached
+route evidence. The four-package audit was correctly skipped. This is a
+post-merge release failure, not a Git conflict or proof that tests were bypassed.
+
+Independent prior success on the same source tree in PR release `42387825788`,
+x86 job `128451871961`, measured 271.95 seconds for Portable native E2E and
+275.79 seconds for Installer native E2E, plus separate routes (19.51/4.69 seconds).
+The old 300-second bridge cap had under 9% headroom above that successful
+Installer measurement. The slow phase's internal cause is NOT established by
+the startup-only failing trace; a reproducible application defect is not claimed.
+A retry of only failed jobs on the original merge SHA was requested for diagnosis.
+
+The proposed CI repair adds an executable architecture-specific budget policy:
+480 seconds for x86 real bridge E2E, 300 seconds for x64. Both Portable and
+Installer use it. Separate routes stay at 120 seconds, simple navigation at
+90 seconds, at most two attempts, the 30-minute package job limit, process-tree
+termination and all exit/trace/role/SQLCipher/69-route/AppData/SHA256 conditions
+remain required. This does not turn a timeout into success or change application
+security, password cost, data, roles or services.
+
+Test-first record: the updated packaged WebView contract guard failed before
+script changes (1 failed / 10 passed). The actual Windows PowerShell watchdog
+regression now also evaluates both policy values and rejects an unsupported
+runtime, in addition to its existing real subprocess nonzero/timeout/missing
+negative tests. That Windows-native test and actual x86/x64 packaged E2E are
+NOT EXECUTED locally (no Windows/PowerShell runtime); both workflows run them
+before acceptance. After script changes the 11 WebView preflight checks and
+five Phase00-02 regressions passed locally. Windows/package validation on the
+new final PR head is still REQUIRED before calling this repair verified or
+merging #253. The earlier 32-case native R01 local result predates this PS-only
+repair; no C# application or native lifecycle test source was changed by it.
