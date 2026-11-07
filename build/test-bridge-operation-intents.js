@@ -8,12 +8,13 @@ const {webcrypto}=require("node:crypto");
 const manifest=JSON.parse(fs.readFileSync("src/AlTamam.WebUI/action-manifest.json","utf8"));
 const source=fs.readFileSync("src/AlTamam.WebUI/assets/js/bridge-client.js","utf8");
 const sent=[], handlers={};
+let automaticReply=true,storedNonce="a".repeat(32);
 const webview={
   addEventListener(name,fn){handlers[name]=fn;},
   postMessage(raw){
     const data=JSON.parse(raw);
     sent.push(data);
-    queueMicrotask(()=>handlers.message({data:JSON.stringify({
+    if(automaticReply)queueMicrotask(()=>handlers.message({data:JSON.stringify({
       requestId:data.requestId,success:true,data:{}
     })}));
   }
@@ -23,7 +24,7 @@ const document={
   addEventListener(){}, dispatchEvent(){},
   getElementById(){return null;}, querySelector(){return null;}
 };
-const localStorage={getItem(){return "a".repeat(32);},setItem(){},removeItem(){}};
+const localStorage={getItem(){return storedNonce;},setItem(key,value){storedNonce=value;},removeItem(){storedNonce=null;}};
 const context={window,document,crypto:webcrypto,localStorage,setTimeout,clearTimeout,
   CustomEvent:class{constructor(name,options){this.type=name;this.detail=options.detail;}}};
 vm.runInNewContext(source,context,{filename:"bridge-client.js"});
@@ -52,5 +53,38 @@ const bridge=window.AltamamBridge;
   assert.equal(sent.at(-1).payload.operationId,undefined);
   await bridge.invoke("Logout",{});
   assert.equal(sent.at(-1).payload.operationId,undefined);
+  // Run real response correlation and invalidation logic, including late frames.
+  automaticReply=false;
+  const invalidations=[];
+  bridge.onInvalidation(event=>invalidations.push(typeof event==="string"?event:event.eventName));
+  const respond=(request,success,code,data={})=>handlers.message({data:JSON.stringify({
+    requestId:request.requestId,success,code,messageAr:code,data
+  })});
+  bridge.setSessionNonce("b".repeat(32));
+  const expired=bridge.invoke("GetActiveAttendanceStatuses",{}).catch(error=>error);
+  const expiredRequest=sent.at(-1);
+  const pendingSearch=bridge.invoke("SearchPersons",{term:"123",take:30}).catch(error=>error);
+  const pendingRequest=sent.at(-1);
+  respond(expiredRequest,false,"SessionExpired");
+  assert.equal((await expired).errorCode,"SessionExpired");
+  assert.equal(bridge.getSessionNonce(),null,"native expiry clears the current browser nonce");
+  assert.equal((await pendingSearch).errorCode,"SessionExpired","expiry cancels other requests of that session");
+  assert.equal(invalidations.filter(x=>x==="SessionEnded").length,1,"expiry informs actual login/UI consumers once");
+  respond(pendingRequest,true,"OK",{items:[{personId:"OLD-PRIVATE"}]});
+  bridge.setSessionNonce("c".repeat(32));
+  const denied=bridge.invoke("SearchActivePersonsForAccount",{term:"123",take:30}).catch(error=>error);
+  respond(sent.at(-1),false,"Unauthorized");
+  assert.equal((await denied).errorCode,"Unauthorized");
+  assert.equal(bridge.getSessionNonce(),"c".repeat(32),"role denial does not end a valid session");
+  const old=bridge.invoke("SearchPersons",{term:"123",take:30}).catch(error=>error);
+  const oldRequest=sent.at(-1);
+  bridge.setSessionNonce("d".repeat(32));
+  assert.equal((await old).errorCode,"SessionExpired","account switch cancels requests belonging to the previous nonce");
+  respond(oldRequest,false,"SessionExpired");
+  assert.equal(bridge.getSessionNonce(),"d".repeat(32),"a late expired frame cannot log out the new account");
+  assert.equal(invalidations.filter(x=>x==="SessionEnded").length,1);
+  automaticReply=true;
+  await bridge.invoke("GetActiveAttendanceStatuses",{});
+  assert.equal(sent.at(-1).sessionNonce,"d".repeat(32),"fresh login can read again");
   console.log("SECTION02 mutation UI bridge PASS: 42 actions, persistent intent, explicit ID, reads and logout");
 })().catch(e=>{console.error(e);process.exitCode=1;});
