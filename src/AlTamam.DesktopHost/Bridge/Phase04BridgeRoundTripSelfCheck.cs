@@ -364,6 +364,75 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("actual revision did not report its saved receipt");
                 commitPage.remove();
                 const r01AttendanceRevisionVerified = true;
+
+                probeStage = "r01-report-consumer";
+                if (typeof window.AltamamReports?.render !== "function")
+                  throw new Error("shipped personnel report renderer missing");
+                const canonicalReport = (await api.invoke("BuildPersonLifetimeReport",
+                  {personIds:[attendancePersonId]})).data;
+                if (canonicalReport?.mode !== "group" || canonicalReport.personCount !== 1 ||
+                    canonicalReport.attendanceTotal !== 1 ||
+                    canonicalReport.persons?.[0]?.personId !== attendancePersonId ||
+                    canonicalReport.statusTotals?.length !== 1 ||
+                    canonicalReport.statusTotals[0].statusName !== "غياب" ||
+                    canonicalReport.statusTotals[0].count !== 1)
+                  throw new Error("canonical report lost revised attendance identity/count");
+                const reportPage = document.createElement("section");
+                document.body.appendChild(reportPage);
+                window.AltamamReports.render(reportPage,()=>{});
+                async function waitForReport(check, description) {
+                  for (let attempt = 0; attempt < 300; attempt++) {
+                    if (reportPage.querySelector(".admin-warning"))
+                      throw new Error("actual report consumer reported an error: " + description);
+                    const result = check();
+                    if (result) return result;
+                    await new Promise(resolve => setTimeout(resolve,50));
+                  }
+                  throw new Error("actual report consumer timed out: " + description);
+                }
+                const reportStatus = await waitForReport(() => {
+                  const select = reportPage.querySelector('select[aria-label="فلتر حالة التحضير التاريخية"]');
+                  return select && [...select.options].some(option => option.value === "STS-ABSENT")
+                    ? select : null;
+                },"status filters");
+                for (const status of activeStatuses.data) {
+                  const option = [...reportStatus.options].find(option => option.value === status.statusId);
+                  if (!option || option.textContent !== status.displayName)
+                    throw new Error("actual report filter lost native status identity/name");
+                }
+                const reportSearch = reportPage.querySelector('input[aria-label="البحث عن فرد"]');
+                const searchReportButton = [...reportPage.querySelectorAll("button")]
+                  .find(button => button.textContent.trim() === "بحث");
+                if (!reportSearch || !searchReportButton)
+                  throw new Error("actual report search controls missing");
+                reportSearch.value = "00007195";
+                searchReportButton.click();
+                const reportPersonRow = await waitForReport(() =>
+                  [...reportPage.querySelectorAll("tbody tr")].find(row =>
+                    row.textContent.includes("00007195") &&
+                    row.textContent.includes("فرد اعتماد التمام")),"person search");
+                const addToReport = [...reportPersonRow.querySelectorAll("button")]
+                  .find(button => button.textContent.trim() === "إضافة للمجموعة");
+                if (!addToReport) throw new Error("actual report group selection missing");
+                addToReport.click();
+                const groupReportButton = [...reportPage.querySelectorAll("button")]
+                  .find(button => button.textContent.trim() === "عرض التقرير الجماعي");
+                if (!groupReportButton) throw new Error("actual group report action missing");
+                groupReportButton.click();
+                const renderedReport = await waitForReport(() => {
+                  const popup = reportPage.querySelector(".person-report-modal");
+                  return popup && !popup.hidden &&
+                    popup.textContent.includes("إجمالي التحضيرات المعتمدة: 1")
+                    ? popup : null;
+                },"group report");
+                if (!renderedReport.textContent.includes("00007195") ||
+                    !renderedReport.textContent.includes("فرد اعتماد التمام") ||
+                    ![...renderedReport.querySelectorAll("tbody tr")].some(row =>
+                      row.cells.length === 2 && row.cells[0].textContent === "غياب" &&
+                      row.cells[1].textContent === String(canonicalReport.statusTotals[0].count)))
+                  throw new Error("actual report DOM disagreed with canonical identity/status totals");
+                reportPage.remove();
+                const r01ReportConsumerVerified = true;
                 const r01AttendanceCommitVerified = true;
                 const r01AttendanceConsumerVerified = true;
                 target.textContent = saved.displayName + " — " + saved.serviceNumberA;
@@ -558,7 +627,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("HTML output lost after authorization checks");
 
                 window.__phase04RealBridge = {status:"pass",personId,movableId,
-                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified,r01AttendanceCancelVerified,r01AttendanceCommitVerified,r01AttendanceRevisionVerified,attendancePersonId};
+                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified,r01AttendanceCancelVerified,r01AttendanceCommitVerified,r01AttendanceRevisionVerified,r01ReportConsumerVerified,attendancePersonId};
               })().catch(error => {
                 window.__phase04RealBridge = {
                   status:"failed",
@@ -607,7 +676,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                             out var transferFlag) || transferFlag.ValueKind != JsonValueKind.True)
                         throw new InvalidOperationException(
                             "Real browser skipped modal-confirmed transfer");
-                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified", "r01AttendanceCancelVerified", "r01AttendanceCommitVerified", "r01AttendanceRevisionVerified" })
+                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified", "r01AttendanceCancelVerified", "r01AttendanceCommitVerified", "r01AttendanceRevisionVerified", "r01ReportConsumerVerified" })
                         if (!status.RootElement.TryGetProperty(flag, out var checkedFlag) ||
                             checkedFlag.ValueKind != JsonValueKind.True)
                             throw new InvalidOperationException("Real browser skipped R01 contract probe: " + flag);
