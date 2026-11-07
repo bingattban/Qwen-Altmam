@@ -195,8 +195,13 @@ const modalReviews=[];
 const editDialogRequests=[];
 let nextIdentityForm=null,nextConfigForm=null;
 let approveDetailPreview=false;
+let deferDetailsReview=false,completeDetailsReview=null;
 const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
-  detailsReview:async(details,opts)=>{modalReviews.push({details,opts});return approveDetailPreview;},
+  detailsReview:async(details,opts)=>{
+    modalReviews.push({details,opts});
+    if(deferDetailsReview)return new Promise(resolve=>{completeDetailsReview=resolve;});
+    return approveDetailPreview;
+  },
   form:async(fields,opts)=>{
     editDialogRequests.push({fields,opts});
     return ["إعادة تسمية الموقع","تعديل حالة التحضير"].includes(opts.title)?
@@ -1061,6 +1066,44 @@ async function run() {
   assert.equal(calls.filter(x=>
     x.name==="UpdateAuditPresentation"||x.name==="DeleteAuditPresentation").length,
     auditWritesBefore,"GA deep link must remain a read until explicitly confirmed");
+  // Pending human confirmation belongs to the screen that requested it.
+  // Navigating away must invalidate both exceptional attendance workflows.
+  for(const kind of ["catchUp","correction"]){
+    controller.renderAdmin(admin);
+    assert.equal(controller.openOwnedRoute("ClosedDayExceptionalCorrection"),true);
+    await new Promise(resolve=>setImmediate(resolve));
+    let action;
+    if(kind==="correction"){
+      const fields=visible().filter(x=>x.className==="form-control");
+      fields.find(x=>x.type==="date").value="2026-10-10";
+      fields.find(x=>x.type==="text").value="اختبار";
+      await buttonNamed("بحث عن فرد").handlers.click();
+      const choices=visible().filter(x=>x.tag==="select");
+      choices[0].value="TST-CLOSED-P1";choices[1].value="STS-ABSENT";
+      fields.filter(x=>x.type==="text").at(-1).value="تصحيح موثق لمراجعة متأخرة";
+      action=buttonNamed("معاينة التصحيح");
+    }else{
+      await buttonNamed("استدراك يوم سابق (خلال 7 أيام)").handlers.click();
+      const form=visible().find(x=>x.className.includes("app-operational-modal")&&
+        x.all().some(y=>y.textContent.includes("استدراك التحضير الناقص")));
+      form.all().find(x=>x.type==="date").value="2026-10-29";
+      form.all().find(x=>x.tag==="input"&&x.type==="text").value="استدراك موثق لمراجعة متأخرة";
+      action=form.all().find(x=>x.tag==="button"&&x.textContent==="معاينة الاستدراك");
+    }
+    assert.ok(action,kind+": original preview control exists");
+    const commitName=kind==="correction"?"CommitClosedDayCorrection":"CommitAdministrativeAttendanceCatchUp";
+    const before=calls.filter(x=>x.name===commitName).length;
+    deferDetailsReview=true;completeDetailsReview=null;
+    const pending=action.handlers.click();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof completeDetailsReview,"function",kind+": human review is pending");
+    controller.renderAdmin(admin);
+    completeDetailsReview(true);await pending;
+    deferDetailsReview=false;
+    assert.equal(calls.filter(x=>x.name===commitName).length,before,
+      kind+": late approval after leaving the screen must not write attendance");
+    assert.ok(byDataset("adminSection").length>0,"navigation remains at administration home");
+  }
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
 run().catch(error => { console.error(error); process.exitCode=1; });
