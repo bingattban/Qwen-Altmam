@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Require executed native lifecycle tests and every committed wire snapshot.
 
-This gate covers this named 78-action slice, NOT all 104 manifest actions.
+This gate covers this named 89-action slice, NOT all 104 manifest actions.
 It consumes the real full-suite TRX; a metadata inventory cannot satisfy it.
 """
 import json
@@ -13,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS = ROOT / "tests/AlTamam.Tests/Bridge/Snapshots/R01NativeConfigurationResponseShapes.json"
 PREFIX = "AlTamam.Tests.Bridge.R01Native"
 CASES = {
+    "ExcelLifecycleTests.Monthly_RealAllSitesAndFilteredWorkbooks_ExactlyMatchEveryPagedNativeCell",
+    "ExcelLifecycleTests.PersonReports_RealSingleGroupFilteredAndPagedExcel_PreserveHistoricalIdentityAndTotals",
+    "ExcelLifecycleTests.Import_RealWorkbookAnalyzePreviewCommitOutcomeAndIssues_PersistExactlyOneAcceptedPerson",
     "ConfigurationLifecycleTests.PersonnelArchive_RealPreviewCommit_HidesRosterWithoutErasingIdentity",
     "ConfigurationLifecycleTests.PersonnelIdentity_RealPreviewEdit_PreservesCanonicalNumberAndHistoricalIdentity",
     "ConfigurationLifecycleTests.SitesAndStatuses_CreateRenameRetireAndDeactivate_PreserveHistoryAndReceipts",
