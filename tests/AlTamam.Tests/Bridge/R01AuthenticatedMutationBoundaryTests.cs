@@ -183,12 +183,16 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
         ["name"]="موقع يجب ألا يحفظ", ["operationId"]=Guid.NewGuid().ToString("N")
     };
 
-    private Task<BridgeDispatchResult> Call(BridgePrincipal actor, JsonObject payload,
+    private async Task<BridgeDispatchResult> Call(BridgePrincipal actor, JsonObject payload,
         string action = "CreateSite")
-        => _dispatcher.DispatchAsync(new JsonObject {
+    {
+        var result = await _dispatcher.DispatchAsync(new JsonObject {
             ["requestId"]=Guid.NewGuid().ToString("N"), ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
             ["action"]=action, ["sessionNonce"]=actor.SessionNonce, ["payload"]=payload.DeepClone()
         }.ToJsonString(), LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
+        R01ResponseSchema.AssertMatches(result.Response);
+        return result;
+    }
 
     private string Evidence()
     {
