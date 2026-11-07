@@ -33,6 +33,7 @@ let transferCount=0,expandedRoster=false,approveReview=true;
 let discardApproved=false,discardPrompts=0;
 let deferAutoReview=false,releaseAutoReview=null;
 let approveStatusForm=true;
+let statusLookupMode="normal",completeStatusLookup=null;
 let autoCommitFailure=null,autoCommitReceipt=null,failAutoRosterNext=false;
 const statusForms=[];
 let autoPeople=[{personId:"P3",name:"P3",serviceNumberA:"12345",
@@ -46,9 +47,13 @@ const bridge={hasBridge:()=>true,onInvalidation:()=>{},setSessionNonce:()=>{},
      return{data:{sessionNonce:"A".repeat(32),username:"tester",role:"Supervisor"}};
    if(action==="QuerySites")
      return{data:[{siteId:"SITE-UNSPECIFIED",name:"غير محدد",active:true}]};
-   if(action==="GetActiveAttendanceStatuses")
+   if(action==="GetActiveAttendanceStatuses"){
+     if(statusLookupMode==="failure")throw Error("status lookup unavailable");
+     if(statusLookupMode==="empty")return {data:[]};
+     if(statusLookupMode==="deferred")return new Promise(resolve=>{completeStatusLookup=resolve;});
      return{data:[{statusId:"STS-PRESENT",displayName:"موجود"},
        {statusId:"STS-ABSENT",displayName:"غياب"}]};
+   }
    if(action==="GetDashboardSummary")
      return{data:{totalForce:3,unprepared:1,automaticallyPrepared:1,internalTransferDay:transferCount,completionPercentage:67,statusCounts:[
        {statusId:"STS-PRESENT",name:"موجود",count:1,color:"#157A52"},
@@ -389,6 +394,58 @@ async function main(){
  deferAutoReview=false;releaseAutoReview=null;
  context.window.AltamamFunctional.render("dashboard");await settle();
  assert.ok(counter("all"),"navigation does not break the four main sections");
+
+ // A status lookup is independent of reading saved automatic attendance.
+ // Exercise the shipped controller; only the bridge reply boundary is supplied.
+ const countAction=action=>calls.filter(x=>x.action===action).length;
+ for(const mode of ["failure","empty"]){
+   statusLookupMode=mode;
+   counter("__AUTO_PREPARED__").handlers.click();await settle();
+   const register=viewport.all().find(x=>x.className.includes("auto-attendance-overlay")&&!x.removed);
+   assert.ok(register.all().some(x=>x.textContent==="P3"),mode+": persisted attendance remains visible");
+   assert.ok(register.all().some(x=>x.textContent==="غياب"),mode+": saved status remains visible");
+   assert.ok(register.all().some(x=>x.textContent.includes(mode==="failure"?
+     "status lookup unavailable":"لا توجد حالات نشطة")),mode+": lookup problem is explicit");
+   const beforePreview=countAction("PreviewAttendanceChange"),beforeWrite=countAction("ReviseTodayAttendance");
+   const priorForm=statusForms.length;
+   register.all().find(x=>x.tag==="button"&&x.textContent==="اختيار الحالة والمعاينة").handlers.click();
+   await settle();
+   assert.equal(statusForms.length,priorForm+1);
+   assert.deepEqual(Array.from(statusForms.at(-1).fields[0].options.map(x=>x.value)),[""],
+     mode+": stale choices from a previous register cannot be offered");
+   assert.equal(countAction("PreviewAttendanceChange"),beforePreview,mode+": no unverified preview");
+   assert.equal(countAction("ReviseTodayAttendance"),beforeWrite,mode+": no attendance write");
+   register.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق").handlers.click();await settle();
+ }
+ statusLookupMode="deferred";
+ counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const pendingRegister=viewport.all().find(x=>x.className.includes("auto-attendance-overlay")&&!x.removed);
+ assert.ok(pendingRegister.all().some(x=>x.textContent==="P3"),
+   "saved rows load before the independent status lookup completes");
+ assert.equal(typeof completeStatusLookup,"function");
+ context.window.AltamamFunctional.render("settings");await settle();
+ assert.equal(pendingRegister.removed,true);
+ const rosterAfterNavigation=countAction("QueryDailyRoster");
+ const detachedNodes=pendingRegister.all().length;
+ completeStatusLookup({data:[{statusId:"LATE",displayName:"late status"}]});await settle();
+ assert.equal(countAction("QueryDailyRoster"),rosterAfterNavigation,
+   "late lookup must not reload a disposed register");
+ assert.equal(pendingRegister.all().length,detachedNodes,
+   "late lookup must not mutate detached UI");
+ statusLookupMode="normal";
+ context.window.AltamamFunctional.render("dashboard");await settle();
+ counter("__AUTO_PREPARED__").handlers.click();await settle();
+ const recovered=viewport.all().find(x=>x.className.includes("auto-attendance-overlay")&&!x.removed);
+ const beforeRecoveryPreview=countAction("PreviewAttendanceChange"),beforeRecoveryWrite=countAction("ReviseTodayAttendance");
+ approveReview=false;
+ recovered.all().find(x=>x.tag==="button"&&x.textContent==="اختيار الحالة والمعاينة").handlers.click();await settle();
+ assert.equal(countAction("PreviewAttendanceChange"),beforeRecoveryPreview+1,
+   "reopening after recovery uses fresh valid status choices");
+ assert.equal(countAction("ReviseTodayAttendance"),beforeRecoveryWrite,
+   "declining the recovered preview still cannot commit");
+ assert.ok(statusForms.at(-1).fields[0].options.some(x=>x.value==="STS-PRESENT"));
+ assert.ok(!statusForms.at(-1).fields[0].options.some(x=>x.value==="LATE"));
+ recovered.all().find(x=>x.tag==="button"&&x.textContent==="إغلاق").handlers.click();await settle();
 
  expandedRoster=true;
  counter("all").handlers.click();await settle();

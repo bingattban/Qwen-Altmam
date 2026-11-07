@@ -162,19 +162,21 @@
       addOption(movement,value,label));
    movement.value="0";
    async function loadHistoricalFilters(){
-     try{
-       const [sites,statuses]=await Promise.all([
-         api().invoke("QuerySites",{}),api().invoke("GetActiveAttendanceStatuses",{})
-       ]);
-       if(!root.isConnected)return;
-       for(const entry of sites.data||[]){
-         if(entry.siteId)addOption(site,entry.siteId,entry.name||entry.siteId);
-       }
-       for(const entry of statuses.data||[]){
-         const id=entry.statusId||entry.id;
-         if(id)addOption(statusFilter,id,entry.name||entry.displayName||id);
-       }
-     }catch(e){alert(status,e);}
+     // Each lookup owns its filter; one failure must not discard the other result.
+     await Promise.all([
+       [()=>api().invoke("QuerySites",{}),site,entry=>entry.siteId,entry=>entry.name],
+       [()=>api().invoke("GetActiveAttendanceStatuses",{}),statusFilter,entry=>entry.statusId||entry.id,
+         entry=>entry.name||entry.displayName]
+     ].map(async([read,picker,id,label])=>{
+       try{
+         const reply=await read();
+         if(!root.isConnected)return;
+         for(const entry of reply.data||[]){
+           const value=id(entry);
+           if(value)addOption(picker,value,label(entry)||value);
+         }
+       }catch(e){if(root.isConnected)alert(status,e);}
+     }));
    }
    const filters=()=>({
      dateFrom:dateFrom.value,dateTo:dateTo.value,

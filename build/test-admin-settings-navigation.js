@@ -62,6 +62,10 @@ class Element {
 const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
+let accountSearchFailure=null,accountSearchItems=null,statusLookupFailure=null;
+let deferAllowedRoles=false,completeAllowedRoles=null,allowedRolesFailure=null;
+let deferUserList=false,completeUserList=null;
+let deferAccountSearch=false,completeAccountSearch=null;
 let failOneDueTimeSave = false;
 let deferAuditHistory = false, completeDeferredAuditHistory = null;
 let showAuditEntry = false, deferAuditDetail = false, completeDeferredAuditDetail = null;
@@ -81,6 +85,12 @@ const document = {
 const bridge = {
   invoke: async (name, body) => {
     calls.push({ name, body });
+    if(name==="GetAllowedRoles"&&allowedRolesFailure)
+      throw Object.assign(Error(allowedRolesFailure),{errorCode:allowedRolesFailure});
+    if(name==="GetAllowedRoles"&&deferAllowedRoles)
+      return new Promise(resolve=>{completeAllowedRoles=resolve;});
+    if(name==="ListUserAccounts"&&deferUserList)
+      return new Promise(resolve=>{completeUserList=resolve;});
     if(name==="SetAttendanceSchedule" && body?.dueTimeLocal && failOneDueTimeSave){
       failOneDueTimeSave=false;
       throw Error("فشل تجريبي: تعذر حفظ وقت التحضير");
@@ -97,6 +107,13 @@ const bridge = {
         completeDeferredAuditHistory=()=>resolve({data:{items:[],total:0,hasNext:false}});
       });
     }
+    if(name==="SearchActivePersonsForAccount"){
+      if(accountSearchFailure)throw Object.assign(Error(accountSearchFailure),{errorCode:accountSearchFailure});
+      if(deferAccountSearch)return new Promise(resolve=>{completeAccountSearch=resolve;});
+      if(accountSearchItems!==null)return {data:{items:accountSearchItems}};
+    }
+    if(name==="GetActiveAttendanceStatuses"&&statusLookupFailure)
+      throw Object.assign(Error(statusLookupFailure),{errorCode:statusLookupFailure});
     const responses = {
       GetSettingsOverview: { username:"test-user", roleLabelAr:"الإدارة العامة",
         backupDirectory:"E:\\AlTamamAlYawmi\\Backups", backupTime:"16:00",
@@ -195,8 +212,13 @@ const modalReviews=[];
 const editDialogRequests=[];
 let nextIdentityForm=null,nextConfigForm=null;
 let approveDetailPreview=false;
+let deferDetailsReview=false,completeDetailsReview=null;
 const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
-  detailsReview:async(details,opts)=>{modalReviews.push({details,opts});return approveDetailPreview;},
+  detailsReview:async(details,opts)=>{
+    modalReviews.push({details,opts});
+    if(deferDetailsReview)return new Promise(resolve=>{completeDetailsReview=resolve;});
+    return approveDetailPreview;
+  },
   form:async(fields,opts)=>{
     editDialogRequests.push({fields,opts});
     return ["إعادة تسمية الموقع","تعديل حالة التحضير"].includes(opts.title)?
@@ -1061,6 +1083,195 @@ async function run() {
   assert.equal(calls.filter(x=>
     x.name==="UpdateAuditPresentation"||x.name==="DeleteAuditPresentation").length,
     auditWritesBefore,"GA deep link must remain a read until explicitly confirmed");
+  for(const code of ["BridgeOffline","Unauthorized","SessionExpired"]){
+    statusLookupFailure=code;
+    controller.renderAdmin(admin);controller.openOwnedRoute("ClosedDayExceptionalCorrection");
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(visible().some(x=>x.textContent===code),"correction exposes lookup failure");
+    const status=visible().find(x=>x.tag==="select"&&x.children.length===0);
+    assert.ok(status,"failed correction lookup cannot offer stale status options");
+    const before=calls.filter(x=>x.name==="CommitClosedDayCorrection").length;
+    await buttonNamed("بحث عن فرد").handlers.click();
+    assert.ok(visible().some(x=>x.value==="TST-CLOSED-P1"),"independent person search still works");
+    assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,before);
+    await controller.renderSettings(admin,()=>{});
+    assert.ok(visible().some(x=>x.textContent===code),"settings exposes status lookup failure");
+    assert.ok(visible().some(x=>x.className.includes("settings-backup-panel")),
+      "settings lookup failure cannot remove the independent backup panel");
+    statusLookupFailure=null;
+  }
+  // A user may reach the add action before the native allowed-role read returns.
+  // The initial list request must start before the editor captures its generation.
+  for(const role of [admin,ordinary]){
+    deferAllowedRoles=true;deferUserList=true;
+    completeAllowedRoles=null;completeUserList=null;
+    controller.renderAdmin(role);controller.openOwnedRoute("Users");
+    const add=buttonNamed("إضافة حساب");
+    assert.equal(add.disabled,true,"cannot open account editor before native roles arrive");
+    add.handlers.click();
+    assert.ok(!visible().some(x=>x.className.includes("admin-user-form")),
+      "even a queued activation cannot open an uninitialized editor");
+    assert.equal(typeof completeAllowedRoles,"function");
+    completeAllowedRoles({data:[{role:"Supervisor",name:"مشرف"}]});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof completeUserList,"function","initial list request has begun");
+    assert.equal(add.disabled,false,"verified roles enable account creation");
+    add.handlers.click();
+    const form=visible().find(x=>x.className.includes("admin-user-form"));
+    assert.ok(form);
+    const input=form.all().find(x=>x.tag==="label"&&
+      x.children[0]?.textContent==="بحث عن فرد بالاسم أو الرقم (ع)").all().find(x=>x.tag==="input");
+    input.value="91001";
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    const picker=form.all().find(x=>x.attrs["aria-label"]==="اختر فرداً من الكشف");
+    assert.ok(picker.children.some(x=>x.value==="TST-ACTIVE-1"),
+      "pending initial list cannot invalidate the authenticated picker");
+    completeUserList({data:{items:[],total:0}});
+    await new Promise(resolve=>setImmediate(resolve));
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    assert.ok(picker.children.some(x=>x.value==="TST-ACTIVE-1"),"picker still works after the list read completes");
+    deferAllowedRoles=false;deferUserList=false;
+  }
+  for(const failure of ["Unauthorized","SessionExpired","BridgeOffline"]){
+    allowedRolesFailure=failure;
+    controller.renderAdmin(admin);controller.openOwnedRoute("Users");
+    await new Promise(resolve=>setImmediate(resolve));
+    const add=buttonNamed("إضافة حساب");
+    assert.equal(add.disabled,true,"failed role read never enables create-account");
+    add.handlers.click();
+    assert.ok(!visible().some(x=>x.className.includes("admin-user-form")));
+    assert.ok(visible().some(x=>x.textContent===failure),"role initialization failure is visible");
+    allowedRolesFailure=null;
+  }
+  deferAllowedRoles=true;
+  controller.renderAdmin(admin);controller.openOwnedRoute("Users");
+  const abandonedAdd=buttonNamed("إضافة حساب");
+  const lateRoles=completeAllowedRoles;
+  controller.renderAdmin({role:"Supervisor",username:"supervisor"});
+  lateRoles({data:[{role:"Supervisor",name:"مشرف"}]});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(abandonedAdd.disabled,true,"late roles cannot enable a previous user's editor");
+  abandonedAdd.handlers.click();
+  assert.ok(!visible().some(x=>x.className.includes("admin-user-form")));
+  deferAllowedRoles=false;
+  // Stage 1: account identity must be tied to the latest successful active search.
+  for(const errorCode of ["Unauthorized","SessionExpired","BridgeOffline","empty"]){
+    controller.renderAdmin(admin);controller.openOwnedRoute("Users");
+    await new Promise(resolve=>setImmediate(resolve));
+    buttonNamed("إضافة حساب").handlers.click();
+    const form=visible().find(x=>x.className.includes("admin-user-form"));
+    const input=label=>form.all().find(x=>x.tag==="label"&&x.children[0]?.textContent===label)
+      .all().find(x=>x.tag==="input");
+    input("بحث عن فرد بالاسم أو الرقم (ع)").value="91001";
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    const picker=form.all().find(x=>x.attrs["aria-label"]==="اختر فرداً من الكشف");
+    picker.value="TST-ACTIVE-1";picker.handlers.change();
+    accountSearchFailure=errorCode==="empty"?null:errorCode;
+    accountSearchItems=errorCode==="empty"?[]:null;
+    input("بحث عن فرد بالاسم أو الرقم (ع)").value="other";
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    assert.equal(picker.value,"",errorCode+": failure/empty search clears prior PersonId");
+    assert.ok(!picker.children.some(x=>x.value==="TST-ACTIVE-1"),errorCode+": no stale person option");
+    assert.ok(!form.all().some(x=>x.textContent==="الرقم (ع): 91001"));
+    input("اسم المستخدم").value="stage1-user";
+    input("كلمة المرور الجديدة").value="Abc123";
+    input("تأكيد كلمة المرور").value="Abc123";
+    const writesBefore=calls.filter(x=>x.name==="CreateUserAccount").length;
+    await buttonNamed("تأكيد إضافة الحساب").handlers.click();
+    assert.equal(calls.filter(x=>x.name==="CreateUserAccount").length,writesBefore,
+      errorCode+": failed search cannot create an account for the old person");
+    accountSearchFailure=null;accountSearchItems=null;
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    assert.ok(picker.children.some(x=>x.value==="TST-ACTIVE-1"),"search recovers without a stale selection");
+  }
+  for(const dismiss of ["navigation","close"]){
+    controller.renderAdmin(admin);controller.openOwnedRoute("Users");
+    await new Promise(resolve=>setImmediate(resolve));
+    buttonNamed("إضافة حساب").handlers.click();
+    const form=visible().find(x=>x.className.includes("admin-user-form"));
+    const findInput=label=>form.all().find(x=>x.tag==="label"&&x.children[0]?.textContent===label)
+      .all().find(x=>x.tag==="input");
+    findInput("بحث عن فرد بالاسم أو الرقم (ع)").value="91001";
+    deferAccountSearch=true;completeAccountSearch=null;
+    const search=form.all().find(x=>x.tag==="button"&&x.textContent==="البحث في كشف القوة");
+    const pending=search.handlers.click();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof completeAccountSearch,"function");
+    if(dismiss==="navigation")controller.renderAdmin(admin);
+    else form.all().find(x=>x.tag==="button"&&x.textContent==="إلغاء").handlers.click();
+    completeAccountSearch({data:{items:[{personId:"LATE-ID",displayName:"late",
+      serviceNumberA:"111",organizationalStatus:1}]}});await pending;
+    const picker=form.all().find(x=>x.attrs["aria-label"]==="اختر فرداً من الكشف");
+    assert.ok(!picker.children.some(x=>x.value==="LATE-ID"),dismiss+": late response cannot revive dismissed picker");
+    deferAccountSearch=false;
+  }
+  for(const role of [admin,ordinary]){
+    controller.renderAdmin(role);controller.openOwnedRoute("Users");
+    await new Promise(resolve=>setImmediate(resolve));
+    buttonNamed("إضافة حساب").handlers.click();
+    const form=visible().find(x=>x.className.includes("admin-user-form"));
+    const input=label=>form.all().find(x=>x.tag==="label"&&x.children[0]?.textContent===label)
+      .all().find(x=>x.tag==="input");
+    input("بحث عن فرد بالاسم أو الرقم (ع)").value="91001";
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    const picker=form.all().find(x=>x.attrs["aria-label"]==="اختر فرداً من الكشف");
+    picker.value="TST-ACTIVE-1";picker.handlers.change();
+    input("اسم المستخدم").value="stage1-user";
+    input("كلمة المرور الجديدة").value="Abc123";input("تأكيد كلمة المرور").value="Abc123";
+    let resolveConfirmation=null;
+    context.window.AltamamDialog.confirm=async()=>new Promise(resolve=>{resolveConfirmation=resolve;});
+    const before=calls.filter(x=>x.name==="CreateUserAccount").length;
+    const pending=buttonNamed("تأكيد إضافة الحساب").handlers.click();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof resolveConfirmation,"function");
+    controller.renderAdmin(role);resolveConfirmation(true);await pending;
+    assert.equal(calls.filter(x=>x.name==="CreateUserAccount").length,before,
+      role.role+": pending confirmation cannot write after navigation");
+    context.window.AltamamDialog.confirm=async()=>true;
+  }
+  // Pending human confirmation belongs to the screen that requested it.
+  // Navigating away must invalidate both exceptional attendance workflows.
+  for(const role of [admin,ordinary])for(const reopen of [false,true])
+  for(const kind of ["catchUp","correction"]){
+    controller.renderAdmin(role);
+    assert.equal(controller.openOwnedRoute("ClosedDayExceptionalCorrection"),true);
+    await new Promise(resolve=>setImmediate(resolve));
+    let action;
+    if(kind==="correction"){
+      const fields=visible().filter(x=>x.className==="form-control");
+      fields.find(x=>x.type==="date").value="2026-10-10";
+      fields.find(x=>x.type==="text").value="اختبار";
+      await buttonNamed("بحث عن فرد").handlers.click();
+      const choices=visible().filter(x=>x.tag==="select");
+      choices[0].value="TST-CLOSED-P1";choices[1].value="STS-ABSENT";
+      fields.filter(x=>x.type==="text").at(-1).value="تصحيح موثق لمراجعة متأخرة";
+      action=buttonNamed("معاينة التصحيح");
+    }else{
+      await buttonNamed("استدراك يوم سابق (خلال 7 أيام)").handlers.click();
+      const form=visible().find(x=>x.className.includes("app-operational-modal")&&
+        x.all().some(y=>y.textContent.includes("استدراك التحضير الناقص")));
+      form.all().find(x=>x.type==="date").value="2026-10-29";
+      form.all().find(x=>x.tag==="input"&&x.type==="text").value="استدراك موثق لمراجعة متأخرة";
+      action=form.all().find(x=>x.tag==="button"&&x.textContent==="معاينة الاستدراك");
+    }
+    assert.ok(action,kind+": original preview control exists");
+    const commitName=kind==="correction"?"CommitClosedDayCorrection":"CommitAdministrativeAttendanceCatchUp";
+    const before=calls.filter(x=>x.name===commitName).length;
+    deferDetailsReview=true;completeDetailsReview=null;
+    const pending=action.handlers.click();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof completeDetailsReview,"function",kind+": human review is pending");
+    controller.renderAdmin(role);
+    if(reopen){
+      assert.equal(controller.openOwnedRoute("ClosedDayExceptionalCorrection"),true);
+      await new Promise(resolve=>setImmediate(resolve));
+    }
+    completeDetailsReview(true);await pending;
+    deferDetailsReview=false;
+    assert.equal(calls.filter(x=>x.name===commitName).length,before,
+      kind+": late approval after leaving the screen must not write attendance");
+    assert.ok(reopen?buttonNamed("معاينة التصحيح"):byDataset("adminSection").length>0,
+      "late approval does not replace the destination screen");
+  }
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
 run().catch(error => { console.error(error); process.exitCode=1; });

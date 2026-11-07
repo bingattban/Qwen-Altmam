@@ -692,6 +692,8 @@
       return;
     }
     const page=start("الإدارة / إدارة القوة / التصحيح الاستثنائي لليوم المغلق");
+    const requestEpoch=currentRequest;
+    const isCurrent=()=>requestEpoch===currentRequest&&state.active==="closedCorrection";
     const box=card("تصحيح تحضير يوم مغلق — الإدارة العامة والإدارة العادية");
     const notice=node("div","admin-note");
     box.appendChild(warning("عملية استثنائية وخاضعة للتدقيق. يجب تفعيل السياسة صراحة، ومعاينة حالة قديمة محفوظة، ولا يمكن تصحيح يوم نقل أو فصل. لا يُفتح اليوم ولا يُغيَّر وقت التحضير الأصلي."));
@@ -718,6 +720,7 @@
       clearPreview();search.disabled=true;
       try{
         const response=await api().invoke("SearchPersons",{term:personSearch.input.value, take:50});
+        if(!isCurrent())return;
         const data=response.data||{};
         personList.replaceChildren();
         for(const item of data.items||[]){
@@ -736,6 +739,7 @@
       clearPreview();
       const verb=enabled?"تفعيل":"إيقاف";
       if(!await dialogs.confirm("هل تؤكد "+verb+" إذن التصحيح الاستثنائي؟ سيتم تسجيل تغيير الإعداد في سجل العمليات، والسبب إلزامي عند تصحيح التحضير نفسه فقط."))return;
+      if(!isCurrent())return;
       const signature=JSON.stringify([enabled,reason.input.value]);
       if(policyIntent?.signature!==signature)
         policyIntent={signature,operationId:makeOperationId()};
@@ -757,6 +761,7 @@
         const response=await api().invoke("PreviewClosedDayCorrection",{
           personId:personList.value,businessDate:date.input.value,
           statusId:statusList.value,reason:reason.input.value});
+        if(!isCurrent())return;
         const result=response.data||{};
         if(!result.previewToken||result.requiresExplicitConfirmation!==true)
           throw Error("لم تُرجع الخدمة معاينة موثّقة.");
@@ -776,8 +781,9 @@
           message:"تصحيح استثنائي موثق في سجل العمليات؛ لا يُعاد فتح اليوم.",
           confirmLabel:"اعتماد التصحيح الاستثنائي"
         });
-        if(!accept){clearPreview();return;}
+        if(!accept||!isCurrent()){clearPreview();return;}
         const commit=async()=>{
+          if(!isCurrent())return;
           try{
             const committed=await api().invoke("CommitClosedDayCorrection",{
               previewToken,operationId
@@ -812,6 +818,7 @@
           const response=await api().invoke("PreviewAdministrativeAttendanceCatchUp",{
             businessDate:day.input.value,reason:why.input.value
           });
+          if(!isCurrent())return;
           const data=response?.data||{};
           if(!data.previewToken||data.requiresExplicitConfirmation!==true)
             throw Error("لم تُصدر الخدمة معاينة صالحة.");
@@ -824,7 +831,7 @@
           ]},{title:"معاينة استدراك يوم سابق",
             message:"بعد التأكيد ستضاف الحالات الناقصة فقط مع تسجيل الفاعل والسبب في سجل العمليات.",
             confirmLabel:"اعتماد استدراك اليوم"});
-          if(!confirmed)return;
+          if(!confirmed||!isCurrent())return;
           const operationId=makeOperationId();
           const commit=await api().invoke("CommitAdministrativeAttendanceCatchUp",{
             previewToken:data.previewToken,operationId
@@ -848,6 +855,7 @@
     page.appendChild(box);
     try{
       const response=await api().invoke("GetActiveAttendanceStatuses",{});
+      if(!isCurrent())return;
       const data=Array.isArray(response.data)?response.data:[];
       for(const item of data){
         const option=node("option","",item.name||item.displayName||item.statusId);
@@ -864,9 +872,11 @@
     const notice=node("div","admin-note");
     const tools=node("div","functional-toolbar");
     const filter=field("بحث باسم المستخدم أو الاسم أو الرقم (ع)",state.term);
+    const addAccount=btn("إضافة حساب",()=>showAdd(),"btn btn-outline");
+    addAccount.disabled=true;
     tools.append(filter.wrap,btn("بحث",()=>{
       state.term=filter.input.value.trim();state.page=1;load();
-    },"btn btn-primary"),btn("إضافة حساب",()=>showAdd(),"btn btn-outline"));
+    },"btn btn-primary"),addAccount);
     container.append(tools,notice);
     const rows=node("div","admin-users-list");container.appendChild(rows);
     const token=++currentRequest;
@@ -878,9 +888,13 @@
     }catch(e){if(token===currentRequest)errors(notice,e);return;}
 
     function showAdd() {
-      if(state.active!=="accounts")return;
+      if(state.active!=="accounts"||addAccount.disabled)return;
       const form=card("إضافة حساب مرتبط بفرد من القوة");
-      operationalModal(form,"modal-md");
+      const formEpoch=currentRequest;
+      let dismissed=false,searchSerial=0;
+      const isCurrent=()=>!dismissed&&form.isConnected&&formEpoch===currentRequest&&state.active==="accounts";
+      const dismiss=()=>{dismissed=true;form.remove();};
+      operationalModal(form,"modal-md",false,false,()=>{dismissed=true;});
       form.classList.add("admin-user-form");
       const personSearch=field("بحث عن فرد بالاسم أو الرقم (ع)");
       const personPick=node("select","form-control");
@@ -903,22 +917,29 @@
       for(const allowed of allowedRoles){
         const opt=node("option","",allowed.name);opt.value=allowed.role;role.appendChild(opt);
       }
+      const activePeople=new Map();
       const searchButton=btn("البحث في كشف القوة",async()=>{
+        if(!isCurrent()||searchButton.disabled)return;
+        const serial=++searchSerial;
+        activePeople.clear();personPick.replaceChildren();personPick.value="";
+        selected.textContent="الرقم (ع): —";
         const term=personSearch.input.value.trim();
         if(!term){errors(message,new Error("أدخل الاسم أو الرقم (ع) للبحث."));return;}
         searchButton.disabled=true;message.replaceChildren();
         try {
           const result=await api().invoke("SearchActivePersonsForAccount",{term,take:30});
+          if(!isCurrent()||serial!==searchSerial||personSearch.input.value.trim()!==term)return;
           const people=(result.data?.items||[]).filter(p=>p.organizationalStatus===1);
           personPick.replaceChildren();
           const head=node("option","","اختر الفرد");head.value="";personPick.appendChild(head);
           for(const person of people){
+            activePeople.set(person.personId,person);
             const opt=node("option","",person.displayName+" — ع: "+person.serviceNumberA);
             opt.value=person.personId;opt.dataset.serviceNumberA=person.serviceNumberA;
             personPick.appendChild(opt);
           }
           if(people.length===0)errors(message,new Error("لم يوجد فرد نشط مطابق."));
-        }catch(e){errors(message,e);}finally{searchButton.disabled=false;}
+        }catch(e){if(isCurrent())errors(message,e);}finally{searchButton.disabled=false;}
       });
       personPick.addEventListener("change",()=>{
         const option=Array.from(personPick.children).find(o=>o.value===personPick.value);
@@ -926,18 +947,21 @@
       });
       const message=node("div","admin-note");
       let accountPayload=null,accountOperation=null;
+      const accountFields=()=>[personPick.value,username.input.value.trim(),role.value,
+        password.input.value,passwordConfirm.input.value];
       const save=btn("تأكيد إضافة الحساب",async()=>{
-        if(!personPick.value||!username.input.value.trim()||!password.input.value||
+        if(!isCurrent()||save.disabled||searchButton.disabled)return;
+        if(!activePeople.has(personPick.value)||!username.input.value.trim()||!password.input.value||
            !passwordConfirm.input.value)
           return errors(message,new Error("اختر فرداً وأدخل اسم المستخدم وكلمة المرور وتأكيدها."));
         if(password.input.value!==passwordConfirm.input.value)
           return errors(message,new Error("كلمة المرور وتأكيدها غير متطابقين."));
-        if(!await dialogs.confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
+        const signature=JSON.stringify(accountFields());
         save.disabled=true;message.replaceChildren();
         try {
-          const fields=[personPick.value,username.input.value.trim(),role.value,
-            password.input.value,passwordConfirm.input.value];
-          const signature=JSON.stringify(fields);
+          if(!await dialogs.confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
+          if(!isCurrent()||searchButton.disabled||signature!==JSON.stringify(accountFields())||
+             !activePeople.has(personPick.value))return;
           if(accountPayload!==signature){accountPayload=signature;accountOperation=makeOperationId();}
           await api().invoke("CreateUserAccount",{
             personId:personPick.value,username:username.input.value.trim(),
@@ -963,7 +987,7 @@
       const layout=node("div","admin-account-form-grid");
       layout.append(personSearchRow,pickerLabel,selected,username.wrap,
         secrets,roleLabel);
-      form.append(layout,save,btn("إلغاء",()=>form.remove()),message);
+      form.append(layout,save,btn("إلغاء",dismiss),message);
       page.appendChild(form);
       // Fixed modal does not displace the list.
     }
@@ -1068,7 +1092,9 @@
       page.appendChild(wrapper);
       // Fixed modal keeps the list and current query.
     }
-    await load();
+    const initialList=load();
+    addAccount.disabled=allowedRoles.length===0;
+    await initialList;
   }
 
   // The one canonical roster-column editor. No presentation label is a data key.

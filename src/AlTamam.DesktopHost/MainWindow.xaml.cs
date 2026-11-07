@@ -416,10 +416,13 @@ public partial class MainWindow : Window
                 try
                 {
                     await fixture.InitializeAsync().ConfigureAwait(true);
-                    var services = new BridgeSharedServices(fixture);
+                    var clock = new WebViewSelfCheckTimeProvider(TimeProvider.System);
+                    var services = new BridgeSharedServices(fixture, clock);
+                    await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                        clock.GetBrowserInitializationScript()).ConfigureAwait(true);
                     fixtureGateway = new DesktopBridgeGateway(BridgeHandlerCatalog.Create(services), services);
                     fixtureGateway.Attach(core);
-                    await CheckActualWebViewNavigationAsync(core, fixture).ConfigureAwait(true);
+                    await CheckActualWebViewNavigationAsync(core, fixture, clock).ConfigureAwait(true);
                 }
                 finally
                 {
@@ -541,7 +544,7 @@ public partial class MainWindow : Window
     }
 
     private static async Task CheckActualWebViewNavigationAsync(
-        CoreWebView2 core, AlTamamDbContext? syntheticDatabase = null)
+        CoreWebView2 core, AlTamamDbContext? syntheticDatabase = null, TimeProvider? selfCheckTime = null)
     {
         var completion = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -563,7 +566,7 @@ public partial class MainWindow : Window
                 await CheckActualWebViewModalInteractionsAsync(core).ConfigureAwait(true);
             if (syntheticDatabase is not null)
             {
-                await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase).ConfigureAwait(true);
+                await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase, selfCheckTime ?? TimeProvider.System).ConfigureAwait(true);
                 TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
             }
             // Packaged acceptance can run the two real browser suites in distinct
