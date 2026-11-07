@@ -67,7 +67,7 @@ const bridge=window.AltamamBridge;
   const pendingRequest=sent.at(-1);
   respond(expiredRequest,false,"SessionExpired");
   assert.equal((await expired).errorCode,"SessionExpired");
-  assert.equal(bridge.getSessionNonce(),null,"native expiry clears the current browser nonce");
+  assert.equal(storedNonce,null,"native expiry clears the current browser nonce");
   assert.equal((await pendingSearch).errorCode,"SessionExpired","expiry cancels other requests of that session");
   assert.equal(invalidations.filter(x=>x==="SessionEnded").length,1,"expiry informs actual login/UI consumers once");
   respond(pendingRequest,true,"OK",{items:[{personId:"OLD-PRIVATE"}]});

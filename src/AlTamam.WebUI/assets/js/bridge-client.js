@@ -82,10 +82,9 @@
       if (nonce) localStorage.setItem(SESSION_NONCE_STORAGE_KEY, nonce);
       else localStorage.removeItem(SESSION_NONCE_STORAGE_KEY);
     } catch (_) { /* ignore */ }
-    if (!nonce) {
-      // Logout/idle expiry discards EVERY unresolved response of the old user.
-      // No delayed result is allowed to repaint a new user's screen.
-      for (const [requestId, entry] of pending) {
+    // Logout and account switches invalidate unresolved reads of the old user.
+    for (const [requestId, entry] of pending) {
+      if (!nonce || (entry.sessionNonce && entry.sessionNonce !== nonce)) {
         pending.delete(requestId);
         clearTimeout(entry.timer);
         const error = new Error("أُلغيت العملية لانتهاء جلسة المستخدم.");
@@ -123,6 +122,15 @@
       err.actualVersion = msg.actualVersion ?? null;
       err.canonical = CANONICAL_ERROR_CODES.indexOf(err.errorCode) !== -1;
       entry.reject(err);
+      if (err.errorCode === "SessionExpired" && entry.sessionNonce &&
+          entry.sessionNonce === getSessionNonce()) {
+        setSessionNonce(null);
+        // Reuse the existing session-ended consumer path; role denial is separate.
+        if (!(msg.invalidationEvents || []).some(evt =>
+          (typeof evt === "string" ? evt : evt?.eventName) === "SessionEnded")) {
+          listeners.forEach(fn => { try { fn("SessionEnded"); } catch (_) { /* listener fault isolation */ } });
+        }
+      }
     }
     if (Array.isArray(msg.invalidationEvents)) {
       msg.invalidationEvents.forEach(evt => listeners.forEach(fn => { try { fn(evt); } catch (_) { /* listener fault isolation */ } }));
@@ -173,6 +181,7 @@
         }
       }, timeoutMs);
       pending.set(requestId, {
+        sessionNonce: envelope.sessionNonce,
         resolve: function (msg) { settleLoading(false); resolve(msg); },
         reject: function (err) { settleLoading(false); reject(err); },
         timer: timer
