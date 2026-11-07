@@ -97,3 +97,24 @@ native traces during the bridge probe to localize a repeat timeout; no credentia
 This is test-harness calibration, not a production performance fix or successful x86 claim.
 Local inline-JS/contract preflight passes. Corrected x86/x64 native execution is pending CI;
 merge remains blocked until Core, Release, four actual packages and provenance all pass.
+
+## Verified recovery baseline (#244) and actual attendance consumer slice
+
+PR #244 final head 403e8fa23feca0a01a837f0c415e8198789ed38b passed Core 42290746058
+and Release 42290746016, including packaged x86/x64 native recovery, four actual packages
+and independent SHA256 audit. Merged as 55a075d57b16352e236f2c2ab3a5cc23ee0c898a.
+Earlier failure notes above remain historical evidence; the bounded 300-second package suite
+completed successfully. Manual clean-machine acceptance remains NOT EXECUTED.
+
+Next slice acceptance (test only): invoke shipped AltamamAttendance.render in a connected
+WebView2 section under the existing real founder session. Require actual native site/status
+options matching IDs and names, real roster row for the created synthetic person with its
+selection checkbox, STS-LEAVE exposing mandatory duration fields, and STS-PRESENT hiding
+and unrequiring them again. No attendance mutation or injected bridge reply is used.
+C# must reject success missing r01AttendanceConsumerVerified. Existing bridge/role/transfer
+and recovery gates remain mandatory. No production behavior or optimization changes.
+Validation: python build/test-webview-selfcheck-contract.py (11, embedded JS syntax) and
+python build/test-section08-bridge-contract.py (6) pass locally; real Windows consumer
+execution is pending. This covers initial attendance rendering and duration controls only;
+review/commit/dashboard/correction/report flows, failure isolation, all-action runtime gate
+and full schemas/Excel parity remain incomplete. Do not declare R01 complete.

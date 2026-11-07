@@ -200,6 +200,47 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     throw new Error(action + " native person did not render in HTML");
                 }
                 const r01SearchVerified = true;
+
+                // Render the shipped attendance consumer, not a parallel picker.
+                // Reads use the real authenticated bridge and disposable SQLCipher.
+                probeStage = "r01-attendance-consumer";
+                if (typeof window.AltamamAttendance?.render !== "function")
+                  throw new Error("shipped attendance renderer missing");
+                const attendancePage = document.createElement("section");
+                document.body.appendChild(attendancePage);
+                await window.AltamamAttendance.render(attendancePage);
+                if (attendancePage.querySelector(".admin-warning"))
+                  throw new Error("native attendance initialization reported an error");
+                const attendanceStatus = attendancePage.querySelector('select[aria-label="الحالة الجديدة"]');
+                const attendanceSite = attendancePage.querySelector('select[aria-label="الموقع"]');
+                if (!attendanceStatus || !attendanceSite ||
+                    ![...attendanceSite.options].some(item => item.value === "SITE-UNSPECIFIED"))
+                  throw new Error("actual attendance site/status selectors missing");
+                for (const status of activeStatuses.data) {
+                  const rendered = [...attendanceStatus.options].find(item => item.value === status.statusId);
+                  if (!rendered || rendered.textContent !== status.displayName)
+                    throw new Error("actual attendance consumer lost native status identity/name");
+                }
+                const personRow = [...attendancePage.querySelectorAll("tbody tr")]
+                  .find(row => row.textContent.includes("00007192"));
+                if (!personRow?.querySelector('input[type="checkbox"]') ||
+                    !personRow.textContent.includes("فرد اختبار التكامل"))
+                  throw new Error("actual attendance roster did not render the saved person");
+                attendanceStatus.value = "STS-LEAVE";
+                attendanceStatus.dispatchEvent(new Event("change",{bubbles:true}));
+                const range = attendancePage.querySelector(".attendance-range-fields");
+                const rangeFrom = attendancePage.querySelector('input[aria-label="من تاريخ"]');
+                const rangeTo = attendancePage.querySelector('input[aria-label="إلى تاريخ"]');
+                if (attendanceStatus.value !== "STS-LEAVE" || !range || range.hidden ||
+                    !rangeFrom?.required || !rangeTo?.required)
+                  throw new Error("actual leave selection did not require its duration");
+                attendanceStatus.value = "STS-PRESENT";
+                attendanceStatus.dispatchEvent(new Event("change",{bubbles:true}));
+                if (attendanceStatus.value !== "STS-PRESENT" || !range.hidden ||
+                    rangeFrom.required || rangeTo.required)
+                  throw new Error("actual present selection retained leave-only duration fields");
+                attendancePage.remove();
+                const r01AttendanceConsumerVerified = true;
                 target.textContent = saved.displayName + " — " + saved.serviceNumberA;
                 if (!target.textContent.includes("00007192") ||
                     !target.isConnected)
@@ -392,7 +433,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("HTML output lost after authorization checks");
 
                 window.__phase04RealBridge = {status:"pass",personId,movableId,
-                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified};
+                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified};
               })().catch(error => {
                 window.__phase04RealBridge = {
                   status:"failed",
@@ -441,7 +482,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                             out var transferFlag) || transferFlag.ValueKind != JsonValueKind.True)
                         throw new InvalidOperationException(
                             "Real browser skipped modal-confirmed transfer");
-                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified" })
+                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified" })
                         if (!status.RootElement.TryGetProperty(flag, out var checkedFlag) ||
                             checkedFlag.ValueKind != JsonValueKind.True)
                             throw new InvalidOperationException("Real browser skipped R01 contract probe: " + flag);
