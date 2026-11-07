@@ -201,6 +201,13 @@ jobs:
           $count = [int]$xml.TestRun.ResultSummary.Counters.total
           Write-Host "Core full tests executed: $count"
           if ($count -lt 1) { throw 'Core suite executed zero tests' }
+      - name: R01 real native lifecycle response and execution evidence
+        shell: pwsh
+        run: |
+          python build/test-r01-native-contract-evidence.py
+          if ($LASTEXITCODE -ne 0) { throw 'R01 evidence validator regression failed' }
+          python build/check-r01-native-contract-evidence.py TestResults/core-tests.trx
+          if ($LASTEXITCODE -ne 0) { throw 'R01 real native lifecycle evidence is missing or mismatched' }
       - name: Phase 15 assert SQLCipher 10k active people and three-calendar-year measured evidence
         shell: pwsh
         run: |

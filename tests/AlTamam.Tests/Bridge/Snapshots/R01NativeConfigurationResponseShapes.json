@@ -1,0 +1,116 @@
+{
+  "AuthenticateLocalUser": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{role:string,roleLabelAr:string,sessionNonce:string,userId:string,username:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "ChangeUserPassword": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,rowVersion:integer,userId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "ConfigureAutoMonthlyExcel": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{directory:string,enabled:boolean,exportTime:string,lastFailure:string,lastSuccessDate:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CreateAttendanceStatus": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{auditEventId:string,rowVersion:integer,statusId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CreateCustomFieldDefinition": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,caption:string,columnId:string,displayOrder:integer,fieldType:integer,isSystemProtected:boolean,snapshot:string,storedValueCount:integer,technicalKey:string,visible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CreatePerson": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{personId:string,revision:integer,siteId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:integer,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CreateSite": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{auditEventId:string,name:string,rowVersion:integer,siteId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CreateUserAccount": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{linkedPersonId:string,role:string,userId:string,username:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "DeactivateCustomField": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,caption:string,columnId:string,displayOrder:integer,fieldType:integer,isSystemProtected:boolean,snapshot:string,storedValueCount:integer,technicalKey:string,visible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "DeactivateOrDeleteStatus": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{active:boolean,auditEventId:string,statusId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "DeactivateUserAccount": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,rowVersion:integer,userId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "DeleteAuditPresentation": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{afterState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},auditEventId:string,beforeState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},isTombstoned:boolean,operationAuditEventId:string,overlayVersion:integer,rawEvidenceUntouched:boolean},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetActiveAttendanceStatuses": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<object{active:boolean,color:string,displayName:string,shortSymbol:string,statusId:string,todayCount:integer,version:integer}>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetAllowedRoles": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<object{name:string,role:string}>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetAuditEntryDetails": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{actorDisplay:string,actorRosterFullName:string,actorUserId:string,actorUsername:string,auditEventId:string,chainValid:boolean,correlationId:string,effectiveLocalDate:string,eventHash:string,executedAtUtc:string,foundingAccountProvenance:boolean,newValue:object{name:string},oldValue:null,operationArabicName:string,operationCode:string,overlays:array<object{afterState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},beforeState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},correctedDescription:null,editedAtUtc:string,editedByDisplay:string,editedByUserId:string,isTombstoned:boolean,overlayVersion:integer,reason:string}|object{afterState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},beforeState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},correctedDescription:string,editedAtUtc:string,editedByDisplay:string,editedByUserId:string,isTombstoned:boolean,overlayVersion:integer,reason:string}>,priorEventHash:string,rawDescription:string,reason:null,targetDisplay:string,targetEntityId:string,targetEntityType:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetAutoAttendancePolicy": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{configured:boolean,dailyLockTimeLocal:string,defaultStatusId:string,defaultStatusName:string,dueTimeLocal:string,note:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetBackupSchedule": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{backupTime:string,enabled:boolean,lastAutoBackupDate:null,message:string,operational:boolean,retentionCount:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetCurrentSession": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{role:string,roleLabelAr:string,sessionNonce:string,userId:string,username:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetCustomFieldDefinitions": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{items:array<object{active:boolean,caption:string,columnId:string,displayOrder:integer,fieldType:integer,isSystemProtected:boolean,snapshot:string,storedValueCount:integer,technicalKey:string,visible:boolean}>,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetProvisioningState": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{provisioned:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "GetSettingsOverview": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{autoMonthlyExcel:object{directory:string,enabled:boolean,exportTime:string,lastFailure:string,lastSuccessDate:string},automaticBackupEnabled:boolean,automaticBackupNote:string,automaticBackupOperational:boolean,automaticBackupRetentionCount:integer,backupDirectory:string,backupTime:string,defaultDriveAvailable:boolean,lastAutoBackupDate:null,lastAutoBackupFailure:string,role:string,roleLabelAr:string,theme:string,username:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "ListUserAccounts": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{hasNext:boolean,items:array<object{active:boolean,canModify:boolean,createdAtUtc:string,createdBy:string,fullName:string,index:integer,personId:string,role:string,roleLabelAr:string,rowVersion:integer,serviceNumberA:string,userId:string,username:string}>,page:integer,pageSize:integer,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "Logout": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{loggedOut:boolean},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "QueryAuditLog": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{count:integer,hasNext:boolean,items:array<object{actorDisplay:string,actorRosterFullName:string,actorUsername:string,auditEventId:string,description:string,effectiveLocalDate:string,eventHash:string,executedAtUtc:string,foundingAccountProvenance:boolean,isTombstoned:boolean,newValue:object{name:string},oldValue:null,operationArabicName:string,operationCode:string,outcome:string,overlayVersion:integer,rawDescription:string,reason:null,sequence:integer,targetDisplay:string,targetEntityId:string,targetEntityType:string}>,page:integer,pageSize:integer,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "QueryAuditPresentationChanges": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{count:integer,items:array<object{afterState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},auditEventId:string,beforeState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},correctedDescription:null,editedAtUtc:string,editedByDisplay:string,editedByUserId:string,isTombstoned:boolean,operationCode:string,overlayVersion:integer,rawDescription:string,reason:string}|object{afterState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},auditEventId:string,beforeState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},correctedDescription:string,editedAtUtc:string,editedByDisplay:string,editedByUserId:string,isTombstoned:boolean,operationCode:string,overlayVersion:integer,rawDescription:string,reason:string}>,page:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "QuerySites": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<object{active:boolean,name:string,rowVersion:integer,siteId:string}>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "ReactivateUserAccount": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,rowVersion:integer,userId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "RemoveSiteAndReassignCurrentPersons": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,effectiveDate:string,reassignedCount:integer,rowVersion:integer,siteId:string,siteName:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "RenameSite": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{auditEventId:string,rowVersion:integer,siteId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "RunDatabaseIntegrityCheck": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{encrypted:boolean,integrity:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "SetAttendanceSchedule": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{auditEventId:string,settingKey:string,value:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "SetAutoAttendanceDefaultStatus": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{auditEventId:string,configured:boolean,defaultStatusId:string,defaultStatusName:string,dueTimeLocal:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "SetOutputDirectory": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{directory:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "SetTheme": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{theme:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "UpdateAttendanceStatus": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{auditEventId:string,rowVersion:integer,statusId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "UpdateAuditPresentation": [
+    "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{afterState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},auditEventId:string,beforeState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},isTombstoned:boolean,operationAuditEventId:string,overlayVersion:integer,rawEvidenceUntouched:boolean},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "UpdateBackupSchedule": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{backupTime:string,enabled:boolean,retentionCount:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "UpdateCustomFieldMetadata": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,caption:string,columnId:string,displayOrder:integer,fieldType:integer,isSystemProtected:boolean,snapshot:string,storedValueCount:integer,technicalKey:string,visible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ]
+}
