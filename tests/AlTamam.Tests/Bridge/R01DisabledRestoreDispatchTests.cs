@@ -62,6 +62,7 @@ public sealed class R01DisabledRestoreDispatchTests
             var dispatcher = BridgeHandlerCatalog.Create(services);
             var result = await dispatcher.DispatchAsync(request.ToJsonString(),
                 LocalWebUiOrigin.BaseUrl, true, value => services.ResolveSessionAsync(value));
+            R01ResponseSchema.AssertMatches(result.Response, "RestoreDatabaseAtomically");
             Assert.False(result.Response.Success);
             Assert.Equal(liveSession ? BridgeErrorCodes.MissingData : BridgeErrorCodes.SessionExpired,
                 result.Response.ErrorCode);

@@ -9,7 +9,7 @@ namespace AlTamam.Tests.Bridge;
 // silently pretending to implement arbitrary JSON Schema semantics.
 internal static class R01ResponseSchema
 {
-    internal static void AssertMatches(BridgeResponse response)
+    internal static void AssertMatches(BridgeResponse response, string? action = null)
     {
         DirectoryInfo? root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName,
@@ -20,10 +20,21 @@ internal static class R01ResponseSchema
         using var wire = JsonDocument.Parse(JsonSerializer.Serialize(response,
             new JsonSerializerOptions(JsonSerializerDefaults.Web)));
         Validate(wire.RootElement, schema.RootElement.GetProperty("$defs").GetProperty("response"), "$", schema.RootElement);
+        if (response.Success && (action is "GetActiveAttendanceStatuses" or "QueryAttendanceStatuses"
+            or "SearchPersons" or "SearchActivePersonsForAccount"))
+            Validate(wire.RootElement.GetProperty("data"), schema.RootElement.GetProperty("$defs")
+                .GetProperty("responseData_" + action), "$.data", schema.RootElement);
         Assert.Equal(response.RequestId, wire.RootElement.GetProperty("requestId").GetString());
         Assert.Equal(response.Code, wire.RootElement.GetProperty("code").GetString());
         Assert.Equal(response.MessageAr, wire.RootElement.GetProperty("messageAr").GetString());
-        if (!response.Success) Assert.False(wire.RootElement.TryGetProperty("data", out _));
+        if (response.Success) Assert.Equal("OK", response.Code);
+        else
+        {
+            Assert.Contains(response.Code, BridgeErrorCodes.AllCanonicalErrorCodes);
+            Assert.Equal(response.ErrorCode, response.Code);
+            Assert.Equal(response.UserMessage, response.MessageAr);
+            Assert.False(wire.RootElement.TryGetProperty("data", out _));
+        }
     }
 
     private static void Validate(JsonElement value, JsonElement shape, string path, JsonElement document)

@@ -2121,7 +2121,9 @@
       "type": "object",
       "required": [
         "requestId",
-        "success"
+        "success",
+        "code",
+        "messageAr"
       ],
       "properties": {
         "requestId": {
@@ -2160,6 +2162,72 @@
         "invalidationEvents": {
           "type": [
             "array",
+            "null"
+          ],
+          "items": {
+            "type": "object",
+            "required": [
+              "eventName",
+              "affectedEntityIds",
+              "effectiveLocalDate",
+              "revision"
+            ],
+            "properties": {
+              "eventName": {
+                "type": "string",
+                "minLength": 1
+              },
+              "affectedEntityIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "effectiveLocalDate": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "messageAr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "validationErrors": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "conflictInfo": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "auditEventId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expectedVersion": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "actualVersion": {
+          "type": [
+            "integer",
             "null"
           ]
         }
@@ -3737,6 +3805,132 @@
         "exportTime"
       ],
       "additionalProperties": true
+    },
+    "r01StatusRow": {
+      "type": "object",
+      "required": [
+        "statusId",
+        "displayName",
+        "shortSymbol",
+        "color",
+        "active",
+        "version",
+        "todayCount"
+      ],
+      "properties": {
+        "statusId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shortSymbol": {
+          "type": "string"
+        },
+        "color": {
+          "type": "string"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "todayCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "r01PersonSearchRow": {
+      "type": "object",
+      "required": [
+        "personId",
+        "displayName",
+        "serviceNumberA",
+        "organizationalStatus",
+        "revision",
+        "siteName"
+      ],
+      "properties": {
+        "personId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "serviceNumberA": {
+          "type": "string"
+        },
+        "organizationalStatus": {
+          "type": "integer"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "siteName": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "responseData_GetActiveAttendanceStatuses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/r01StatusRow"
+      }
+    },
+    "responseData_QueryAttendanceStatuses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/r01StatusRow"
+      }
+    },
+    "responseData_SearchPersons": {
+      "type": "object",
+      "required": [
+        "items",
+        "count"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/r01PersonSearchRow"
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "responseData_SearchActivePersonsForAccount": {
+      "type": "object",
+      "required": [
+        "items",
+        "count"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/r01PersonSearchRow"
+          }
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
