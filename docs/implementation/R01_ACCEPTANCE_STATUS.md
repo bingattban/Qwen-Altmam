@@ -1,8 +1,8 @@
 # R01 acceptance status — 2026-11-07
 
 **R01 is OPEN.** Successful incremental PRs are not full phase acceptance.
-Current verified baseline: merged #252, `13305e98e79863720703cb3713466367ab123796`.
-Post-merge push release 42391468076 failed x86 packaged E2E; bounded-budget repair pending Windows verification (see investigation below).
+Current verified baseline: merged #253, `fb3cbd898af36869e4a58e8ad273faf984d1e520`.
+The #253 bounded-budget repair passed both Windows workflows and all four packages before merge (see verified follow-up below).
 Do not start a different corrective package or label this application production-ready.
 
 ## Verified Windows baseline
@@ -238,3 +238,83 @@ five Phase00-02 regressions passed locally. Windows/package validation on the
 new final PR head is still REQUIRED before calling this repair verified or
 merging #253. The earlier 32-case native R01 local result predates this PS-only
 repair; no C# application or native lifecycle test source was changed by it.
+
+
+## Verified #253 merge and repository compatibility review
+
+Final head `1b7483ffaab7cdc3fd9a7b5879d45cf53be78794` passed Core
+`42395171854` and Release `42395171897`. Each main suite executed 1072 tests
+with zero failures/skips; the independent Release SQLCipher suite passed 18
+and authorization unit suite passed 14. The live repository guard verified
+69 routes, 104 actions, 8 projects, both gated Windows workflows, migrations
+V001-V014, pinned SQLCipher and disabled restore. Review found no application
+service/role/schema behavior change, missing dependency or merge conflict;
+changes were native acceptance evidence plus the bounded CI budget repair.
+No unresolved review submissions/threads were present.
+
+Real x86 packaged bridge E2E passed in 345.82s (Portable) and 349.12s (Installer),
+above the old 300s cap and within the new 480s cap. Both architectures' actual
+Portable/Installer acceptance and the independent four-package SHA256 audit
+passed. All four non-expired artifacts and provenance identified the same head.
+Merge commit: `fb3cbd898af36869e4a58e8ad273faf984d1e520`.
+Independent manual clean-machine acceptance remains deferred and NOT EXECUTED.
+This review does not certify untested flows or close R01.
+
+## Native Excel/import parity extension (current review branch)
+
+Classification: missing acceptance coverage; no production fix/optimization.
+Three isolated authenticated dispatcher/SQLCipher scenarios use real XLSX bytes
+and read every exported cell, including actual number/date styles. Native setup
+selects an isolated output directory; all generated files remain temporary.
+Fixture history is inserted at its original effective dates; it is not rewritten.
+
+- Monthly: 105 distinct people, two sites, three independently known October
+  attendance cells, current versus historical identity; all 31 day columns and
+  ordered identity/site fields in consolidated and both site workbooks exactly
+  match all native pages (100 plus 5). A name/site-filtered workbook and completed
+  session-owned export progress are checked. Cancel after completion is refused;
+  active writer cancellation is still an open acceptance case, not success-covered.
+- Individual/group reports: 103 known attendance records cross the real fixed
+  100-row report boundary (100 plus 3); historical name/000123 versus current
+  name/009000 remain distinct. Genuine numeric Excel dates/times are decoded
+  from OOXML styles before comparison; all historical columns and status counts
+  match native report rows. The filtered two-person group retains two individual
+  rows, an explicit combined total and a separate date/status aggregate.
+  Individual workbook parity already passed with real GeneralAdministration,
+  OrdinaryAdministration and Supervisor logins. The strict final run additionally
+  checks every grouped worksheet under those same three real roles.
+- Import: real workbook selection, analysis, preview, commit, stable receipt retry,
+  owned outcome and genuine issues workbook; one accepted leading-zero identity,
+  one rejected row, original duplicate identity untouched, one import audit and
+  no executable XLSX formula despite formula-like rejected input text.
+
+Successful three-case capture passed before enabling strict comparison.
+Snapshots now contain 89 canonical action keys. Both TRX gates require all
+13 explicitly named native cases across configuration/operations/Excel classes;
+configuration-only evidence cannot satisfy either added group. Final strict
+results follow. Remaining enabled actions, consumer/error/role/schema coverage,
+full mode/filter/export parity and independent manual acceptance keep R01 OPEN.
+
+
+Final strict result: 35 R01/envelope cases passed, 0 failed, 0 skipped
+(.NET SDK 10.0.403, `r01-excel-verified-final/final.trx`, 3m16s).
+The actual final TRX passed the gate: 13 real native cases / 89 action keys.
+This final run includes fully related/content-typed OOXML import input and
+all individual AND grouped worksheets under real GA/OA/Supervisor sessions.
+Eight evidence-validator tests, six Section08 contract checks, five Phase00-02
+regressions, eleven WebView self-check preflights, the 104-action request-schema
+and live repository invariant guards and diff whitespace checks passed.
+No capture/update bypass remains in the tests. Windows Core/Release and all
+four package/hash checks on the new head remain required before merge.
+
+The 14 enabled actions outside this named successful native slice are:
+PreviewArchivedIdentity, CommitArchivedReturn, CancelExport (active writer),
+CreateVerifiedBackup, VerifyBackup, InspectBackup, PreviewRestore,
+PreviewFullReset, CommitFullReset, PreviewAdministrativeAttendanceCatchUp,
+CommitAdministrativeAttendanceCatchUp, SetClosedDayCorrectionPolicy,
+PreviewClosedDayCorrection, CommitClosedDayCorrection. Disabled
+RestoreDatabaseAtomically remains explicitly refused by its separate real
+native tests and is not falsely counted as successful implementation.
+This inventory is not proof that every branch/role/UI consumer of the 89 named
+actions is complete. Per-consumer failure isolation, complete wire/error/null
+and role variants, and remaining report/export modes still require acceptance.
