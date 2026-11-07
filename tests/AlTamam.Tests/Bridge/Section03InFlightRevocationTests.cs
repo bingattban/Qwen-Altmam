@@ -86,6 +86,32 @@ public sealed class Section03InFlightRevocationTests
         Assert.Null(result.Response.Data);
     }
 
+    [Theory]
+    [InlineData("GetCurrentSession", true, true)]
+    [InlineData("CommitFullReset", false, true)]
+    [InlineData("CommitFullReset", true, false)]
+    public async Task R01ResetLikeFields_DoNotBypassExpiryForOtherActionsOrIncompleteReset(
+        string action, bool reset, bool requiresSetup)
+    {
+        bool live = true;
+        var principal = new BridgePrincipal("TST-GA", "owner", UserRole.GeneralAdministration, Nonce);
+        var dispatcher = new WebView2BridgeDispatcher([new BridgeActionRegistration(
+            action, "ExpiryRegression", ["GeneralAdministration"], true, false,
+            (request, user, ct) =>
+            {
+                live = false;
+                return Task.FromResult(new BridgeResponse(request.RequestId, true, new JsonObject {
+                    ["reset"] = reset, ["requiresFirstSetup"] = requiresSetup, ["privateRoster"] = "must-not-leak"
+                }));
+            })]);
+        var result = await dispatcher.DispatchAsync(Envelope(action, Guid.NewGuid().ToString("N")),
+            LocalWebUiOrigin.BaseUrl, true,
+            nonce => Task.FromResult<BridgePrincipal?>(live ? principal : null));
+        Assert.False(result.Response.Success);
+        Assert.Equal(BridgeErrorCodes.SessionExpired, result.Response.ErrorCode);
+        Assert.Null(result.Response.Data);
+    }
+
     [Fact]
     public async Task RealSqlCipherSession_LogoutSignalsOldPrincipalBeforeReturning()
     {
