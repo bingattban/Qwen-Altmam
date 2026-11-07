@@ -90,6 +90,7 @@ public sealed class R01SeededStatusContractTests : IAsyncLifetime, IDisposable
         var result = await dispatcher.DispatchAsync(raw,
             $"https://{LocalWebUiOrigin.Host}/index.html", true,
             supplied => Task.FromResult<BridgePrincipal?>(supplied == Nonce ? principal : null));
+        R01ResponseSchema.AssertMatches(result.Response, "GetActiveAttendanceStatuses");
         Assert.True(result.Response.Success, result.Response.UserMessage);
         return Assert.IsType<JsonArray>(result.Response.Data);
     }

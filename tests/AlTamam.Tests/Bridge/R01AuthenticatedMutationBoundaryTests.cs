@@ -179,16 +179,107 @@ public sealed class R01AuthenticatedMutationBoundaryTests : IAsyncLifetime, IDis
         Assert.Equal(before, Evidence());
     }
 
+    [Fact]
+    public async Task RealLogin_ReadContractsPreserveBusinessStateAndServerRolePermissions()
+    {
+        async Task<JsonObject> ReadObject(BridgePrincipal actor, string action, JsonObject? payload = null)
+        {
+            var reply = await Call(actor, payload ?? new JsonObject(), action);
+            Assert.True(reply.Response.Success, action + ": " + reply.Response.UserMessage);
+            Assert.Null(reply.Response.AuditEventId);
+            Assert.True(reply.Response.InvalidationEvents is null || reply.Response.InvalidationEvents.Count == 0);
+            return Assert.IsType<JsonObject>(reply.Response.Data);
+        }
+        async Task CheckRole(BridgePrincipal actor)
+        {
+            string before = Evidence();
+            var session = await ReadObject(actor, "GetCurrentSession");
+            Assert.Equal(actor.UserId, session["userId"]!.GetValue<string>());
+            Assert.Equal(actor.Role.ToString(), session["role"]!.GetValue<string>());
+            var navigation = await ReadObject(actor, "GetNavigationPermissions");
+            Assert.Equal(actor.Role.ToString(), navigation["role"]!.GetValue<string>());
+            Assert.Equal(ActionManifest.All.Where(x => x.AllowedRoles.Contains(actor.Role.ToString(), StringComparer.Ordinal))
+                .Select(x => x.Action).OrderBy(x => x, StringComparer.Ordinal),
+                Assert.IsType<JsonArray>(navigation["allowedActions"]).Select(x => x!.GetValue<string>())
+                    .OrderBy(x => x, StringComparer.Ordinal));
+            var settings = await ReadObject(actor, "GetSettingsOverview");
+            Assert.Equal(actor.Username, settings["username"]!.GetValue<string>());
+            Assert.Equal(actor.Role.ToString(), settings["role"]!.GetValue<string>());
+            Assert.Equal("light", settings["theme"]!.GetValue<string>());
+            Assert.Equal("16:00", settings["backupTime"]!.GetValue<string>());
+            var policy = await ReadObject(actor, "GetAutoAttendancePolicy");
+            Assert.Equal("08:00", policy["dueTimeLocal"]!.GetValue<string>());
+            Assert.Equal("20:00", policy["dailyLockTimeLocal"]!.GetValue<string>());
+            var schedule = await ReadObject(actor, "GetBackupSchedule");
+            Assert.Equal("16:00", schedule["backupTime"]!.GetValue<string>());
+            var version = await ReadObject(actor, "GetApplicationVersion");
+            Assert.Equal("التمام اليومي", version["productNameAr"]!.GetValue<string>());
+            Assert.True(version["offline"]!.GetValue<bool>());
+            Assert.Equal(BridgeProtocol.ProtocolVersion, version["bridgeProtocol"]!.GetValue<int>());
+            var dashboard = await ReadObject(actor, "GetDashboardSummary", new JsonObject {
+                ["businessDate"] = TimeProvider.System.GetLocalNow().ToString("yyyy-MM-dd")
+            });
+            Assert.Equal(1L, dashboard["totalForce"]!.GetValue<long>());
+            Assert.Equal(1L, dashboard["unprepared"]!.GetValue<long>());
+            Assert.Equal(0L, dashboard["internalTransferDay"]!.GetValue<long>());
+            var statuses = await Call(actor, new JsonObject(), "QueryAttendanceStatuses");
+            Assert.True(statuses.Response.Success, statuses.Response.UserMessage);
+            Assert.Equal(4, Assert.IsType<JsonArray>(statuses.Response.Data).Count);
+            var search = await Call(actor, new JsonObject { ["term"] = "۹۸۷۶۵۴", ["take"] = 10 }, "SearchPersons");
+            Assert.True(search.Response.Success, search.Response.UserMessage);
+            var data = Assert.IsType<JsonObject>(search.Response.Data);
+            Assert.Equal(1, data["count"]!.GetValue<int>());
+            Assert.Equal("TST-R01-SUP", Assert.Single(Assert.IsType<JsonArray>(data["items"]))!["personId"]!.GetValue<string>());
+            Assert.Equal(before, Evidence());
+        }
+        await CheckRole(_admin);
+        var accountSearch = await Call(_admin, new JsonObject { ["term"] = "987654" }, "SearchActivePersonsForAccount");
+        Assert.True(accountSearch.Response.Success, accountSearch.Response.UserMessage);
+        Assert.Equal(1, Assert.IsType<JsonObject>(accountSearch.Response.Data)["count"]!.GetValue<int>());
+        await _services.RevokeSessionAsync(_admin.SessionNonce);
+        var (principal, failure) = await _services.AuthenticateAsync("r01-native-supervisor", "Synthetic123", default);
+        Assert.Null(failure);
+        var supervisor = Assert.IsType<BridgePrincipal>(principal);
+        await CheckRole(supervisor);
+        string afterLogin = Evidence();
+        var forbidden = await Call(supervisor, new JsonObject { ["term"] = "987654" }, "SearchActivePersonsForAccount");
+        Assert.Equal(BridgeErrorCodes.Unauthorized, forbidden.Response.ErrorCode);
+        Assert.Equal(afterLogin, Evidence());
+    }
+
+    [Fact]
+    public async Task NativeSchema_GuardRejectsArrayObjectDriftAndInvalidSearchMetadata()
+    {
+        var statuses = await Call(_admin, new JsonObject(), "GetActiveAttendanceStatuses");
+        Assert.True(statuses.Response.Success, statuses.Response.UserMessage);
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => R01ResponseSchema.AssertMatches(
+            statuses.Response with { Data = new JsonObject() }, "GetActiveAttendanceStatuses"));
+        var search = await Call(_admin, new JsonObject { ["term"] = "987654" }, "SearchPersons");
+        Assert.True(search.Response.Success, search.Response.UserMessage);
+        var malformed = (JsonObject)Assert.IsType<JsonObject>(search.Response.Data).DeepClone();
+        malformed["count"] = "1";
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => R01ResponseSchema.AssertMatches(
+            search.Response with { Data = malformed }, "SearchPersons"));
+        var omitted = (JsonObject)Assert.IsType<JsonObject>(search.Response.Data).DeepClone();
+        Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(omitted["items"])[0]).Remove("personId");
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => R01ResponseSchema.AssertMatches(
+            search.Response with { Data = omitted }, "SearchPersons"));
+    }
+
     private static JsonObject Intent() => new() {
         ["name"]="موقع يجب ألا يحفظ", ["operationId"]=Guid.NewGuid().ToString("N")
     };
 
-    private Task<BridgeDispatchResult> Call(BridgePrincipal actor, JsonObject payload,
+    private async Task<BridgeDispatchResult> Call(BridgePrincipal actor, JsonObject payload,
         string action = "CreateSite")
-        => _dispatcher.DispatchAsync(new JsonObject {
+    {
+        var result = await _dispatcher.DispatchAsync(new JsonObject {
             ["requestId"]=Guid.NewGuid().ToString("N"), ["protocolVersion"]=BridgeProtocol.ProtocolVersion,
             ["action"]=action, ["sessionNonce"]=actor.SessionNonce, ["payload"]=payload.DeepClone()
         }.ToJsonString(), LocalWebUiOrigin.BaseUrl, true, nonce => _services.ResolveSessionAsync(nonce));
+        R01ResponseSchema.AssertMatches(result.Response, action);
+        return result;
+    }
 
     private string Evidence()
     {
