@@ -66,3 +66,31 @@ inventory does not prove every conceivable role/branch combination. Final review
 must use the new head's actual full-suite and UI/package evidence, retain any
 reported gap, and keep manual clean-machine/production authorization separate.
 This document is a review candidate, not a claim of completed Windows acceptance.
+
+## Follow-up: recovery probe module readiness
+
+Owner-reported Release 42422961414 (head a911f3205b4b889124a8f61d82185b6994345297)
+passed 1094 main tests, 18 integration/14 unit tests and native evidence 22/103.
+The existing actual native roundtrip, authorizations and all 69 routes passed.
+The added recovery probe then failed at login with an undefined invoke reference.
+Package/hash jobs correctly remained skipped.
+
+The new root navigation can complete before all bundled scripts initialize. The
+probe captured window.AltamamBridge once before awaiting the real login DOM; that
+local reference stayed undefined even when the page subsequently initialized it.
+Test-first 8fbb589 executes the shipped inline probe with delayed module availability
+and fails 1/15 before correction. The repair resolves the native bridge only after
+its host transport and required shipped UI modules/root exist, within the existing
+bounded wait. A second control covers a bridge arriving before its UI dependencies.
+These supplied-boundary readiness tests are not native Windows recovery acceptance.
+
+Local repair validation: 15 preflights, 21 JS suites, 13 evidence-validator regressions,
+six Section08 checks and whitespace checks pass; Windows-targeted cross-build has
+zero warnings/errors. No domain/service, password, reset, backup, UI policy, timeout
+or required recovery assertion is changed. Final-head Windows execution and all four
+package/hash gates are still mandatory; R01 remains OPEN and no merge is claimed.
+
+Core 42422961415 succeeded on that same prior head, including its required actual
+Windows UI process (job 128555250778). Release alone hit the early module-capture
+race. That earlier Core success does not waive the failed Release/package gates or
+prove the new repaired head; both workflows must pass again on the final source.

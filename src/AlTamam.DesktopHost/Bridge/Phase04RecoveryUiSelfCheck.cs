@@ -31,9 +31,8 @@ internal static class Phase04RecoveryUiSelfCheck
         finally { core.NavigationCompleted -= completed; }
         string javascript = """
             (()=>{
-              const api=window.AltamamBridge;
               window.__r01RecoveryUi={status:"running"};
-              let stage="login",resetDispatches=0,logoutCompletions=0;
+              let stage="modules-ready",resetDispatches=0,logoutCompletions=0;
               const countReset=event=>{
                 if(event.detail?.action==="CommitFullReset"&&event.detail.busy)resetDispatches++;
                 if(event.detail?.action==="Logout"&&event.detail.busy===false)logoutCompletions++;
@@ -53,6 +52,16 @@ internal static class Phase04RecoveryUiSelfCheck
                 control.click();
               }
               void(async()=>{
+                const api=await wait(()=>
+                  window.AltamamBridge?.hasBridge?.()&&
+                  typeof window.AltamamBridge.invoke==="function"&&
+                  typeof window.AltamamFunctional?.render==="function"&&
+                  typeof window.AltamamAdminSettings?.renderSettings==="function"&&
+                  typeof window.AltamamDialog?.confirm==="function"&&
+                  typeof window.AltamamDialog?.detailsReview==="function"&&
+                  typeof window.AltamamDialog?.alert==="function"&&viewport()
+                    ?window.AltamamBridge:null,"shipped bridge and UI modules");
+                stage="login";
                 await wait(()=>viewport().querySelector(".daily-roster-panel,.auth-form"),"initial root");
                 try{await api.invoke("Logout",{});}catch(e){if(e.errorCode!=="SessionExpired")throw e;}
                 api.setSessionNonce(null);
