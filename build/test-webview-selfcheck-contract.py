@@ -17,7 +17,7 @@ class WebViewSmokeContract(unittest.TestCase):
         self.assertIn("new WebViewSelfCheckTimeProvider(TimeProvider.System)", HOST)
         self.assertIn("new BridgeSharedServices(fixture, clock)", HOST)
         self.assertIn("clock.GetBrowserInitializationScript()", HOST)
-        self.assertIn("CheckActualWebViewNavigationAsync(core, fixture, clock)", HOST)
+        self.assertIn("CheckActualWebViewNavigationAsync(core, fixture, clock, fixtureKey, recoveryOutput)", HOST)
         bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(encoding="utf-8")
         self.assertIn("timeProvider.GetLocalNow().AddDays(-1)", bridge)
 
@@ -47,6 +47,19 @@ assert.equal(vm.runInContext('class Derived extends Date {}; new Derived() insta
         probe = probe.replace("SCRIPT", json.dumps(script))
         result = subprocess.run(["node", "-"], input=probe.encode("utf-8"), capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
+
+    def test_recovery_ui_uses_real_gateway_and_preserves_independent_rescue_check(self):
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
+        match = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source)
+        self.assertIsNotNone(match)
+        syntax = subprocess.run(["node", "--check", "-"], input=match.group(1).encode("utf-8"), capture_output=True, timeout=20)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr.decode("utf-8", errors="replace"))
+        self.assertIn("Phase04RecoveryUiSelfCheck.RunAsync", HOST)
+        self.assertIn('rescue-before-reset-*.dbbackup', source)
+        self.assertIn('copy.HasValidIntegrity()', source)
+        self.assertIn('Count(copy, "Persons") != people', source)
+        self.assertIn('wrong-reset-password', source)
+        self.assertIn('RestoreDatabaseAtomically', (ROOT / "src/AlTamam.Application/Bridge/BridgeHandlerCatalog.cs").read_text(encoding="utf-8"))
 
     def test_transfer_uses_preexisting_person_with_yesterday_assignment(self):
         # A person created through the live first-use UI *today* has an assignment

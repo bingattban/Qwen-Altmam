@@ -43,6 +43,13 @@ class NativeEvidenceGuard(unittest.TestCase):
             self.fixture(**kwargs).write(trx, encoding="utf-8")
             return gate.validate(trx, {"QuerySites": ["array<object>"], "CreateSite": ["object<siteId>"]})
 
+    def test_stage2_native_acceptance_cases_are_mandatory(self):
+        self.assertTrue({
+            "ExcelLifecycleTests.FilteredSingleReport_RealNativeAndWorkbook_HaveIdenticalEmptyAndNonemptyRows",
+            "ExcelLifecycleTests.ArchiveModes_RealInternalExternalAndSeparationExcel_MatchNativeArchivedFacts",
+            "ExcelLifecycleTests.ReportExportErrors_RealNativeFailures_LeakNoDataAndPublishNoFiles"
+        }.issubset(gate.CASES))
+
     def test_current_snapshot_inventory_exactly_covers_enabled_manifest(self):
         import json
         snapshots = json.loads(gate.SNAPSHOTS.read_text(encoding="utf-8"))

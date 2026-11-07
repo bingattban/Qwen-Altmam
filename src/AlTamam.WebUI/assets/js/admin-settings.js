@@ -2658,12 +2658,15 @@
         const resetStatus=node("div","settings-feedback app-reset-verification-modal");
         resetStatus.setAttribute("role","dialog");
         resetStatus.setAttribute("aria-label","التحقق النهائي من التصفير");
+        let resetGeneration=0;
         const previewButton=btn("معاينة التصفير الكامل",async()=>{
+          const generation=++resetGeneration;
+          const isCurrent=()=>token===currentRequest&&generation===resetGeneration&&resetBox.isConnected;
           previewButton.disabled=true;
           resetStatus.replaceChildren(warning("جارٍ إعداد معاينة البيانات التي سيتم حذفها..."));
           try{
             const response=await api().invoke("PreviewFullReset",{});
-            if(token!==currentRequest)return;
+            if(!isCurrent())return;
             const data=response.data||{};
             if(!data.previewToken || !data.requiredConfirmation)throw Error("معاينة التصفير غير موثقة.");
             const detailsReview=window.AltamamDialog?.detailsReview;
@@ -2685,18 +2688,21 @@
             ]},{title:"معاينة التصفير النهائي",
               message:"ستُمحى جميع البيانات. راجع الأعداد بعناية قبل الانتقال للتحقق النهائي.",
               confirmLabel:"الانتقال للتحقق بكلمة المرور",danger:true});
+            if(!isCurrent())return;
             if(!approved){resetStatus.replaceChildren();previewButton.disabled=false;return;}
             const passwordWrap=field("كلمة المرور الحالية للإدارة العامة","","password");
             passwordWrap.input.autocomplete="current-password";
             const phraseWrap=field("اكتب عبارة التأكيد حرفياً","","text");
             phraseWrap.input.autocomplete="off";
             const approve=btn("تأكيد تصفير البرنامج نهائياً",async()=>{
+              if(!isCurrent()||approve.disabled)return;
               if(!passwordWrap.input.value || phraseWrap.input.value!==data.requiredConfirmation){
                 resetStatus.appendChild(warning("كلمة المرور وعبارة التأكيد مطلوبة حرفياً."));
                 return;
               }
               if(!await dialogs.confirm("هذه العملية نهائية وتمسح جميع الحسابات والتحضير وسجل العمليات. هل تؤكد؟"))
                 return;
+              if(!isCurrent())return;
               approve.disabled=true;
               try{
                 const result=await api().invoke("CommitFullReset",{
@@ -2723,6 +2729,7 @@
             },1000);
             countdown.textContent="يمكن اعتماد التصفير بعد "+remaining+" ثوانٍ.";
             const cancel=btn("إلغاء",()=>{
+              resetGeneration++;
               clearInterval(clock);passwordWrap.input.value="";
               resetStatus.replaceChildren();previewButton.disabled=false;
             });

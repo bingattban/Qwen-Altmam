@@ -61,7 +61,9 @@ execution gate and intentionally disabled RestoreDatabaseAtomically.
    package/hash checks. Report any unexecuted cell explicitly; action inventory or
    green routing checks alone do not close R01 or authorize production publishing.
 
-Stage 2 is not claimed implemented or accepted by Stage 1 changes.
+Stage 2 implementation is now a review candidate; its own exact-head Windows
+execution and package/hash acceptance remain required. Stage 1 alone did not
+prove these added scenarios.
 
 
 ## Windows failure 42410644404 / 42410644315 — shared test clock repair
@@ -132,3 +134,56 @@ Local follow-up: all 21 JS suites, 13 WebView preflights (including the shipped
 inline JS parser), six Section08 checks, twelve native evidence validator tests
 and whitespace checks pass. The new final-head Windows browser/package/hash runs
 are still REQUIRED; no local Windows success or Stage 1 acceptance is claimed.
+
+
+## Stage 1 accepted — #257
+
+Head 03bee88bad5c69f3324b585d13407a00f5928db9 passed Core 42416970467 and
+Release 42416970433, each with 1091 main tests plus 18 integration/14 unit tests,
+The gate at that baseline was still 19 native cases / 103 enabled actions.
+Actual native WPF/WebView2, both x86/x64 Portable/Installer acceptance and independent
+four-file SHA256 audit job 128547085754 passed; all four artifacts were nonexpired
+and identified that same head. No blocking reviews/comments and a clean main merge.
+Merge: af5dec792876f5dfd55296691b5ce08156bf07b9. Manual clean-machine acceptance
+remains owner-deferred / NOT EXECUTED.
+
+## Stage 2 implementation candidate
+
+- Actual native filtered single-person report and XLSX parity for nonempty Present,
+  nonempty Absent and empty site/status results; historical identity and known
+  104 source attendance records stay intact. Extend the committed corpus by one
+  observed empty-report shape; keep strict comparison and exactly 103 action keys.
+- All remaining personnel export modes: real internal/external transfers and
+  confirmed delayed separation, native archive reads, genuine workbook cell values,
+  correct local ordinals and UTC instant parity. Explicit date/time normalization
+  compares the same instant, not timezone string spelling.
+- Native malformed report/export requests: unknown mode/type, duplicate identities,
+  invalid export identifier, reversed dates, revoked session; truthful error/null,
+  no published/partial workbooks, no failed-command attendance or audit writes.
+  Intentional Logout audit is retained and measured separately.
+- Supplied-boundary UI regressions: rejected/corrupt inspection clears a formerly
+  valid selection; inconsistent digest or enabled-restore receipt cannot show a
+  successful comparison; destructive restore is never invoked.
+- Verified reset-consumer defect: a review approved after leaving settings could
+  construct the final form or dispatch reset. Test-first b52bfff fails on this
+  behavior before production edits. Bind preview/final confirmation to the owning
+  connected settings screen and current generation; cancellation invalidates it.
+- Actual Windows recovery UI harness: real founder login form, real native backup,
+  corrupt then valid inspection, read-only comparison, abandoned final reset approval,
+  wrong password refusal, then successful confirmed reset and first setup. Only OS
+  file selection is a supplied path delegate inside the disposable fixture. No
+  native response is injected. Independent C# verifies empty intact live DB, original
+  people/users in the encrypted rescue and retention of an unregistered test file.
+  The original independent SQL assertions and all 69 route checks run BEFORE reset.
+
+Both native TRX gates now require all 22 named cases / the same 103 enabled action
+keys, including the three added report/error/archive acceptance cases. The added
+Windows recovery harness must finish before the process reports success. All tests,
+production lock/roles/encryption and package/process budgets stay mandatory.
+
+Local capture fixture assumptions corrected before final verification: numeric Excel
+UTC spelling is semantically normalized; successful Logout owns an audit record.
+These are not claimed production defects. The empty native response was captured
+only from passed real tests, then strict committed verification was restored; no
+capture/update bypass is committed. See R01_FINAL_ACCEPTANCE_REVIEW.md for final
+local checks and the remaining exact-head Windows acceptance gate.

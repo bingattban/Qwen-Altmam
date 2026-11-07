@@ -85,6 +85,11 @@ const document = {
 const bridge = {
   invoke: async (name, body) => {
     calls.push({ name, body });
+    if(recoveryOverrides.has(name)){
+      const value=recoveryOverrides.get(name);
+      if(value instanceof Error)throw value;
+      return {data:value};
+    }
     if(name==="GetAllowedRoles"&&allowedRolesFailure)
       throw Object.assign(Error(allowedRolesFailure),{errorCode:allowedRolesFailure});
     if(name==="GetAllowedRoles"&&deferAllowedRoles)
@@ -215,6 +220,7 @@ const editDialogRequests=[];
 let nextIdentityForm=null,nextConfigForm=null;
 let approveDetailPreview=false;
 let deferDetailsReview=false,completeDetailsReview=null;
+const recoveryOverrides=new Map();
 let resetTimer=null;
 const context = { setInterval:fn=>{resetTimer=fn;return 1;},clearInterval:()=>{resetTimer=null;}, window:{ AltamamBridge:bridge,AltamamDialog:{
   detailsReview:async(details,opts)=>{
@@ -1157,6 +1163,31 @@ async function run() {
   abandonedAdd.handlers.click();
   assert.ok(!visible().some(x=>x.className.includes("admin-user-form")));
   deferAllowedRoles=false;
+  for(const invalid of [Error("BackupIntegrityFailed"),{verified:false},
+    {verified:true,path:"C:\\Temp\\bad.dbbackup",sha256:"invalid"}]){
+    await controller.renderSettings(admin,()=>{});
+    await buttonNamed("اختيار نسخة مشفرة وفحص سلامتها").handlers.click();
+    assert.equal(buttonNamed("معاينة الاستعادة دون تنفيذ").disabled,false);
+    recoveryOverrides.set("InspectBackup",invalid);
+    await buttonNamed("اختيار نسخة مشفرة وفحص سلامتها").handlers.click();
+    assert.equal(buttonNamed("معاينة الاستعادة دون تنفيذ").disabled,true,
+      "failed new inspection revokes the previously verified backup selection");
+    const previewsBefore=calls.filter(x=>x.name==="PreviewRestore").length;
+    await buttonNamed("معاينة الاستعادة دون تنفيذ").handlers.click();
+    assert.equal(calls.filter(x=>x.name==="PreviewRestore").length,previewsBefore);
+    recoveryOverrides.clear();
+  }
+  for(const invalid of [{verified:true,previewOnly:true,restoreEnabled:true,sha256:"a".repeat(64)},
+    {verified:true,previewOnly:true,restoreEnabled:false,sha256:"b".repeat(64)}]){
+    await controller.renderSettings(admin,()=>{});
+    await buttonNamed("اختيار نسخة مشفرة وفحص سلامتها").handlers.click();
+    recoveryOverrides.set("PreviewRestore",invalid);
+    const reviewsBefore=modalReviews.length;
+    await buttonNamed("معاينة الاستعادة دون تنفيذ").handlers.click();
+    assert.equal(modalReviews.length,reviewsBefore,"inconsistent restore receipt cannot be shown as a verified preview");
+    assert.equal(calls.filter(x=>x.name==="RestoreDatabaseAtomically").length,0);
+    recoveryOverrides.clear();
+  }
   // Stage 2: destructive confirmation belongs to the current settings screen.
   await controller.renderSettings(admin,()=>{});
   deferDetailsReview=true;completeDetailsReview=null;
