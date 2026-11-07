@@ -100,7 +100,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                 if(!controller.openOwnedRoute("Users"))throw new Error(role+" account route denied");
                 const viewport=document.getElementById("appViewport");
                 const add=await waitForUi(()=>[...viewport.querySelectorAll("button")]
-                  .find(b=>b.textContent.trim()==="إضافة حساب"),"account list");
+                  .find(b=>b.textContent.trim()==="إضافة حساب"&&!b.disabled),"account list and allowed roles");
                 add.click();
                 const form=await waitForUi(()=>viewport.querySelector(".admin-user-form"),"account picker");
                 const input=[...form.querySelectorAll("label")]
@@ -576,6 +576,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("linked supervisor account not persisted");
                 const ownerUsers = await api.invoke("ListUserAccounts",{});
                 if (!ownerUsers?.success) throw new Error("GeneralAdmin user list denied");
+                probeStage = "r01-owner-account-picker";
                 await verifyAccountPicker("GeneralAdministration",personId);
                 await api.invoke("Logout",{});
                 api.setSessionNonce(null);
@@ -676,6 +677,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                       empty.data.items.length !== 0 || empty.data.count !== 0)
                     throw new Error(action + " empty result retained stale person data");
                 }
+                probeStage = "r01-admin-account-picker";
                 await verifyAccountPicker("OrdinaryAdministration",personId);
                 const r01AccountPickerConsumerVerified=true;
                 const r01SessionRecoveryVerified = true;

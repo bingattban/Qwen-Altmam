@@ -63,7 +63,7 @@ const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
 let accountSearchFailure=null,accountSearchItems=null,statusLookupFailure=null;
-let deferAllowedRoles=false,completeAllowedRoles=null;
+let deferAllowedRoles=false,completeAllowedRoles=null,allowedRolesFailure=null;
 let deferUserList=false,completeUserList=null;
 let deferAccountSearch=false,completeAccountSearch=null;
 let failOneDueTimeSave = false;
@@ -85,6 +85,8 @@ const document = {
 const bridge = {
   invoke: async (name, body) => {
     calls.push({ name, body });
+    if(name==="GetAllowedRoles"&&allowedRolesFailure)
+      throw Object.assign(Error(allowedRolesFailure),{errorCode:allowedRolesFailure});
     if(name==="GetAllowedRoles"&&deferAllowedRoles)
       return new Promise(resolve=>{completeAllowedRoles=resolve;});
     if(name==="ListUserAccounts"&&deferUserList)
@@ -1130,6 +1132,28 @@ async function run() {
     assert.ok(picker.children.some(x=>x.value==="TST-ACTIVE-1"),"picker still works after the list read completes");
     deferAllowedRoles=false;deferUserList=false;
   }
+  for(const failure of ["Unauthorized","SessionExpired","BridgeOffline"]){
+    allowedRolesFailure=failure;
+    controller.renderAdmin(admin);controller.openOwnedRoute("Users");
+    await new Promise(resolve=>setImmediate(resolve));
+    const add=buttonNamed("إضافة حساب");
+    assert.equal(add.disabled,true,"failed role read never enables create-account");
+    add.handlers.click();
+    assert.ok(!visible().some(x=>x.className.includes("admin-user-form")));
+    assert.ok(visible().some(x=>x.textContent===failure),"role initialization failure is visible");
+    allowedRolesFailure=null;
+  }
+  deferAllowedRoles=true;
+  controller.renderAdmin(admin);controller.openOwnedRoute("Users");
+  const abandonedAdd=buttonNamed("إضافة حساب");
+  const lateRoles=completeAllowedRoles;
+  controller.renderAdmin({role:"Supervisor",username:"supervisor"});
+  lateRoles({data:[{role:"Supervisor",name:"مشرف"}]});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(abandonedAdd.disabled,true,"late roles cannot enable a previous user's editor");
+  abandonedAdd.handlers.click();
+  assert.ok(!visible().some(x=>x.className.includes("admin-user-form")));
+  deferAllowedRoles=false;
   // Stage 1: account identity must be tied to the latest successful active search.
   for(const errorCode of ["Unauthorized","SessionExpired","BridgeOffline","empty"]){
     controller.renderAdmin(admin);controller.openOwnedRoute("Users");

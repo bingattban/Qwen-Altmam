@@ -96,3 +96,39 @@ checks passed. Native evidence validator regressions remain passing. The real
 Windows E2E and packages on the repaired head remain REQUIRED / NOT EXECUTED locally.
 Consolidation avoids merging a failed prerequisite: #257 carries all #256 changes
 and the repair, and must pass against main before any merge or Stage 2 work.
+
+## Follow-up Windows failure — account initialization ordering
+
+Repaired-clock head `fbc151be3f468350fa517695ad37934901a86e7a` passed
+1091 main tests plus 18 integration/14 authorization tests in both runs
+42413405342 and 42413405362. The real browser progressed beyond attendance
+preview/save/revision and transfer checks, then timed out waiting for native
+account-picker identity. Its old stage label still said QueryMovementArchive;
+the actual reason in BOTH job logs was "native consumer did not reach account
+search identity". Packages and independent audit correctly remained skipped.
+
+The add button existed and was enabled while GetAllowedRoles was pending. The
+browser helper clicked it immediately. The form captured currentRequest before
+accounts() started its initial load(), which increments that request generation.
+The form's existing ownership guard then correctly rejected every search. Fast
+supplied replies in the previous Node tests did not exercise this startup race.
+
+Test-first commit 405a818 reproduces delayed role/list completion through the
+shipped controller. Before correction it fails because the initial add action is
+enabled before native roles arrive. The full regression additionally opens and
+searches while the initial list remains pending, completes that list, and searches
+again, under both GA/OA roles. Other tests retain a disabled add action on denied,
+expired or offline role reads and ignore a late role reply after navigation to a
+Supervisor session. No service, role, schema or write authority is modified.
+
+The owning UI now disables add until roles are known and starts the first list
+request BEFORE enabling the editor. Its generation is therefore current when
+opened; queued activations before readiness are rejected. The real Windows
+harness waits for the enabled add action and records the correct owner/admin
+picker stage. Native authentication/SQLCipher and both completion flags remain
+mandatory. No delay or timeout increase, fake success, or removed assertion is used.
+
+Local follow-up: all 21 JS suites, 13 WebView preflights (including the shipped
+inline JS parser), six Section08 checks, twelve native evidence validator tests
+and whitespace checks pass. The new final-head Windows browser/package/hash runs
+are still REQUIRED; no local Windows success or Stage 1 acceptance is claimed.

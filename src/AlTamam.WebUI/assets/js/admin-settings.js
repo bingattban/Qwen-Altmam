@@ -872,9 +872,11 @@
     const notice=node("div","admin-note");
     const tools=node("div","functional-toolbar");
     const filter=field("بحث باسم المستخدم أو الاسم أو الرقم (ع)",state.term);
+    const addAccount=btn("إضافة حساب",()=>showAdd(),"btn btn-outline");
+    addAccount.disabled=true;
     tools.append(filter.wrap,btn("بحث",()=>{
       state.term=filter.input.value.trim();state.page=1;load();
-    },"btn btn-primary"),btn("إضافة حساب",()=>showAdd(),"btn btn-outline"));
+    },"btn btn-primary"),addAccount);
     container.append(tools,notice);
     const rows=node("div","admin-users-list");container.appendChild(rows);
     const token=++currentRequest;
@@ -886,7 +888,7 @@
     }catch(e){if(token===currentRequest)errors(notice,e);return;}
 
     function showAdd() {
-      if(state.active!=="accounts")return;
+      if(state.active!=="accounts"||addAccount.disabled)return;
       const form=card("إضافة حساب مرتبط بفرد من القوة");
       const formEpoch=currentRequest;
       let dismissed=false,searchSerial=0;
@@ -1090,7 +1092,9 @@
       page.appendChild(wrapper);
       // Fixed modal keeps the list and current query.
     }
-    await load();
+    const initialList=load();
+    addAccount.disabled=allowedRoles.length===0;
+    await initialList;
   }
 
   // The one canonical roster-column editor. No presentation label is a data key.
