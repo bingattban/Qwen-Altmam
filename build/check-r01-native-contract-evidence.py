@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Require executed native lifecycle tests and every committed wire snapshot.
 
-This gate covers this named 89-action slice, NOT all 104 manifest actions.
+This gate covers this named 103-action slice, NOT all 104 manifest actions.
 It consumes the real full-suite TRX; a metadata inventory cannot satisfy it.
 """
 import json
@@ -12,7 +12,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS = ROOT / "tests/AlTamam.Tests/Bridge/Snapshots/R01NativeConfigurationResponseShapes.json"
 PREFIX = "AlTamam.Tests.Bridge.R01Native"
+# Owner-deferred R08 destructive restore is explicitly rejected by native tests.
+INTENTIONALLY_DISABLED = {"RestoreDatabaseAtomically"}
 CASES = {
+    "RecoveryLifecycleTests.ArchivedReturn_RealPreviewCommit_ReusesIdentityAndRetainsExitHistory",
+    "RecoveryLifecycleTests.CatchUp_RealPreviewCommit_FillsOnlyMissingDayWithOneLedgerAndDurableReceipt",
+    "RecoveryLifecycleTests.ClosedCorrection_RealPolicyPreviewCommit_KeepsClosureOriginalTimeAndRevisionEvidence",
+    "RecoveryLifecycleTests.Backup_RealCreateVerifyPickerAndRestorePreview_PreserveLiveDataAndEncryptedCandidate",
+    "RecoveryLifecycleTests.FullReset_RealConfirmedCommand_ReturnsTruthfulSuccessAfterEndingItsOwnSession",
+    "RecoveryLifecycleTests.CancelExport_RealRunningNativeWriter_StopsWithoutPublishingOrChangingSqlCipher",
+
     "ExcelLifecycleTests.Monthly_RealAllSitesAndFilteredWorkbooks_ExactlyMatchEveryPagedNativeCell",
     "ExcelLifecycleTests.PersonReports_RealSingleGroupFilteredAndPagedExcel_PreserveHistoricalIdentityAndTotals",
     "ExcelLifecycleTests.Import_RealWorkbookAnalyzePreviewCommitOutcomeAndIssues_PersistExactlyOneAcceptedPerson",
@@ -28,6 +37,19 @@ CASES = {
     "OperationalLifecycleTests.Separation_RealServerDelayCommit_RetainsReasonAndHistoryWithoutInventedAttendance",
 }
 NS = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+
+
+def require_complete_enabled_inventory(snapshots):
+    canonical = {row["action"] for row in json.loads(
+        (ROOT / "src/AlTamam.WebUI/action-manifest.json").read_text(encoding="utf-8"))["actions"]}
+    if not INTENTIONALLY_DISABLED <= canonical:
+        raise ValueError("Disabled action classification drift")
+    enabled = canonical - INTENTIONALLY_DISABLED
+    if set(snapshots) != enabled:
+        raise ValueError("Enabled native inventory mismatch; missing=" +
+                         ",".join(sorted(enabled - set(snapshots))) + "; unexpected=" +
+                         ",".join(sorted(set(snapshots) - enabled)))
+    return enabled
 
 
 def validate(trx, snapshots):
@@ -72,7 +94,9 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise SystemExit("Usage: check-r01-native-contract-evidence.py <actual-suite.trx>")
     try:
-        found = validate(Path(sys.argv[1]), json.loads(SNAPSHOTS.read_text(encoding="utf-8")))
+        snapshots = json.loads(SNAPSHOTS.read_text(encoding="utf-8"))
+        require_complete_enabled_inventory(snapshots)
+        found = validate(Path(sys.argv[1]), snapshots)
     except (OSError, ValueError, ET.ParseError) as error:
         raise SystemExit("R01 NATIVE CONTRACT EVIDENCE FAIL: " + str(error)) from error
     print(f"R01 NATIVE CONTRACT SLICE PASS: {len(CASES)} real native cases / {len(found)} actions; not full R01 closure")

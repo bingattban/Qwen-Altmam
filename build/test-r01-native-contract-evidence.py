@@ -13,11 +13,13 @@ SPEC.loader.exec_module(gate)
 
 
 class NativeEvidenceGuard(unittest.TestCase):
-    def fixture(self, missing_case=False, failed=False, missing_action=False, wrong_shape=False, duplicate=False, configuration_only=False, missing_excel=False):
+    def fixture(self, missing_case=False, failed=False, missing_action=False, wrong_shape=False, duplicate=False, configuration_only=False, missing_excel=False, missing_recovery=False):
         namespace = gate.NS["t"]
         root = ET.Element("{" + namespace + "}TestRun")
         results = ET.SubElement(root, "{" + namespace + "}Results")
         for index, case in enumerate(sorted(gate.CASES)):
+            if missing_recovery and case.startswith("RecoveryLifecycleTests."):
+                continue
             if missing_excel and case.startswith("ExcelLifecycleTests."):
                 continue
             if configuration_only and not case.startswith("ConfigurationLifecycleTests."):
@@ -41,6 +43,25 @@ class NativeEvidenceGuard(unittest.TestCase):
             self.fixture(**kwargs).write(trx, encoding="utf-8")
             return gate.validate(trx, {"QuerySites": ["array<object>"], "CreateSite": ["object<siteId>"]})
 
+    def test_current_snapshot_inventory_exactly_covers_enabled_manifest(self):
+        import json
+        snapshots = json.loads(gate.SNAPSHOTS.read_text(encoding="utf-8"))
+        self.assertEqual(gate.require_complete_enabled_inventory(snapshots), set(snapshots))
+
+    def test_missing_enabled_snapshot_cannot_be_hidden_by_slice_count(self):
+        import json
+        snapshots = json.loads(gate.SNAPSHOTS.read_text(encoding="utf-8"))
+        snapshots.pop("GetCurrentSession")
+        with self.assertRaisesRegex(ValueError, "inventory mismatch"):
+            gate.require_complete_enabled_inventory(snapshots)
+
+    def test_disabled_restore_cannot_be_counted_as_successful_coverage(self):
+        import json
+        snapshots = json.loads(gate.SNAPSHOTS.read_text(encoding="utf-8"))
+        snapshots["RestoreDatabaseAtomically"] = ["object<false-success>"]
+        with self.assertRaisesRegex(ValueError, "inventory mismatch"):
+            gate.require_complete_enabled_inventory(snapshots)
+
     def test_complete_passed_execution_is_accepted(self):
         self.assertEqual(self.check(), {"QuerySites", "CreateSite"})
 
@@ -55,6 +76,10 @@ class NativeEvidenceGuard(unittest.TestCase):
     def test_configuration_and_operational_output_cannot_replace_excel_execution(self):
         with self.assertRaisesRegex(ValueError, "not executed"):
             self.check(missing_excel=True)
+
+    def test_older_native_output_cannot_replace_recovery_execution(self):
+        with self.assertRaisesRegex(ValueError, "not executed"):
+            self.check(missing_recovery=True)
 
     def test_failed_case_cannot_be_masked_by_complete_action_lines(self):
         with self.assertRaisesRegex(ValueError, "did not pass"):

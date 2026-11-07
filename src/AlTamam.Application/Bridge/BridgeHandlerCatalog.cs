@@ -793,7 +793,9 @@ public static class BridgeHandlerCatalog
         {
             var svc=new FullDataResetService(services.Db,services.Time);
             var response=await svc.CommitAsync(req.Payload,principal!,ct).ConfigureAwait(false);
-            return response with {RequestId=req.RequestId};
+            return response.Success
+                ? Done(req,response.Data,Invalidation(UiInvalidationEvents.SessionEnded))
+                : response with {RequestId=req.RequestId};
         },
         // Phase 11: secure user administration, not the older "not implemented" fallback.
         "GetAllowedRoles" => (req, principal, ct) =>

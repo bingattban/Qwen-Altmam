@@ -210,16 +210,25 @@ public sealed class WebView2BridgeDispatcher
             executionToken.ThrowIfCancellationRequested();
             BridgeResponse response = await registration.Handler(
                 request, principal, executionToken).ConfigureAwait(false);
+            // A confirmed full reset deliberately removes its own Users/Sessions.
+            // Return its committed, non-roster receipt instead of reporting a
+            // false expiry. Only this named native command with BOTH completed
+            // reset flags qualifies; unrelated reads/writes still fail closed.
+            bool completedReset = request.Action == "CommitFullReset" && response.Success &&
+                response.Data is JsonObject resetData &&
+                resetData["reset"] is JsonValue resetFlag && resetFlag.TryGetValue<bool>(out bool reset) && reset &&
+                resetData["requiresFirstSetup"] is JsonValue setupFlag && setupFlag.TryGetValue<bool>(out bool setup) && setup;
+            bool endsOwnSession = request.Action == "Logout" || completedReset;
             // A deferred read or handler that ignored cancellation must NOT
             // return the old user's sensitive response after logout/expiry.
-            if (requiresAuth && request.Action != "Logout" &&
+            if (requiresAuth && !endsOwnSession &&
                 (principal!.SessionRevocation.IsCancellationRequested ||
                  await authenticate(request.SessionNonce).ConfigureAwait(false) is null))
                 return Fail(request.RequestId, BridgeErrorCodes.SessionExpired,
                     "انتهت صلاحية الجلسة، يجب تسجيل الدخول من جديد.", BridgeOutcomeKind.Unauthorized);
-            // Explicit logout revokes the old nonce, so its replay history may be
-            // discarded. A successful login does not clear anonymous history.
-            if (response.Success && request.Action == "Logout")
+            // Both explicit session-ending commands discard the old replay
+            // history. A successful login does not clear anonymous history.
+            if (response.Success && endsOwnSession)
             {
                 await _gate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
                 try
