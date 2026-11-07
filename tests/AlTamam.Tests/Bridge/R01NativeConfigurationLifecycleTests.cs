@@ -57,6 +57,7 @@ public sealed class R01NativeConfigurationLifecycleTests : IAsyncLifetime, IDisp
     {
         var response = await Dispatch(action, payload);
         Assert.True(response.Success, action + ": " + response.UserMessage);
+
         R01WireShapeSnapshot.Verify(action, response);
         _output.WriteLine("R01_NATIVE_SHAPE " + action + " " + R01WireShapeSnapshot.Shape(response));
         return response;
@@ -309,6 +310,100 @@ public sealed class R01NativeConfigurationLifecycleTests : IAsyncLifetime, IDisp
         var history = await Object("QueryAuditPresentationChanges", new JsonObject { ["auditEventId"] = id });
         Assert.Equal(2, Assert.IsType<JsonArray>(history["items"]).Count);
         Assert.Equal("1", Scalar("SELECT COUNT(*) FROM AuditEvents WHERE AuditEventId=$id;", id));
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
+    public async Task PersonnelIdentity_RealPreviewEdit_PreservesCanonicalNumberAndHistoricalIdentity()
+    {
+        // Trusted setup only: earlier history makes today's identity transition valid.
+        var seeded = await new PersonRosterService(_db).CreatePersonAsync("USR-SYSTEM", "fixture", new JsonObject {
+            ["visibleName"] = "هوية اختبارية سابقة", ["serviceNumberA"] = "008811",
+            ["firstRecordedLocalDate"] = DateTime.Today.AddDays(-2).ToString("yyyy-MM-dd")
+        }, default);
+        Assert.True(seeded.Success, seeded.UserMessage);
+        string id = Assert.IsType<JsonObject>(seeded.Data)["personId"]!.GetValue<string>();
+        var intent = new JsonObject {
+            ["personId"] = id, ["visibleName"] = "هوية اختبارية محدثة", ["serviceNumberA"] = "۰۰۸۸۱۲",
+            ["baseRevision"] = 1, ["expectedRevision"] = 1,
+            ["effectiveLocalDate"] = DateTime.Today.ToString("yyyy-MM-dd"), ["reason"] = "تصحيح هوية اختبارية"
+        };
+        long before = AuditCount();
+        var preview = await Object("PreviewPersonIdentityUpdate", intent);
+        Assert.Equal("008812", preview["newServiceNumberA"]!.GetValue<string>());
+        Assert.Equal(before, AuditCount());
+        Assert.Equal("008811", Scalar("SELECT CurrentServiceNumberA FROM Persons WHERE PersonId=$id;", id));
+        var saved = await Object("UpdatePersonIdentity", intent);
+        await ReplayWithoutNewAudit("UpdatePersonIdentity", intent, saved);
+        Assert.Equal("008812", Scalar("SELECT CurrentServiceNumberA FROM Persons WHERE PersonId=$id;", id));
+        Assert.Equal("008811", Scalar("SELECT ServiceNumberASnapshot FROM PersonIdentityHistory WHERE PersonId=$id AND ValidToLocalDate IS NOT NULL;", id));
+        Assert.Equal("008812", Scalar("SELECT ServiceNumberASnapshot FROM PersonIdentityHistory WHERE PersonId=$id AND ValidToLocalDate IS NULL;", id));
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM Persons WHERE PersonId=$id;", id));
+        Assert.Equal(before + 1, AuditCount());
+        var stale = (JsonObject)intent.DeepClone();
+        stale["operationId"] = Guid.NewGuid().ToString("N");
+        Assert.False((await Dispatch("UpdatePersonIdentity", stale)).Success);
+        Assert.Equal(before + 1, AuditCount());
+        var current = await Object("GetPersonSummary", new JsonObject { ["personId"] = id });
+        Assert.Equal(id, current["personId"]!.GetValue<string>());
+        Assert.Equal("008812", current["serviceNumberA"]!.GetValue<string>());
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
+    public async Task PersonnelArchive_RealPreviewCommit_HidesRosterWithoutErasingIdentity()
+    {
+        using (var connection = _db.CreateOpenConnection())
+        using (var seed = connection.CreateCommand())
+        {
+            seed.CommandText = """
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,CurrentServiceNumberA,
+                    NormalizedServiceNumberA,FirstRecordedLocalDate,FirstRecordedAtUtc,
+                    OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('R01-ARCHIVE','فرد أرشفة اختباري','فرد ارشفه اختباري','091871','091871',
+                    '2026-01-01','2026-01-01T00:00:00Z',1,1,1);
+                INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,CreatedAtUtc)
+                VALUES('R01-ARCHIVE-ASSIGN','R01-ARCHIVE','SITE-UNSPECIFIED','2026-01-01','2026-01-01T00:00:00Z');
+                """;
+            await seed.ExecuteNonQueryAsync();
+        }
+        var query = new JsonObject { ["term"] = "091871", ["pageSize"] = 1 };
+        var before = await Object("QueryPersons", query);
+        Assert.Equal("R01-ARCHIVE", before["items"]![0]!["personId"]!.GetValue<string>());
+        var summary = await Object("GetPersonSummary", new JsonObject { ["personId"] = "R01-ARCHIVE" });
+        Assert.True(summary["active"]!.GetValue<bool>());
+        string day = DateTime.Today.ToString("yyyy-MM-dd");
+        var previewIntent = new JsonObject { ["personIds"] = new JsonArray("R01-ARCHIVE"), ["effectiveLocalDate"] = day };
+        long auditBefore = AuditCount();
+        var preview = await Object("PreviewArchivePersons", previewIntent);
+        Assert.Equal(auditBefore, AuditCount());
+        Assert.Equal("1", Scalar("SELECT ActiveFlag FROM Persons WHERE PersonId='R01-ARCHIVE';"));
+        var intent = new JsonObject {
+            ["personIds"] = new JsonArray("R01-ARCHIVE"), ["effectiveLocalDate"] = day,
+            ["baseRevision"] = preview["baseRevision"]!.DeepClone(),
+            ["expectedRevision"] = preview["baseRevision"]!.DeepClone(),
+            ["previewToken"] = preview["previewToken"]!.DeepClone(), ["reason"] = "أرشفة اختبارية مع حفظ التاريخ"
+        };
+        var archived = await Object("ArchivePersons", intent);
+        await ReplayWithoutNewAudit("ArchivePersons", intent, archived);
+        long committedAudit = AuditCount();
+        var conflicting = (JsonObject)intent.DeepClone();
+        conflicting["reason"] = "سبب مختلف لنفس العملية";
+        Assert.False((await Dispatch("ArchivePersons", conflicting)).Success);
+        var stale = (JsonObject)intent.DeepClone();
+        stale["operationId"] = Guid.NewGuid().ToString("N");
+        Assert.False((await Dispatch("ArchivePersons", stale)).Success);
+        Assert.Equal(committedAudit, AuditCount());
+        Assert.Equal("4", Scalar("SELECT OrganizationalStatus FROM Persons WHERE PersonId='R01-ARCHIVE';"));
+        Assert.Equal("0", Scalar("SELECT ActiveFlag FROM Persons WHERE PersonId='R01-ARCHIVE';"));
+        Assert.Equal(day, Scalar("SELECT ValidToLocalDate FROM PersonAssignments WHERE PersonId='R01-ARCHIVE';"));
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSON_ARCHIVE';"));
+        Assert.Empty(Assert.IsType<JsonArray>((await Object("QueryPersons", query))["items"]));
+        query["includeArchived"] = true;
+        Assert.Equal("R01-ARCHIVE", (await Object("QueryPersons", query))["items"]![0]!["personId"]!.GetValue<string>());
+        var after = await Object("GetPersonSummary", new JsonObject { ["personId"] = "R01-ARCHIVE" });
+        Assert.False(after["active"]!.GetValue<bool>());
+        Assert.Equal(summary["firstRecordedLocalDate"]!.GetValue<string>(), after["firstRecordedLocalDate"]!.GetValue<string>());
         Assert.True(_db.HasValidIntegrity());
     }
 

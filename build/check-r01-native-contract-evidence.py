@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Require executed native lifecycle tests and every committed wire snapshot.
 
-This gate covers this named 38-action slice, NOT all 104 manifest actions.
+This gate covers this named 44-action slice, NOT all 104 manifest actions.
 It consumes the real full-suite TRX; a metadata inventory cannot satisfy it.
 """
 import json
@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS = ROOT / "tests/AlTamam.Tests/Bridge/Snapshots/R01NativeConfigurationResponseShapes.json"
 PREFIX = "AlTamam.Tests.Bridge.R01NativeConfigurationLifecycleTests."
 CASES = {
+    "PersonnelArchive_RealPreviewCommit_HidesRosterWithoutErasingIdentity",
+    "PersonnelIdentity_RealPreviewEdit_PreservesCanonicalNumberAndHistoricalIdentity",
     "SitesAndStatuses_CreateRenameRetireAndDeactivate_PreserveHistoryAndReceipts",
     "CustomColumns_RealCreateEditDeactivate_PreserveStableIdAndStoredValues",
     "IndependentSettings_RealWritesAndReads_KeepSeparateSchedulesAndReceipts",
