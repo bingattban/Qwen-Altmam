@@ -1,4 +1,8 @@
 {
+  "ArchivePersons": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{archivedPersonIds:array<string>,effectiveLocalDate:string,operationId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:integer,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{archivedPersonIds:array<string>,effectiveLocalDate:string,operationId:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "AuthenticateLocalUser": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{role:string,roleLabelAr:string,sessionNonce:string,userId:string,username:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
@@ -56,6 +60,10 @@
   "GetCustomFieldDefinitions": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{items:array<object{active:boolean,caption:string,columnId:string,displayOrder:integer,fieldType:integer,isSystemProtected:boolean,snapshot:string,storedValueCount:integer,technicalKey:string,visible:boolean}>,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
+  "GetPersonSummary": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,customColumns:array<>,customFields:object{},displayName:string,firstRecordedLocalDate:string,identityHistory:array<>,normalizedDisplayName:string,organizationalStatus:integer,personId:string,revision:integer,serviceNumberA:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,customColumns:array<>,customFields:object{},displayName:string,firstRecordedLocalDate:string,identityHistory:array<object{name:string,reason:string,recordedAtUtc:string,serviceNumberA:string,validFrom:string,validTo:null}|object{name:string,reason:string,recordedAtUtc:string,serviceNumberA:string,validFrom:string,validTo:string}>,normalizedDisplayName:string,organizationalStatus:integer,personId:string,revision:integer,serviceNumberA:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "GetProvisioningState": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{provisioned:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
@@ -68,11 +76,21 @@
   "Logout": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{loggedOut:boolean},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
+  "PreviewArchivePersons": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{baseRevision:integer,candidates:array<object{attendanceDays:integer,blocker:null,currentSiteName:string,displayName:string,organizationalStatus:integer,personId:string,serviceNumberA:string}>,effectiveLocalDate:string,expectedVersions:array<object{personId:string,rowVersion:integer}>,previewToken:string,reversible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "PreviewPersonIdentityUpdate": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{baseRevision:integer,effectiveLocalDate:string,newName:string,newServiceNumberA:string,oldName:string,oldServiceNumberA:string,personId:string,previewToken:string,willCloseOldSnapshot:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "QueryAuditLog": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{count:integer,hasNext:boolean,items:array<object{actorDisplay:string,actorRosterFullName:string,actorUsername:string,auditEventId:string,description:string,effectiveLocalDate:string,eventHash:string,executedAtUtc:string,foundingAccountProvenance:boolean,isTombstoned:boolean,newValue:object{name:string},oldValue:null,operationArabicName:string,operationCode:string,outcome:string,overlayVersion:integer,rawDescription:string,reason:null,sequence:integer,targetDisplay:string,targetEntityId:string,targetEntityType:string}>,page:integer,pageSize:integer,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "QueryAuditPresentationChanges": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{count:integer,items:array<object{afterState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},auditEventId:string,beforeState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},correctedDescription:null,editedAtUtc:string,editedByDisplay:string,editedByUserId:string,isTombstoned:boolean,operationCode:string,overlayVersion:integer,rawDescription:string,reason:string}|object{afterState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},auditEventId:string,beforeState:object{displayDescription:string,isTombstoned:boolean,overlayVersion:integer},correctedDescription:string,editedAtUtc:string,editedByDisplay:string,editedByUserId:string,isTombstoned:boolean,operationCode:string,overlayVersion:integer,rawDescription:string,reason:string}>,page:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "QueryPersons": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{count:integer,customColumns:array<>,hasNext:boolean,items:array<object{active:boolean,customFields:object{},displayName:string,organizationalStatus:integer,personId:string,revision:integer,serviceNumberA:string,siteName:string}>,page:integer,pageSize:integer,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{count:integer,customColumns:array<>,hasNext:boolean,items:array<>,page:integer,pageSize:integer,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "QuerySites": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<object{active:boolean,name:string,rowVersion:integer,siteId:string}>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
@@ -112,5 +130,9 @@
   ],
   "UpdateCustomFieldMetadata": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,caption:string,columnId:string,displayOrder:integer,fieldType:integer,isSystemProtected:boolean,snapshot:string,storedValueCount:integer,technicalKey:string,visible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "UpdatePersonIdentity": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{personId:string,revision:integer},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:integer,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{personId:string,revision:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ]
 }

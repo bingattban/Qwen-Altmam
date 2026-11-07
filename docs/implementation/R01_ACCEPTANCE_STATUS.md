@@ -1,7 +1,7 @@
 # R01 acceptance status — 2026-11-07
 
 **R01 is OPEN.** Successful incremental PRs are not full phase acceptance.
-Current verified baseline: merged #250, `2146cba238c10cd2a288be48e5e2978182a1cabe`.
+Current verified baseline: merged #251, `33661153b267fd685b82a01f6d2f9a92aeb4fbcc`.
 Do not start a different corrective package or label this application production-ready.
 
 ## Verified Windows baseline
@@ -28,8 +28,8 @@ Results for a recorded head do not prove unexecuted changes on a later head.
 | 4.4 historical reports | Three retained aliases equal canonical filtered native DTO for all roles; synthetic group Excel aggregate/row-count parity; actual one-person group report consumer after revision | Full filtered/paged/single/group/historical report-to-Excel parity matrix |
 | 4.5 restore | Real-login live/expired refusal, no writes, backup hash/integrity; explicit disabled handler | Preserve disabled state; destructive restore belongs to separate R08 authorization |
 | 4.6 accountability | Missing handler factory fails; explicit disabled refusal; RED/GREEN evidence in #239 | Registration alone is not 4.7 business acceptance |
-| 4.7 runtime gate | Real native mutation persistence/replay/conflict/stale/denied/expired negatives; native status/search/read slices; full mocked RBAC matrix separately identified; new 38-action native lifecycle/snapshot slice passes locally, pending Windows | A meaningful real authenticated SQLCipher scenario for EVERY enabled UI-used action, integrated with duplicate/role/mutation/request-response disposition checks |
-| 4.8 schemas | Real native read/mutation/error serialization; current schema repair below adds automated envelope and four status/search data projections, strict vocabulary and negative controls; new 38-action response-shape snapshots pass locally, pending Windows | Data schemas/snapshots and native consumer parity across ALL required actions and roles |
+| 4.7 runtime gate | Real native mutation persistence/replay/conflict/stale/denied/expired negatives; native status/search/read slices; full mocked RBAC matrix separately identified; merged 38-action native lifecycle/snapshot slice passed Windows; current personnel extension pending Windows | A meaningful real authenticated SQLCipher scenario for EVERY enabled UI-used action, integrated with duplicate/role/mutation/request-response disposition checks |
+| 4.8 schemas | Real native read/mutation/error serialization; current schema repair below adds automated envelope and four status/search data projections, strict vocabulary and negative controls; merged 38-action response-shape slice passed Windows; current personnel extension pending Windows | Data schemas/snapshots and native consumer parity across ALL required actions and roles |
 | 4.9 closure | Explicit enabled/disabled routing inventory; honest residual ledger | Cannot close until all required cells above have executed passing evidence |
 
 ## Current consolidated schema repair
@@ -60,7 +60,7 @@ Normal merge requires final-head Core and Release success, tests before packagin
 four genuine x86/x64 outputs, independent SHA256 audit and no blocking review.
 Production publishing and physical Windows acceptance remain separate owner gates.
 
-## Native configuration lifecycle execution gate (current review branch)
+## Native configuration lifecycle execution gate (merged #251)
 
 Base: `2146cba238c10cd2a288be48e5e2978182a1cabe`. Classification: acceptance
 coverage gap, not a new production defect. No production code, schema migration,
@@ -103,3 +103,41 @@ successful actions with matching snapshots. Six evidence-validator tests, five
 Phase00-02 guard regressions, six Section08 checks, eleven WebView2 preflights,
 the 104-action request-schema guard and both workflow YAML parses passed.
 .NET SDK 10.0.403; Windows WPF and packaged native checks are not executed locally.
+
+
+## Native personnel identity and archive extension (current review branch)
+
+Base: merged #251. The configuration slice above passed Windows Core and
+Windows Release, including all four package artifacts and independent SHA256
+audit, before merge. This extension is an acceptance coverage gap, not a
+production defect; no production behavior, role or packaging dependency changes.
+
+Two additional isolated authenticated SQLCipher scenarios execute through the
+real dispatcher. Identity preview does not alter the person or audit; commit
+canonicalizes Persian digits with leading zeros, retains the original effective
+dated identity and stable PersonId, and writes exactly one audit. Replay returns
+the original receipt; an independently retried stale revision fails unchanged.
+Archive preview is read-only; confirmation closes the original assignment,
+removes the person from default QueryPersons, retains the archived query and
+GetPersonSummary identity, and writes one archive audit. Exact replay is stable;
+changed intent under the same operationId and a fresh operation with the old
+preview both fail without another audit. Both databases pass integrity checks.
+
+The initial two-case capture passed locally with no failures or skips. Snapshots
+were captured only from those successful serialized native replies, then strict
+snapshot comparison was restored. The evidence gate now requires seven named
+cases and all 44 action keys; QueryPersons and GetPersonSummary include distinct
+empty/history-populated response shapes. There is no CI snapshot update bypass.
+Final strict rerun and Windows status are recorded separately when available.
+R01 remains OPEN: full enabled-action, consumer, role/error-schema and Excel
+parity coverage still requires completion; deferred manual Windows acceptance
+has not been executed.
+
+Final strict local verification: 29 R01/envelope cases passed, 0 failed, 0 skipped
+with .NET SDK 10.0.403 (TRX `r01-personnel-final/final.trx`). The real TRX passed
+the execution gate: seven native lifecycle cases / 44 successful action keys.
+Six evidence-validator checks, six Section08 contract checks, five Phase00-02
+guard checks, the 104-action typed request-schema guard and diff whitespace
+checks passed. Windows Core/Release and four-package verification remain
+required on the new PR head before merge. No local Windows/package execution
+is claimed.
