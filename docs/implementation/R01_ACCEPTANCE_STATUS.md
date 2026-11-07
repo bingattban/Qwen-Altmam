@@ -136,3 +136,21 @@ optimization claim. Local 11 WebView2 preflights (including embedded JS syntax) 
 Section08 checks pass; actual Windows execution is pending on the new final head.
 This slice does not claim confirmed attendance writes/revision, failure isolation, complete
 all-action runtime coverage, or full schema/Excel parity. R01 remains open.
+
+## Verified preview cancellation (#246); confirmed attendance slice
+
+PR #246 head b048dac823c4ceb9a99cd0b68de0a0ee4c97a5e1 passed Core 42349664009 and
+Release 42349664026, including four packages and independent SHA256 audit. Merged as
+8b33430b4a89a58b926e15322412a8ea572678b8. Manual clean-machine acceptance NOT EXECUTED.
+
+Next test-only acceptance: create a separate synthetic person (00007195), render the actual
+attendance screen, select that person's checkbox and Present status, click the actual preview
+and confirm buttons, and require the real saved-count UI receipt. Independently require one
+SQLCipher AttendanceRecords row for that stable identity and STS-PRESENT, and exactly one
+ATTENDANCE_COMMIT audit event. The original cancelled person must still have zero attendance;
+the transfer fixture remains independent. C# requires the new commit probe flag and PersonId.
+No production fix, auth change, attendance policy change, or performance claim is made.
+Local 11 WebView2 preflights (embedded JS syntax) and 6 Section08 checks pass; Windows native
+execution is pending on the new final head. All existing Core/Release/package/provenance gates
+remain mandatory. R01 is still incomplete: revision/correction/dashboard/report consumer flows,
+failure isolation, full executed action matrix and schema/Excel parity remain to be accepted.

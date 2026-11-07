@@ -272,6 +272,57 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("cancelled attendance review failed to return without save");
                 attendancePage.remove();
                 const r01AttendanceCancelVerified = true;
+
+                probeStage = "r01-attendance-confirm-save";
+                const attendancePerson = await api.invoke("CreatePerson",{
+                  visibleName:"فرد اعتماد التمام",serviceNumberA:"00007195",
+                  siteId:"SITE-UNSPECIFIED"
+                });
+                const attendancePersonId = attendancePerson.data?.personId;
+                if (!attendancePersonId || attendancePersonId === personId)
+                  throw new Error("independent attendance fixture identity missing");
+                const commitPage = document.createElement("section");
+                document.body.appendChild(commitPage);
+                await window.AltamamAttendance.render(commitPage);
+                const commitStatus = commitPage.querySelector('select[aria-label="الحالة الجديدة"]');
+                const commitRow = [...commitPage.querySelectorAll("tbody tr")]
+                  .find(row => row.textContent.includes("00007195"));
+                const commitCheck = commitRow?.querySelector('input[type="checkbox"]');
+                if (!commitStatus || !commitCheck || commitPage.querySelector(".admin-warning"))
+                  throw new Error("actual commit roster did not load independent person");
+                commitStatus.value = "STS-PRESENT";
+                commitStatus.dispatchEvent(new Event("change",{bubbles:true}));
+                commitCheck.checked = true;
+                commitCheck.dispatchEvent(new Event("change",{bubbles:true}));
+                const commitPreview = [...commitPage.querySelectorAll("button")]
+                  .find(button => button.textContent.trim() === "معاينة التحضير");
+                if (!commitPreview) throw new Error("actual commit preview button missing");
+                commitPreview.click();
+                let confirmAttendance = null;
+                for (let attempt = 0; attempt < 300; attempt++) {
+                  const modal = document.getElementById("appModalBody");
+                  confirmAttendance = [...(modal?.querySelectorAll("button") || [])]
+                    .find(button => button.textContent.trim() === "تأكيد وحفظ التحضير");
+                  if (confirmAttendance) {
+                    if (!modal.textContent.includes("00007195") ||
+                        !modal.textContent.includes("فرد اعتماد التمام"))
+                      throw new Error("commit review displayed the wrong person");
+                    break;
+                  }
+                  if (commitPage.querySelector(".admin-warning"))
+                    throw new Error("actual commit preview failed");
+                  await new Promise(resolve => setTimeout(resolve,50));
+                }
+                if (!confirmAttendance) throw new Error("actual commit confirmation did not open");
+                confirmAttendance.click();
+                for (let attempt = 0; attempt < 400 && commitPreview.disabled; attempt++)
+                  await new Promise(resolve => setTimeout(resolve,50));
+                if (commitPreview.disabled ||
+                    !commitPage.querySelector(".settings-success")?.textContent.includes("تم حفظ 1 فرداً.") ||
+                    commitPage.querySelector(".admin-warning"))
+                  throw new Error("actual attendance confirmation did not report a saved receipt");
+                commitPage.remove();
+                const r01AttendanceCommitVerified = true;
                 const r01AttendanceConsumerVerified = true;
                 target.textContent = saved.displayName + " — " + saved.serviceNumberA;
                 if (!target.textContent.includes("00007192") ||
@@ -465,7 +516,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("HTML output lost after authorization checks");
 
                 window.__phase04RealBridge = {status:"pass",personId,movableId,
-                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified,r01AttendanceCancelVerified};
+                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified,r01AttendanceCancelVerified,r01AttendanceCommitVerified,attendancePersonId};
               })().catch(error => {
                 window.__phase04RealBridge = {
                   status:"failed",
@@ -514,7 +565,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                             out var transferFlag) || transferFlag.ValueKind != JsonValueKind.True)
                         throw new InvalidOperationException(
                             "Real browser skipped modal-confirmed transfer");
-                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified", "r01AttendanceCancelVerified" })
+                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified", "r01AttendanceCancelVerified", "r01AttendanceCommitVerified" })
                         if (!status.RootElement.TryGetProperty(flag, out var checkedFlag) ||
                             checkedFlag.ValueKind != JsonValueKind.True)
                             throw new InvalidOperationException("Real browser skipped R01 contract probe: " + flag);
@@ -543,6 +594,28 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     if (Convert.ToInt64(cancelledAttendance.ExecuteScalar()) != 0)
                         throw new InvalidOperationException(
                             "Cancelled real attendance review persisted an attendance record");
+                    string attendancePersonId = status.RootElement.GetProperty("attendancePersonId").GetString()
+                        ?? throw new InvalidOperationException("Missing confirmed attendance PersonId");
+                    if (attendancePersonId == personId || attendancePersonId == movableId)
+                        throw new InvalidOperationException("Attendance confirmation reused another fixture");
+                    using var confirmedAttendance = connection.CreateCommand();
+                    confirmedAttendance.CommandText = """
+                        SELECT COUNT(*) FROM AttendanceRecords a
+                        JOIN Persons p ON p.PersonId=a.PersonId
+                        WHERE a.PersonId=$person AND a.StatusId='STS-PRESENT'
+                          AND p.CurrentServiceNumberA='00007195';
+                        """;
+                    confirmedAttendance.Parameters.AddWithValue("$person", attendancePersonId);
+                    if (Convert.ToInt64(confirmedAttendance.ExecuteScalar()) != 1)
+                        throw new InvalidOperationException("Real modal confirmation did not persist exact attendance");
+                    using var attendanceAudit = connection.CreateCommand();
+                    attendanceAudit.CommandText = """
+                        SELECT COUNT(*) FROM AuditEvents
+                        WHERE TargetEntityId=$person AND OperationCode='ATTENDANCE_COMMIT';
+                        """;
+                    attendanceAudit.Parameters.AddWithValue("$person", attendancePersonId);
+                    if (Convert.ToInt64(attendanceAudit.ExecuteScalar()) != 1)
+                        throw new InvalidOperationException("Real attendance confirmation audit missing or duplicated");
                     using var cipher = connection.CreateCommand();
                     cipher.CommandText = "PRAGMA cipher_version;";
                     if (string.IsNullOrWhiteSpace(cipher.ExecuteScalar()?.ToString()))
