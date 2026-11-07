@@ -154,3 +154,21 @@ Local 11 WebView2 preflights (embedded JS syntax) and 6 Section08 checks pass; W
 execution is pending on the new final head. All existing Core/Release/package/provenance gates
 remain mandatory. R01 is still incomplete: revision/correction/dashboard/report consumer flows,
 failure isolation, full executed action matrix and schema/Excel parity remain to be accepted.
+
+## Verified modal commit (#247); actual revision acceptance
+
+PR #247 head ca8653d9500ee57f3d5ed53b6394c744dcec43dc passed Core 42352797101 and
+Release 42352797095, all four x86/x64 packages and independent SHA256 audit. Merged as
+bae226428eb7dc6e0be49276053563a8e12e2f2c. Manual clean-machine acceptance NOT EXECUTED.
+
+Next test-only slice: after actual attendance confirmation, use the shipped mode/status controls
+and saved person's roster checkbox to preview and confirm a Present-to-Absent revision. Require
+correct person identity in the real modal, revised one-person receipt, no warning and recovered
+controls. Independently require final Absent attendance, exactly one Present-to-Absent revision
+history and exactly one ATTENDANCE_REVISE audit; preserve initial ATTENDANCE_COMMIT audit
+and zero attendance for the cancelled person. C# must require the revision probe flag.
+No production behavior/policy changes, mocked replies, or performance claims. Local 11 WebView2
+preflights including embedded JS syntax and 6 Section08 checks pass. New native Windows
+execution is pending. Required exact-head Core/Release/four-package/provenance gates remain.
+R01 remains open for correction/dashboard/report consumers, failure isolation, complete executed
+action/schema matrix and Excel parity; this slice is not full application acceptance.
