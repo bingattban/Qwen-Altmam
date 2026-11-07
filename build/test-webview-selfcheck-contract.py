@@ -13,6 +13,14 @@ CORE = (ROOT / ".github/workflows/windows-ci.yml").read_text(encoding="utf-8")
 
 
 class WebViewSmokeContract(unittest.TestCase):
+    def test_disposable_bridge_and_browser_share_business_clock(self):
+        self.assertIn("new WebViewSelfCheckTimeProvider(TimeProvider.System)", HOST)
+        self.assertIn("new BridgeSharedServices(fixture, clock)", HOST)
+        self.assertIn("clock.GetBrowserInitializationScript()", HOST)
+        self.assertIn("CheckActualWebViewNavigationAsync(core, fixture, clock)", HOST)
+        bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(encoding="utf-8")
+        self.assertIn("timeProvider.GetLocalNow().AddDays(-1)", bridge)
+
     def test_transfer_uses_preexisting_person_with_yesterday_assignment(self):
         # A person created through the live first-use UI *today* has an assignment
         # starting today, which SQLCipher must not close with a zero-day interval.

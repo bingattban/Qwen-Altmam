@@ -129,6 +129,24 @@ public sealed class R01NativeOperationalLifecycleTests : IAsyncLifetime, IDispos
     };
 
     [Fact]
+    public async Task R01LateRunner_DefaultCutoff_RefusesPreviewWithoutAttendanceOrAuditWrites()
+    {
+        _clock.AdvanceSeconds(9 * 60 * 60); // 21:00, beyond the unchanged 20:00 default.
+        var login = await Object("AuthenticateLocalUser", new JsonObject {
+            ["username"] = "r01-operations-owner", ["password"] = "Native123"
+        });
+        _nonce = login["sessionNonce"]!.GetValue<string>();
+        long before = AuditCount();
+        var rejected = await Dispatch("PreviewAttendanceChange", Attendance("initial", "STS-PRESENT"));
+        Assert.False(rejected.Success);
+        Assert.Equal(BridgeErrorCodes.HistoricDayLocked, rejected.ErrorCode);
+        Assert.Contains("انتهى الوقت المحدد", rejected.UserMessage);
+        Assert.Null(rejected.Data);
+        Assert.Equal("0", Scalar("SELECT COUNT(*) FROM AttendanceRecords;"));
+        Assert.Equal(before, AuditCount());
+    }
+
+    [Fact]
     public async Task Attendance_DraftPreviewCommitRevise_RealReadModelsAndHistoricalAliasesAgree()
     {
         long startAudit = AuditCount();
