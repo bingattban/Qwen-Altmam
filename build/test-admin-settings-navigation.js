@@ -63,6 +63,8 @@ const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
 let accountSearchFailure=null,accountSearchItems=null,statusLookupFailure=null;
+let deferAllowedRoles=false,completeAllowedRoles=null;
+let deferUserList=false,completeUserList=null;
 let deferAccountSearch=false,completeAccountSearch=null;
 let failOneDueTimeSave = false;
 let deferAuditHistory = false, completeDeferredAuditHistory = null;
@@ -83,6 +85,10 @@ const document = {
 const bridge = {
   invoke: async (name, body) => {
     calls.push({ name, body });
+    if(name==="GetAllowedRoles"&&deferAllowedRoles)
+      return new Promise(resolve=>{completeAllowedRoles=resolve;});
+    if(name==="ListUserAccounts"&&deferUserList)
+      return new Promise(resolve=>{completeUserList=resolve;});
     if(name==="SetAttendanceSchedule" && body?.dueTimeLocal && failOneDueTimeSave){
       failOneDueTimeSave=false;
       throw Error("فشل تجريبي: تعذر حفظ وقت التحضير");
@@ -1091,6 +1097,38 @@ async function run() {
     assert.ok(visible().some(x=>x.className.includes("settings-backup-panel")),
       "settings lookup failure cannot remove the independent backup panel");
     statusLookupFailure=null;
+  }
+  // A user may reach the add action before the native allowed-role read returns.
+  // The initial list request must start before the editor captures its generation.
+  for(const role of [admin,ordinary]){
+    deferAllowedRoles=true;deferUserList=true;
+    completeAllowedRoles=null;completeUserList=null;
+    controller.renderAdmin(role);controller.openOwnedRoute("Users");
+    const add=buttonNamed("إضافة حساب");
+    assert.equal(add.disabled,true,"cannot open account editor before native roles arrive");
+    add.handlers.click();
+    assert.ok(!visible().some(x=>x.className.includes("admin-user-form")),
+      "even a queued activation cannot open an uninitialized editor");
+    assert.equal(typeof completeAllowedRoles,"function");
+    completeAllowedRoles({data:[{role:"Supervisor",name:"مشرف"}]});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof completeUserList,"function","initial list request has begun");
+    assert.equal(add.disabled,false,"verified roles enable account creation");
+    add.handlers.click();
+    const form=visible().find(x=>x.className.includes("admin-user-form"));
+    assert.ok(form);
+    const input=form.all().find(x=>x.tag==="label"&&
+      x.children[0]?.textContent==="بحث عن فرد بالاسم أو الرقم (ع)").all().find(x=>x.tag==="input");
+    input.value="91001";
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    const picker=form.all().find(x=>x.attrs["aria-label"]==="اختر فرداً من الكشف");
+    assert.ok(picker.children.some(x=>x.value==="TST-ACTIVE-1"),
+      "pending initial list cannot invalidate the authenticated picker");
+    completeUserList({data:{items:[],total:0}});
+    await new Promise(resolve=>setImmediate(resolve));
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    assert.ok(picker.children.some(x=>x.value==="TST-ACTIVE-1"),"picker still works after the list read completes");
+    deferAllowedRoles=false;deferUserList=false;
   }
   // Stage 1: account identity must be tied to the latest successful active search.
   for(const errorCode of ["Unauthorized","SessionExpired","BridgeOffline","empty"]){
