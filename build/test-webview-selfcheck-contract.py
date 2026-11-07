@@ -48,6 +48,36 @@ assert.equal(vm.runInContext('class Derived extends Date {}; new Derived() insta
         result = subprocess.run(["node", "-"], input=probe.encode("utf-8"), capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
 
+    def test_recovery_probe_waits_for_late_shipped_bridge_after_root_reload(self):
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
+        script = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source).group(1)
+        import json
+        probe = """
+const vm=require('node:vm'),assert=require('node:assert/strict');
+const timers=[],root={querySelector:()=>({})};
+let calls=0;
+const context={document:{addEventListener(){},removeEventListener(){},getElementById:()=>root},
+  setTimeout:fn=>{timers.push(fn);return timers.length;},console};
+context.window=context;vm.createContext(context);vm.runInContext(SCRIPT,context);
+(async()=>{
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,0,'no native action before bridge readiness');
+  context.AltamamBridge={hasBridge:()=>true,invoke:async()=>{calls++;throw Error('readiness-test-stop');}};
+  context.AltamamFunctional={render(){}};
+  context.AltamamAdminSettings={renderSettings(){}};
+  context.AltamamDialog={confirm(){},detailsReview(){},alert(){}};
+  for(let i=0;i<10;i++){
+    timers.splice(0).forEach(fn=>fn());
+    await new Promise(resolve=>setImmediate(resolve));
+  }
+  assert.equal(calls,1,'late native bridge must be resolved after modules arrive');
+  assert.match(context.__r01RecoveryUi.reason,/readiness-test-stop/,
+    'probe must reach the real invoke boundary rather than fail on an undefined reference');
+})().catch(e=>{console.error(e);process.exitCode=1;});
+""".replace("SCRIPT", json.dumps(script))
+        result = subprocess.run(["node", "-"], input=probe.encode("utf-8"), capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
+
     def test_recovery_ui_uses_real_gateway_and_preserves_independent_rescue_check(self):
         source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
         match = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source)
