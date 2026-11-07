@@ -239,7 +239,39 @@ internal static class Phase04BridgeRoundTripSelfCheck
                 if (attendanceStatus.value !== "STS-PRESENT" || !range.hidden ||
                     rangeFrom.required || rangeTo.required)
                   throw new Error("actual present selection retained leave-only duration fields");
+                probeStage = "r01-attendance-preview-cancel";
+                const selectedPerson = personRow.querySelector('input[type="checkbox"]');
+                selectedPerson.checked = true;
+                selectedPerson.dispatchEvent(new Event("change",{bubbles:true}));
+                const previewAttendance = [...attendancePage.querySelectorAll("button")]
+                  .find(button => button.textContent.trim() === "معاينة التحضير");
+                if (!previewAttendance) throw new Error("actual attendance preview button missing");
+                previewAttendance.click();
+                let cancelAttendance = null;
+                for (let attempt = 0; attempt < 300; attempt++) {
+                  const modal = document.getElementById("appModalBody");
+                  cancelAttendance = [...(modal?.querySelectorAll("button") || [])]
+                    .find(button => button.textContent.trim() === "إلغاء");
+                  if (cancelAttendance) {
+                    if (!modal.textContent.includes("00007192") ||
+                        !modal.textContent.includes("فرد اختبار التكامل") ||
+                        ![...modal.querySelectorAll("button")].some(button =>
+                          button.textContent.trim() === "تأكيد وحفظ التحضير"))
+                      throw new Error("native attendance review lost person or confirmation action");
+                    break;
+                  }
+                  if (attendancePage.querySelector(".admin-warning"))
+                    throw new Error("native attendance preview reported an error");
+                  await new Promise(resolve => setTimeout(resolve,50));
+                }
+                if (!cancelAttendance) throw new Error("actual native attendance review did not open");
+                cancelAttendance.click();
+                for (let attempt = 0; attempt < 100 && previewAttendance.disabled; attempt++)
+                  await new Promise(resolve => setTimeout(resolve,50));
+                if (previewAttendance.disabled || attendancePage.querySelector(".settings-success"))
+                  throw new Error("cancelled attendance review failed to return without save");
                 attendancePage.remove();
+                const r01AttendanceCancelVerified = true;
                 const r01AttendanceConsumerVerified = true;
                 target.textContent = saved.displayName + " — " + saved.serviceNumberA;
                 if (!target.textContent.includes("00007192") ||
@@ -433,7 +465,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("HTML output lost after authorization checks");
 
                 window.__phase04RealBridge = {status:"pass",personId,movableId,
-                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified};
+                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified,r01AttendanceCancelVerified};
               })().catch(error => {
                 window.__phase04RealBridge = {
                   status:"failed",
@@ -482,7 +514,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                             out var transferFlag) || transferFlag.ValueKind != JsonValueKind.True)
                         throw new InvalidOperationException(
                             "Real browser skipped modal-confirmed transfer");
-                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified" })
+                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified", "r01AttendanceCancelVerified" })
                         if (!status.RootElement.TryGetProperty(flag, out var checkedFlag) ||
                             checkedFlag.ValueKind != JsonValueKind.True)
                             throw new InvalidOperationException("Real browser skipped R01 contract probe: " + flag);
@@ -504,6 +536,13 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     if (Convert.ToInt64(query.ExecuteScalar()) != 1)
                         throw new InvalidOperationException(
                             "Phase 04 SQLCipher write did not persist the rendered PersonId");
+                    using var cancelledAttendance = connection.CreateCommand();
+                    cancelledAttendance.CommandText =
+                        "SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId=$person;";
+                    cancelledAttendance.Parameters.AddWithValue("$person", personId);
+                    if (Convert.ToInt64(cancelledAttendance.ExecuteScalar()) != 0)
+                        throw new InvalidOperationException(
+                            "Cancelled real attendance review persisted an attendance record");
                     using var cipher = connection.CreateCommand();
                     cipher.CommandText = "PRAGMA cipher_version;";
                     if (string.IsNullOrWhiteSpace(cipher.ExecuteScalar()?.ToString()))
