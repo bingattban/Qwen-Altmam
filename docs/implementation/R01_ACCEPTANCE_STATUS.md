@@ -1,7 +1,7 @@
 # R01 acceptance status — 2026-11-07
 
 **R01 is OPEN.** Successful incremental PRs are not full phase acceptance.
-Current verified baseline: merged #253, `fb3cbd898af36869e4a58e8ad273faf984d1e520`.
+Current verified baseline: merged #254, `f736ec7a69eb467e147b0eb8df359d133af36af2`.
 The #253 bounded-budget repair passed both Windows workflows and all four packages before merge (see verified follow-up below).
 Do not start a different corrective package or label this application production-ready.
 
@@ -318,3 +318,99 @@ native tests and is not falsely counted as successful implementation.
 This inventory is not proof that every branch/role/UI consumer of the 89 named
 actions is complete. Per-consumer failure isolation, complete wire/error/null
 and role variants, and remaining report/export modes still require acceptance.
+
+
+## Verified #254 compatibility review and merge
+
+Head `ed27da9c227dc70e3b72fc059e98dbde9bbb78c1` passed Core `42400046633`
+and Release `42400046625`: 1075 main-suite tests, zero failures/skips on each,
+plus 18 independent SQLCipher and 14 independent authorization tests. Both
+runners verified 13 named native cases / 89 successful action keys. All four
+non-expired x86/x64 Portable/Installer artifacts matched that exact head, both
+package lifecycle jobs passed, and independent SHA256 audit passed. No blocking
+reviews/threads or merge conflict; no application/role/schema/package-dependency
+change in that test-only PR. Live inventory still verified 8 projects, 69 routes,
+104 actions, V001-V014 and pinned SQLCipher. Merged as
+`f736ec7a69eb467e147b0eb8df359d133af36af2`.
+
+## Native full-reset reply defect — test first, current repair branch
+
+Verified production defect: an authenticated, password-confirmed CommitFullReset
+successfully commits its disposable SQLCipher reset and encrypted rescue, then
+the dispatcher rechecks the now-deleted session and replaces the committed
+success receipt with SessionExpired. The real reset regression on the merged
+baseline failed with `CommitFullReset: SessionExpired` AFTER independently
+asserting zero live Persons/Users, an invalid old nonce and an intact encrypted
+rescue containing the original person/user. It did not run against real user data.
+Test-first local commit `7761f1c` precedes the production repair.
+
+Minimal owning-layer repair: the dispatcher acknowledges ONLY a successful
+named CommitFullReset with BOTH server-returned reset/requiresFirstSetup flags,
+clears its old replay history like logout, and the catalog emits SessionEnded.
+It does not accept client-declared completion. Unrelated responses and incomplete
+reset replies still undergo post-handler live-session checking. Three adversarial
+unit rows prove reset-like fields cannot expose private data for another action
+or bypass expiry when either completion flag is false. Existing in-flight logout
+cancellation and real SQLCipher revocation remain required.
+
+The narrow native-reset/in-flight group passed 7 tests after repair. The reset
+scenario additionally checks wrong password, five-second server countdown,
+first-setup provisioning state, native SessionEnded, rejected old-session reads,
+original rescue identity and integrity. No reset password/confirmation, deletion
+scope, service transaction, encryption, role or restore behavior is changed.
+The original admin-settings consumer requires result.data.reset; canonical
+SessionEnded invalidation also clears its stale UI session.
+
+## Recovery scenario inventory and remaining R01 disposition
+
+Six new independent authenticated dispatcher/SQLCipher cases cover:
+- Archived return: one permanent PersonId, historical exit/assignment retained,
+  current return-site assignment, new identity interval, one return movement/audit,
+  exact persisted retry receipt without duplicate evidence.
+- Administrative catch-up: one missing past-day record and ledger, approved
+  default status and source, exact retry and rejection of a stale new operation.
+- Closed-day correction: initially disabled policy, real temporary enable/disable,
+  explicit preview/commit/replay, preserved original timestamp/actor and closure,
+  one historical revision and correction audit.
+- Backup: real encrypted copy and independent SHA256, native registered verify,
+  file selection delegated ONLY at the OS picker boundary, real inspection and
+  read-only restore preview with independently known live/candidate count delta;
+  stale hash and destructive restore are refused and original bytes preserved.
+- Full reset: the verified defect and constrained fix above, solely in a unique
+  throwaway database root with independently verified pre-reset encrypted rescue.
+- Active export cancellation: real 10,000-person historical roster and actual
+  ExportMonthlyWorkbookSet dispatcher/writer. Poll real session-owned progress
+  until total is known, send native CancelExport while it runs, require canceled
+  failure/status, no published XLSX or .part and no SQLCipher/audit alteration.
+  This is not a fabricated coordinator record or a pre-completed job.
+
+Five scenarios passed in the capture suite and the corrected synthetic cancellation
+fixture passed independently. Only PASSED stdout contributed shape snapshots.
+Strict comparison is now enabled for every new success. The corpus contains all
+103 enabled canonical actions; RestoreDatabaseAtomically is explicitly excluded
+from successful inventory and remains intentionally refused by real native tests.
+Both CI entry points now require exact enabled-manifest inventory AND all 19
+named executed native cases with observed matching shapes. Metadata-only or
+configuration/operations/Excel-only output cannot satisfy the gate.
+
+This completes named native SUCCESS-action inventory, not all R01 acceptance.
+Actual Windows verification of this final repair is pending. Complete consumer
+failure isolation, all required error/null/role variants and branch/mode parity
+remain open. No claim of full UI, manual clean-machine, destructive-restore or
+whole-program completion follows from 103 action keys. Manual independent
+Windows acceptance remains owner-deferred, NOT EXECUTED; restore stays disabled.
+
+
+Final strict local result: 52 R01/envelope/in-flight-session/full-reset cases
+passed, 0 failed, 0 skipped (.NET SDK 10.0.403; 8m44s;
+`r01-recovery-final/final.trx`). The actual final TRX passed the unconditional
+complete-enabled-inventory and execution gates: 19 native cases / 103 actions.
+Twelve validator regressions passed, including missing recovery cases, missing
+enabled snapshot and false successful coverage of disabled restore. Six
+Section08 contract checks, eleven WebView preflights, five Phase00-02 guards,
+the 104-action typed request guard and diff whitespace checks passed.
+The production fix has a real native RED -> GREEN record; synthetic guard tests
+are separate from that evidence. No snapshot capture bypass remains in committed
+tests. Final Windows Core/Release, actual packaged WPF/WebView2 x86/x64 and
+independent four-output SHA256 verification on the new head remain REQUIRED
+before merge. This is not Windows/package execution performed locally.

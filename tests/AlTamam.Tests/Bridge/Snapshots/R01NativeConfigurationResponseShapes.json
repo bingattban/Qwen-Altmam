@@ -15,12 +15,30 @@
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{dateFrom:string,dateTo:string,directory:string,exportId:string,fileName:string,mode:string,personCount:integer,siteId:string,statusId:string,worksheets:array<string>},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{attendanceTotal:integer,customColumns:array<>,dailyStatusHasNext:boolean,dailyStatusPage:integer,dailyStatusTotals:array<object{count:integer,date:string,personCount:integer,statusId:string,statusName:string}>,dateFrom:string,dateTo:string,mode:string,movementTotal:integer,movementType:integer,personCount:integer,persons:array<object{active:boolean,attendanceTotal:integer,customFields:object{},firstRecordedDate:string,movementTotal:integer,name:string,organizationalStatus:integer,personId:string,serviceNumberA:string,statusTotals:array<object{count:integer,statusId:string,statusName:string}>}>,siteId:string,statusId:string,statusTotals:array<object{count:integer,statusId:string,statusName:string}>},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
+  "CancelExport": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{cancelRequested:boolean,completed:boolean,jobId:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "ChangeUserPassword": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,rowVersion:integer,userId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CommitAdministrativeAttendanceCatchUp": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{appliedCount:integer,businessDate:string,isCatchUpRun:boolean,pendingBefore:integer,summary:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{appliedCount:integer,businessDate:string,isCatchUpRun:boolean,pendingBefore:integer,summary:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CommitArchivedReturn": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,movementId:string,personId:string,returned:boolean,revision:integer,siteId:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,movementId:string,personId:string,returned:boolean,revision:integer,siteId:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CommitClosedDayCorrection": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,personId:string,revisionNumber:integer},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,personId:string,revisionNumber:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "CommitExternalTransfer": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,count:integer,destinationName:string,external:boolean},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,count:integer,destinationName:string,external:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CommitFullReset": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{backupFilesNotDeleted:integer,backupsDeleted:integer,requiresFirstSetup:boolean,rescuePath:string,reset:boolean},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "CommitImport": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{committedAtUtc:string,createdCount:integer,createdSitesCount:integer,importBatchId:string,importToken:string,rejectedCount:integer},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
@@ -51,6 +69,9 @@
   ],
   "CreateUserAccount": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{linkedPersonId:string,role:string,userId:string,username:string},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "CreateVerifiedBackup": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{backupId:string,path:string,sha256:string,verificationPassed:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "DeactivateCustomField": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,caption:string,columnId:string,displayOrder:integer,fieldType:integer,isSystemProtected:boolean,snapshot:string,storedValueCount:integer,technicalKey:string,visible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
@@ -111,7 +132,8 @@
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{attendanceEligible:integer,automaticallyPrepared:integer,businessDate:string,completionPercentage:integer,internalTransferDay:integer,siteId:string,statusCounts:array<object{color:string,count:integer,name:string,statusId:string,symbol:string}>,totalForce:integer,unprepared:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "GetExportProgress": [
-    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{cancelRequested:boolean,completed:boolean,filePath:string,jobId:string,kind:string,percentage:integer,processed:integer,startedAtUtc:string,status:string,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{cancelRequested:boolean,completed:boolean,filePath:string,jobId:string,kind:string,percentage:integer,processed:integer,startedAtUtc:string,status:string,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{cancelRequested:boolean,completed:boolean,filePath:null,jobId:string,kind:string,percentage:integer,processed:integer,startedAtUtc:string,status:string,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "GetExportablePeriods": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<string>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
@@ -139,6 +161,9 @@
   "GetSettingsOverview": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{autoMonthlyExcel:object{directory:string,enabled:boolean,exportTime:string,lastFailure:string,lastSuccessDate:string},automaticBackupEnabled:boolean,automaticBackupNote:string,automaticBackupOperational:boolean,automaticBackupRetentionCount:integer,backupDirectory:string,backupTime:string,defaultDriveAvailable:boolean,lastAutoBackupDate:null,lastAutoBackupFailure:string,role:string,roleLabelAr:string,theme:string,username:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
+  "InspectBackup": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{attendance:integer,auditEvents:integer,fileName:string,fileSizeBytes:integer,message:string,path:string,people:integer,registeredInCurrentCatalog:boolean,restoreEnabled:boolean,schemaCompatible:boolean,schemaVersion:integer,sha256:string,users:integer,verified:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "ListAttendanceDrafts": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<object{businessDate:string,draftId:string,selectedPersonIds:array<string>,siteId:string,targetStatusId:string,updatedAtUtc:string}>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
@@ -149,15 +174,27 @@
   "Logout": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{loggedOut:boolean},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
+  "PreviewAdministrativeAttendanceCatchUp": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,eligibleCount:integer,fingerprint:string,pendingCount:integer,previewToken:string,reason:string,requiresExplicitConfirmation:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "PreviewArchivePersons": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{baseRevision:integer,candidates:array<object{attendanceDays:integer,blocker:null,currentSiteName:string,displayName:string,organizationalStatus:integer,personId:string,serviceNumberA:string}>,effectiveLocalDate:string,expectedVersions:array<object{personId:string,rowVersion:integer}>,previewToken:string,reversible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "PreviewArchivedIdentity": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,candidates:array<object{exitDate:string,exitType:string,name:string,nameMatch:boolean,numberMatch:boolean,organizationalStatus:integer,personId:string,previousSiteName:string,revision:integer,serviceNumberA:string}>,numberContested:boolean,previewToken:string,requiresResolution:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "PreviewAttendanceChange": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,count:integer,mode:string,persons:array<object{assignmentId:string,name:string,personId:string,previousRevision:integer,previousStatusId:null,previousStatusName:string,serviceNumberA:string,siteId:string,siteName:string}>,previewToken:string,rangeEndDate:null,rangeStartDate:null,reason:string,statusColor:string,statusId:string,statusName:string,statusSymbol:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,count:integer,mode:string,persons:array<object{assignmentId:string,name:string,personId:string,previousRevision:integer,previousStatusId:string,previousStatusName:string,serviceNumberA:string,siteId:string,siteName:string}>,previewToken:string,rangeEndDate:null,rangeStartDate:null,reason:string,statusColor:string,statusId:string,statusName:string,statusSymbol:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
+  "PreviewClosedDayCorrection": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{afterStatusColor:string,afterStatusName:string,afterStatusSymbol:string,beforeStatusId:string,beforeStatusName:string,businessDate:string,personId:string,personName:string,previewToken:string,previousRevision:integer,reason:string,requiresExplicitConfirmation:boolean,serviceNumberA:string,siteName:string,statusId:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "PreviewExternalTransfer": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,count:integer,destinationName:string,destinationSiteId:null,external:boolean,persons:array<object{name:string,personId:string,rowVersion:integer,serviceNumberA:string,sourceAssignmentId:string,sourceSiteId:string,sourceSiteName:string}>,previewToken:string,sourceSiteId:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "PreviewFullReset": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{assignments:integer,attendance:integer,auditEvents:integer,backupEntries:integer,backupFileNames:array<>,backupFileNamesTruncated:boolean,countdownSeconds:integer,expectedRevision:integer,movements:integer,people:integer,previewToken:string,requiredConfirmation:string,users:integer,warning:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "PreviewImportPlan": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{acceptedPreview:array<object{name:string,row:integer,serviceNumberA:string,siteName:string,worksheet:string}>,issueCount:integer,issues:array<object{name:string,reason:string,row:integer,serviceNumberA:string,siteName:string,worksheet:string}>,newCount:integer,newSites:array<>,previewToken:string,requiresExplicitConfirmation:boolean,similarNameCount:integer,similarNames:array<>},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
@@ -170,6 +207,9 @@
   ],
   "PreviewPersonIdentityUpdate": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{baseRevision:integer,effectiveLocalDate:string,newName:string,newServiceNumberA:string,oldName:string,oldServiceNumberA:string,personId:string,previewToken:string,willCloseOldSnapshot:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "PreviewRestore": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{current:object{attendance:integer,auditEvents:integer,people:integer,users:integer},fileName:string,incoming:object{attendance:integer,auditEvents:integer,people:integer,users:integer},message:string,path:string,previewOnly:boolean,restoreEnabled:boolean,schemaVersion:integer,sha256:string,verified:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "PreviewSeparation": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{assignmentId:string,businessDate:string,minimumConfirmationSeconds:integer,name:string,personId:string,previewToken:string,reason:string,rowVersion:integer,serviceNumberA:string,siteId:string,siteName:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
@@ -261,6 +301,9 @@
   "SetAutoAttendanceDefaultStatus": [
     "object{actualVersion:null,auditEventId:string,code:string,conflictInfo:null,data:object{auditEventId:string,configured:boolean,defaultStatusId:string,defaultStatusName:string,dueTimeLocal:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
+  "SetClosedDayCorrectionPolicy": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{enabled:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "SetOutputDirectory": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{directory:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
@@ -286,5 +329,8 @@
   "UpdatePersonIdentity": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{personId:string,revision:integer},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:integer,success:boolean,userMessage:null,validationErrors:null}",
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{personId:string,revision:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "VerifyBackup": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{attendance:integer,auditEvents:integer,fileName:string,fileSizeBytes:integer,message:string,path:string,people:integer,registeredInCurrentCatalog:boolean,restoreEnabled:boolean,schemaCompatible:boolean,schemaVersion:integer,sha256:string,users:integer,verified:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ]
 }

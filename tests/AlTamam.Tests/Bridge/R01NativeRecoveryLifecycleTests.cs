@@ -87,6 +87,7 @@ public sealed class R01NativeRecoveryLifecycleTests : IAsyncLifetime, IDisposabl
     private BridgeResponse Record(string action, BridgeResponse response)
     {
         Assert.True(response.Success, action + ": " + response.ErrorCode + " " + response.UserMessage);
+        R01WireShapeSnapshot.Verify(action, response);
         _output.WriteLine("R01_NATIVE_SHAPE " + action + " " + R01WireShapeSnapshot.Shape(response)); return response;
     }
     private async Task<BridgeResponse> Call(string action, JsonObject? payload = null) => Record(action, await Dispatch(action, payload));
@@ -224,6 +225,10 @@ public sealed class R01NativeRecoveryLifecycleTests : IAsyncLifetime, IDisposabl
         Assert.False((await Dispatch("CommitFullReset", intent)).Success); // Real server countdown.
         Assert.Equal("1", Scalar("SELECT COUNT(*) FROM Persons;"));
         _clock.Advance(6);
+        var wrongPassword = (JsonObject)intent.DeepClone(); wrongPassword["password"] = "Wrong456";
+        wrongPassword["operationId"] = Guid.NewGuid().ToString("N");
+        Assert.Equal(BridgeErrorCodes.Unauthorized, (await Dispatch("CommitFullReset", wrongPassword)).ErrorCode);
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM Persons;"));
         var wire = await Dispatch("CommitFullReset", intent);
         // Prove whether reset COMMITTED before asserting its wire result.
         Assert.Equal("0", Scalar("SELECT COUNT(*) FROM Persons;"));
@@ -237,6 +242,8 @@ public sealed class R01NativeRecoveryLifecycleTests : IAsyncLifetime, IDisposabl
             q.CommandText = "SELECT COUNT(*) FROM Users;"; Assert.Equal(1L, Convert.ToInt64(q.ExecuteScalar()));
         }
         Record("CommitFullReset", wire);
+        Assert.NotNull(wire.InvalidationEvents);
+        Assert.Contains(wire.InvalidationEvents!, e => e.EventName == "SessionEnded");
         var data = Assert.IsType<JsonObject>(wire.Data);
         Assert.True(data["reset"]!.GetValue<bool>()); Assert.True(data["requiresFirstSetup"]!.GetValue<bool>());
         Assert.Equal(rescue, data["rescuePath"]!.GetValue<string>());
@@ -254,6 +261,10 @@ public sealed class R01NativeRecoveryLifecycleTests : IAsyncLifetime, IDisposabl
                 FirstRecordedLocalDate,FirstRecordedAtUtc,OrganizationalStatus,ActiveFlag,RowVersion)
             SELECT 'R01-CANCEL-'||i,'فرد الغاء '||i,'فرد الغاء '||i,'887'||printf('%05d',i),'887'||printf('%05d',i),
                 $day,'2026-01-01T00:00:00Z',1,1,1 FROM n;
+            INSERT INTO PersonIdentityHistory(PersonId,NameSnapshot,ServiceNumberASnapshot,ValidFromLocalDate,
+                ChangedByUserId,RecordedAtUtc,Reason)
+            SELECT PersonId,CurrentVisibleName,CurrentServiceNumberA,$day,'USR-SYSTEM','2026-01-01T00:00:00Z','synthetic cancel roster'
+            FROM Persons WHERE PersonId LIKE 'R01-CANCEL-%';
             INSERT INTO PersonAssignments(AssignmentId,PersonId,SiteId,ValidFromLocalDate,CreatedAtUtc)
             SELECT 'R01-CANCEL-A-'||PersonId,PersonId,'SITE-UNSPECIFIED',$day,'2026-01-01T00:00:00Z'
             FROM Persons WHERE PersonId LIKE 'R01-CANCEL-%';
@@ -261,6 +272,8 @@ public sealed class R01NativeRecoveryLifecycleTests : IAsyncLifetime, IDisposabl
         long before = Audits();
         var payload = new JsonObject { ["year"] = DateOnly.Parse(Day()).Year, ["month"] = DateOnly.Parse(Day()).Month,
             ["term"] = "الغاء", ["consolidatedOnly"] = true };
+        var plan = await Object("PreviewMonthlyExport", payload);
+        Assert.Equal(10000L, plan["personCount"]!.GetValue<long>());
         var exporting = Task.Run(() => Dispatch("ExportMonthlyWorkbookSet", payload));
         try
         {
@@ -271,6 +284,11 @@ public sealed class R01NativeRecoveryLifecycleTests : IAsyncLifetime, IDisposabl
                 if (progress.Success && progress.Data is JsonObject d && d["total"]?.ToString() == "10000" &&
                     d["completed"]?.GetValue<bool>() == false) { running = progress; break; }
                 await Task.Delay(10);
+            }
+            if (running is null && exporting.IsCompleted)
+            {
+                var ended = await exporting;
+                _output.WriteLine("Native export ended before cancellation: success=" + ended.Success + "; code=" + ended.ErrorCode + "; message=" + ended.UserMessage);
             }
             Assert.NotNull(running); Record("GetExportProgress", running!);
             var canceled = await Object("CancelExport"); Assert.True(canceled["cancelRequested"]!.GetValue<bool>());
