@@ -888,7 +888,11 @@
     function showAdd() {
       if(state.active!=="accounts")return;
       const form=card("إضافة حساب مرتبط بفرد من القوة");
-      operationalModal(form,"modal-md");
+      const formEpoch=currentRequest;
+      let dismissed=false,searchSerial=0;
+      const isCurrent=()=>!dismissed&&formEpoch===currentRequest&&state.active==="accounts";
+      const dismiss=()=>{dismissed=true;form.remove();};
+      operationalModal(form,"modal-md",false,false,()=>{dismissed=true;});
       form.classList.add("admin-user-form");
       const personSearch=field("بحث عن فرد بالاسم أو الرقم (ع)");
       const personPick=node("select","form-control");
@@ -911,22 +915,29 @@
       for(const allowed of allowedRoles){
         const opt=node("option","",allowed.name);opt.value=allowed.role;role.appendChild(opt);
       }
+      const activePeople=new Map();
       const searchButton=btn("البحث في كشف القوة",async()=>{
+        if(!isCurrent()||searchButton.disabled)return;
+        const serial=++searchSerial;
+        activePeople.clear();personPick.replaceChildren();personPick.value="";
+        selected.textContent="الرقم (ع): —";
         const term=personSearch.input.value.trim();
         if(!term){errors(message,new Error("أدخل الاسم أو الرقم (ع) للبحث."));return;}
         searchButton.disabled=true;message.replaceChildren();
         try {
           const result=await api().invoke("SearchActivePersonsForAccount",{term,take:30});
+          if(!isCurrent()||serial!==searchSerial||personSearch.input.value.trim()!==term)return;
           const people=(result.data?.items||[]).filter(p=>p.organizationalStatus===1);
           personPick.replaceChildren();
           const head=node("option","","اختر الفرد");head.value="";personPick.appendChild(head);
           for(const person of people){
+            activePeople.set(person.personId,person);
             const opt=node("option","",person.displayName+" — ع: "+person.serviceNumberA);
             opt.value=person.personId;opt.dataset.serviceNumberA=person.serviceNumberA;
             personPick.appendChild(opt);
           }
           if(people.length===0)errors(message,new Error("لم يوجد فرد نشط مطابق."));
-        }catch(e){errors(message,e);}finally{searchButton.disabled=false;}
+        }catch(e){if(isCurrent())errors(message,e);}finally{searchButton.disabled=false;}
       });
       personPick.addEventListener("change",()=>{
         const option=Array.from(personPick.children).find(o=>o.value===personPick.value);
@@ -934,18 +945,21 @@
       });
       const message=node("div","admin-note");
       let accountPayload=null,accountOperation=null;
+      const accountFields=()=>[personPick.value,username.input.value.trim(),role.value,
+        password.input.value,passwordConfirm.input.value];
       const save=btn("تأكيد إضافة الحساب",async()=>{
-        if(!personPick.value||!username.input.value.trim()||!password.input.value||
+        if(!isCurrent()||save.disabled||searchButton.disabled)return;
+        if(!activePeople.has(personPick.value)||!username.input.value.trim()||!password.input.value||
            !passwordConfirm.input.value)
           return errors(message,new Error("اختر فرداً وأدخل اسم المستخدم وكلمة المرور وتأكيدها."));
         if(password.input.value!==passwordConfirm.input.value)
           return errors(message,new Error("كلمة المرور وتأكيدها غير متطابقين."));
-        if(!await dialogs.confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
+        const signature=JSON.stringify(accountFields());
         save.disabled=true;message.replaceChildren();
         try {
-          const fields=[personPick.value,username.input.value.trim(),role.value,
-            password.input.value,passwordConfirm.input.value];
-          const signature=JSON.stringify(fields);
+          if(!await dialogs.confirm("تأكيد إنشاء حساب «"+username.input.value.trim()+"» للفرد المحدد؟"))return;
+          if(!isCurrent()||searchButton.disabled||signature!==JSON.stringify(accountFields())||
+             !activePeople.has(personPick.value))return;
           if(accountPayload!==signature){accountPayload=signature;accountOperation=makeOperationId();}
           await api().invoke("CreateUserAccount",{
             personId:personPick.value,username:username.input.value.trim(),
@@ -971,7 +985,7 @@
       const layout=node("div","admin-account-form-grid");
       layout.append(personSearchRow,pickerLabel,selected,username.wrap,
         secrets,roleLabel);
-      form.append(layout,save,btn("إلغاء",()=>form.remove()),message);
+      form.append(layout,save,btn("إلغاء",dismiss),message);
       page.appendChild(form);
       // Fixed modal does not displace the list.
     }
