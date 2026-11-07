@@ -1,6 +1,7 @@
 # R01 acceptance status — 2026-11-07
 
 **R01 is OPEN.** Successful incremental PRs are not full phase acceptance.
+Owner-approved remaining work is split into two stages; see `R01_TWO_STAGE_ACCEPTANCE.md`.
 Current verified baseline: merged #255, `72849ff60381ef6389de7a7cf0086c30a4868a68`.
 The #253 bounded-budget repair passed both Windows workflows and all four packages before merge (see verified follow-up below).
 Do not start a different corrective package or label this application production-ready.
