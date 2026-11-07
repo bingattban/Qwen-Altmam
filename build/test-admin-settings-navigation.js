@@ -62,6 +62,8 @@ class Element {
 const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
+let accountSearchFailure=null,accountSearchItems=null;
+let deferAccountSearch=false,completeAccountSearch=null;
 let failOneDueTimeSave = false;
 let deferAuditHistory = false, completeDeferredAuditHistory = null;
 let showAuditEntry = false, deferAuditDetail = false, completeDeferredAuditDetail = null;
@@ -96,6 +98,11 @@ const bridge = {
       return new Promise(resolve=>{
         completeDeferredAuditHistory=()=>resolve({data:{items:[],total:0,hasNext:false}});
       });
+    }
+    if(name==="SearchActivePersonsForAccount"){
+      if(accountSearchFailure)throw Object.assign(Error(accountSearchFailure),{errorCode:accountSearchFailure});
+      if(deferAccountSearch)return new Promise(resolve=>{completeAccountSearch=resolve;});
+      if(accountSearchItems!==null)return {data:{items:accountSearchItems}};
     }
     const responses = {
       GetSettingsOverview: { username:"test-user", roleLabelAr:"الإدارة العامة",
@@ -1066,6 +1073,80 @@ async function run() {
   assert.equal(calls.filter(x=>
     x.name==="UpdateAuditPresentation"||x.name==="DeleteAuditPresentation").length,
     auditWritesBefore,"GA deep link must remain a read until explicitly confirmed");
+  // Stage 1: account identity must be tied to the latest successful active search.
+  for(const errorCode of ["Unauthorized","SessionExpired","BridgeOffline","empty"]){
+    controller.renderAdmin(admin);controller.openOwnedRoute("Users");
+    await new Promise(resolve=>setImmediate(resolve));
+    buttonNamed("إضافة حساب").handlers.click();
+    const form=visible().find(x=>x.className.includes("admin-user-form"));
+    const input=label=>form.all().find(x=>x.tag==="label"&&x.children[0]?.textContent===label)
+      .all().find(x=>x.tag==="input");
+    input("بحث عن فرد بالاسم أو الرقم (ع)").value="91001";
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    const picker=form.all().find(x=>x.attrs["aria-label"]==="اختر فرداً من الكشف");
+    picker.value="TST-ACTIVE-1";picker.handlers.change();
+    accountSearchFailure=errorCode==="empty"?null:errorCode;
+    accountSearchItems=errorCode==="empty"?[]:null;
+    input("بحث عن فرد بالاسم أو الرقم (ع)").value="other";
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    assert.equal(picker.value,"",errorCode+": failure/empty search clears prior PersonId");
+    assert.ok(!picker.children.some(x=>x.value==="TST-ACTIVE-1"),errorCode+": no stale person option");
+    assert.ok(!form.all().some(x=>x.textContent==="الرقم (ع): 91001"));
+    input("اسم المستخدم").value="stage1-user";
+    input("كلمة المرور الجديدة").value="Abc123";
+    input("تأكيد كلمة المرور").value="Abc123";
+    const writesBefore=calls.filter(x=>x.name==="CreateUserAccount").length;
+    await buttonNamed("تأكيد إضافة الحساب").handlers.click();
+    assert.equal(calls.filter(x=>x.name==="CreateUserAccount").length,writesBefore,
+      errorCode+": failed search cannot create an account for the old person");
+    accountSearchFailure=null;accountSearchItems=null;
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    assert.ok(picker.children.some(x=>x.value==="TST-ACTIVE-1"),"search recovers without a stale selection");
+  }
+  for(const dismiss of ["navigation","close"]){
+    controller.renderAdmin(admin);controller.openOwnedRoute("Users");
+    await new Promise(resolve=>setImmediate(resolve));
+    buttonNamed("إضافة حساب").handlers.click();
+    const form=visible().find(x=>x.className.includes("admin-user-form"));
+    const findInput=label=>form.all().find(x=>x.tag==="label"&&x.children[0]?.textContent===label)
+      .all().find(x=>x.tag==="input");
+    findInput("بحث عن فرد بالاسم أو الرقم (ع)").value="91001";
+    deferAccountSearch=true;completeAccountSearch=null;
+    const search=form.all().find(x=>x.tag==="button"&&x.textContent==="البحث في كشف القوة");
+    const pending=search.handlers.click();await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof completeAccountSearch,"function");
+    if(dismiss==="navigation")controller.renderAdmin(admin);
+    else form.all().find(x=>x.tag==="button"&&x.textContent==="إلغاء").handlers.click();
+    completeAccountSearch({data:{items:[{personId:"LATE-ID",displayName:"late",
+      serviceNumberA:"111",organizationalStatus:1}]}});await pending;
+    const picker=form.all().find(x=>x.attrs["aria-label"]==="اختر فرداً من الكشف");
+    assert.ok(!picker.children.some(x=>x.value==="LATE-ID"),dismiss+": late response cannot revive dismissed picker");
+    deferAccountSearch=false;
+  }
+  for(const role of [admin,ordinary]){
+    controller.renderAdmin(role);controller.openOwnedRoute("Users");
+    await new Promise(resolve=>setImmediate(resolve));
+    buttonNamed("إضافة حساب").handlers.click();
+    const form=visible().find(x=>x.className.includes("admin-user-form"));
+    const input=label=>form.all().find(x=>x.tag==="label"&&x.children[0]?.textContent===label)
+      .all().find(x=>x.tag==="input");
+    input("بحث عن فرد بالاسم أو الرقم (ع)").value="91001";
+    await buttonNamed("البحث في كشف القوة").handlers.click();
+    const picker=form.all().find(x=>x.attrs["aria-label"]==="اختر فرداً من الكشف");
+    picker.value="TST-ACTIVE-1";picker.handlers.change();
+    input("اسم المستخدم").value="stage1-user";
+    input("كلمة المرور الجديدة").value="Abc123";input("تأكيد كلمة المرور").value="Abc123";
+    let resolveConfirmation=null;
+    context.window.AltamamDialog.confirm=async()=>new Promise(resolve=>{resolveConfirmation=resolve;});
+    const before=calls.filter(x=>x.name==="CreateUserAccount").length;
+    const pending=buttonNamed("تأكيد إضافة الحساب").handlers.click();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(typeof resolveConfirmation,"function");
+    controller.renderAdmin(role);resolveConfirmation(true);await pending;
+    assert.equal(calls.filter(x=>x.name==="CreateUserAccount").length,before,
+      role.role+": pending confirmation cannot write after navigation");
+    context.window.AltamamDialog.confirm=async()=>true;
+  }
   // Pending human confirmation belongs to the screen that requested it.
   // Navigating away must invalidate both exceptional attendance workflows.
   for(const role of [admin,ordinary])for(const reopen of [false,true])
