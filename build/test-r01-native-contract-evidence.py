@@ -13,11 +13,13 @@ SPEC.loader.exec_module(gate)
 
 
 class NativeEvidenceGuard(unittest.TestCase):
-    def fixture(self, missing_case=False, failed=False, missing_action=False, wrong_shape=False, duplicate=False):
+    def fixture(self, missing_case=False, failed=False, missing_action=False, wrong_shape=False, duplicate=False, configuration_only=False):
         namespace = gate.NS["t"]
         root = ET.Element("{" + namespace + "}TestRun")
         results = ET.SubElement(root, "{" + namespace + "}Results")
         for index, case in enumerate(sorted(gate.CASES)):
+            if configuration_only and case.startswith("OperationalLifecycleTests."):
+                continue
             if index == 0 and missing_case:
                 continue
             row = ET.SubElement(results, "{" + namespace + "}UnitTestResult",
@@ -43,6 +45,10 @@ class NativeEvidenceGuard(unittest.TestCase):
     def test_missing_test_cannot_be_replaced_by_other_output(self):
         with self.assertRaisesRegex(ValueError, "not executed"):
             self.check(missing_case=True)
+
+    def test_configuration_output_cannot_replace_operational_execution(self):
+        with self.assertRaisesRegex(ValueError, "not executed"):
+            self.check(configuration_only=True)
 
     def test_failed_case_cannot_be_masked_by_complete_action_lines(self):
         with self.assertRaisesRegex(ValueError, "did not pass"):

@@ -4,6 +4,13 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "package-process-watchdog.ps1")
+# Evaluate the policy in the actual PowerShell runtime, not a text-only guard.
+if ((Get-PackagedBridgeTimeoutSeconds -Runtime "win-x86") -ne 480) { throw "Wrong measured x86 bridge budget" }
+if ((Get-PackagedBridgeTimeoutSeconds -Runtime "win-x64") -ne 300) { throw "x64 bridge budget changed" }
+$rejectedRuntime = $false
+try { Get-PackagedBridgeTimeoutSeconds -Runtime "unknown" | Out-Null }
+catch { $rejectedRuntime = $true }
+if (-not $rejectedRuntime) { throw "Unknown architecture acquired a package budget" }
 $pwsh = Join-Path $PSHOME "pwsh.exe"
 if (-not (Test-Path -LiteralPath $pwsh -PathType Leaf)) {
     throw "A Windows PowerShell 7 process is required"
