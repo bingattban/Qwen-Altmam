@@ -126,7 +126,7 @@
           entry.sessionNonce === getSessionNonce()) {
         setSessionNonce(null);
         // Reuse the existing session-ended consumer path; role denial is separate.
-        if (!(msg.invalidationEvents || []).some(evt =>
+        if (!Array.isArray(msg.invalidationEvents) || !msg.invalidationEvents.some(evt =>
           (typeof evt === "string" ? evt : evt?.eventName) === "SessionEnded")) {
           listeners.forEach(fn => { try { fn("SessionEnded"); } catch (_) { /* listener fault isolation */ } });
         }

@@ -86,6 +86,44 @@ internal static class Phase04BridgeRoundTripSelfCheck
                 throw new Error(action + " illegally returned success");
               }
 
+              async function waitForUi(read,label) {
+                for(let i=0;i<200;i++){
+                  const value=read();if(value)return value;
+                  await new Promise(resolve=>setTimeout(resolve,50));
+                }
+                throw new Error("native consumer did not reach "+label);
+              }
+
+              async function verifyAccountPicker(role,personId) {
+                const controller=window.AltamamAdminSettings;
+                controller.renderAdmin({role,username:"native-consumer"});
+                if(!controller.openOwnedRoute("Users"))throw new Error(role+" account route denied");
+                const viewport=document.getElementById("appViewport");
+                const add=await waitForUi(()=>[...viewport.querySelectorAll("button")]
+                  .find(b=>b.textContent.trim()==="إضافة حساب"),"account list");
+                add.click();
+                const form=await waitForUi(()=>viewport.querySelector(".admin-user-form"),"account picker");
+                const input=[...form.querySelectorAll("label")]
+                  .find(x=>x.textContent.includes("بحث عن فرد بالاسم أو الرقم (ع)"))?.querySelector("input");
+                const search=[...form.querySelectorAll("button")]
+                  .find(b=>b.textContent.trim()==="البحث في كشف القوة");
+                const picker=form.querySelector('select[aria-label="اختر فرداً من الكشف"]');
+                if(!input||!search||!picker)throw new Error("native account picker controls missing");
+                input.value="۰۰۰۰۷۱۹۲";search.click();
+                await waitForUi(()=>!search.disabled&&[...picker.options].some(x=>x.value===personId),
+                  "account search identity");
+                picker.value=personId;picker.dispatchEvent(new Event("change",{bubbles:true}));
+                if(picker.value!==personId||!form.textContent.includes("الرقم (ع): 00007192"))
+                  throw new Error("account picker did not retain native immutable identity");
+                input.value="999999999999";search.click();
+                await waitForUi(()=>!search.disabled&&form.textContent.includes("لم يوجد فرد نشط مطابق"),
+                  "empty account search");
+                if(picker.value||[...picker.options].some(x=>x.value===personId)||
+                   form.textContent.includes("الرقم (ع): 00007192"))
+                  throw new Error("empty native account search retained stale selection");
+                controller.renderAdmin({role,username:"native-consumer"});
+              }
+
               async function malformedVersion(nonce) {
                 const requestId = "phase04-bad-version-" +
                   Array.from(crypto.getRandomValues(new Uint8Array(8)),
@@ -537,6 +575,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("linked supervisor account not persisted");
                 const ownerUsers = await api.invoke("ListUserAccounts",{});
                 if (!ownerUsers?.success) throw new Error("GeneralAdmin user list denied");
+                await verifyAccountPicker("GeneralAdministration",personId);
                 await api.invoke("Logout",{});
                 api.setSessionNonce(null);
                 const adminLogin = await api.invoke("AuthenticateLocalUser",{
@@ -563,6 +602,10 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   throw new Error("supervisor session missing");
                 api.setSessionNonce(nonce);
 
+                window.AltamamAdminSettings.renderAdmin({role:"Supervisor",username:"native-supervisor"});
+                if(window.AltamamAdminSettings.openOwnedRoute("Users")||
+                   document.querySelector("#appViewport .admin-user-form"))
+                  throw new Error("Supervisor UI exposed restricted account picker");
                 await expectRejected("ListUserAccounts",{},undefined,"Unauthorized");
                 const supervisorAudit = await api.invoke("QueryAuditLog",{page:1,pageSize:10});
                 if (!supervisorAudit?.success)
@@ -582,6 +625,17 @@ internal static class Phase04BridgeRoundTripSelfCheck
                   await expectRejected(action,{term:"00007192",take:30},
                     undefined,"SessionExpired");
                 }
+                // Real expired nonce through a shipped UI consumer, not a supplied reply.
+                api.setSessionNonce(nonce);
+                const expiredAttendance=document.createElement("section");
+                document.body.appendChild(expiredAttendance);
+                await window.AltamamAttendance.render(expiredAttendance);
+                if(!expiredAttendance.querySelector(".admin-warning")||
+                   expiredAttendance.querySelector('input[type="checkbox"]')||
+                   api.getSessionNonce()===nonce)
+                  throw new Error("expired native attendance UI retained selectable data/session");
+                expiredAttendance.remove();
+                const r01ExpiredUiConsumerVerified=true;
                 api.setSessionNonce(null);
                 const recoveredLogin = await api.invoke("AuthenticateLocalUser",{
                   username:"phase04-supervisor",password:__SUPERVISOR_PASSWORD__
@@ -621,13 +675,15 @@ internal static class Phase04BridgeRoundTripSelfCheck
                       empty.data.items.length !== 0 || empty.data.count !== 0)
                     throw new Error(action + " empty result retained stale person data");
                 }
+                await verifyAccountPicker("OrdinaryAdministration",personId);
+                const r01AccountPickerConsumerVerified=true;
                 const r01SessionRecoveryVerified = true;
                 if (!document.getElementById("phase04-real-sqlcipher-roundtrip")
                     ?.textContent.includes("00007192"))
                   throw new Error("HTML output lost after authorization checks");
 
                 window.__phase04RealBridge = {status:"pass",personId,movableId,
-                  modalConfirmedTransfer:true,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified,r01AttendanceCancelVerified,r01AttendanceCommitVerified,r01AttendanceRevisionVerified,r01ReportConsumerVerified,attendancePersonId};
+                  modalConfirmedTransfer:true,r01AccountPickerConsumerVerified,r01ExpiredUiConsumerVerified,r01StatusVerified,r01SearchVerified,r01SessionRecoveryVerified,r01AttendanceConsumerVerified,r01AttendanceCancelVerified,r01AttendanceCommitVerified,r01AttendanceRevisionVerified,r01ReportConsumerVerified,attendancePersonId};
               })().catch(error => {
                 window.__phase04RealBridge = {
                   status:"failed",
@@ -676,7 +732,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                             out var transferFlag) || transferFlag.ValueKind != JsonValueKind.True)
                         throw new InvalidOperationException(
                             "Real browser skipped modal-confirmed transfer");
-                    foreach (string flag in new[] { "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified", "r01AttendanceCancelVerified", "r01AttendanceCommitVerified", "r01AttendanceRevisionVerified", "r01ReportConsumerVerified" })
+                    foreach (string flag in new[] { "r01AccountPickerConsumerVerified", "r01ExpiredUiConsumerVerified", "r01StatusVerified", "r01SearchVerified", "r01SessionRecoveryVerified", "r01AttendanceConsumerVerified", "r01AttendanceCancelVerified", "r01AttendanceCommitVerified", "r01AttendanceRevisionVerified", "r01ReportConsumerVerified" })
                         if (!status.RootElement.TryGetProperty(flag, out var checkedFlag) ||
                             checkedFlag.ValueKind != JsonValueKind.True)
                             throw new InvalidOperationException("Real browser skipped R01 contract probe: " + flag);

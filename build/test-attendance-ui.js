@@ -303,6 +303,19 @@ async function main(){
   assert.ok(root.all().some(x=>x.textContent.includes("تعذر تحديث الكشف")),
     "a separate refresh warning must not undo saved success");
 
+  for(const code of ["BridgeOffline","Unauthorized","SessionExpired"]){
+    structuredFailure={action:"GetActiveAttendanceStatuses",error:Object.assign(Error(code),{errorCode:code})};
+    const writesBefore=writes.length;
+    await context.window.AltamamAttendance.render(root);
+    assert.ok(root.all().some(x=>x.textContent.includes(code)),"attendance exposes "+code);
+    assert.equal(root.all().filter(x=>x.tag==="input"&&x.type==="checkbox").length,0,
+      "failed initialization cannot keep a previous user's roster selectable");
+    assert.equal(writes.length,writesBefore,"failed lookup cannot save attendance");
+    structuredFailure=null;
+    await context.window.AltamamAttendance.render(root);
+    assert.ok(root.all().some(x=>x.tag==="input"&&x.type==="checkbox"),
+      "fresh successful initialization recovers the roster");
+  }
   console.log("ATTENDANCE UI PASS: roster, native receipt, conflict, same-intent retry and refresh safety");
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

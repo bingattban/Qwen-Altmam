@@ -890,7 +890,7 @@
       const form=card("إضافة حساب مرتبط بفرد من القوة");
       const formEpoch=currentRequest;
       let dismissed=false,searchSerial=0;
-      const isCurrent=()=>!dismissed&&formEpoch===currentRequest&&state.active==="accounts";
+      const isCurrent=()=>!dismissed&&form.isConnected&&formEpoch===currentRequest&&state.active==="accounts";
       const dismiss=()=>{dismissed=true;form.remove();};
       operationalModal(form,"modal-md",false,false,()=>{dismissed=true;});
       form.classList.add("admin-user-form");

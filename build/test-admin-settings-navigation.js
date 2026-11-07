@@ -62,7 +62,7 @@ class Element {
 const viewport = new Element("main");
 const calls = [];
 let showRosterPerson = false;
-let accountSearchFailure=null,accountSearchItems=null;
+let accountSearchFailure=null,accountSearchItems=null,statusLookupFailure=null;
 let deferAccountSearch=false,completeAccountSearch=null;
 let failOneDueTimeSave = false;
 let deferAuditHistory = false, completeDeferredAuditHistory = null;
@@ -104,6 +104,8 @@ const bridge = {
       if(deferAccountSearch)return new Promise(resolve=>{completeAccountSearch=resolve;});
       if(accountSearchItems!==null)return {data:{items:accountSearchItems}};
     }
+    if(name==="GetActiveAttendanceStatuses"&&statusLookupFailure)
+      throw Object.assign(Error(statusLookupFailure),{errorCode:statusLookupFailure});
     const responses = {
       GetSettingsOverview: { username:"test-user", roleLabelAr:"الإدارة العامة",
         backupDirectory:"E:\\AlTamamAlYawmi\\Backups", backupTime:"16:00",
@@ -1073,6 +1075,23 @@ async function run() {
   assert.equal(calls.filter(x=>
     x.name==="UpdateAuditPresentation"||x.name==="DeleteAuditPresentation").length,
     auditWritesBefore,"GA deep link must remain a read until explicitly confirmed");
+  for(const code of ["BridgeOffline","Unauthorized","SessionExpired"]){
+    statusLookupFailure=code;
+    controller.renderAdmin(admin);controller.openOwnedRoute("ClosedDayExceptionalCorrection");
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(visible().some(x=>x.textContent===code),"correction exposes lookup failure");
+    const status=visible().find(x=>x.tag==="select"&&x.children.length===0);
+    assert.ok(status,"failed correction lookup cannot offer stale status options");
+    const before=calls.filter(x=>x.name==="CommitClosedDayCorrection").length;
+    await buttonNamed("بحث عن فرد").handlers.click();
+    assert.ok(visible().some(x=>x.value==="TST-CLOSED-P1"),"independent person search still works");
+    assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,before);
+    await controller.renderSettings(admin,()=>{});
+    assert.ok(visible().some(x=>x.textContent===code),"settings exposes status lookup failure");
+    assert.ok(visible().some(x=>x.className.includes("settings-backup-panel")),
+      "settings lookup failure cannot remove the independent backup panel");
+    statusLookupFailure=null;
+  }
   // Stage 1: account identity must be tied to the latest successful active search.
   for(const errorCode of ["Unauthorized","SessionExpired","BridgeOffline","empty"]){
     controller.renderAdmin(admin);controller.openOwnedRoute("Users");
