@@ -15,6 +15,7 @@ class El{
 }
 const viewport=new El("main"),calls=[];
 let delayExport=false,releaseDelayedExport=null;
+let failFilter=null;
 const records=[
   {personId:"OLD-ID",serviceNumberA:"5151",displayName:"مفصول سابق",active:false,
     organizationalStatus:3,siteName:"موقع سابق"},
@@ -24,6 +25,7 @@ const records=[
 const bridge={
   invoke:async(action,payload)=>{
     calls.push({action,payload});
+    if(failFilter===action)throw Object.assign(Error("lookup unavailable"),{errorCode:"BridgeOffline"});
     if(action==="QueryPersons")
       return {data:{items:records,total:2}};
     if(action==="QuerySites")
@@ -181,6 +183,19 @@ async function main(){
     "../src/AlTamam.WebUI/assets/js/personnel-report.js"),"utf8");
   assert.match(reportSource,/Math\.min\(99,rawPercentage\)/,
     "live Excel progress is capped at 99 until the final workbook is verified");
+  // A failed lookup must not discard an independently successful filter.
+  for(const failed of ["GetActiveAttendanceStatuses","QuerySites"]){
+    failFilter=failed;context.window.AltamamReports.render(viewport,()=>{});
+    await settle();await settle();
+    const filters=viewport.all().filter(x=>x.tag==="select");
+    const surviving=failed==="GetActiveAttendanceStatuses"?filters[0]:filters[1];
+    assert.ok(surviving.children.length>1,failed+": unrelated successful filter remains usable");
+    assert.ok(viewport.all().some(x=>x.textContent==="lookup unavailable"));
+    const search=viewport.all().find(x=>x.tag==="input"&&x.type==="search");
+    search.value="5151";buttons("بحث")[0].handlers.click();await settle();await settle();
+    assert.equal(buttons("إضافة للمجموعة").length,2,"lookup failure does not suppress person search");
+  }
+  failFilter=null;
   console.log("UNIFIED REPORT UI PASS: person/group, historical vs new identity, exact PersonIds, date filter, drilldown");
 }
 main().catch(err=>{console.error(err);process.exitCode=1;});
