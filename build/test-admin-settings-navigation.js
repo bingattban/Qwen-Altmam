@@ -124,6 +124,8 @@ const bridge = {
         defaultStatusId:"STS-ABSENT"},
       SetAutoAttendanceDefaultStatus: {defaultStatusId:"STS-ABSENT",defaultStatusName:"غياب",configured:true},
       RunDatabaseIntegrityCheck: { integrity:"ok" },
+      PreviewFullReset:{previewToken:"R".repeat(64),expectedRevision:"rev",requiredConfirmation:"تصفير جميع البيانات",countdownSeconds:5,people:1,users:1},
+      CommitFullReset:{reset:true,requiresFirstSetup:true},
       InspectBackup: {verified:true,fileName:"verified.dbbackup",
         path:"C:\\Temp\\verified.dbbackup",fileSizeBytes:4096,
         schemaVersion:9,schemaCompatible:true,people:5,attendance:8,
@@ -213,7 +215,8 @@ const editDialogRequests=[];
 let nextIdentityForm=null,nextConfigForm=null;
 let approveDetailPreview=false;
 let deferDetailsReview=false,completeDetailsReview=null;
-const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
+let resetTimer=null;
+const context = { setInterval:fn=>{resetTimer=fn;return 1;},clearInterval:()=>{resetTimer=null;}, window:{ AltamamBridge:bridge,AltamamDialog:{
   detailsReview:async(details,opts)=>{
     modalReviews.push({details,opts});
     if(deferDetailsReview)return new Promise(resolve=>{completeDetailsReview=resolve;});
@@ -1154,6 +1157,38 @@ async function run() {
   abandonedAdd.handlers.click();
   assert.ok(!visible().some(x=>x.className.includes("admin-user-form")));
   deferAllowedRoles=false;
+  // Stage 2: destructive confirmation belongs to the current settings screen.
+  await controller.renderSettings(admin,()=>{});
+  deferDetailsReview=true;completeDetailsReview=null;
+  const pendingResetPreview=buttonNamed("معاينة التصفير الكامل").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof completeDetailsReview,"function");
+  const oldReset=visible().find(x=>x.attrs["aria-label"]==="التحقق النهائي من التصفير");
+  controller.renderAdmin(admin);completeDetailsReview(true);await pendingResetPreview;
+  deferDetailsReview=false;
+  assert.ok(!oldReset.all().some(x=>x.textContent==="تأكيد تصفير البرنامج نهائياً"),
+    "late reset preview approval cannot create a verification form after navigation");
+  await controller.renderSettings(admin,()=>{});
+  approveDetailPreview=true;
+  await buttonNamed("معاينة التصفير الكامل").handlers.click();
+  const resetForm=visible().find(x=>x.attrs["aria-label"]==="التحقق النهائي من التصفير");
+  const finalReset=buttonNamed("تأكيد تصفير البرنامج نهائياً");
+  assert.equal(finalReset.disabled,true,"server countdown cannot be skipped by the UI");
+  for(let i=0;i<5;i++)resetTimer?.();
+  assert.equal(finalReset.disabled,false);
+  const resetInputs=resetForm.all().filter(x=>x.tag==="input");
+  resetInputs.find(x=>x.type==="password").value="Abc123";
+  resetInputs.find(x=>x.type==="text").value="تصفير جميع البيانات";
+  let resolveResetConfirm=null;
+  context.window.AltamamDialog.confirm=async()=>new Promise(resolve=>{resolveResetConfirm=resolve;});
+  const resetsBefore=calls.filter(x=>x.name==="CommitFullReset").length;
+  const pendingReset=finalReset.handlers.click();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof resolveResetConfirm,"function");
+  controller.renderAdmin(admin);resolveResetConfirm(true);await pendingReset;
+  assert.equal(calls.filter(x=>x.name==="CommitFullReset").length,resetsBefore,
+    "late final confirmation after navigation cannot reset the database");
+  context.window.AltamamDialog.confirm=async()=>true;
+  approveDetailPreview=false;
   // Stage 1: account identity must be tied to the latest successful active search.
   for(const errorCode of ["Unauthorized","SessionExpired","BridgeOffline","empty"]){
     controller.renderAdmin(admin);controller.openOwnedRoute("Users");
