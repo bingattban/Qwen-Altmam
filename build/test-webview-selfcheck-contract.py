@@ -116,7 +116,12 @@ class WebViewSmokeContract(unittest.TestCase):
         # bridge/SQLCipher/UI must pass AND all 69 routes must really navigate.
         # A single 180s process previously timed out on win-x86 after the bridge
         # passed, without ever finishing the 69-route evidence gate.
-        self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e") 300', package)
+        self.assertIn('$bridgeTimeoutSeconds = Get-PackagedBridgeTimeoutSeconds -Runtime $ExpectedArch', package)
+        self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e") $bridgeTimeoutSeconds', package)
+        watchdog = (ROOT / "build/package-process-watchdog.ps1").read_text(encoding="utf-8")
+        self.assertIn('function Get-PackagedBridgeTimeoutSeconds', watchdog)
+        self.assertIn('"win-x86" { return 480 }', watchdog)
+        self.assertIn('"win-x64" { return 300 }', watchdog)
         self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-route-e2e") 120', package)
         self.assertIn('Assert-True ($routeEvidence.Contains("PASS all 69 manifest routes opened in real Windows WebView2"))', package)
         self.assertIn('Assert-True ($routeEvidence.Contains("PASS bundled offline WebUI title verified"))', package)
