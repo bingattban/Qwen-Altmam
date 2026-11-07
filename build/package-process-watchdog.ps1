@@ -1,5 +1,22 @@
 # Fail-closed process watchdog: shared by real x86/x64 packaged acceptance.
 Set-StrictMode -Version Latest
+function Get-PackagedBridgeTimeoutSeconds {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("win-x86", "win-x64")][string]$Runtime
+    )
+    # Real successful x86 bridge runs measured 271.95s and 275.79s in
+    # release 42387825788. A 300s cap left less than 9% runner headroom;
+    # main release 42391468076 then hit that cap twice. Keep a finite
+    # architecture-specific budget; no timeout ever counts as success.
+    switch ($Runtime) {
+        "win-x86" { return 480 }
+        "win-x64" { return 300 }
+        default { throw "Unsupported packaged bridge runtime: $Runtime" }
+    }
+}
+
 function Invoke-CheckedPackageProcess {
     [CmdletBinding()]
     param(

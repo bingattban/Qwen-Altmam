@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Require executed native lifecycle tests and every committed wire snapshot.
 
-This gate covers this named 44-action slice, NOT all 104 manifest actions.
+This gate covers this named 78-action slice, NOT all 104 manifest actions.
 It consumes the real full-suite TRX; a metadata inventory cannot satisfy it.
 """
 import json
@@ -11,15 +11,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOTS = ROOT / "tests/AlTamam.Tests/Bridge/Snapshots/R01NativeConfigurationResponseShapes.json"
-PREFIX = "AlTamam.Tests.Bridge.R01NativeConfigurationLifecycleTests."
+PREFIX = "AlTamam.Tests.Bridge.R01Native"
 CASES = {
-    "PersonnelArchive_RealPreviewCommit_HidesRosterWithoutErasingIdentity",
-    "PersonnelIdentity_RealPreviewEdit_PreservesCanonicalNumberAndHistoricalIdentity",
-    "SitesAndStatuses_CreateRenameRetireAndDeactivate_PreserveHistoryAndReceipts",
-    "CustomColumns_RealCreateEditDeactivate_PreserveStableIdAndStoredValues",
-    "IndependentSettings_RealWritesAndReads_KeepSeparateSchedulesAndReceipts",
-    "UserAccounts_RealLifecycle_RetainsPersonLinkAndOneAuditPerMutation",
-    "AuditPresentation_RealEditHideAndHistory_PreserveCanonicalEvidence",
+    "ConfigurationLifecycleTests.PersonnelArchive_RealPreviewCommit_HidesRosterWithoutErasingIdentity",
+    "ConfigurationLifecycleTests.PersonnelIdentity_RealPreviewEdit_PreservesCanonicalNumberAndHistoricalIdentity",
+    "ConfigurationLifecycleTests.SitesAndStatuses_CreateRenameRetireAndDeactivate_PreserveHistoryAndReceipts",
+    "ConfigurationLifecycleTests.CustomColumns_RealCreateEditDeactivate_PreserveStableIdAndStoredValues",
+    "ConfigurationLifecycleTests.IndependentSettings_RealWritesAndReads_KeepSeparateSchedulesAndReceipts",
+    "ConfigurationLifecycleTests.UserAccounts_RealLifecycle_RetainsPersonLinkAndOneAuditPerMutation",
+    "ConfigurationLifecycleTests.AuditPresentation_RealEditHideAndHistory_PreserveCanonicalEvidence",
+    "OperationalLifecycleTests.Attendance_DraftPreviewCommitRevise_RealReadModelsAndHistoricalAliasesAgree",
+    "OperationalLifecycleTests.Transfers_RealInternalAndExternalCommits_PreserveDatedMembershipAndArchives",
+    "OperationalLifecycleTests.Separation_RealServerDelayCommit_RetainsReasonAndHistoryWithoutInventedAttendance",
 }
 NS = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
 

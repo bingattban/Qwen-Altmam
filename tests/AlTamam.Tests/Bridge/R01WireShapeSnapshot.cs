@@ -27,17 +27,32 @@ internal static class R01WireShapeSnapshot
             .EnumerateArray().Select(item => item.GetString()!));
     }
 
-    private static string Describe(JsonElement value) => value.ValueKind switch
+    private static string Describe(JsonElement value, string? field = null)
     {
-        JsonValueKind.Object => "object{" + string.Join(",", value.EnumerateObject()
-            .OrderBy(item => item.Name, StringComparer.Ordinal)
-            .Select(item => item.Name + ":" + Describe(item.Value))) + "}",
-        JsonValueKind.Array => "array<" + string.Join("|", value.EnumerateArray()
-            .Select(Describe).Distinct(StringComparer.Ordinal).OrderBy(item => item, StringComparer.Ordinal)) + ">",
-        JsonValueKind.String => "string",
-        JsonValueKind.True or JsonValueKind.False => "boolean",
-        JsonValueKind.Number => value.TryGetInt64(out _) ? "integer" : "number",
-        JsonValueKind.Null => "null",
-        _ => throw new InvalidOperationException("Unsupported JSON wire value")
-    };
+        // Monthly days is an ISO-date-keyed map, not a set of fixed DTO fields.
+        // Validate the key contract without pinning snapshots to a calendar day.
+        if (field == "days" && value.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var item in value.EnumerateObject())
+                Assert.True(DateOnly.TryParseExact(item.Name, "yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out _), "Invalid monthly date key: " + item.Name);
+            return "dateMap<" + string.Join("|", value.EnumerateObject()
+                .Select(item => Describe(item.Value)).Distinct(StringComparer.Ordinal)
+                .OrderBy(item => item, StringComparer.Ordinal)) + ">";
+        }
+        return value.ValueKind switch
+        {
+            JsonValueKind.Object => "object{" + string.Join(",", value.EnumerateObject()
+                .OrderBy(item => item.Name, StringComparer.Ordinal)
+                .Select(item => item.Name + ":" + Describe(item.Value, item.Name))) + "}",
+            JsonValueKind.Array => "array<" + string.Join("|", value.EnumerateArray()
+                .Select(item => Describe(item)).Distinct(StringComparer.Ordinal).OrderBy(item => item, StringComparer.Ordinal)) + ">",
+            JsonValueKind.String => "string",
+            JsonValueKind.True or JsonValueKind.False => "boolean",
+            JsonValueKind.Number => value.TryGetInt64(out _) ? "integer" : "number",
+            JsonValueKind.Null => "null",
+            _ => throw new InvalidOperationException("Unsupported JSON wire value")
+        };
+    }
 }
