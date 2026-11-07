@@ -1,7 +1,7 @@
 # R01 acceptance status — 2026-11-07
 
 **R01 is OPEN.** Successful incremental PRs are not full phase acceptance.
-Current verified baseline: merged #251, `33661153b267fd685b82a01f6d2f9a92aeb4fbcc`.
+Current verified baseline: merged #252, `13305e98e79863720703cb3713466367ab123796`.
 Do not start a different corrective package or label this application production-ready.
 
 ## Verified Windows baseline
@@ -28,8 +28,8 @@ Results for a recorded head do not prove unexecuted changes on a later head.
 | 4.4 historical reports | Three retained aliases equal canonical filtered native DTO for all roles; synthetic group Excel aggregate/row-count parity; actual one-person group report consumer after revision | Full filtered/paged/single/group/historical report-to-Excel parity matrix |
 | 4.5 restore | Real-login live/expired refusal, no writes, backup hash/integrity; explicit disabled handler | Preserve disabled state; destructive restore belongs to separate R08 authorization |
 | 4.6 accountability | Missing handler factory fails; explicit disabled refusal; RED/GREEN evidence in #239 | Registration alone is not 4.7 business acceptance |
-| 4.7 runtime gate | Real native mutation persistence/replay/conflict/stale/denied/expired negatives; native status/search/read slices; full mocked RBAC matrix separately identified; merged 38-action native lifecycle/snapshot slice passed Windows; current personnel extension pending Windows | A meaningful real authenticated SQLCipher scenario for EVERY enabled UI-used action, integrated with duplicate/role/mutation/request-response disposition checks |
-| 4.8 schemas | Real native read/mutation/error serialization; current schema repair below adds automated envelope and four status/search data projections, strict vocabulary and negative controls; merged 38-action response-shape slice passed Windows; current personnel extension pending Windows | Data schemas/snapshots and native consumer parity across ALL required actions and roles |
+| 4.7 runtime gate | Real native mutation persistence/replay/conflict/stale/denied/expired negatives; native status/search/read slices; full mocked RBAC matrix separately identified; merged 38-action native lifecycle/snapshot slice passed Windows; personnel extension also passed Windows; current operational extension pending Windows | A meaningful real authenticated SQLCipher scenario for EVERY enabled UI-used action, integrated with duplicate/role/mutation/request-response disposition checks |
+| 4.8 schemas | Real native read/mutation/error serialization; current schema repair below adds automated envelope and four status/search data projections, strict vocabulary and negative controls; merged 38-action response-shape slice passed Windows; personnel extension also passed Windows; current operational extension pending Windows | Data schemas/snapshots and native consumer parity across ALL required actions and roles |
 | 4.9 closure | Explicit enabled/disabled routing inventory; honest residual ledger | Cannot close until all required cells above have executed passing evidence |
 
 ## Current consolidated schema repair
@@ -105,7 +105,7 @@ the 104-action request-schema guard and both workflow YAML parses passed.
 .NET SDK 10.0.403; Windows WPF and packaged native checks are not executed locally.
 
 
-## Native personnel identity and archive extension (current review branch)
+## Native personnel identity and archive extension (merged #252)
 
 Base: merged #251. The configuration slice above passed Windows Core and
 Windows Release, including all four package artifacts and independent SHA256
@@ -141,3 +141,61 @@ guard checks, the 104-action typed request-schema guard and diff whitespace
 checks passed. Windows Core/Release and four-package verification remain
 required on the new PR head before merge. No local Windows/package execution
 is claimed.
+
+
+## Native attendance, movement and separation extension (current review branch)
+
+Base: merged #252. Windows Core `42387825790` and Windows Release `42387825788`
+both passed 1069 main-suite tests on head
+`b0e304acc2eecfe15918652df1e614b8f86898ac`, plus their independent SQLCipher and
+unit suites. The seven-case / 44-action evidence gate passed on both runners.
+Both x86/x64 Portable and Installer jobs and the independent four-package SHA256
+audit passed before merge. Manual clean-machine acceptance remains deferred and
+NOT EXECUTED, a separate production GO decision.
+
+This new slice is acceptance coverage, not a verified new production defect.
+No production service, role, schema migration, schedule or packaging dependency
+is changed. Three new isolated unpooled SQLCipher fixtures provision/login via
+the real dispatcher and resolve real session nonces. The business clock is
+injected at noon so attendance eligibility does not depend on CI wall-clock hour.
+
+| Native scenario | Independent business assertions |
+|---|---|
+| Attendance | Save/list/delete owned draft without attendance; missing leave dates rejected; preview read-only; Present commit then Absent revision; exact receipt replay; consumed preview rejected for new operation; exactly two audits, one attendance and one revision; daily/unprepared/dashboard/monthly/detail and canonical report/aliases agree |
+| Transfers | Internal and external preview/commit/replay; source history retained and membership changes immediately; transferred-day attendance explicitly forbidden, next-day destination preview allowed after real reauthentication; archived source/destination/filter/detail facts, external inactive state, correct month markers and report movement count; no fabricated attendance |
+| Separation | Real server five-second delay refuses early commit; after clock advance, one movement, inactive/separated person and closed original assignment; replay without duplicate audit; reason and stable PersonId retained in archive/details; historical monthly separation marker, no invented attendance |
+
+The attendance scenario also verifies real navigation permission, offline/protocol
+metadata, active-status DTO and Arabic-digit person/account searches. An empty
+auto-attendance ledger read must not fabricate a receipt or create a run.
+Monthly `days` response snapshots validate ISO date keys and normalize only that
+known date-keyed map, retaining each distinct cell shape. A corrupted copy of
+the actual monthly reply with a non-date key must fail the snapshot descriptor;
+this negative control is not a substitute for the real native business tests.
+The evidence gate now requires all ten explicitly named native cases across the
+two fixture classes; the actual response shape count and final results follow
+after successful capture and strict comparison rerun. R01 remains OPEN.
+
+
+Successful capture evidence: Attendance and Separation cases passed in the
+operational capture TRX; the corrected Transfer case passed independently in
+`r01-transfer-capture-final/capture.trx`. Only PASSED case stdout was used to
+extend snapshots. The slice now contains 78 canonical action keys. Strict
+snapshot comparison is enabled for every success in BOTH fixture classes.
+The actual monthly response also has a negative control for wrong cell value
+type, so date-key normalization cannot hide a DTO shape change. Seven validator
+regressions include rejection of configuration-only output when operational
+cases were not executed. No production defect/fix claim follows from test
+fixture assumptions corrected during construction. Final strict results follow.
+
+
+Final strict local verification: 32 R01/envelope cases passed, 0 failed, 0 skipped
+with .NET SDK 10.0.403, TRX `r01-operations-final/final.trx` (4m48s).
+The actual final TRX passed the evidence gate: ten named native lifecycle cases /
+78 successful canonical action keys with committed response shapes. Seven
+validator regressions, six Section08 contract checks, five Phase00-02 gate
+checks, the 104-action request-schema guard and whitespace checks passed.
+Windows Core/Release plus all four x86/x64 Portable/Installer artifacts and
+independent hashes on the final new PR head are required before merge.
+Windows WPF/package execution is NOT claimed locally. Full enabled-action,
+per-role/error/consumer and Excel parity requirements still keep R01 OPEN.
