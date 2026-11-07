@@ -172,3 +172,21 @@ preflights including embedded JS syntax and 6 Section08 checks pass. New native 
 execution is pending. Required exact-head Core/Release/four-package/provenance gates remain.
 R01 remains open for correction/dashboard/report consumers, failure isolation, complete executed
 action/schema matrix and Excel parity; this slice is not full application acceptance.
+
+## Verified revision (#248); real report consumer slice
+
+PR #248 head 36bdde51de9948ae02108cc2e84bd48188767eb3 passed Core 42355296296 and
+Release 42355296252, four actual packages and independent SHA256 audit. Merged as
+c7670f1591e078b217c9e945d6ff04faf30e94c7. Manual clean-machine acceptance NOT EXECUTED.
+
+Next test-only acceptance: obtain canonical group report for the revised synthetic PersonId;
+require one Absent attendance and exact identity. Render shipped AltamamReports, wait for real
+native historical status filters and compare IDs/names, search 00007195 via actual controls,
+add the correct returned person to the group and open the actual group report. Compare visible
+identity, total and status row count with canonical native data. Bound waits, fail on consumer
+warnings, require visible modal and C# r01ReportConsumerVerified flag. No mocked responses,
+production changes, exports or optimization claims. Local 11 WebView2 preflights including
+embedded JS syntax and 6 Section08 checks pass; Windows execution pending on new final head.
+This is a one-person group report consumer slice; broader filters/paging/history/Excel parity,
+correction/dashboard consumers, failure isolation and full action/schema matrix remain open.
+Core/Release plus four-package provenance must pass before merge; R01 is not complete.
