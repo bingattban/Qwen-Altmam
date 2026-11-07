@@ -14,6 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../../src/AlTamam.DesktopHost/Bridge/WebViewSelfCheckTimeProvider.cs" Link="SelfCheck/WebViewSelfCheckTimeProvider.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../src/AlTamam.Domain/AlTamam.Domain.csproj" />
     <ProjectReference Include="../../src/AlTamam.Contracts/AlTamam.Contracts.csproj" />
     <ProjectReference Include="../../src/AlTamam.Application/AlTamam.Application.csproj" />

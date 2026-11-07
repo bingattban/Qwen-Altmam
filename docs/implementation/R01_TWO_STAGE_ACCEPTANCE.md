@@ -8,10 +8,12 @@ is part of either stage. Stage 2 follows Stage 1 acceptance.
 
 ## Stage 1 — UI failures, session expiry, person selection and permissions
 
-Baseline: #256 head `72fd6852f2da682aefd8937c4bc2395210dba439`
-(tree `5fc97933c764411f65f5096015830614bdbf0cc3`). #256 is a separate pending
-prerequisite; its stale exceptional-attendance confirmation fix is retained.
-This follow-up must not be merged ahead of that prerequisite.
+Stage 1 retains every commit of #256 head
+`72fd6852f2da682aefd8937c4bc2395210dba439` (tree
+`5fc97933c764411f65f5096015830614bdbf0cc3`). The review is consolidated in #257
+against main `72849ff60381ef6389de7a7cf0086c30a4868a68`; #256 is superseded
+unmerged. Its stale exceptional-attendance confirmation fix and tests are
+retained. The complete Stage 1 tree must pass both workflows before promotion.
 
 | Boundary | Acceptance evidence added | State |
 |---|---|---|
@@ -60,3 +62,37 @@ execution gate and intentionally disabled RestoreDatabaseAtomically.
    green routing checks alone do not close R01 or authorize production publishing.
 
 Stage 2 is not claimed implemented or accepted by Stage 1 changes.
+
+
+## Windows failure 42410644404 / 42410644315 — shared test clock repair
+
+Both exact-head runs passed compilation and 1084 main tests, 18 integration tests,
+14 authorization tests and the 19-case / 103-action native gate. Both failed in
+real WPF/WebView2 at r01-attendance-preview-cancel; package/audit jobs correctly
+remained skipped. Core failed at 20:34 UTC, Release at 20:43 UTC. The disposable
+host used TimeProvider.System, while attendance refuses new previews at the
+unchanged default 20:00 cutoff. This made the success-path browser fixture depend
+on when a runner was assigned, rather than indicating a Git merge conflict.
+
+A real authenticated native SQLCipher regression reproduces the 21:00 refusal:
+HistoricDayLocked, the actual cutoff message, no AttendanceRecords or audit write.
+A paired test runs real preview/commit with the new disposable-host clock and
+independently verifies one saved attendance record and one new audit event.
+Pre-fix WebView wiring guard: 1 failed / 11 passed, test-first commit 16a69ab.
+The failed Windows runs are the actual browser baseline; no local Windows success
+is claimed from Python source checks or Node consumers.
+
+Only the isolated --webview-bridge-e2e branch receives a shared noon business clock.
+The native services, historical fixture dates and browser Date use the same local
+business date. Native and browser clocks continue advancing with monotonic elapsed
+time; explicit date construction/UTC parsing and Date subclassing are retained.
+No production schedule, role, lock condition, system clock or user data is changed.
+The diagnostic now includes the actual synthetic UI warning on preview failure.
+
+Local repair verification: 7 C# tests passed (five clock hour/timezone rows and two
+real native SQLCipher cutoff/noon outcomes); 13 WebView preflights passed including
+execution of the actual injected browser clock, 21 JS suites and six Section08
+checks passed. Native evidence validator regressions remain passing. The real
+Windows E2E and packages on the repaired head remain REQUIRED / NOT EXECUTED locally.
+Consolidation avoids merging a failed prerequisite: #257 carries all #256 changes
+and the repair, and must pass against main before any merge or Stage 2 work.

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using AlTamam.Application.Bridge;
+using AlTamam.DesktopHost.Bridge;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Tests.Fixtures;
@@ -127,6 +128,26 @@ public sealed class R01NativeOperationalLifecycleTests : IAsyncLifetime, IDispos
         ["mode"] = mode, ["statusId"] = status, ["businessDate"] = Today,
         ["siteId"] = Source, ["personIds"] = new JsonArray(P1), ["reason"] = "تصحيح حضور اختباري موثق"
     };
+
+    [Fact]
+    public async Task R01SelfCheckClock_LateRunner_CompletesRealPreviewAndCommitAtSyntheticNoon()
+    {
+        _clock.AdvanceSeconds(9 * 60 * 60);
+        var clock = new WebViewSelfCheckTimeProvider(_clock);
+        Assert.Equal(12, clock.GetLocalNow().Hour);
+        _services = new BridgeSharedServices(_db, clock);
+        _dispatcher = BridgeHandlerCatalog.Create(_services);
+        Assert.NotNull(await _services.ResolveSessionAsync(_nonce));
+        long before = AuditCount();
+        var preview = await Object("PreviewAttendanceChange", Attendance("initial", "STS-PRESENT"));
+        var saved = await Object("SubmitAttendance", new JsonObject {
+            ["previewToken"] = preview["previewToken"]!.DeepClone(),
+            ["operationId"] = "R01-SELF-CHECK-NOON-COMMIT-0001"
+        });
+        Assert.Equal(1, saved["count"]!.GetValue<int>());
+        Assert.Equal("1", Scalar("SELECT COUNT(*) FROM AttendanceRecords WHERE StatusId='STS-PRESENT';"));
+        Assert.Equal(before + 1, AuditCount());
+    }
 
     [Fact]
     public async Task R01LateRunner_DefaultCutoff_RefusesPreviewWithoutAttendanceOrAuditWrites()

@@ -21,6 +21,33 @@ class WebViewSmokeContract(unittest.TestCase):
         bridge = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04BridgeRoundTripSelfCheck.cs").read_text(encoding="utf-8")
         self.assertIn("timeProvider.GetLocalNow().AddDays(-1)", bridge)
 
+    def test_browser_fixture_clock_preserves_explicit_dates_and_elapsed_time(self):
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/WebViewSelfCheckTimeProvider.cs").read_text(encoding="utf-8")
+        script = re.search(r'string script = """\s*([\s\S]*?)\s*""";', source).group(1)
+        script = script.replace("__SELF_CHECK_UTC_MS__", "Date.parse('2026-11-07T12:00:00Z')")
+        # Execute the actual injected script, not a parallel clock implementation.
+        probe = """
+const vm=require('node:vm'),assert=require('node:assert/strict');
+let elapsed=10;
+const context={performance:{now:()=>elapsed}};context.window=context;
+vm.createContext(context);
+vm.runInContext(SCRIPT,context);
+assert.equal(vm.runInContext('new Date().toISOString()',context),'2026-11-07T12:00:00.000Z');
+elapsed+=6000.25;
+assert.equal(vm.runInContext('new Date().toISOString()',context),'2026-11-07T12:00:06.000Z');
+assert.equal(vm.runInContext('Date.now()',context),Date.parse('2026-11-07T12:00:06Z'));
+assert.equal(vm.runInContext('new Date(0).getTime()',context),0);
+assert.equal(vm.runInContext('Date.UTC(2020,0,2)',context),Date.UTC(2020,0,2));
+assert.equal(vm.runInContext('new Date(2020,0,2).getFullYear()',context),2020);
+assert.equal(vm.runInContext('new Date() instanceof Date',context),true);
+assert.equal(vm.runInContext('Number.isInteger(Date.now())',context),true);
+assert.equal(vm.runInContext('class Derived extends Date {}; new Derived() instanceof Derived',context),true);
+"""
+        import json
+        probe = probe.replace("SCRIPT", json.dumps(script))
+        result = subprocess.run(["node", "-"], input=probe.encode("utf-8"), capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
+
     def test_transfer_uses_preexisting_person_with_yesterday_assignment(self):
         # A person created through the live first-use UI *today* has an assignment
         # starting today, which SQLCipher must not close with a zero-day interval.

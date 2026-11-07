@@ -12,7 +12,7 @@ namespace AlTamam.DesktopHost.Bridge;
 /// </summary>
 internal static class Phase04BridgeRoundTripSelfCheck
 {
-    public static async Task RunAsync(CoreWebView2 core, AlTamamDbContext database)
+    public static async Task RunAsync(CoreWebView2 core, AlTamamDbContext database, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(core);
         ArgumentNullException.ThrowIfNull(database);
@@ -27,7 +27,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
         // today through CreatePerson cannot have an assignment closed today
         // without violating the immutable effective-date SQLCipher constraint.
         // Do not modify the user's data or weaken production storage policy.
-        string yesterday = TimeProvider.System.GetLocalNow().AddDays(-1).ToString("yyyy-MM-dd",
+        string yesterday = timeProvider.GetLocalNow().AddDays(-1).ToString("yyyy-MM-dd",
             System.Globalization.CultureInfo.InvariantCulture);
         // Create one active site in the disposable encrypted SQLCipher fixture.
         // The actual user's AppData and configuration are never accessed here.
@@ -58,7 +58,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     'SITE-UNSPECIFIED',$yesterday,NULL,NULL,$recorded);
                 """;
             createSite.Parameters.AddWithValue("$yesterday", yesterday);
-            createSite.Parameters.AddWithValue("$recorded", TimeProvider.System.GetUtcNow().ToString("O"));
+            createSite.Parameters.AddWithValue("$recorded", timeProvider.GetUtcNow().ToString("O"));
             createSite.ExecuteNonQuery();
         }
 
@@ -299,7 +299,8 @@ internal static class Phase04BridgeRoundTripSelfCheck
                     break;
                   }
                   if (attendancePage.querySelector(".admin-warning"))
-                    throw new Error("native attendance preview reported an error");
+                    throw new Error("native attendance preview reported an error: " +
+                      attendancePage.querySelector(".admin-warning").textContent);
                   await new Promise(resolve => setTimeout(resolve,50));
                 }
                 if (!cancelAttendance) throw new Error("actual native attendance review did not open");
