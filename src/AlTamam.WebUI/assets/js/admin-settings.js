@@ -692,6 +692,8 @@
       return;
     }
     const page=start("الإدارة / إدارة القوة / التصحيح الاستثنائي لليوم المغلق");
+    const requestEpoch=currentRequest;
+    const isCurrent=()=>requestEpoch===currentRequest&&state.active==="closedCorrection";
     const box=card("تصحيح تحضير يوم مغلق — الإدارة العامة والإدارة العادية");
     const notice=node("div","admin-note");
     box.appendChild(warning("عملية استثنائية وخاضعة للتدقيق. يجب تفعيل السياسة صراحة، ومعاينة حالة قديمة محفوظة، ولا يمكن تصحيح يوم نقل أو فصل. لا يُفتح اليوم ولا يُغيَّر وقت التحضير الأصلي."));
@@ -718,6 +720,7 @@
       clearPreview();search.disabled=true;
       try{
         const response=await api().invoke("SearchPersons",{term:personSearch.input.value, take:50});
+        if(!isCurrent())return;
         const data=response.data||{};
         personList.replaceChildren();
         for(const item of data.items||[]){
@@ -736,6 +739,7 @@
       clearPreview();
       const verb=enabled?"تفعيل":"إيقاف";
       if(!await dialogs.confirm("هل تؤكد "+verb+" إذن التصحيح الاستثنائي؟ سيتم تسجيل تغيير الإعداد في سجل العمليات، والسبب إلزامي عند تصحيح التحضير نفسه فقط."))return;
+      if(!isCurrent())return;
       const signature=JSON.stringify([enabled,reason.input.value]);
       if(policyIntent?.signature!==signature)
         policyIntent={signature,operationId:makeOperationId()};
@@ -757,6 +761,7 @@
         const response=await api().invoke("PreviewClosedDayCorrection",{
           personId:personList.value,businessDate:date.input.value,
           statusId:statusList.value,reason:reason.input.value});
+        if(!isCurrent())return;
         const result=response.data||{};
         if(!result.previewToken||result.requiresExplicitConfirmation!==true)
           throw Error("لم تُرجع الخدمة معاينة موثّقة.");
@@ -776,8 +781,9 @@
           message:"تصحيح استثنائي موثق في سجل العمليات؛ لا يُعاد فتح اليوم.",
           confirmLabel:"اعتماد التصحيح الاستثنائي"
         });
-        if(!accept){clearPreview();return;}
+        if(!accept||!isCurrent()){clearPreview();return;}
         const commit=async()=>{
+          if(!isCurrent())return;
           try{
             const committed=await api().invoke("CommitClosedDayCorrection",{
               previewToken,operationId
@@ -812,6 +818,7 @@
           const response=await api().invoke("PreviewAdministrativeAttendanceCatchUp",{
             businessDate:day.input.value,reason:why.input.value
           });
+          if(!isCurrent())return;
           const data=response?.data||{};
           if(!data.previewToken||data.requiresExplicitConfirmation!==true)
             throw Error("لم تُصدر الخدمة معاينة صالحة.");
@@ -824,7 +831,7 @@
           ]},{title:"معاينة استدراك يوم سابق",
             message:"بعد التأكيد ستضاف الحالات الناقصة فقط مع تسجيل الفاعل والسبب في سجل العمليات.",
             confirmLabel:"اعتماد استدراك اليوم"});
-          if(!confirmed)return;
+          if(!confirmed||!isCurrent())return;
           const operationId=makeOperationId();
           const commit=await api().invoke("CommitAdministrativeAttendanceCatchUp",{
             previewToken:data.previewToken,operationId
@@ -848,6 +855,7 @@
     page.appendChild(box);
     try{
       const response=await api().invoke("GetActiveAttendanceStatuses",{});
+      if(!isCurrent())return;
       const data=Array.isArray(response.data)?response.data:[];
       for(const item of data){
         const option=node("option","",item.name||item.displayName||item.statusId);

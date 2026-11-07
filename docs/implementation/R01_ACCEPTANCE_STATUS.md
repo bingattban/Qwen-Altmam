@@ -1,7 +1,7 @@
 # R01 acceptance status — 2026-11-07
 
 **R01 is OPEN.** Successful incremental PRs are not full phase acceptance.
-Current verified baseline: merged #254, `f736ec7a69eb467e147b0eb8df359d133af36af2`.
+Current verified baseline: merged #255, `72849ff60381ef6389de7a7cf0086c30a4868a68`.
 The #253 bounded-budget repair passed both Windows workflows and all four packages before merge (see verified follow-up below).
 Do not start a different corrective package or label this application production-ready.
 
@@ -29,8 +29,8 @@ Results for a recorded head do not prove unexecuted changes on a later head.
 | 4.4 historical reports | Three retained aliases equal canonical filtered native DTO for all roles; synthetic group Excel aggregate/row-count parity; actual one-person group report consumer after revision | Full filtered/paged/single/group/historical report-to-Excel parity matrix |
 | 4.5 restore | Real-login live/expired refusal, no writes, backup hash/integrity; explicit disabled handler | Preserve disabled state; destructive restore belongs to separate R08 authorization |
 | 4.6 accountability | Missing handler factory fails; explicit disabled refusal; RED/GREEN evidence in #239 | Registration alone is not 4.7 business acceptance |
-| 4.7 runtime gate | Real native mutation persistence/replay/conflict/stale/denied/expired negatives; native status/search/read slices; full mocked RBAC matrix separately identified; merged 38-action native lifecycle/snapshot slice passed Windows; personnel extension also passed Windows; current operational extension pending Windows | A meaningful real authenticated SQLCipher scenario for EVERY enabled UI-used action, integrated with duplicate/role/mutation/request-response disposition checks |
-| 4.8 schemas | Real native read/mutation/error serialization; current schema repair below adds automated envelope and four status/search data projections, strict vocabulary and negative controls; merged 38-action response-shape slice passed Windows; personnel extension also passed Windows; current operational extension pending Windows | Data schemas/snapshots and native consumer parity across ALL required actions and roles |
+| 4.7 runtime gate | All 103 enabled canonical actions executed through authenticated native SQLCipher fixtures; 19 required lifecycle cases and exact response shapes passed both Windows workflows in #255 | Remaining business branches, negative payload/role/session cases and actual UI-consumer acceptance; named-action inventory alone is insufficient |
+| 4.8 schemas | Strict common envelope, four deep status/search projections and 103 actual native success-response shape snapshots passed Windows in #255 | Remaining error/null/data variants and consumer parity across required branches and roles |
 | 4.9 closure | Explicit enabled/disabled routing inventory; honest residual ledger | Cannot close until all required cells above have executed passing evidence |
 
 ## Current consolidated schema repair
@@ -414,3 +414,57 @@ are separate from that evidence. No snapshot capture bypass remains in committed
 tests. Final Windows Core/Release, actual packaged WPF/WebView2 x86/x64 and
 independent four-output SHA256 verification on the new head remain REQUIRED
 before merge. This is not Windows/package execution performed locally.
+
+
+## Verified #255 merge and consumer failure-isolation follow-up
+
+#255 head `f04f443e1c6619238fbc4c5c76092a2fe0e48d0d` passed Core
+`42405093459` and Release `42405093391`: 1084 main tests in EACH workflow,
+zero failures/skips, plus 18 integration and 14 authorization unit tests.
+Both actual native evidence gates passed 19 cases / 103 enabled actions.
+Both architectures' Portable/Installer checks passed after tests; all four
+nonexpired artifacts identify that exact head. Independent SHA256 job
+`128510542448` succeeded. There were no review submissions or inline comments;
+GitHub reported a clean merge with unchanged base. Merge commit:
+`72849ff60381ef6389de7a7cf0086c30a4868a68`.
+Manual clean-machine acceptance remains owner-deferred / NOT EXECUTED.
+
+This follow-up addresses actual JavaScript consumer acceptance. Dashboard tests
+execute the shipped controller with a supplied bridge boundary: failed and empty
+status lookups retain saved automatic attendance, offer no stale selectable
+statuses, and cannot start an unverified preview/write. A deferred lookup after
+navigation cannot reload or alter the disposed register. Reopening successfully
+loads fresh choices; declining its review still cannot write. These are Node DOM
+consumer tests, not claims of additional Windows/WebView2 or SQLCipher execution.
+
+A separate reproducible production defect was found in the exceptional attendance
+consumer: while its human review was pending, leaving the screen and approving
+later still sent CommitClosedDayCorrection / CommitAdministrativeAttendanceCatchUp.
+Each workflow independently failed its pre-fix regression (two commits observed
+versus one existing baseline commit), before any production edits. Test-first
+commit: `cb7dcfe`. The correction captures the existing request generation and
+checks it after preview, human confirmation and before commit/retry; returning to
+the same route does not reactivate an abandoned request. The owning native
+services, roles, SQLCipher, historic-day semantics and confirmation requirements
+are unchanged. No performance optimization or speedup is proposed.
+
+The final regression covers both GeneralAdministration and OrdinaryAdministration,
+both workflows, and leaving versus leaving/reopening the same screen (eight
+combinations). Existing accepted preview/commit tests remain passing. Status
+lookup/search responses and policy confirmation also check the owning screen.
+Final local consumer validation and final-head Windows checks are recorded in the
+PR. No merge of this follow-up is permitted before Core/Release, all four packages
+and independent hashes pass on its exact head.
+
+### Remaining R01 closure work
+
+- Complete status-lookup failure/empty/expiry acceptance for correction, settings,
+  attendance and report consumers, including their independently usable controls.
+- Complete account-picker/navigation stable-person identity and per-role failures.
+- Complete native error/null/receipt/invalidation variants and branch/role outcomes;
+  103 successful action names do not enumerate those variants.
+- Complete the remaining report/export mode and filter parity cells, and actual
+  UI consumers of recovery/reset with native session termination.
+- Execute the required final Windows regressions and reconcile every residual
+  requirement cell. Independent manual clean-machine acceptance remains separately
+  deferred; disabled destructive restore remains owned by R08.

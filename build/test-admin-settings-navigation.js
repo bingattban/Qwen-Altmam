@@ -1068,8 +1068,9 @@ async function run() {
     auditWritesBefore,"GA deep link must remain a read until explicitly confirmed");
   // Pending human confirmation belongs to the screen that requested it.
   // Navigating away must invalidate both exceptional attendance workflows.
+  for(const role of [admin,ordinary])for(const reopen of [false,true])
   for(const kind of ["catchUp","correction"]){
-    controller.renderAdmin(admin);
+    controller.renderAdmin(role);
     assert.equal(controller.openOwnedRoute("ClosedDayExceptionalCorrection"),true);
     await new Promise(resolve=>setImmediate(resolve));
     let action;
@@ -1097,12 +1098,17 @@ async function run() {
     const pending=action.handlers.click();
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(typeof completeDetailsReview,"function",kind+": human review is pending");
-    controller.renderAdmin(admin);
+    controller.renderAdmin(role);
+    if(reopen){
+      assert.equal(controller.openOwnedRoute("ClosedDayExceptionalCorrection"),true);
+      await new Promise(resolve=>setImmediate(resolve));
+    }
     completeDetailsReview(true);await pending;
     deferDetailsReview=false;
     assert.equal(calls.filter(x=>x.name===commitName).length,before,
       kind+": late approval after leaving the screen must not write attendance");
-    assert.ok(byDataset("adminSection").length>0,"navigation remains at administration home");
+    assert.ok(reopen?buttonNamed("معاينة التصحيح"):byDataset("adminSection").length>0,
+      "late approval does not replace the destination screen");
   }
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
