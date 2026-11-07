@@ -118,3 +118,21 @@ python build/test-section08-bridge-contract.py (6) pass locally; real Windows co
 execution is pending. This covers initial attendance rendering and duration controls only;
 review/commit/dashboard/correction/report flows, failure isolation, all-action runtime gate
 and full schemas/Excel parity remain incomplete. Do not declare R01 complete.
+
+## Verified attendance consumer baseline (#245); preview cancellation slice
+
+Head 181869ea0fd1e7f9a382fdb302d6c3840dca27e5 passed Core 42347682029 and
+Release 42347681976, including actual consumer rendering, four x86/x64 packages and
+independent SHA256 audit. Merged as c07c7ef29848f8dcf90d3e2f04616d8c0b1f0b85.
+Manual clean-machine acceptance remains NOT EXECUTED.
+
+Next acceptance (test-only): select the actual saved synthetic person in the shipped attendance
+roster, click its real preview button, require the native-backed review modal to show the
+correct name/number and save-confirmation action, then click Cancel. Bound modal waits and
+require preview controls to recover without a save-success state. Require a browser flag and
+independently query SQLCipher AttendanceRecords for the created PersonId: count must remain
+zero. Preserve the existing transfer/session/role/status gates; no production change or
+optimization claim. Local 11 WebView2 preflights (including embedded JS syntax) and 6
+Section08 checks pass; actual Windows execution is pending on the new final head.
+This slice does not claim confirmed attendance writes/revision, failure isolation, complete
+all-action runtime coverage, or full schema/Excel parity. R01 remains open.
