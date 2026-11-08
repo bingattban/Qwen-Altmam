@@ -197,6 +197,14 @@ const bridge = {
       },
       UpdatePersonIdentity:{personId:"TST-ACTIVE-1"},
       SearchPersons: {items:[{personId:"TST-CLOSED-P1",displayName:"اختبار",serviceNumberA:"C-1"}]},
+      BuildPersonLifetimeReport: {
+        person:{personId:"TST-CLOSED-P1",name:"اختبار",serviceNumberA:"C-1"},
+        attendance:[
+          {date:"2026-10-08",statusName:"موجود",symbol:"م"},
+          {date:"2026-10-09",statusName:"إجازة",symbol:"إ"},
+          {date:"2026-10-10",statusName:"غياب",symbol:"غ"}
+        ]
+      },
       SearchActivePersonsForAccount: {items:[{personId:"TST-ACTIVE-1",
         displayName:"فرد في القوة",serviceNumberA:"91001",organizationalStatus:1,
         revision:1,siteName:"غير محدد"}],count:1},
@@ -1338,6 +1346,79 @@ async function run() {
     assert.ok(reopen?buttonNamed("معاينة التصحيح"):byDataset("adminSection").length>0,
       "late approval does not replace the destination screen");
   }
+  // Verify "تعديل تمام سابق" in Administration AND Personnel Management for GA and OA, hidden for Supervisor.
+  for(const role of ["GeneralAdministration","OrdinaryAdministration"]){
+    controller.renderAdmin({role,username:"range-tester"});
+    const adminShortcut=byDataset("adminShortcut").find(x=>x.dataset.adminShortcut==="closedCorrection");
+    assert.ok(adminShortcut,role+" sees تعديل تمام سابق directly on the Administration page");
+    adminShortcut.handlers.click();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(visible().some(x=>x.className.includes("historical-attendance-range-card")),
+      role+" opens تعديل تمام سابق from Administration");
+    controller.renderAdmin({role,username:"range-tester"});
+    byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+    const forceTile=byDataset("adminScreen").find(x=>x.dataset.adminScreen==="closedCorrection");
+    assert.ok(forceTile&&forceTile.textContent==="تعديل تمام سابق",
+      role+" sees تعديل تمام سابق inside Personnel Management");
+  }
+  controller.renderAdmin({role:"Supervisor",username:"sup-range"});
+  assert.ok(!byDataset("adminShortcut").some(x=>x.dataset.adminShortcut==="closedCorrection"),
+    "Supervisor never sees تعديل تمام سابق on Administration page");
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"),
+    "Supervisor never sees تعديل تمام سابق in Personnel Management");
+
+  // Exercise the full "تعديل تمام سابق" workflow: search, date range, table columns, modal, consecutive previous statuses, new status, confirmation statement, and commit.
+  controller.renderAdmin(admin);
+  byDataset("adminShortcut").find(x=>x.dataset.adminShortcut==="closedCorrection").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const rangeCard=visible().find(x=>x.className.includes("historical-attendance-range-card"));
+  assert.ok(rangeCard,"range card mounted");
+  const changeBtn=rangeCard.all().find(x=>x.tag==="button"&&x.textContent==="تغيير الحاله");
+  assert.ok(changeBtn&&changeBtn.disabled,"change status button initially disabled before search");
+  const rangeInputs=rangeCard.all().filter(x=>x.tag==="input");
+  const searchBox=rangeInputs.find(x=>x.type==="search");
+  const dateBoxes=rangeInputs.filter(x=>x.type==="date");
+  assert.equal(dateBoxes.length,2,"two date boxes (from and to)");
+  searchBox.value="اختبار";
+  dateBoxes[0].value="2026-10-08";
+  dateBoxes[1].value="2026-10-10";
+  const rangeSearchBtn=rangeCard.all().find(x=>x.tag==="button"&&x.textContent==="بحث وعرض المدة");
+  await rangeSearchBtn.handlers.click();
+  const rangeTable=rangeCard.all().find(x=>x.tag==="table");
+  assert.ok(rangeTable,"table rendered below search");
+  const rangeHeaders=rangeTable.children[0].children[0].children.map(x=>x.textContent);
+  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","اسم الفرد","2026-10-08","2026-10-09","2026-10-10"],
+    "table columns match الرقم, الرقم (ع), اسم الفرد and the selected days");
+  const rangeCells=rangeTable.children[1].children[0].children.map(x=>x.textContent);
+  assert.deepEqual(rangeCells,["1","C-1","اختبار","موجود","إجازة","غياب"],
+    "table row displays sequence, serviceNumberA, person name, and each day's status box");
+  assert.equal(changeBtn.disabled,false,"change status button enabled after search");
+  changeBtn.handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const statusModal=visible().find(x=>x.attrs["aria-label"]==="تغيير الحاله");
+  assert.ok(statusModal&&!statusModal.hidden,"change status popup modal opened");
+  const prevChips=statusModal.all().filter(x=>x.className.includes("historical-status-chip"));
+  assert.equal(prevChips.length,3,"previous statuses rendered as consecutive boxes for the period");
+  assert.deepEqual(prevChips.map(x=>x.textContent),[
+    "2026-10-08 : موجود",
+    "2026-10-09 : إجازة",
+    "2026-10-10 : غياب"
+  ]);
+  const newStatusPicker=statusModal.all().find(x=>x.tag==="select"&&x.attrs["aria-label"]==="الحاله الجديده");
+  assert.ok(newStatusPicker,"new status selector available in popup");
+  newStatusPicker.value="STS-ABSENT";
+  assert.ok(statusModal.all().some(x=>x.textContent==="سيتم تغيير حاله الفرد بحسب المده المحدده من الحاله السابقه الى الحاله الجديده المختاره"),
+    "exact confirmation statement is displayed above the confirm button");
+  const confirmRangeBtn=statusModal.all().find(x=>x.tag==="button"&&x.textContent==="التاكيد");
+  assert.ok(confirmRangeBtn,"confirm button (التاكيد) is present");
+  const commitsBeforeRange=calls.filter(x=>x.name==="CommitClosedDayCorrection").length;
+  await confirmRangeBtn.handlers.click();
+  assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,commitsBeforeRange+1,
+    "clicking التاكيد commits the status change across the range");
+  assert.ok(rangeCard.all().some(x=>x.textContent.includes("تم اعتماد الحالة الجديدة في جميع جداول التمام والأرشيف وتقييد العملية في سجل العمليات بنجاح.")),
+    "success confirmation displayed after commit");
+
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
 run().catch(error => { console.error(error); process.exitCode=1; });

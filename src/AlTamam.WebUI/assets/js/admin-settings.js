@@ -17,7 +17,7 @@
     {key:"force",title:"إدارة القوة",children:[
       ["attendance","التمام"],["persons","تعديل الأسماء"],["transfers","التنقلات"],
       ["separation","الفصل"],["personReport","التقرير"],["reminders","التنبيهات"],
-      ["closedCorrection","التصحيح الاستثنائي لليوم المغلق"]]},
+      ["closedCorrection","تعديل تمام سابق"]]},
     {key:"config",title:"الحالات والمواقع",children:[["sites","المواقع"],["statuses","الحالات"]]},
     {key:"sheets",title:"الكشوفات",children:[["import","استيراد Excel"],
       ["export","تصدير Excel"],["layout","تعديل هيكل الكشف"]]},
@@ -258,6 +258,19 @@
         node("span","admin-primary-chevron","فتح القسم ←")
       );
       grid.appendChild(tile);
+    }
+    if(["GeneralAdministration","OrdinaryAdministration"].includes(session?.role)){
+      const prevTile=btn("تعديل تمام سابق",()=>navigate("closedCorrection"),"admin-primary-tile");
+      prevTile.textContent="";
+      prevTile.dataset.adminShortcut="closedCorrection";
+      prevTile.setAttribute("aria-label","فتح تعديل تمام سابق");
+      prevTile.append(
+        node("span","admin-primary-icon","↺"),
+        node("span","admin-primary-title","تعديل تمام سابق"),
+        node("span","admin-tile-subtitle","البحث وتعديل التمام السابق والأرشيف حسب المدة"),
+        node("span","admin-primary-chevron","فتح الشاشة ←")
+      );
+      grid.appendChild(prevTile);
     }
     page.appendChild(grid);
   }
@@ -687,11 +700,11 @@
   // Emergency historical changes are always gated in C#, never merely by hiding UI.
   async function closedCorrection(){
     if(!["GeneralAdministration","OrdinaryAdministration"].includes(state.session?.role)){
-      start("الإدارة / إدارة القوة / التصحيح الاستثنائي لليوم المغلق");
+      start("الإدارة / إدارة القوة / تعديل تمام سابق");
       target().appendChild(warning("هذه العملية مخصصة للإدارة العامة والإدارة العادية فقط."));
       return;
     }
-    const page=start("الإدارة / إدارة القوة / التصحيح الاستثنائي لليوم المغلق");
+    const page=start("الإدارة / إدارة القوة / تعديل تمام سابق");
     const requestEpoch=currentRequest;
     const isCurrent=()=>requestEpoch===currentRequest&&state.active==="closedCorrection";
     const box=card("تصحيح تحضير يوم مغلق — الإدارة العامة والإدارة العادية");
@@ -848,6 +861,201 @@
       operationalModal(form,"modal-md");
       page.appendChild(form);
     });
+    // --- شاشة تعديل تمام سابق حسب المدة (من تاريخ - إلى تاريخ) للإدارة العامة والإدارة العادية فقط ---
+    const rangeCard=card("تعديل تمام سابق");
+    rangeCard.classList.add("historical-attendance-range-card");
+    rangeCard.appendChild(node("p","section-description",
+      "ابحث عن الفرد بالاسم أو الرقم (ع) وحدد المدة المطلوبة (من تاريخ - إلى تاريخ) لعرض جدول الأيام وتغيير الحالة واعتمادها في جميع جداول التمام والأرشيف وسجل العمليات."));
+    const rangeToolbar=node("div","closed-correction-fields");
+    const rangeQuery=field("بحث بالاسم أو الرقم (ع)","","search");
+    rangeQuery.input.placeholder="ابحث بالاسم أو الرقم (ع)";
+    const rangeFrom=field("من تاريخ","","date");
+    const rangeTo=field("إلى تاريخ","","date");
+    rangeToolbar.append(rangeQuery.wrap,rangeFrom.wrap,rangeTo.wrap);
+    const rangeActions=node("div","functional-toolbar");
+    const rangeNotice=node("div","admin-note");
+    const rangeTableHost=node("div","historical-range-table-host");
+    const rangeFooter=node("div","functional-toolbar");
+    const changeStatusBtn=btn("تغيير الحاله",()=>openChangeStatusModal(),"btn btn-primary");
+    changeStatusBtn.disabled=true;
+    rangeFooter.appendChild(changeStatusBtn);
+    let activeStatusesCatalog=[];
+    let currentRangeData=null;
+
+    function buildDateRangeList(startStr,endStr){
+      const startMatch=/^(\d{4})-(\d{2})-(\d{2})$/.exec(startStr||"");
+      const endMatch=/^(\d{4})-(\d{2})-(\d{2})$/.exec(endStr||"");
+      if(!startMatch||!endMatch)return null;
+      const startUtc=Date.UTC(Number(startMatch[1]),Number(startMatch[2])-1,Number(startMatch[3]));
+      const endUtc=Date.UTC(Number(endMatch[1]),Number(endMatch[2])-1,Number(endMatch[3]));
+      if(!Number.isFinite(startUtc)||!Number.isFinite(endUtc)||startUtc>endUtc)return null;
+      const days=[];
+      for(let cur=startUtc;cur<=endUtc;cur+=86400000){
+        const d=new Date(cur);
+        days.push([
+          d.getUTCFullYear(),
+          String(d.getUTCMonth()+1).padStart(2,"0"),
+          String(d.getUTCDate()).padStart(2,"0")
+        ].join("-"));
+        if(days.length>62)return null;
+      }
+      return days;
+    }
+
+    async function loadRangeTable(){
+      currentRangeData=null;
+      changeStatusBtn.disabled=true;
+      rangeTableHost.replaceChildren();
+      rangeNotice.replaceChildren();
+      const term=rangeQuery.input.value.trim();
+      const fromVal=rangeFrom.input.value.trim();
+      const toVal=rangeTo.input.value.trim();
+      if(!term){
+        errors(rangeNotice,new Error("أدخل الاسم أو الرقم (ع) للبحث."));
+        return;
+      }
+      const dates=buildDateRangeList(fromVal,toVal);
+      if(!dates||!dates.length){
+        errors(rangeNotice,new Error("حدد تاريخ البداية (من تاريخ) وتاريخ النهاية (إلى تاريخ) بشكل صحيح (بحد أقصى 62 يوماً)."));
+        return;
+      }
+      rangeSearchBtn.disabled=true;
+      try{
+        const found=await api().invoke("SearchPersons",{term,take:50});
+        if(!isCurrent())return;
+        const candidates=Array.isArray(found.data?.items)?found.data.items:[];
+        if(!candidates.length)throw new Error("لا يوجد فرد مطابق للبحث.");
+        const selectedPerson=candidates[0];
+        const reportReply=await api().invoke("BuildPersonLifetimeReport",{
+          personId:selectedPerson.personId,
+          dateFrom:fromVal,
+          dateTo:toVal,
+          attendancePage:1
+        });
+        if(!isCurrent())return;
+        const reportData=reportReply?.data||{};
+        const attendanceRows=Array.isArray(reportData.attendance)?reportData.attendance:[];
+        const byDate=new Map();
+        for(const item of attendanceRows){
+          if(item&&typeof item.date==="string")byDate.set(item.date,item);
+        }
+        const dayEntries=dates.map(d=>{
+          const rec=byDate.get(d);
+          return {
+            date:d,
+            statusName:rec?.statusName||"غير محضر",
+            symbol:rec?.symbol||"—"
+          };
+        });
+        currentRangeData={
+          personId:selectedPerson.personId,
+          personName:reportData.person?.name||selectedPerson.displayName||"",
+          serviceNumberA:reportData.person?.serviceNumberA||selectedPerson.serviceNumberA||"",
+          dateFrom:fromVal,
+          dateTo:toVal,
+          days:dayEntries
+        };
+        const columns=["الرقم","الرقم (ع)","اسم الفرد",...dates];
+        const grid=table(columns);
+        const tr=node("tr");
+        tr.append(
+          node("td","","1"),
+          node("td","",currentRangeData.serviceNumberA),
+          node("td","",currentRangeData.personName)
+        );
+        for(const entry of dayEntries){
+          const cell=node("td","historical-day-box",entry.statusName);
+          cell.dataset.dayDate=entry.date;
+          tr.appendChild(cell);
+        }
+        grid.body.appendChild(tr);
+        rangeTableHost.replaceChildren(grid.wrap);
+        changeStatusBtn.disabled=false;
+      }catch(e){
+        if(isCurrent())errors(rangeNotice,e);
+      }finally{
+        rangeSearchBtn.disabled=false;
+      }
+    }
+
+    function openChangeStatusModal(){
+      if(!currentRangeData||!isCurrent())return;
+      const modalPanel=card("تغيير الحاله");
+      modalPanel.setAttribute("aria-label","تغيير الحاله");
+      const modalNotice=node("div","admin-note");
+
+      const prevSection=node("div","historical-previous-statuses-box");
+      prevSection.appendChild(node("span","admin-input-label","الحاله السابقه في المده المعينه"));
+      const prevBoxesRow=node("div","historical-status-boxes-row");
+      for(const item of currentRangeData.days){
+        const badge=node("div","historical-status-chip",item.date+" : "+item.statusName);
+        badge.dataset.previousStatusDate=item.date;
+        prevBoxesRow.appendChild(badge);
+      }
+      prevSection.appendChild(prevBoxesRow);
+
+      const newStatusSelect=node("select","form-control");
+      newStatusSelect.setAttribute("aria-label","الحاله الجديده");
+      for(const st of activeStatusesCatalog){
+        const opt=node("option","",st.name||st.displayName||st.statusId);
+        opt.value=st.statusId;
+        newStatusSelect.appendChild(opt);
+      }
+      const newStatusWrap=node("label","admin-input");
+      newStatusWrap.append(node("span","","الحاله الجديده"),newStatusSelect);
+
+      const confirmationStatement=node("p","settings-copy historical-confirm-statement",
+        "سيتم تغيير حاله الفرد بحسب المده المحدده من الحاله السابقه الى الحاله الجديده المختاره");
+
+      const confirmBtn=btn("التاكيد",async()=>{
+        if(!newStatusSelect.value){
+          errors(modalNotice,new Error("اختر الحالة الجديدة من الحالات الموجودة في البرنامج."));
+          return;
+        }
+        confirmBtn.disabled=true;
+        modalNotice.replaceChildren(warning("جارٍ معاينة واعتماد الحالة الجديدة في جداول التمام والأرشيف..."));
+        try{
+          const previewRes=await api().invoke("PreviewClosedDayCorrection",{
+            personId:currentRangeData.personId,
+            dateFrom:currentRangeData.dateFrom,
+            dateTo:currentRangeData.dateTo,
+            businessDate:currentRangeData.dateFrom,
+            statusId:newStatusSelect.value,
+            reason:"تعديل تمام سابق حسب المدة المحددة من الإدارة"
+          });
+          if(!isCurrent())return;
+          const previewData=previewRes?.data||{};
+          if(!previewData.previewToken||previewData.requiresExplicitConfirmation!==true)
+            throw new Error("لم تُرجع الخدمة معاينة موثّقة لتعديل التمام السابق.");
+          const opId=makeOperationId();
+          const committed=await api().invoke("CommitClosedDayCorrection",{
+            previewToken:previewData.previewToken,
+            operationId:opId
+          });
+          if(!isCurrent())return;
+          if(!committed?.data?.revisionNumber)
+            throw new Error("لم يؤكد الخادم اعتماد تعديل التمام السابق.");
+          modalCtrl.close();
+          await loadRangeTable();
+          rangeNotice.replaceChildren(node("p","settings-success",
+            "تم اعتماد الحالة الجديدة في جميع جداول التمام والأرشيف وتقييد العملية في سجل العمليات بنجاح."));
+        }catch(err){
+          if(isCurrent())errors(modalNotice,err);
+          confirmBtn.disabled=false;
+        }
+      },"btn btn-primary");
+
+      modalPanel.append(prevSection,newStatusWrap,confirmationStatement,modalNotice,confirmBtn);
+      const modalCtrl=operationalModal(modalPanel,"modal-lg");
+      page.appendChild(modalPanel);
+      modalCtrl.open();
+    }
+
+    const rangeSearchBtn=btn("بحث وعرض المدة",()=>loadRangeTable(),"btn btn-primary");
+    rangeActions.appendChild(rangeSearchBtn);
+    rangeCard.append(rangeToolbar,rangeActions,rangeNotice,rangeTableHost,rangeFooter);
+    page.appendChild(rangeCard);
+
     controls.append(search,btn("تفعيل الإذن الاستثنائي",setPolicy(true)),
       btn("إيقاف الإذن الاستثنائي",setPolicy(false)),preview,openCatchUp);
     correctionFields.append(date.wrap,personSearch.wrap,searchResults,statuses,reason.wrap);
@@ -857,6 +1065,7 @@
       const response=await api().invoke("GetActiveAttendanceStatuses",{});
       if(!isCurrent())return;
       const data=Array.isArray(response.data)?response.data:[];
+      activeStatusesCatalog=data;
       for(const item of data){
         const option=node("option","",item.name||item.displayName||item.statusId);
         option.value=item.statusId;statusList.appendChild(option);
