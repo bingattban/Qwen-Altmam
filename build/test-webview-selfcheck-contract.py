@@ -429,7 +429,7 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
         self.assertIn('Name = "modal-bridge-routes"', run)
         self.assertIn('PASS R01 real backup restore-preview reset UI and independent encrypted rescue', run)
         self.assertIn('if ($process.ExitCode -ne 0)', run)
-        self.assertIn('if (-not $passed) { throw', package)
+        self.assertIn('Assert-True $passed "WebView2 navigation failed', package)
         for workflow in (CORE, RELEASE):
             self.assertIn('pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1', workflow)
 
