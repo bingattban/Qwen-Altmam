@@ -2,7 +2,7 @@
 
 **R01 is OPEN.** Successful incremental PRs are not full phase acceptance.
 Owner-approved remaining work is split into two stages; see `R01_TWO_STAGE_ACCEPTANCE.md`.
-Current verified baseline: merged #255, `72849ff60381ef6389de7a7cf0086c30a4868a68`.
+Current verified baseline: merged #257, `af5dec792876f5dfd55296691b5ce08156bf07b9`.
 The #253 bounded-budget repair passed both Windows workflows and all four packages before merge (see verified follow-up below).
 Do not start a different corrective package or label this application production-ready.
 
@@ -469,3 +469,13 @@ and independent hashes pass on its exact head.
 - Execute the required final Windows regressions and reconcile every residual
   requirement cell. Independent manual clean-machine acceptance remains separately
   deferred; disabled destructive restore remains owned by R08.
+
+
+## Two-stage final review candidate
+
+Stage 1 has passed Windows and merged as #257. Stage 2 extends executed native
+report/error/Excel coverage and adds real Windows recovery UI acceptance, including
+independent encrypted rescue checks. See R01_TWO_STAGE_ACCEPTANCE.md and
+R01_FINAL_ACCEPTANCE_REVIEW.md. R01 remains OPEN until this new candidate's exact
+Core/Release, all four packages, independent hashes and review have passed. Manual
+clean-machine production acceptance remains separate and owner-deferred.

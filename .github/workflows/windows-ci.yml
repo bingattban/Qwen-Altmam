@@ -87,8 +87,9 @@ jobs:
           python build/test-release-artifact-provenance.py
           if ($LASTEXITCODE -ne 0) { throw 'Section 05 release SHA-256 provenance regression failed' }
           python build/test-webview-selfcheck-contract.py
-          python build/test-local-reminders-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Windows real WebView2 smoke-test contract failed' }
+          python build/test-local-reminders-contract.py
+          if ($LASTEXITCODE -ne 0) { throw 'Local reminders contract failed' }
           node build/test-phase04-bridge-schema.js
           if ($LASTEXITCODE -ne 0) { throw 'Phase 04 typed request/response schema drift failed' }
           foreach ($file in @('altamam-app.js', 'bridge-client.js', 'screen-module.js', 'functional-screens.js', 'admin-settings.js', 'attendance-ui.js', 'personnel-movements.js', 'personnel-separation.js', 'personnel-report.js', 'table-experience.js')) {
@@ -130,6 +131,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
           node build/test-session-idle.js
           if ($LASTEXITCODE -ne 0) { throw '5-minute session inactivity regression' }
+          node build/test-login-gate-singleflight.js
+          if ($LASTEXITCODE -ne 0) { throw 'Native logout/login form single-flight regression' }
           node build/test-operation-dialogs.js
           if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
           node build/test-modal-first-design.js

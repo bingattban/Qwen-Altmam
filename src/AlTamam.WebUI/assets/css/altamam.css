@@ -2389,3 +2389,32 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
 @media(max-width:600px){
   .admin-attendance-host .attendance-range-fields:not([hidden]){grid-template-columns:1fr}
 }
+
+/* شاشة تعديل تمام سابق: جدول الأيام ومربعات الحالة السابقة في النافذة المنبثقة */
+.historical-attendance-range-card .historical-day-box{
+  min-width:96px;text-align:center;font-weight:700;
+  background:var(--bg-subtle);border:1px solid var(--border-color);
+  border-radius:8px;padding:8px 10px
+}
+.historical-previous-statuses-box{
+  display:flex;flex-direction:column;gap:8px;margin-bottom:14px;
+  padding:12px;border:1px solid var(--border-color);border-radius:10px;
+  background:var(--bg-subtle)
+}
+.historical-previous-statuses-box>.admin-input-label{
+  font-size:13px;font-weight:800;color:var(--text-muted)
+}
+.historical-status-boxes-row{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center
+}
+.historical-status-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 12px;border-radius:8px;font-weight:700;font-size:13px;
+  background:var(--bg-surface);border:1px solid var(--accent-teal);
+  color:var(--text-main)
+}
+.historical-confirm-statement{
+  margin-top:12px;padding:12px 14px;border-radius:10px;
+  background:var(--status-warning-bg);color:var(--status-warning);
+  border:1px solid var(--status-warning-border);font-weight:800;line-height:1.7
+}

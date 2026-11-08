@@ -21,6 +21,7 @@ public sealed class R01NativeExcelLifecycleTests : IAsyncLifetime, IDisposable
     private AlTamamDbContext _db = null!;
     private BridgeSharedServices _services = null!;
     private WebView2BridgeDispatcher _dispatcher = null!;
+    private readonly SyntheticDaytimeClock _clock = new();
     private string _nonce = new('0', 32);
     private const string SiteB = "R01-XLSX-SITE-B";
     private static string Id(int i) => "R01-XLSX-P" + i.ToString("D3");
@@ -32,7 +33,7 @@ public sealed class R01NativeExcelLifecycleTests : IAsyncLifetime, IDisposable
         Directory.CreateDirectory(_folder);
         _db = new AlTamamDbContext(_path, SyntheticFixtures.TestKeyHex, useConnectionPooling: false);
         await _db.InitializeAsync();
-        _services = new BridgeSharedServices(_db, new SyntheticDaytimeClock());
+        _services = new BridgeSharedServices(_db, _clock);
         _dispatcher = BridgeHandlerCatalog.Create(_services);
         var login = await Object("AuthenticateLocalUser", new JsonObject {
             ["username"] = "r01-excel-owner", ["password"] = "Native123",
@@ -343,6 +344,118 @@ public sealed class R01NativeExcelLifecycleTests : IAsyncLifetime, IDisposable
             }
         }
 
+        Assert.Equal("104", Scalar("SELECT COUNT(*) FROM AttendanceRecords;"));
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    private async Task<JsonObject> Stage2Object(string action, JsonObject payload)
+    {
+        var response = await Dispatch(action, payload);
+        Assert.True(response.Success, action + ": " + response.UserMessage);
+        R01WireShapeSnapshot.Verify(action, response);
+        _output.WriteLine("R01_NATIVE_SHAPE " + action + " " + R01WireShapeSnapshot.Shape(response));
+        return Assert.IsType<JsonObject>(response.Data);
+    }
+
+    [Fact]
+    public async Task FilteredSingleReport_RealNativeAndWorkbook_HaveIdenticalEmptyAndNonemptyRows()
+    {
+        foreach (var (site, status, expected) in new[] {
+            ("SITE-UNSPECIFIED", "STS-PRESENT", 1),
+            ("SITE-UNSPECIFIED", "STS-ABSENT", 1), (SiteB, "STS-ABSENT", 0) })
+        {
+        var filter = new JsonObject { ["personId"] = Id(0), ["dateFrom"] = "2026-10-19",
+            ["dateTo"] = "2026-10-20", ["siteId"] = site, ["statusId"] = status };
+        var report = await Stage2Object("BuildPersonLifetimeReport", filter);
+        Assert.Equal((long)expected, report["attendanceTotal"]!.GetValue<long>());
+        var exported = await Stage2Object("ExportPersonLifetimeExcel", filter);
+        var rows = Sheet(Text(exported["filePath"]), "التفاصيل التاريخية");
+        Assert.Equal(expected + 1, rows.Count);
+        var facts = Assert.IsType<JsonArray>(report["attendance"]);
+        for (int i = 0; i < expected; i++)
+        {
+            var fact = facts[i]!;
+            Assert.Equal("000123", rows[i + 1][1]);
+            Assert.Equal("الاسم التاريخي المحفوظ", rows[i + 1][2]);
+            Assert.Equal(Text(fact["date"]), rows[i + 1][3]);
+            Assert.Equal(Text(fact["statusName"]), rows[i + 1][4]);
+            Assert.Equal(Text(fact["site"]), rows[i + 1][5]);
+        }
+        Assert.Equal("104", Scalar("SELECT COUNT(*) FROM AttendanceRecords;"));
+        Assert.True(_db.HasValidIntegrity());
+        }
+    }
+
+    [Fact]
+    public async Task ArchiveModes_RealInternalExternalAndSeparationExcel_MatchNativeArchivedFacts()
+    {
+        string today = _clock.GetLocalNow().ToString("yyyy-MM-dd");
+        foreach (bool external in new[] { false, true })
+        {
+            int i = external ? 1 : 0;
+            var preview = await Stage2Object(external ? "PreviewExternalTransfer" : "PreviewInternalTransfer", new JsonObject {
+                ["businessDate"] = today, ["sourceSiteId"] = external ? SiteB : "SITE-UNSPECIFIED",
+                ["destinationSiteId"] = external ? null : SiteB,
+                ["destinationExternalName"] = external ? "جهة تصدير خارجية" : null,
+                ["personIds"] = new JsonArray(Id(i))
+            });
+            await Stage2Object(external ? "CommitExternalTransfer" : "CommitInternalTransfer",
+                new JsonObject { ["previewToken"] = preview["previewToken"]!.DeepClone() });
+        }
+        var separation = await Stage2Object("PreviewSeparation", new JsonObject {
+            ["personId"] = Id(2), ["businessDate"] = today, ["reason"] = "سبب فصل تصدير موثق"
+        });
+        _clock.SetLocalTime(12, 1);
+        await Stage2Object("CommitSeparation", new JsonObject { ["previewToken"] = separation["previewToken"]!.DeepClone() });
+        foreach (string kind in new[] { "internal", "external", "separation" })
+        {
+            bool separated = kind == "separation";
+            var filter = new JsonObject { ["type"] = kind, ["dateFrom"] = today, ["dateTo"] = today, ["pageSize"] = 1 };
+            var canonical = await Stage2Object(separated ? "QuerySeparationArchive" : "QueryMovementArchive", filter);
+            Assert.Equal(1L, canonical["total"]!.GetValue<long>());
+            var fact = Assert.Single(Assert.IsType<JsonArray>(canonical["items"]))!;
+            filter["mode"] = separated ? "separationArchive" : "movementArchive";
+            var exported = await Stage2Object("ExportPersonLifetimeExcel", filter);
+            var rows = Sheet(Text(exported["filePath"]), separated ? "أرشيف الفصل" : kind == "internal" ? "نقل داخلي" : "نقل خارجي");
+            Assert.Equal(2, rows.Count);
+            Assert.Equal("1", rows[1][0]);
+            string[] fields = separated ? ["serviceNumberA", "name", "siteName", "reason", "date", "committedAtUtc", "actorDisplay"]
+                : ["serviceNumberA", "name", "type", "sourceSite", "destination", "date", "committedAtUtc"];
+            for (int i = 0; i < fields.Length; i++)
+                if (fields[i] == "committedAtUtc")
+                    Assert.Equal(DateTimeOffset.Parse(Text(fact[fields[i]])), DateTimeOffset.Parse(rows[1][i + 1]));
+                else Assert.Equal(Text(fact[fields[i]]), rows[1][i + 1]);
+        }
+        Assert.Equal("3", Scalar("SELECT COUNT(*) FROM PersonnelMovements;"));
+        Assert.Equal("104", Scalar("SELECT COUNT(*) FROM AttendanceRecords;"));
+        Assert.True(_db.HasValidIntegrity());
+    }
+
+    [Fact]
+    public async Task ReportExportErrors_RealNativeFailures_LeakNoDataAndPublishNoFiles()
+    {
+        long audit = long.Parse(Scalar("SELECT COUNT(*) FROM AuditEvents;"));
+        foreach (var payload in new[] {
+            new JsonObject { ["mode"] = "unknown" },
+            new JsonObject { ["mode"] = "movementArchive", ["type"] = "unknown" },
+            new JsonObject { ["personIds"] = new JsonArray(Id(0), Id(0)) },
+            new JsonObject { ["personId"] = Id(0), ["exportId"] = "../invalid" },
+            new JsonObject { ["personId"] = Id(0), ["dateFrom"] = "2026-10-20", ["dateTo"] = "2026-10-19" }
+        })
+        {
+            var failed = await Dispatch("ExportPersonLifetimeExcel", payload);
+            Assert.False(failed.Success);
+            Assert.Equal(BridgeErrorCodes.ValidationError, failed.ErrorCode);
+            Assert.Null(failed.Data);
+        }
+        Assert.Equal(audit, long.Parse(Scalar("SELECT COUNT(*) FROM AuditEvents;")));
+        await Call("Logout");
+        long afterLogout = long.Parse(Scalar("SELECT COUNT(*) FROM AuditEvents;"));
+        var expired = await Dispatch("BuildPersonLifetimeReport", new JsonObject { ["personId"] = Id(0) });
+        Assert.Equal(BridgeErrorCodes.SessionExpired, expired.ErrorCode); Assert.Null(expired.Data);
+        Assert.Empty(Directory.GetFiles(_folder, "*.xlsx", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetFiles(_folder, "*.part", SearchOption.AllDirectories));
+        Assert.Equal(afterLogout, long.Parse(Scalar("SELECT COUNT(*) FROM AuditEvents;")));
         Assert.Equal("104", Scalar("SELECT COUNT(*) FROM AttendanceRecords;"));
         Assert.True(_db.HasValidIntegrity());
     }

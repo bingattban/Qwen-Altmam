@@ -12,7 +12,7 @@ namespace AlTamam.DesktopHost.Bridge;
 /// </summary>
 internal static class Phase04BridgeRoundTripSelfCheck
 {
-    public static async Task RunAsync(CoreWebView2 core, AlTamamDbContext database, TimeProvider timeProvider)
+    public static async Task<string> RunAsync(CoreWebView2 core, AlTamamDbContext database, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(core);
         ArgumentNullException.ThrowIfNull(database);
@@ -861,7 +861,7 @@ internal static class Phase04BridgeRoundTripSelfCheck
                         "PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher");
                     MainWindow.TraceWebViewSelfCheck(
                         "PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations");
-                    return;
+                    return ownerPassword;
                 }
             }
             await Task.Delay(150).ConfigureAwait(true);

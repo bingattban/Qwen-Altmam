@@ -85,6 +85,11 @@ const document = {
 const bridge = {
   invoke: async (name, body) => {
     calls.push({ name, body });
+    if(recoveryOverrides.has(name)){
+      const value=recoveryOverrides.get(name);
+      if(value instanceof Error)throw value;
+      return {data:value};
+    }
     if(name==="GetAllowedRoles"&&allowedRolesFailure)
       throw Object.assign(Error(allowedRolesFailure),{errorCode:allowedRolesFailure});
     if(name==="GetAllowedRoles"&&deferAllowedRoles)
@@ -124,6 +129,8 @@ const bridge = {
         defaultStatusId:"STS-ABSENT"},
       SetAutoAttendanceDefaultStatus: {defaultStatusId:"STS-ABSENT",defaultStatusName:"غياب",configured:true},
       RunDatabaseIntegrityCheck: { integrity:"ok" },
+      PreviewFullReset:{previewToken:"R".repeat(64),expectedRevision:"rev",requiredConfirmation:"تصفير جميع البيانات",countdownSeconds:5,people:1,users:1},
+      CommitFullReset:{reset:true,requiresFirstSetup:true},
       InspectBackup: {verified:true,fileName:"verified.dbbackup",
         path:"C:\\Temp\\verified.dbbackup",fileSizeBytes:4096,
         schemaVersion:9,schemaCompatible:true,people:5,attendance:8,
@@ -190,6 +197,14 @@ const bridge = {
       },
       UpdatePersonIdentity:{personId:"TST-ACTIVE-1"},
       SearchPersons: {items:[{personId:"TST-CLOSED-P1",displayName:"اختبار",serviceNumberA:"C-1"}]},
+      BuildPersonLifetimeReport: {
+        person:{personId:"TST-CLOSED-P1",name:"اختبار",serviceNumberA:"C-1"},
+        attendance:[
+          {date:"2026-10-08",statusName:"موجود",symbol:"م"},
+          {date:"2026-10-09",statusName:"إجازة",symbol:"إ"},
+          {date:"2026-10-10",statusName:"غياب",symbol:"غ"}
+        ]
+      },
       SearchActivePersonsForAccount: {items:[{personId:"TST-ACTIVE-1",
         displayName:"فرد في القوة",serviceNumberA:"91001",organizationalStatus:1,
         revision:1,siteName:"غير محدد"}],count:1},
@@ -213,7 +228,9 @@ const editDialogRequests=[];
 let nextIdentityForm=null,nextConfigForm=null;
 let approveDetailPreview=false;
 let deferDetailsReview=false,completeDetailsReview=null;
-const context = { window:{ AltamamBridge:bridge,AltamamDialog:{
+const recoveryOverrides=new Map();
+let resetTimer=null;
+const context = { setInterval:fn=>{resetTimer=fn;return 1;},clearInterval:()=>{resetTimer=null;}, window:{ AltamamBridge:bridge,AltamamDialog:{
   detailsReview:async(details,opts)=>{
     modalReviews.push({details,opts});
     if(deferDetailsReview)return new Promise(resolve=>{completeDetailsReview=resolve;});
@@ -1154,6 +1171,63 @@ async function run() {
   abandonedAdd.handlers.click();
   assert.ok(!visible().some(x=>x.className.includes("admin-user-form")));
   deferAllowedRoles=false;
+  for(const invalid of [Error("BackupIntegrityFailed"),{verified:false},
+    {verified:true,path:"C:\\Temp\\bad.dbbackup",sha256:"invalid"}]){
+    await controller.renderSettings(admin,()=>{});
+    await buttonNamed("اختيار نسخة مشفرة وفحص سلامتها").handlers.click();
+    assert.equal(buttonNamed("معاينة الاستعادة دون تنفيذ").disabled,false);
+    recoveryOverrides.set("InspectBackup",invalid);
+    await buttonNamed("اختيار نسخة مشفرة وفحص سلامتها").handlers.click();
+    assert.equal(buttonNamed("معاينة الاستعادة دون تنفيذ").disabled,true,
+      "failed new inspection revokes the previously verified backup selection");
+    const previewsBefore=calls.filter(x=>x.name==="PreviewRestore").length;
+    await buttonNamed("معاينة الاستعادة دون تنفيذ").handlers.click();
+    assert.equal(calls.filter(x=>x.name==="PreviewRestore").length,previewsBefore);
+    recoveryOverrides.clear();
+  }
+  for(const invalid of [{verified:true,previewOnly:true,restoreEnabled:true,sha256:"a".repeat(64)},
+    {verified:true,previewOnly:true,restoreEnabled:false,sha256:"b".repeat(64)}]){
+    await controller.renderSettings(admin,()=>{});
+    await buttonNamed("اختيار نسخة مشفرة وفحص سلامتها").handlers.click();
+    recoveryOverrides.set("PreviewRestore",invalid);
+    const reviewsBefore=modalReviews.length;
+    await buttonNamed("معاينة الاستعادة دون تنفيذ").handlers.click();
+    assert.equal(modalReviews.length,reviewsBefore,"inconsistent restore receipt cannot be shown as a verified preview");
+    assert.equal(calls.filter(x=>x.name==="RestoreDatabaseAtomically").length,0);
+    recoveryOverrides.clear();
+  }
+  // Stage 2: destructive confirmation belongs to the current settings screen.
+  await controller.renderSettings(admin,()=>{});
+  deferDetailsReview=true;completeDetailsReview=null;
+  const pendingResetPreview=buttonNamed("معاينة التصفير الكامل").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof completeDetailsReview,"function");
+  const oldReset=visible().find(x=>x.attrs["aria-label"]==="التحقق النهائي من التصفير");
+  controller.renderAdmin(admin);completeDetailsReview(true);await pendingResetPreview;
+  deferDetailsReview=false;
+  assert.ok(!oldReset.all().some(x=>x.textContent==="تأكيد تصفير البرنامج نهائياً"),
+    "late reset preview approval cannot create a verification form after navigation");
+  await controller.renderSettings(admin,()=>{});
+  approveDetailPreview=true;
+  await buttonNamed("معاينة التصفير الكامل").handlers.click();
+  const resetForm=visible().find(x=>x.attrs["aria-label"]==="التحقق النهائي من التصفير");
+  const finalReset=buttonNamed("تأكيد تصفير البرنامج نهائياً");
+  assert.equal(finalReset.disabled,true,"server countdown cannot be skipped by the UI");
+  for(let i=0;i<5;i++)resetTimer?.();
+  assert.equal(finalReset.disabled,false);
+  const resetInputs=resetForm.all().filter(x=>x.tag==="input");
+  resetInputs.find(x=>x.type==="password").value="Abc123";
+  resetInputs.find(x=>x.type==="text").value="تصفير جميع البيانات";
+  let resolveResetConfirm=null;
+  context.window.AltamamDialog.confirm=async()=>new Promise(resolve=>{resolveResetConfirm=resolve;});
+  const resetsBefore=calls.filter(x=>x.name==="CommitFullReset").length;
+  const pendingReset=finalReset.handlers.click();await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof resolveResetConfirm,"function");
+  controller.renderAdmin(admin);resolveResetConfirm(true);await pendingReset;
+  assert.equal(calls.filter(x=>x.name==="CommitFullReset").length,resetsBefore,
+    "late final confirmation after navigation cannot reset the database");
+  context.window.AltamamDialog.confirm=async()=>true;
+  approveDetailPreview=false;
   // Stage 1: account identity must be tied to the latest successful active search.
   for(const errorCode of ["Unauthorized","SessionExpired","BridgeOffline","empty"]){
     controller.renderAdmin(admin);controller.openOwnedRoute("Users");
@@ -1272,6 +1346,79 @@ async function run() {
     assert.ok(reopen?buttonNamed("معاينة التصحيح"):byDataset("adminSection").length>0,
       "late approval does not replace the destination screen");
   }
+  // Verify "تعديل تمام سابق" in Administration AND Personnel Management for GA and OA, hidden for Supervisor.
+  for(const role of ["GeneralAdministration","OrdinaryAdministration"]){
+    controller.renderAdmin({role,username:"range-tester"});
+    const adminShortcut=byDataset("adminShortcut").find(x=>x.dataset.adminShortcut==="closedCorrection");
+    assert.ok(adminShortcut,role+" sees تعديل تمام سابق directly on the Administration page");
+    adminShortcut.handlers.click();
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(visible().some(x=>x.className.includes("historical-attendance-range-card")),
+      role+" opens تعديل تمام سابق from Administration");
+    controller.renderAdmin({role,username:"range-tester"});
+    byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+    const forceTile=byDataset("adminScreen").find(x=>x.dataset.adminScreen==="closedCorrection");
+    assert.ok(forceTile&&forceTile.textContent==="تعديل تمام سابق",
+      role+" sees تعديل تمام سابق inside Personnel Management");
+  }
+  controller.renderAdmin({role:"Supervisor",username:"sup-range"});
+  assert.ok(!byDataset("adminShortcut").some(x=>x.dataset.adminShortcut==="closedCorrection"),
+    "Supervisor never sees تعديل تمام سابق on Administration page");
+  byDataset("adminSection").find(x=>x.dataset.adminSection==="force").handlers.click();
+  assert.ok(!byDataset("adminScreen").some(x=>x.dataset.adminScreen==="closedCorrection"),
+    "Supervisor never sees تعديل تمام سابق in Personnel Management");
+
+  // Exercise the full "تعديل تمام سابق" workflow: search, date range, table columns, modal, consecutive previous statuses, new status, confirmation statement, and commit.
+  controller.renderAdmin(admin);
+  byDataset("adminShortcut").find(x=>x.dataset.adminShortcut==="closedCorrection").handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const rangeCard=visible().find(x=>x.className.includes("historical-attendance-range-card"));
+  assert.ok(rangeCard,"range card mounted");
+  const changeBtn=rangeCard.all().find(x=>x.tag==="button"&&x.textContent==="تغيير الحاله");
+  assert.ok(changeBtn&&changeBtn.disabled,"change status button initially disabled before search");
+  const rangeInputs=rangeCard.all().filter(x=>x.tag==="input");
+  const searchBox=rangeInputs.find(x=>x.type==="search");
+  const dateBoxes=rangeInputs.filter(x=>x.type==="date");
+  assert.equal(dateBoxes.length,2,"two date boxes (from and to)");
+  searchBox.value="اختبار";
+  dateBoxes[0].value="2026-10-08";
+  dateBoxes[1].value="2026-10-10";
+  const rangeSearchBtn=rangeCard.all().find(x=>x.tag==="button"&&x.textContent==="بحث وعرض المدة");
+  await rangeSearchBtn.handlers.click();
+  const rangeTable=rangeCard.all().find(x=>x.tag==="table");
+  assert.ok(rangeTable,"table rendered below search");
+  const rangeHeaders=rangeTable.children[0].children[0].children.map(x=>x.textContent);
+  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","اسم الفرد","2026-10-08","2026-10-09","2026-10-10"],
+    "table columns match الرقم, الرقم (ع), اسم الفرد and the selected days");
+  const rangeCells=rangeTable.children[1].children[0].children.map(x=>x.textContent);
+  assert.deepEqual(rangeCells,["1","C-1","اختبار","موجود","إجازة","غياب"],
+    "table row displays sequence, serviceNumberA, person name, and each day's status box");
+  assert.equal(changeBtn.disabled,false,"change status button enabled after search");
+  changeBtn.handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  const statusModal=visible().find(x=>x.attrs["aria-label"]==="تغيير الحاله");
+  assert.ok(statusModal&&!statusModal.hidden,"change status popup modal opened");
+  const prevChips=statusModal.all().filter(x=>x.className.includes("historical-status-chip"));
+  assert.equal(prevChips.length,3,"previous statuses rendered as consecutive boxes for the period");
+  assert.deepEqual(prevChips.map(x=>x.textContent),[
+    "2026-10-08 : موجود",
+    "2026-10-09 : إجازة",
+    "2026-10-10 : غياب"
+  ]);
+  const newStatusPicker=statusModal.all().find(x=>x.tag==="select"&&x.attrs["aria-label"]==="الحاله الجديده");
+  assert.ok(newStatusPicker,"new status selector available in popup");
+  newStatusPicker.value="STS-ABSENT";
+  assert.ok(statusModal.all().some(x=>x.textContent==="سيتم تغيير حاله الفرد بحسب المده المحدده من الحاله السابقه الى الحاله الجديده المختاره"),
+    "exact confirmation statement is displayed above the confirm button");
+  const confirmRangeBtn=statusModal.all().find(x=>x.tag==="button"&&x.textContent==="التاكيد");
+  assert.ok(confirmRangeBtn,"confirm button (التاكيد) is present");
+  const commitsBeforeRange=calls.filter(x=>x.name==="CommitClosedDayCorrection").length;
+  await confirmRangeBtn.handlers.click();
+  assert.equal(calls.filter(x=>x.name==="CommitClosedDayCorrection").length,commitsBeforeRange+1,
+    "clicking التاكيد commits the status change across the range");
+  assert.ok(rangeCard.all().some(x=>x.textContent.includes("تم اعتماد الحالة الجديدة في جميع جداول التمام والأرشيف وتقييد العملية في سجل العمليات بنجاح.")),
+    "success confirmation displayed after commit");
+
   console.log("ADMIN SETTINGS UI PASS: admin fallback status, supervisor policy isolation, backup safety");
 }
 run().catch(error => { console.error(error); process.exitCode=1; });

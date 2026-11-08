@@ -365,6 +365,49 @@ public sealed class ClosedDayCorrectionIntegrationTests : IAsyncLifetime, IDispo
         Assert.Equal("موجود",Stored("SELECT StatusNameSnapshot FROM AttendanceRecords"));
     }
 
+    [Fact]
+    public async Task HistoricalRangeCorrection_AllowsGaAndOa_RejectsSupervisor_UpdatesRecordsAndAudit()
+    {
+        var service = new ClosedDayCorrectionService(_db);
+        var rangePayload = new JsonObject
+        {
+            ["personId"] = Person,
+            ["dateFrom"] = "2026-10-08",
+            ["dateTo"] = "2026-10-10",
+            ["businessDate"] = "2026-10-08",
+            ["statusId"] = "STS-ABSENT",
+            ["reason"] = "تعديل تمام سابق حسب المدة المحددة من الإدارة"
+        };
+
+        // Supervisor is strictly rejected
+        var deniedSup = await service.PreviewAsync(rangePayload, Supervisor, CancellationToken.None);
+        Assert.False(deniedSup.Success);
+        Assert.Equal(BridgeErrorCodes.Unauthorized, deniedSup.ErrorCode);
+
+        // OrdinaryAdministration can preview and commit the range across archived/closed and unprepared days
+        var preview = await service.PreviewAsync(rangePayload, Admin, CancellationToken.None);
+        Assert.True(preview.Success, preview.UserMessage);
+        var data = Assert.IsType<JsonObject>(preview.Data);
+        Assert.Equal("غير محضر / موجود", data["beforeStatusName"]!.GetValue<string>());
+        Assert.Equal("غياب", data["afterStatusName"]!.GetValue<string>());
+        string token = data["previewToken"]!.GetValue<string>();
+
+        const string opId = "range-hist-correction-20261010-001";
+        var commitReq = new JsonObject { ["previewToken"] = token, ["operationId"] = opId };
+        var committed = await service.CommitAsync(commitReq, Admin, CancellationToken.None);
+        Assert.True(committed.Success, committed.UserMessage);
+
+        // Verify all 3 days in the range (2026-10-08, 2026-10-09, 2026-10-10) now have STS-ABSENT in AttendanceRecords
+        Assert.Equal("3", Stored("SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId='TST-CLOSED-P1' AND AttendanceLocalDate BETWEEN '2026-10-08' AND '2026-10-10' AND StatusId='STS-ABSENT'"));
+        Assert.Equal("3", Stored("SELECT COUNT(*) FROM AttendanceRevisions WHERE PersonId='TST-CLOSED-P1'"));
+        Assert.Equal("3", Stored("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CLOSED_DAY_CORRECTED' AND TargetEntityId='TST-CLOSED-P1'"));
+
+        // Exact retry is idempotent
+        var retry = await service.CommitAsync((JsonObject)commitReq.DeepClone(), Admin, CancellationToken.None);
+        Assert.True(retry.Success, retry.UserMessage);
+        Assert.Equal("3", Stored("SELECT COUNT(*) FROM AttendanceRevisions WHERE PersonId='TST-CLOSED-P1'"));
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose()
     {

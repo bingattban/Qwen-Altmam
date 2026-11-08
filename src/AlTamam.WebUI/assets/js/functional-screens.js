@@ -190,6 +190,13 @@
     const submit=el("button","btn btn-primary","دخول"); submit.type="submit";
     append(form,brand,name.wrapper,pass.wrapper,note,status,submit);
     container.appendChild(form);
+    // The form is visible before its async provisioning check completes.
+    // Suppress the browser's default navigation if Enter is pressed before
+    // the actual async submit handler is installed.
+    submit.disabled=true;
+    form.addEventListener("submit",event=>{
+      if(form.dataset.authReady!=="true")event.preventDefault();
+    });
     try {
       const provisioning=parseData(await bridge().invoke("GetProvisioningState",{}));
       if (provisioning && provisioning.provisioned===false) {
@@ -286,6 +293,24 @@
       } catch(e) { showError(status,e); }
       finally { submit.disabled=false; }
     });
+    // The login form is visible before GetProvisioningState resolves, but
+    // requestSubmit() is unsafe until this handler is attached: an early
+    // unhandled submit would perform a full document navigation and discard
+    // the active WebView2 acceptance probe.
+    form.dataset.authReady="true";
+    submit.disabled=false;
+  }
+
+  // One native Logout response can both resolve the UI click and broadcast
+  // SessionEnded. Coordinate concurrent boot/invalidations through a single
+  // provisioning request and a single bound login form.
+  let loginGateInFlight=null;
+  async function openLoginGateOnce(){
+    if(loginGateInFlight)return loginGateInFlight;
+    const pending=loginGate();
+    loginGateInFlight=pending;
+    try {return await pending;}
+    finally {if(loginGateInFlight===pending)loginGateInFlight=null;}
   }
 
   async function loadSites() {
@@ -1351,7 +1376,7 @@
   function render(section, requestedRoute=null) {
     if(section!=="dashboard")dismissAutoPrepared();
     if(section!=="dashboard")stopDashboardClock();
-    if (!STATE.session) { loginGate();return; }
+    if (!STATE.session) { void openLoginGateOnce();return; }
     if (!sections.has(section)) section="dashboard";
     if(section!=="dashboard")view().classList.toggle("daily-dashboard",false);
     if(section!=="monthly")view().classList.toggle("monthly-dashboard",false);
@@ -1404,7 +1429,7 @@
       if(window.AltamamIdleGuard?.shouldLogout()){
         try{await bridge().invoke("Logout",{});}catch{ /* already expired */ }
         bridge().setSessionNonce(null);
-        return await loginGate();
+        return await openLoginGateOnce();
       }
       const state=parseData(await bridge().invoke("GetCurrentSession",{}));
       if(state && state.sessionNonce) {
@@ -1424,8 +1449,8 @@
           if(automatic)openAutoPreparedList();
           if(initialSection==="dashboard")void checkOutputAfterLogin();
         }
-      } else await loginGate();
-    } catch { await loginGate(); }
+      } else await openLoginGateOnce();
+    } catch { await openLoginGateOnce(); }
   }
 
   async function logout(){
@@ -1438,7 +1463,7 @@
       bridge().setSessionNonce(null);
       STATE.session=null;
       window.AltamamTheme?.clearAuthorization();
-      await loginGate();
+      await openLoginGateOnce();
     }
   }
   document.getElementById("logoutAction")?.addEventListener("click",logout);
@@ -1476,6 +1501,6 @@
       // Administration refreshes its own nested screen after a write; keep its context.
      if(sections.has(section)&&section!=="admin"&&STATE.session)render(section);
     }
-    if(name==="SessionEnded"){window.AltamamReminders?.stop();dismissAutoPrepared();window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);window.AltamamTheme?.clearAuthorization();loginGate();}
+    if(name==="SessionEnded"){window.AltamamReminders?.stop();dismissAutoPrepared();window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);window.AltamamTheme?.clearAuthorization();void openLoginGateOnce();}
   });
 })();

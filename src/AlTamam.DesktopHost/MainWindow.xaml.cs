@@ -408,9 +408,11 @@ public partial class MainWindow : Window
                 string fixtureFolder = Path.Combine(Path.GetTempPath(),
                     "AlTamam-Phase04-Bridge-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(fixtureFolder);
+                string fixtureKey = AlTamam.Infrastructure.Security.DatabaseKeyGenerator.Generate();
+                string recoveryOutput = fixtureFolder + "-recovery-output";
                 var fixture = new AlTamamDbContext(
                     Path.Combine(fixtureFolder, "phase04-synthetic.db"),
-                    AlTamam.Infrastructure.Security.DatabaseKeyGenerator.Generate(),
+                    fixtureKey,
                     useConnectionPooling: false);
                 DesktopBridgeGateway? fixtureGateway = null;
                 try
@@ -418,18 +420,25 @@ public partial class MainWindow : Window
                     await fixture.InitializeAsync().ConfigureAwait(true);
                     var clock = new WebViewSelfCheckTimeProvider(TimeProvider.System);
                     var services = new BridgeSharedServices(fixture, clock);
+                    Directory.CreateDirectory(recoveryOutput);
+                    string invalidBackup = Path.Combine(recoveryOutput, "invalid.dbbackup");
+                    File.WriteAllText(invalidBackup, "synthetic corrupt backup");
+                    int picked = 0;
+                    // Only the OS selection boundary is supplied; native inspection remains real.
+                    services.PickBackupFileAsync = _ => Task.FromResult<string?>(++picked == 1 ? invalidBackup :
+                        Directory.GetFiles(recoveryOutput, "*.dbbackup").Single(path => path != invalidBackup));
                     await core.AddScriptToExecuteOnDocumentCreatedAsync(
                         clock.GetBrowserInitializationScript()).ConfigureAwait(true);
                     fixtureGateway = new DesktopBridgeGateway(BridgeHandlerCatalog.Create(services), services);
                     fixtureGateway.Attach(core);
-                    await CheckActualWebViewNavigationAsync(core, fixture, clock).ConfigureAwait(true);
+                    await CheckActualWebViewNavigationAsync(core, fixture, clock, fixtureKey, recoveryOutput).ConfigureAwait(true);
                 }
                 finally
                 {
                     if (fixtureGateway is not null)
                         await fixtureGateway.StopReceivingAndDrainAsync().ConfigureAwait(true);
                     fixture.Dispose();
-                    try { Directory.Delete(fixtureFolder, recursive: true); }
+                    try { Directory.Delete(fixtureFolder, recursive: true); Directory.Delete(recoveryOutput, recursive: true); }
                     catch (IOException) { /* Windows may still be releasing synthetic WAL handles. */ }
                     catch (UnauthorizedAccessException) { /* Best-effort temporary-file cleanup. */ }
                 }
@@ -544,8 +553,9 @@ public partial class MainWindow : Window
     }
 
     private static async Task CheckActualWebViewNavigationAsync(
-        CoreWebView2 core, AlTamamDbContext? syntheticDatabase = null, TimeProvider? selfCheckTime = null)
+        CoreWebView2 core, AlTamamDbContext? syntheticDatabase = null, TimeProvider? selfCheckTime = null, string? fixtureKey = null, string? recoveryOutput = null)
     {
+        string? fixtureOwnerPassword = null;
         var completion = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         EventHandler<CoreWebView2NavigationCompletedEventArgs> onNavigation =
@@ -566,7 +576,7 @@ public partial class MainWindow : Window
                 await CheckActualWebViewModalInteractionsAsync(core).ConfigureAwait(true);
             if (syntheticDatabase is not null)
             {
-                await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase, selfCheckTime ?? TimeProvider.System).ConfigureAwait(true);
+                fixtureOwnerPassword = await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase, selfCheckTime ?? TimeProvider.System).ConfigureAwait(true);
                 TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
             }
             // Packaged acceptance can run the two real browser suites in distinct
@@ -582,6 +592,16 @@ public partial class MainWindow : Window
                     core, ResolveBundledWebUiRoot()).ConfigureAwait(true);
                 TraceWebViewSelfCheck("PASS all 69 manifest routes opened in real Windows WebView2");
             }
+            // Pre-package Core/Release run the complete native WebView2 suite in
+            // two separately bounded disposable processes: the first proves
+            // modal/bridge/roles/all routes, the second repeats the real bridge
+            // setup and then performs the destructive recovery UI acceptance.
+            // Neither process substitutes fabricated data for live SQLCipher.
+            bool splitRecovery = Environment.GetCommandLineArgs().Contains(
+                "--webview-split-recovery-e2e", StringComparer.Ordinal);
+            if (!splitRecovery && syntheticDatabase is not null && fixtureOwnerPassword is not null && fixtureKey is not null && recoveryOutput is not null)
+                await Phase04RecoveryUiSelfCheck.RunAsync(core, syntheticDatabase, fixtureKey, recoveryOutput,
+                    fixtureOwnerPassword).ConfigureAwait(true);
             TraceWebViewSelfCheck("PASS bundled offline WebUI title verified");
             Console.WriteLine("WEBVIEW-SELFCHECK PASS");
             System.Windows.Application.Current.Shutdown(0);

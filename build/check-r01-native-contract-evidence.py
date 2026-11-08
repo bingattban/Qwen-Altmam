@@ -15,6 +15,9 @@ PREFIX = "AlTamam.Tests.Bridge.R01Native"
 # Owner-deferred R08 destructive restore is explicitly rejected by native tests.
 INTENTIONALLY_DISABLED = {"RestoreDatabaseAtomically"}
 CASES = {
+    "ExcelLifecycleTests.FilteredSingleReport_RealNativeAndWorkbook_HaveIdenticalEmptyAndNonemptyRows",
+    "ExcelLifecycleTests.ArchiveModes_RealInternalExternalAndSeparationExcel_MatchNativeArchivedFacts",
+    "ExcelLifecycleTests.ReportExportErrors_RealNativeFailures_LeakNoDataAndPublishNoFiles",
     "RecoveryLifecycleTests.ArchivedReturn_RealPreviewCommit_ReusesIdentityAndRetainsExitHistory",
     "RecoveryLifecycleTests.CatchUp_RealPreviewCommit_FillsOnlyMissingDayWithOneLedgerAndDurableReceipt",
     "RecoveryLifecycleTests.ClosedCorrection_RealPolicyPreviewCommit_KeepsClosureOriginalTimeAndRevisionEvidence",

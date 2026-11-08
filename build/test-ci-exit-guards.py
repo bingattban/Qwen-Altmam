@@ -12,6 +12,7 @@ WORKFLOWS = (
 )
 TEST_LINE = re.compile(r"^\s*node\s+build/(test-[\w-]+\.js)\s*$")
 SELF_LINE = re.compile(r"^\s*python\s+build/test-ci-exit-guards\.py\s*$")
+PY_CONTRACT_LINE = re.compile(r"^\s*python\s+build/(?:validate-ui-shell|test-ci-performance-contract|test-release-artifact-provenance|test-webview-selfcheck-contract|test-local-reminders-contract)\.py\s*$")
 EXIT_CHECK = re.compile(r"^\s*if\s*\(\$LASTEXITCODE\s+-ne\s+0\)\s*\{\s*throw\b.+\}\s*$")
 
 
@@ -22,7 +23,12 @@ def validate(lines: list[str], expected: set[str], label: str) -> list[str]:
     for index, line in enumerate(lines):
         test = TEST_LINE.fullmatch(line)
         self_check = SELF_LINE.fullmatch(line)
-        if not test and not self_check:
+        py_contract = PY_CONTRACT_LINE.fullmatch(line)
+        if not test and not self_check and not py_contract:
+            continue
+        if py_contract:
+            if index + 1 >= len(lines) or not EXIT_CHECK.fullmatch(lines[index + 1]):
+                issues.append(f"{label}:{index + 1}: missing immediate PowerShell exit-code guard")
             continue
         if test:
             seen.append(test.group(1))
