@@ -35,10 +35,9 @@ internal static class Phase04RecoveryUiSelfCheck
         finally { core.NavigationCompleted -= completed; }
         string javascript = """
             (()=>{
-              window.__r01RecoveryUi={status:"running"};
+              window.__r01RecoveryUi={status:"running",stage:"modules-ready",uiState:"initializing"};
               let stage="modules-ready",resetDispatches=0,logoutCompletions=0;
-              Object.defineProperty(window.__r01RecoveryUi,"stage",
-                {enumerable:true,get:()=>stage});
+              
               const countReset=event=>{
                 if(event.detail?.action==="CommitFullReset"&&event.detail.busy)resetDispatches++;
                 if(event.detail?.action==="Logout"&&event.detail.busy===false)logoutCompletions++;
@@ -64,8 +63,14 @@ internal static class Phase04RecoveryUiSelfCheck
                   ",dashboard="+!!current?.querySelector(".daily-roster-panel")+
                   ",error="+(issue?.textContent||"none").trim().slice(0,180)+"]";
               };
-              Object.defineProperty(window.__r01RecoveryUi,"uiState",
-                {enumerable:true,get:safeUiState});
+              const setStage=next=>{
+                stage=next;
+                if(window.__r01RecoveryUi?.status==="running"){
+                  window.__r01RecoveryUi.stage=next;
+                  try {window.__r01RecoveryUi.uiState=safeUiState();}
+                  catch {window.__r01RecoveryUi.uiState="[DOM transition]";}
+                }
+              };
               async function wait(read,label,timeoutMs=60000){
                 const deadline=performance.now()+timeoutMs;
                 while(performance.now()<deadline){
@@ -88,7 +93,7 @@ internal static class Phase04RecoveryUiSelfCheck
                   typeof window.AltamamDialog?.detailsReview==="function"&&
                   typeof window.AltamamDialog?.alert==="function"&&viewport()
                     ?window.AltamamBridge:null,"shipped bridge and UI modules");
-                stage="session-transition";
+                setStage("session-transition");
                 // After a root reload, boot() may still be resolving the inherited
                 // authenticated session. Do not race its GetCurrentSession or issue
                 // a second native Logout directly from the acceptance script.
@@ -112,48 +117,48 @@ internal static class Phase04RecoveryUiSelfCheck
                     throw Error("real logout control unavailable for recovered session");
                   logoutAction.click();
                 }
-                stage="login-form";
+                setStage("login-form");
                 const auth=await wait(()=>document.querySelector(".app-sidebar")?.hidden===true
                   ?viewport().querySelector(".auth-form"):null,"real login form");
                 auth.querySelector('input[autocomplete="username"]').value="phase04-owner";
                 auth.querySelector('input[type="password"]').value=__OWNER__;
-                stage="founder-authentication";
+                setStage("founder-authentication");
                 auth.requestSubmit();
                 await wait(()=>document.querySelector(".app-sidebar")?.hidden===false&&
                   document.getElementById("logoutAction")?.hidden===false&&
                   (viewport().querySelector(".daily-roster-panel")||
                    viewport().querySelector(".settings-heading")),"real founder login");
-                stage="founder-session-check";
+                setStage("founder-session-check");
                 const authenticated=await api.invoke("GetCurrentSession",{});
                 if(authenticated.data?.username!=="phase04-owner"||
                    !authenticated.data?.sessionNonce)
                   throw Error("real founder session not active before settings navigation");
-                stage="configure-recovery-output";
+                setStage("configure-recovery-output");
                 await api.invoke("SetOutputDirectory",{directory:__OUTPUT__});
-                stage="settings-navigation";
+                setStage("settings-navigation");
                 const settingsNav=document.getElementById("navBtn-settings");
                 if(!settingsNav||settingsNav.hidden||!settingsNav.isConnected)
                   throw Error("real settings navigation control unavailable");
                 settingsNav.click();
                 await wait(()=>button(viewport(),"إنشاء نسخة احتياطية الآن"),"real settings");
-                stage="backup";
+                setStage("backup");
                 const save=button(viewport(),"إنشاء نسخة احتياطية الآن");
                 if(!save||save.disabled)throw Error("native backup control unavailable");
                 save.click();await modal("تأكيد العملية");
                 await wait(()=>!save.disabled&&viewport().textContent.includes("تم إنشاء نسخة مشفرة متحقق منها"),"verified backup");
-                stage="corrupt-inspection";
+                setStage("corrupt-inspection");
                 const inspect=button(viewport(),"اختيار نسخة مشفرة وفحص سلامتها");
                 const preview=button(viewport(),"معاينة الاستعادة دون تنفيذ");
                 if(!inspect||!preview||!preview.disabled)throw Error("restore must start disabled");
                 inspect.click();await wait(()=>!inspect.disabled,"corrupt inspection refusal");
                 if(!preview.disabled)throw Error("corrupt backup enabled preview");
-                stage="verified-inspection";
+                setStage("verified-inspection");
                 inspect.click();await wait(()=>!inspect.disabled&&!preview.disabled,"verified inspection");
                 preview.click();await modal("إغلاق المعاينة");
                 await wait(()=>viewport().textContent.includes("اكتملت المقارنة دون تعديل البيانات"),"read-only preview receipt");
                 if([...viewport().querySelectorAll("button")].some(b=>b.textContent.includes("تنفيذ الاستعادة")))
                   throw Error("disabled restore exposed destructive UI");
-                stage="reset-preview";
+                setStage("reset-preview");
                 button(viewport(),"معاينة التصفير الكامل").click();
                 await modal("الانتقال للتحقق بكلمة المرور");
                 let approve=await wait(()=>button(viewport(),"تأكيد تصفير البرنامج نهائياً"),"reset verification");
@@ -161,7 +166,7 @@ internal static class Phase04RecoveryUiSelfCheck
                 let password=form.querySelector('input[type="password"]'),phrase=form.querySelector('input[type="text"]');
                 if(!approve.disabled)throw Error("reset countdown was skipped");
                 await wait(()=>!approve.disabled,"reset countdown");
-                stage="abandoned-final-reset-confirmation";
+                setStage("abandoned-final-reset-confirmation");
                 password.value=__OWNER__;phrase.value="تصفير جميع البيانات";
                 approve.click();
                 const abandonedConfirm=await wait(()=>button(document.getElementById("appModalBody"),"تأكيد العملية"),"pending final confirmation");
@@ -177,14 +182,14 @@ internal static class Phase04RecoveryUiSelfCheck
                 form=approve.closest('[aria-label="التحقق النهائي من التصفير"]');
                 password=form.querySelector('input[type="password"]');phrase=form.querySelector('input[type="text"]');
                 await wait(()=>!approve.disabled,"fresh countdown");
-                stage="wrong-reset-password";
+                setStage("wrong-reset-password");
                 password.value="Wrong456";phrase.value="تصفير جميع البيانات";
                 approve.click();await modal("تأكيد العملية");
                 await wait(()=>!approve.disabled&&form.querySelector(".admin-warning"),"wrong password refusal");
                 if(password.value!=="")throw Error("rejected password retained in UI");
                 if(!(await api.invoke("GetProvisioningState",{})).data.provisioned)
                   throw Error("wrong reset password changed provisioning");
-                stage="confirmed-reset";
+                setStage("confirmed-reset");
                 const beforeResetLogout=logoutCompletions;
                 password.value=__OWNER__;phrase.value="تصفير جميع البيانات";
                 approve.click();await modal("تأكيد العملية");
@@ -196,19 +201,30 @@ internal static class Phase04RecoveryUiSelfCheck
                 window.__r01RecoveryUi={status:"pass"};
               })().catch(error=>{window.__r01RecoveryUi={status:"failed",reason:stage+": "+error.message};})
                 .finally(()=>document.removeEventListener("altamam:bridge-loading",countReset));
+              return "R01_RECOVERY_INJECTED";
             })();
             """;
         javascript = javascript.Replace("__OWNER__", JsonSerializer.Serialize(ownerPassword), StringComparison.Ordinal)
             .Replace("__OUTPUT__", JsonSerializer.Serialize(output), StringComparison.Ordinal);
-        await core.ExecuteScriptAsync(javascript).ConfigureAwait(true);
+        string acknowledged = await core.ExecuteScriptAsync(javascript).WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(true);
+        if (acknowledged != "\\"R01_RECOVERY_INJECTED\\"")
+            throw new InvalidOperationException("Recovery UI script injection did not return its startup receipt: " + acknowledged);
         MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe injection completed");
+        MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe startup acknowledged");
         string? lastStage = null;
+        int missingStateCount = 0;
         for (int i = 0; i < 1200; i++)
         {
             string? raw = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync(
-                "JSON.stringify(window.__r01RecoveryUi||null)").ConfigureAwait(true));
-            if (raw is not null && raw != "null")
+                "JSON.stringify(window.__r01RecoveryUi||null)").WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(true));
+            if (raw is null || raw == "null")
             {
+                if (++missingStateCount >= 12)
+                    throw new InvalidOperationException("Recovery UI probe lost from browser document after acknowledged injection");
+            }
+            else
+            {
+                missingStateCount = 0;
                 using var state = JsonDocument.Parse(raw);
                 string? status = state.RootElement.GetProperty("status").GetString();
                 if (status == "running" &&
