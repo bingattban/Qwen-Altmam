@@ -192,7 +192,6 @@ async function check(initialMode){
         self.assertIn('PASS R01 real backup restore-preview reset UI and independent encrypted rescue', runner)
         self.assertIn('WaitForExit(240000)', runner)
         self.assertIn('if ($process.ExitCode -ne 0)', runner)
-        self.assertIn('all69CanonicalManifestRoutesOpened = $true', runner) if False else None
         self.assertNotIn('continue-on-error', runner)
         host = (ROOT / "src/AlTamam.DesktopHost/MainWindow.xaml.cs").read_text(encoding="utf-8")
         self.assertIn('"--webview-split-recovery-e2e"', host)
