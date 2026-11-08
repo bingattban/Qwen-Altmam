@@ -59,11 +59,12 @@ public sealed class NativeHostShutdownGateTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         int invocations = 0;
         var work = Enumerable.Range(0, 32).Select(_ =>
-            Task.Run(() => gate.StopAndDrainAsync(async () =>
+            Task.Factory.StartNew(() => gate.StopAndDrainAsync(async () =>
             {
                 Interlocked.Increment(ref invocations);
                 await release.Task;
-            }))).ToArray();
+            }), CancellationToken.None, TaskCreationOptions.None,
+                TaskScheduler.Default)).ToArray();
         Task[] results = await Task.WhenAll(work);
         Assert.All(results, task => Assert.Same(results[0], task));
         Assert.False(gate.IsCompleted);
