@@ -54,11 +54,16 @@ assert.equal(vm.runInContext('class Derived extends Date {}; new Derived() insta
         import json
         probe = """
 const vm=require('node:vm'),assert=require('node:assert/strict');
-const timers=[],root={querySelector:()=>({})};
+const timers=[],sidebar={hidden:true};
+const auth={querySelector:()=>({value:''}),requestSubmit(){sidebar.hidden=false;}};
+const root={querySelector:sel=>sel==='.auth-form'&&sidebar.hidden?auth:
+  sel==='.daily-roster-panel'&&!sidebar.hidden?{}:null,querySelectorAll:()=>[]};
 let calls=0;
 const lateBridge={hasBridge:()=>true,invoke:async()=>{calls++;throw Error('readiness-test-stop');}};
-const context={document:{addEventListener(){},removeEventListener(){},getElementById:()=>root},
-  setTimeout:fn=>{timers.push(fn);return timers.length;},console};
+const context={document:{addEventListener(){},removeEventListener(){},
+    getElementById:id=>id==='appViewport'?root:null,
+    querySelector:sel=>sel==='.app-sidebar'?sidebar:null},
+  location:{hash:'#dashboard'},setTimeout:fn=>{timers.push(fn);return timers.length;},console};
 context.window=context;if(EARLY_BRIDGE)context.AltamamBridge=lateBridge;
 vm.createContext(context);vm.runInContext(SCRIPT,context);
 (async()=>{
