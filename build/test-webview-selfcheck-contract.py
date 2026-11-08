@@ -55,6 +55,13 @@ assert.equal(vm.runInContext('class Derived extends Date {}; new Derived() insta
         self.assertIn('form.dataset.authReady="true"', ui)
         self.assertLess(ui.index('form.addEventListener("submit",async event=>'),
                         ui.index('form.dataset.authReady="true"'))
+        # The UI itself must suppress premature native HTML form submission,
+        # not merely the automated probe: a human can also press Enter early.
+        gate = 'form.addEventListener("submit",event=>{'
+        self.assertIn(gate, ui)
+        self.assertIn('if(form.dataset.authReady!=="true")event.preventDefault();', ui)
+        self.assertLess(ui.index(gate),
+                        ui.index('const provisioning=parseData(await bridge().invoke("GetProvisioningState",{}))'))
 
     def test_recovery_probe_waits_for_late_shipped_bridge_after_root_reload(self):
         source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
