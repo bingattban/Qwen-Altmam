@@ -190,6 +190,13 @@
     const submit=el("button","btn btn-primary","دخول"); submit.type="submit";
     append(form,brand,name.wrapper,pass.wrapper,note,status,submit);
     container.appendChild(form);
+    // The form is visible before its async provisioning check completes.
+    // Suppress the browser's default navigation if Enter is pressed before
+    // the actual async submit handler is installed.
+    submit.disabled=true;
+    form.addEventListener("submit",event=>{
+      if(form.dataset.authReady!=="true")event.preventDefault();
+    });
     try {
       const provisioning=parseData(await bridge().invoke("GetProvisioningState",{}));
       if (provisioning && provisioning.provisioned===false) {
@@ -291,6 +298,7 @@
     // unhandled submit would perform a full document navigation and discard
     // the active WebView2 acceptance probe.
     form.dataset.authReady="true";
+    submit.disabled=false;
   }
 
   async function loadSites() {
