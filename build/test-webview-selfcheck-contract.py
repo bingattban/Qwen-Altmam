@@ -48,14 +48,26 @@ assert.equal(vm.runInContext('class Derived extends Date {}; new Derived() insta
         result = subprocess.run(["node", "-"], input=probe.encode("utf-8"), capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
 
+    def test_recovery_form_submission_waits_for_actual_handler_registration(self):
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
+        ui = (ROOT / "src/AlTamam.WebUI/assets/js/functional-screens.js").read_text(encoding="utf-8")
+        self.assertIn('form?.dataset?.authReady==="true"', source)
+        self.assertIn('form.dataset.authReady="true"', ui)
+        self.assertLess(ui.index('form.addEventListener("submit",async event=>'),
+                        ui.index('form.dataset.authReady="true"'))
+
     def test_recovery_probe_waits_for_late_shipped_bridge_after_root_reload(self):
         source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
         script = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source).group(1)
         import json
+        # The C# host supplies these values at runtime: Node must run the same
+        # post-substitution script, not throw on undefined test placeholders.
+        script = script.replace("__OWNER__", json.dumps("Example123"))
+        script = script.replace("__OUTPUT__", json.dumps("C:/test-recovery"))
         probe = """
 const vm=require('node:vm'),assert=require('node:assert/strict');
 const timers=[],sidebar={hidden:true},logout={hidden:true,isConnected:true};
-const auth={querySelector:()=>({value:''}),requestSubmit(){sidebar.hidden=false;logout.hidden=false;}};
+const auth={dataset:{authReady:'false'},querySelector:()=>({value:''}),requestSubmit(){sidebar.hidden=false;logout.hidden=false;}};
 const root={querySelector:sel=>sel==='.auth-form'&&sidebar.hidden?auth:
   sel==='.daily-roster-panel'&&!sidebar.hidden?{}:null,querySelectorAll:()=>[]};
 let calls=0;
@@ -74,6 +86,7 @@ vm.createContext(context);vm.runInContext(SCRIPT,context);
   context.AltamamFunctional={render(){}};
   context.AltamamAdminSettings={renderSettings(){}};
   context.AltamamDialog={confirm(){},detailsReview(){},alert(){}};
+  auth.dataset.authReady='true'; // native provisioning initialization finished
   for(let i=0;i<10;i++){
     timers.splice(0).forEach(fn=>fn());
     await new Promise(resolve=>setImmediate(resolve));
@@ -96,13 +109,15 @@ vm.createContext(context);vm.runInContext(SCRIPT,context);
         import json
         source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
         script = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source).group(1)
+        script = script.replace("__OWNER__", json.dumps("Example123"))
+        script = script.replace("__OUTPUT__", json.dumps("C:/test-recovery"))
         code = r"""
 const vm=require('node:vm'),assert=require('node:assert/strict');
 async function check(initialMode){
   let mode=initialMode, logoutClicks=0, submits=0;
   const sidebarWasInitiallyVisible=initialMode==='dashboard'||initialMode==='settings';
   const calls=[],sidebar={hidden:mode==='login'||mode==='login-auto-settings'};
-  const auth={querySelector:selector=>({value:''}),requestSubmit(){
+  const auth={dataset:{authReady:'false'},querySelector:selector=>({value:''}),requestSubmit(){
     submits++;mode=initialMode==='login-auto-settings'?'settings':'dashboard';
     sidebar.hidden=false;logoutAction.hidden=false;
   }};
@@ -131,6 +146,9 @@ async function check(initialMode){
   context.AltamamAdminSettings={renderSettings(){}};
   context.AltamamDialog={confirm(){},detailsReview(){},alert(){}};
   vm.createContext(context);vm.runInContext(SCRIPT_JSON,context);
+  for(let i=0;i<6;i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(submits,0,'must not submit form before real handler is ready');
+  auth.dataset.authReady='true';
   for(let i=0;i<3000&&!context.__r01RecoveryUi?.reason;i++)
     await new Promise(resolve=>setImmediate(resolve));
   assert.equal(logoutClicks,sidebarWasInitiallyVisible?1:0,
@@ -391,7 +409,8 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
                          'key:"Escape"', "document.activeElement === opener"):
             self.assertIn(evidence, HOST)
         self.assertIn('TraceWebViewSelfCheck("UI-E2E PASS', HOST)
-        self.assertIn('("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e")', driver)
+        self.assertIn('("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-recovery-e2e")', driver)
+        self.assertIn('("--webview-selfcheck","--webview-bridge-e2e","--webview-split-route-e2e")', driver)
         self.assertIn("PASS actual HTML-C#-SQLCipher-HTML roundtrip", driver)
         self.assertIn("PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher", driver)
         package = (ROOT / "build/test-package-appdata-preservation.ps1").read_text(encoding="utf-8")
