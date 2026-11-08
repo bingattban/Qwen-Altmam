@@ -188,7 +188,7 @@ async function check(initialMode){
         # navigation and hides every native stage when JSON.stringify executes.
         import json
         source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
-        script = re.search(r'string javascript = """\\s*([\\s\\S]*?)\\s*""";', source).group(1)
+        script = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source).group(1)
         probe = r"""
 const vm=require('node:vm'),assert=require('node:assert/strict');
 const ctx={
