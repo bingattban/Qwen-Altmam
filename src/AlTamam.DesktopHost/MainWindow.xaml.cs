@@ -141,6 +141,15 @@ public partial class MainWindow : Window
 
             // Selection occurs in the actual Windows dialog; the candidate is
             // validated with the ORIGINAL SQLCipher key, not a JS file path.
+            var registeredCheck = await new BackupInspectionService(database)
+                .VerifyAsync(selectedFile, CancellationToken.None);
+            if (!registeredCheck.Success)
+            {
+                MessageBox.Show(this,
+                    registeredCheck.UserMessage ?? "بصمة النسخة أو سلامتها غير صحيحة.",
+                    "رفض نسخة غير موثوقة", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             var candidate = await database.InspectEncryptedBackupAsync(selectedFile);
             if (candidate.SchemaVersion != AlTamamDbContext.CurrentSchemaVersion)
             {
