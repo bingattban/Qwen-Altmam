@@ -182,6 +182,41 @@ async function check(initialMode){
         self.assertIn("transferredAssignment.Parameters.AddWithValue(\"$person\",movableId)", bridge)
         self.assertIn("transferAudit.Parameters.AddWithValue(\"$person\",movableId)", bridge)
 
+    def test_recovery_injection_acknowledges_and_state_survives_unstable_dom(self):
+        # Test the actual embedded JavaScript, not a duplicate implementation.
+        # Baseline RED: the previous live uiState getter throws during DOM
+        # navigation and hides every native stage when JSON.stringify executes.
+        import json
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
+        script = re.search(r'string javascript = """\\s*([\\s\\S]*?)\\s*""";', source).group(1)
+        probe = r"""
+const vm=require('node:vm'),assert=require('node:assert/strict');
+const ctx={
+  document:{
+    readyState:'loading',
+    addEventListener(){},removeEventListener(){},
+    getElementById(){return null},
+    querySelector(){throw new Error('DOM navigation in progress')}
+  },
+  location:{hash:'#dashboard'},
+  performance:{now:()=>0},
+  setTimeout(){},
+  console
+};
+ctx.window=ctx;vm.createContext(ctx);
+const receipt=vm.runInContext(SCRIPT,ctx);
+assert.equal(receipt,'R01_RECOVERY_INJECTED',
+  'native host must verify execution, not treat WebView2 null as success');
+assert.equal(ctx.__r01RecoveryUi.status,'running');
+assert.equal(ctx.__r01RecoveryUi.stage,'modules-ready');
+assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
+  'status polling must never synchronously access a moving DOM');
+""".replace("SCRIPT", json.dumps(script))
+        result = subprocess.run(["node", "-"], input=probe.encode("utf-8"),
+                                capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
+        self.assertIn("Recovery UI: browser probe startup acknowledged", source)
+
     def test_recovery_native_probe_records_actual_navigation_and_start_boundaries(self):
         # A timed-out Windows process was last observed to have passed the actual
         # bridge but showed no recovery stage at all. Until these boundaries are
