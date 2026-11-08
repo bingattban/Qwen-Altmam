@@ -592,7 +592,14 @@ public partial class MainWindow : Window
                     core, ResolveBundledWebUiRoot()).ConfigureAwait(true);
                 TraceWebViewSelfCheck("PASS all 69 manifest routes opened in real Windows WebView2");
             }
-            if (syntheticDatabase is not null && fixtureOwnerPassword is not null && fixtureKey is not null && recoveryOutput is not null)
+            // Pre-package Core/Release run the complete native WebView2 suite in
+            // two separately bounded disposable processes: the first proves
+            // modal/bridge/roles/all routes, the second repeats the real bridge
+            // setup and then performs the destructive recovery UI acceptance.
+            // Neither process substitutes fabricated data for live SQLCipher.
+            bool splitRecovery = Environment.GetCommandLineArgs().Contains(
+                "--webview-split-recovery-e2e", StringComparer.Ordinal);
+            if (!splitRecovery && syntheticDatabase is not null && fixtureOwnerPassword is not null && fixtureKey is not null && recoveryOutput is not null)
                 await Phase04RecoveryUiSelfCheck.RunAsync(core, syntheticDatabase, fixtureKey, recoveryOutput,
                     fixtureOwnerPassword).ConfigureAwait(true);
             TraceWebViewSelfCheck("PASS bundled offline WebUI title verified");
