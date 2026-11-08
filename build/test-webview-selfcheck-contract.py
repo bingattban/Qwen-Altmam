@@ -98,17 +98,20 @@ vm.createContext(context);vm.runInContext(SCRIPT,context);
 const vm=require('node:vm'),assert=require('node:assert/strict');
 async function check(initialMode){
   let mode=initialMode, logoutClicks=0, submits=0;
-  const calls=[],sidebar={hidden:mode!=='dashboard'};
+  const sidebarWasInitiallyVisible=initialMode==='dashboard'||initialMode==='settings';
+  const calls=[],sidebar={hidden:mode==='login'||mode==='login-auto-settings'};
   const auth={querySelector:selector=>({value:''}),requestSubmit(){
-    submits++;mode='dashboard';sidebar.hidden=false;
+    submits++;mode=initialMode==='login-auto-settings'?'settings':'dashboard';
+    sidebar.hidden=false;
   }};
   const viewport={querySelector(selector){
     if(selector==='.daily-roster-panel,.auth-form')return {};
     if(selector==='.daily-roster-panel')return mode==='dashboard'?{}:null;
-    if(selector==='.auth-form')return mode==='login'?auth:null;
+    if(selector==='.settings-heading')return mode==='settings'?{}:null;
+    if(selector==='.auth-form')return sidebar.hidden?auth:null;
     return null;
   },querySelectorAll(){return []}};
-  const logoutAction={hidden:mode!=='dashboard',isConnected:true,click(){
+  const logoutAction={hidden:sidebar.hidden,isConnected:true,click(){
     logoutClicks++;mode='login';sidebar.hidden=true;
   }};
   const document={addEventListener(){},removeEventListener(){},
@@ -118,22 +121,29 @@ async function check(initialMode){
   const bridge={hasBridge:()=>true,invoke:async(action)=>{
     calls.push(action);throw Error('native-boundary-stop');
   },setSessionNonce(){}};
-  const context={document,location:{hash:'#dashboard'},console,setTimeout};
+  // Fast deterministic scheduling exposes a 60-second UI readiness bug in milliseconds.
+  const context={document,location:{hash:'#dashboard'},console,
+    setTimeout:callback=>setImmediate(callback)};
   context.window=context;context.AltamamBridge=bridge;
   context.AltamamFunctional={render(){}};
   context.AltamamAdminSettings={renderSettings(){}};
   context.AltamamDialog={confirm(){},detailsReview(){},alert(){}};
   vm.createContext(context);vm.runInContext(SCRIPT_JSON,context);
-  for(let i=0;i<30&&!context.__r01RecoveryUi?.reason;i++)
+  for(let i=0;i<3000&&!context.__r01RecoveryUi?.reason;i++)
     await new Promise(resolve=>setImmediate(resolve));
-  assert.equal(logoutClicks,initialMode==='dashboard'?1:0,
+  assert.equal(logoutClicks,sidebarWasInitiallyVisible?1:0,
     'logout must use the actual shipped UI when a prior session exists');
   assert.equal(submits,1,'login form must submit through the real UI');
   assert.deepEqual(calls,['GetCurrentSession'],
     'no redundant native Logout/provisioning requests during auth transition');
   assert.match(context.__r01RecoveryUi.reason,/native-boundary-stop/);
 }
-(async()=>{await check('dashboard');await check('login');})().catch(e=>{
+(async()=>{
+  await check('dashboard');
+  await check('settings'); // actual default-drive-unavailable auto-navigation
+  await check('login');
+  await check('login-auto-settings');
+})().catch(e=>{
   console.error(e);process.exitCode=1;
 });
 """.replace("SCRIPT_JSON", json.dumps(script))
