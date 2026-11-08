@@ -62,6 +62,27 @@ public sealed class NativeRestoreActivationCoordinator
                 grant, actor, cancellationToken).ConfigureAwait(false);
             if (prepared is null) return null;
 
+            // The offline key comes exclusively from the Windows native key
+            // store. Refuse a wrong/replaced key BEFORE requesting the final
+            // confirmation and before stopping an otherwise healthy host.
+            try
+            {
+                var keyedStage = await EncryptedBackupInspector.VerifyAsync(
+                    prepared.StageFilePath, _database.DatabasePath,
+                    existingDatabaseKeyHex, cancellationToken).ConfigureAwait(false);
+                if (keyedStage.SchemaVersion != AlTamamDbContext.CurrentSchemaVersion ||
+                    !string.Equals(keyedStage.Sha256, prepared.StageSha256,
+                        StringComparison.OrdinalIgnoreCase))
+                    return null;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                InvalidDataException or ArgumentException or InvalidOperationException or
+                Microsoft.Data.Sqlite.SqliteException)
+            {
+                return null;
+            }
+
             // Stage/rescue were verified by SQLCipher. The native host now
             // presents their counts and SHA to the same WPF administrator.
             // A final warning must be explicitly accepted, never inferred
