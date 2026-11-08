@@ -83,6 +83,59 @@ vm.createContext(context);vm.runInContext(SCRIPT,context);
                 result = subprocess.run(["node", "-"], input=code.encode("utf-8"), capture_output=True, timeout=20)
                 self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
 
+    def test_recovery_login_uses_real_ui_session_transition_not_extra_native_logout(self):
+        # Run the ACTUAL embedded browser script against both settled views.
+        # This JS-only contract is not a substitute for real Windows SQLCipher E2E.
+        import json
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
+        script = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source).group(1)
+        code = r"""
+const vm=require('node:vm'),assert=require('node:assert/strict');
+async function check(initialMode){
+  let mode=initialMode, logoutClicks=0, submits=0;
+  const calls=[],sidebar={hidden:mode!=='dashboard'};
+  const auth={querySelector:selector=>({value:''}),requestSubmit(){
+    submits++;mode='dashboard';sidebar.hidden=false;
+  }};
+  const viewport={querySelector(selector){
+    if(selector==='.daily-roster-panel,.auth-form')return {};
+    if(selector==='.daily-roster-panel')return mode==='dashboard'?{}:null;
+    if(selector==='.auth-form')return mode==='login'?auth:null;
+    return null;
+  },querySelectorAll(){return []}};
+  const logoutAction={hidden:mode!=='dashboard',isConnected:true,click(){
+    logoutClicks++;mode='login';sidebar.hidden=true;
+  }};
+  const document={addEventListener(){},removeEventListener(){},
+    getElementById(id){return id==='appViewport'?viewport:
+      id==='logoutAction'?logoutAction:null},
+    querySelector(selector){return selector==='.app-sidebar'?sidebar:null}};
+  const bridge={hasBridge:()=>true,invoke:async(action)=>{
+    calls.push(action);throw Error('native-boundary-stop');
+  },setSessionNonce(){}};
+  const context={document,location:{hash:'#dashboard'},console,setTimeout};
+  context.window=context;context.AltamamBridge=bridge;
+  context.AltamamFunctional={render(){}};
+  context.AltamamAdminSettings={renderSettings(){}};
+  context.AltamamDialog={confirm(){},detailsReview(){},alert(){}};
+  vm.createContext(context);vm.runInContext(SCRIPT_JSON,context);
+  for(let i=0;i<30&&!context.__r01RecoveryUi?.reason;i++)
+    await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(logoutClicks,initialMode==='dashboard'?1:0,
+    'logout must use the actual shipped UI when a prior session exists');
+  assert.equal(submits,1,'login form must submit through the real UI');
+  assert.deepEqual(calls,['GetCurrentSession'],
+    'no redundant native Logout/provisioning requests during auth transition');
+  assert.match(context.__r01RecoveryUi.reason,/native-boundary-stop/);
+}
+(async()=>{await check('dashboard');await check('login');})().catch(e=>{
+  console.error(e);process.exitCode=1;
+});
+""".replace("SCRIPT_JSON", json.dumps(script))
+        result = subprocess.run(["node", "-"], input=code.encode("utf-8"),
+                                capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
+
     def test_recovery_ui_uses_real_gateway_and_preserves_independent_rescue_check(self):
         source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
         match = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source)
