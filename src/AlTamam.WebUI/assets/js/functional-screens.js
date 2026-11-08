@@ -286,6 +286,11 @@
       } catch(e) { showError(status,e); }
       finally { submit.disabled=false; }
     });
+    // The login form is visible before GetProvisioningState resolves, but
+    // requestSubmit() is unsafe until this handler is attached: an early
+    // unhandled submit would perform a full document navigation and discard
+    // the active WebView2 acceptance probe.
+    form.dataset.authReady="true";
   }
 
   async function loadSites() {
