@@ -392,6 +392,16 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
         self.assertLess(RELEASE.index("needs: build-test"),
                         RELEASE.index("test-package-appdata-preservation.ps1"))
 
+    def test_every_windows_manifest_contract_exit_code_is_checked_immediately(self):
+        for workflow in (CORE, RELEASE):
+            self.assertIn(
+                "python build/test-webview-selfcheck-contract.py\n"
+                "          if ($LASTEXITCODE -ne 0) { throw 'Windows real WebView2 smoke-test contract failed' }\n"
+                "          python build/test-local-reminders-contract.py\n"
+                "          if ($LASTEXITCODE -ne 0) { throw 'Local reminders contract failed' }",
+                workflow,
+            )
+
     def test_contract_is_run_by_both_parallel_windows_workflows_before_build(self):
         for workflow in (CORE, RELEASE):
             self.assertIn("python build/test-webview-selfcheck-contract.py", workflow)
