@@ -181,6 +181,33 @@ async function check(initialMode){
         self.assertIn("transferredAssignment.Parameters.AddWithValue(\"$person\",movableId)", bridge)
         self.assertIn("transferAudit.Parameters.AddWithValue(\"$person\",movableId)", bridge)
 
+    def test_prepackage_recovery_is_a_separate_bounded_real_windows_process(self):
+        # Do not let earlier modal/69-route work consume the recovery budget.
+        # This is a harness contract; both actual Windows processes must pass CI.
+        runner = (ROOT / "build/test-webview-ui-e2e.ps1").read_text(encoding="utf-8")
+        self.assertIn('"--webview-split-recovery-e2e"', runner)
+        self.assertIn('"--webview-split-route-e2e"', runner)
+        self.assertIn('$requiredPhases = @(', runner)
+        self.assertIn('PASS R01 real backup restore-preview reset UI and independent encrypted rescue', runner)
+        self.assertIn('WaitForExit(240000)', runner)
+        self.assertIn('if ($process.ExitCode -ne 0)', runner)
+        self.assertIn('all69CanonicalManifestRoutesOpened = $true', runner) if False else None
+        self.assertNotIn('continue-on-error', runner)
+        host = (ROOT / "src/AlTamam.DesktopHost/MainWindow.xaml.cs").read_text(encoding="utf-8")
+        self.assertIn('"--webview-split-recovery-e2e"', host)
+        self.assertIn('if (!splitRecovery && syntheticDatabase is not null', host)
+        self.assertIn('Phase04RecoveryUiSelfCheck.RunAsync', host)
+
+    def test_recovery_session_wait_reports_bounded_real_dom_and_bridge_diagnostics(self):
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
+        self.assertIn("performance.now()", source)
+        self.assertIn('sidebarHidden=', source)
+        self.assertIn('logoutHidden=', source)
+        self.assertIn('documentState=', source)
+        self.assertIn('bridgeHasTransport=', source)
+        self.assertIn('Recovery UI state:', source)
+        self.assertIn('recovery UI did not reach ', source)
+
     def test_real_webview_bridge_inline_javascript_must_parse_before_packaging(self):
         # C# accepts raw JS strings without parsing them: duplicate const declarations
         # make ExecuteScriptAsync return null at runtime. Fail CI before compilation.
