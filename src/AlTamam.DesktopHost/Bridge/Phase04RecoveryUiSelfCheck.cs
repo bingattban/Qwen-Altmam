@@ -12,6 +12,7 @@ internal static class Phase04RecoveryUiSelfCheck
     public static async Task RunAsync(CoreWebView2 core, AlTamamDbContext database,
         string databaseKey, string output, string ownerPassword)
     {
+        MainWindow.TraceWebViewSelfCheck("Recovery UI: entered native fixture");
         long Count(AlTamamDbContext db, string table)
         {
             using var c = db.CreateOpenConnection(); using var q = c.CreateCommand();
@@ -19,14 +20,17 @@ internal static class Phase04RecoveryUiSelfCheck
             return Convert.ToInt64(q.ExecuteScalar());
         }
         long people = Count(database, "Persons"), users = Count(database, "Users");
+        MainWindow.TraceWebViewSelfCheck("Recovery UI: native person/user census complete");
         var navigation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         EventHandler<CoreWebView2NavigationCompletedEventArgs> completed = (_, args) => navigation.TrySetResult(args.IsSuccess);
         core.NavigationCompleted += completed;
         try
         {
+            MainWindow.TraceWebViewSelfCheck("Recovery UI: navigation requested");
             core.Navigate(LocalWebUiOrigin.EntryPointUrl);
             if (!await navigation.Task.WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true))
                 throw new InvalidOperationException("Recovery UI root navigation failed");
+            MainWindow.TraceWebViewSelfCheck("Recovery UI: root navigation completed");
         }
         finally { core.NavigationCompleted -= completed; }
         string javascript = """
@@ -197,6 +201,7 @@ internal static class Phase04RecoveryUiSelfCheck
         javascript = javascript.Replace("__OWNER__", JsonSerializer.Serialize(ownerPassword), StringComparison.Ordinal)
             .Replace("__OUTPUT__", JsonSerializer.Serialize(output), StringComparison.Ordinal);
         await core.ExecuteScriptAsync(javascript).ConfigureAwait(true);
+        MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe injection completed");
         string? lastStage = null;
         for (int i = 0; i < 1200; i++)
         {
