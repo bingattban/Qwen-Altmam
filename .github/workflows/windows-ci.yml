@@ -92,6 +92,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Local reminders contract failed' }
           python build/test-native-restore-host-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Native restore WPF host security contract failed' }
+          python build/test-native-host-shutdown-lifecycle.py
+          if ($LASTEXITCODE -ne 0) { throw 'Native host shutdown lifecycle contract failed' }
           python build/test-webview-recovery-fixture-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows recovery fixture contract failed' }
           node build/test-phase04-bridge-schema.js
