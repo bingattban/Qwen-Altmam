@@ -189,6 +189,34 @@ public sealed class NativeRestoreActivationCoordinatorTests : IDisposable
         Assert.Equal("changed-after-backup", ReadMarker(_live));
     }
 
+    [Fact]
+    public async Task CanceledInFlightQuiescence_CannotHangOrStartDatabaseReplacement()
+    {
+        await InitializeAsync();
+        using var canceled = new CancellationTokenSource();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var neverDrains = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = new NativeRestoreActivationCoordinator(_db, _sessions);
+        Task<NativeRestoreActivationCoordinator.Result?> restoring =
+            coordinator.TryActivateAsync(
+                _founder, Password, _candidate, _sha, Key,
+                (_, _) => Task.FromResult(true),
+                _ =>
+                {
+                    entered.SetResult();
+                    return neverDrains.Task;
+                },
+                canceled.Token);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        canceled.Cancel();
+        Task completed = await Task.WhenAny(restoring, Task.Delay(TimeSpan.FromSeconds(3)));
+        Assert.Same(restoring, completed); // RED if the native drain ignores cancellation
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => restoring);
+        Assert.Equal("changed-after-backup", ReadMarker(_live));
+        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(_live)!,
+            ".altamam-restore-activation.pending.json")));
+    }
+
     public void Dispose()
     {
         _db?.Dispose();
