@@ -140,6 +140,24 @@ public sealed class NativeRestoreActivationCoordinatorTests : IDisposable
         Assert.Equal("changed-after-backup", ReadMarker(_live));
     }
 
+    [Fact]
+    public async Task WrongActivationKey_IsRejectedBeforeFinalApprovalOrHostShutdown()
+    {
+        await InitializeAsync();
+        bool reviewed = false, drained = false;
+        var coordinator = new NativeRestoreActivationCoordinator(_db, _sessions);
+        var outcome = await coordinator.TryActivateAsync(
+            _founder, Password, _candidate, _sha, new string('D', 64),
+            (_, _) => { reviewed = true; return Task.FromResult(true); },
+            _ => { drained = true; return Task.CompletedTask; });
+        Assert.Null(outcome);
+        Assert.False(reviewed);
+        Assert.False(drained);
+        Assert.Equal("changed-after-backup", ReadMarker(_live));
+        Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(_live)!,
+            ".altamam-restore-activation.pending.json")));
+    }
+
     public void Dispose()
     {
         _db?.Dispose();
