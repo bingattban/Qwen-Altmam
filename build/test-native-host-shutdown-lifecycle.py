@@ -24,7 +24,8 @@ class NativeShutdownLifecycle(unittest.TestCase):
         self.assertNotIn("Closed += async", HOST)
 
     def test_no_early_mutex_release_or_unsafe_gate_success(self):
-        self.assertIn("TaskCreationOptions.RunContinuationsAsynchronously", APP)
+        self.assertIn("await nativeShutdown().ConfigureAwait(false)", APP)
+        self.assertIn("lock (_sync) _completed = true", APP)
         self.assertIn("IsCompleted", APP)
         self.assertIn("StopAndDrainAsync", APP)
         self.assertIn("await", APP)
