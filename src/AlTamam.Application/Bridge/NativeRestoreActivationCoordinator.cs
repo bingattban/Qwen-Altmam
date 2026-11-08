@@ -118,7 +118,11 @@ public sealed class NativeRestoreActivationCoordinator
             // in-flight WebView operations and scheduled tasks, and dispose
             // all SQLCipher contexts. Never invoke from a bridge handler.
             enteredShutdown = true;
+            // A broken or busy host must never hang a destructive operation
+            // forever. An aborted/timed-out drain CANNOT reach File.Replace.
+            // The native host closes rather than resumes after this boundary.
             await stopBridgeSchedulersAndDatabase(cancellationToken)
+                .WaitAsync(TimeSpan.FromMinutes(2), cancellationToken)
                 .ConfigureAwait(false);
 
             // No cancellation is allowed after the irreversible boundary.
