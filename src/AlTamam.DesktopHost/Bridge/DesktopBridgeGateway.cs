@@ -39,28 +39,19 @@ public sealed class DesktopBridgeGateway
             ? principal : null;
     }
 
-    private async Task TrackValidatedSessionAsync(string requestJson,
-        BridgeResponse response)
+    private async Task TrackValidatedSessionAsync(BridgeResponse response)
     {
-        if (!response.Success) return;
-        string? nonce = null;
-        if (response.Data is System.Text.Json.Nodes.JsonObject data &&
-            data["sessionNonce"] is System.Text.Json.Nodes.JsonNode issued &&
-            issued.GetValueKind() == JsonValueKind.String)
-            nonce = issued.GetValue<string>();
-        if (string.IsNullOrWhiteSpace(nonce))
-        {
-            try
-            {
-                using var message = JsonDocument.Parse(requestJson);
-                if (message.RootElement.TryGetProperty("sessionNonce", out var supplied) &&
-                    supplied.ValueKind == JsonValueKind.String)
-                    nonce = supplied.GetString();
-            }
-            catch (JsonException) { return; }
-        }
+        if (!response.Success ||
+            response.Data is not System.Text.Json.Nodes.JsonObject data ||
+            data["sessionNonce"] is not System.Text.Json.Nodes.JsonNode issued ||
+            issued.GetValueKind() != JsonValueKind.String) return;
+        string? nonce = issued.GetValue<string>();
         if (string.IsNullOrEmpty(nonce) ||
-            !BridgeProtocol.IsValidSessionNonceFormat(nonce)) return;
+            !BridgeProtocol.IsValidSessionNonceFormat(nonce) ||
+            string.Equals(nonce, Volatile.Read(ref _lastTrustedSessionNonce),
+                StringComparison.Ordinal)) return;
+        // Only login/session responses carry a session nonce. All 103 other
+        // bridge actions avoid an extra SQLCipher read on every request.
         var principal = await _services.ResolveSessionAsync(nonce).ConfigureAwait(true);
         if (principal is not null)
             Interlocked.Exchange(ref _lastTrustedSessionNonce, nonce);
@@ -201,7 +192,7 @@ public sealed class DesktopBridgeGateway
                 isMainFrame,
                 nonce => _services.ResolveSessionAsync(nonce)).ConfigureAwait(true);
 
-            await TrackValidatedSessionAsync(raw, result.Response).ConfigureAwait(true);
+            await TrackValidatedSessionAsync(result.Response).ConfigureAwait(true);
 
             // A successful authenticated session check is not enough to
             // refresh inactivity: verify actual recent Windows user input.
