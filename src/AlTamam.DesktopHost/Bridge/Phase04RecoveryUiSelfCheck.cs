@@ -33,6 +33,8 @@ internal static class Phase04RecoveryUiSelfCheck
             (()=>{
               window.__r01RecoveryUi={status:"running"};
               let stage="modules-ready",resetDispatches=0,logoutCompletions=0;
+              Object.defineProperty(window.__r01RecoveryUi,"stage",
+                {enumerable:true,get:()=>stage});
               const countReset=event=>{
                 if(event.detail?.action==="CommitFullReset"&&event.detail.busy)resetDispatches++;
                 if(event.detail?.action==="Logout"&&event.detail.busy===false)logoutCompletions++;
@@ -174,6 +176,7 @@ internal static class Phase04RecoveryUiSelfCheck
         javascript = javascript.Replace("__OWNER__", JsonSerializer.Serialize(ownerPassword), StringComparison.Ordinal)
             .Replace("__OUTPUT__", JsonSerializer.Serialize(output), StringComparison.Ordinal);
         await core.ExecuteScriptAsync(javascript).ConfigureAwait(true);
+        string? lastStage = null;
         for (int i = 0; i < 1200; i++)
         {
             string? raw = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync(
@@ -182,6 +185,16 @@ internal static class Phase04RecoveryUiSelfCheck
             {
                 using var state = JsonDocument.Parse(raw);
                 string? status = state.RootElement.GetProperty("status").GetString();
+                if (status == "running" &&
+                    state.RootElement.TryGetProperty("stage", out var stageProperty))
+                {
+                    string? stageName = stageProperty.GetString();
+                    if (stageName != lastStage)
+                    {
+                        MainWindow.TraceWebViewSelfCheck("Recovery UI stage: " + stageName);
+                        lastStage = stageName;
+                    }
+                }
                 if (status == "failed") throw new InvalidOperationException(state.RootElement.GetProperty("reason").GetString());
                 if (status == "pass")
                 {
