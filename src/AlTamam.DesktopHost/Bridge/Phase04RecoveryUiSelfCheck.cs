@@ -9,6 +9,62 @@ namespace AlTamam.DesktopHost.Bridge;
 // Runs only after the original independent SQL assertions, on the disposable DB.
 internal static class Phase04RecoveryUiSelfCheck
 {
+    /// <summary>
+    /// A fast independent REAL SQLCipher fixture for the second mandatory
+    /// Windows WebView2 process. The first process already executes the
+    /// expensive 69-route, three-role and native bridge contract suite.
+    /// This one proves recovery with real encrypted *nonempty* personnel
+    /// and a real Argon2id founding account; nothing is mocked or skipped
+    /// in the subsequent backup/preview/reset/rescue flow.
+    /// </summary>
+    public static async Task<string> PrepareSyntheticRecoveryFixtureAsync(
+        AlTamamDbContext database)
+    {
+        string password = "Abc123!" + Guid.NewGuid().ToString("N");
+        var services = new AlTamam.Application.Bridge.BridgeSharedServices(database);
+        var created = await services.ProvisionFirstAdministratorAsync(
+            "phase04-owner", password, CancellationToken.None).ConfigureAwait(false);
+        if (!created.Success)
+            throw new InvalidOperationException(
+                "Recovery fixture founding account creation failed: " +
+                created.ErrorCode);
+
+        using (var connection = database.CreateOpenConnection())
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                INSERT INTO Persons(PersonId,CurrentVisibleName,NormalizedName,
+                    CurrentServiceNumberA,NormalizedServiceNumberA,
+                    FirstRecordedLocalDate,FirstRecordedAtUtc,
+                    OrganizationalStatus,ActiveFlag,RowVersion)
+                VALUES('TST-RECOVERY-RESCUE-PERSON','فرد استعادة تجريبي',
+                    'فرد استعادة تجريبي','00007991','00007991',
+                    $date,$created,1,1,1);
+                """;
+            command.Parameters.AddWithValue("$date",
+                DateTime.Now.ToString("yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$created", DateTimeOffset.UtcNow.ToString("O"));
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
+        // Failure here must remain visible before the browser probe; a
+        // synthetic empty database could otherwise pass an empty-to-empty reset.
+        using (var connection = database.CreateOpenConnection())
+        using (var census = connection.CreateCommand())
+        {
+            census.CommandText =
+                "SELECT (SELECT COUNT(*) FROM Persons), (SELECT COUNT(*) FROM Users);";
+            using var reader = await census.ExecuteReaderAsync().ConfigureAwait(false);
+            if (!await reader.ReadAsync().ConfigureAwait(false) ||
+                reader.GetInt64(0) < 1 || reader.GetInt64(1) != 1)
+                throw new InvalidDataException(
+                    "Recovery fixture must preserve a real person and founding user.");
+        }
+        if (!database.HasValidIntegrity())
+            throw new InvalidDataException("Recovery fixture SQLCipher integrity failed.");
+        return password;
+    }
+
     public static async Task RunAsync(CoreWebView2 core, AlTamamDbContext database,
         string databaseKey, string output, string ownerPassword)
     {
