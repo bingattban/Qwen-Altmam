@@ -379,7 +379,7 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
         # A single 180s process previously timed out on win-x86 after the bridge
         # passed, without ever finishing the 69-route evidence gate.
         self.assertIn('$bridgeTimeoutSeconds = Get-PackagedBridgeTimeoutSeconds -Runtime $ExpectedArch', package)
-        self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e") $bridgeTimeoutSeconds', package)
+        self.assertIn('Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e","--webview-split-recovery-e2e") $bridgeTimeoutSeconds', package)
         watchdog = (ROOT / "build/package-process-watchdog.ps1").read_text(encoding="utf-8")
         self.assertIn('function Get-PackagedBridgeTimeoutSeconds', watchdog)
         self.assertIn('"win-x86" { return 480 }', watchdog)
@@ -398,6 +398,40 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
             self.assertIn("runtime: " + runtime, RELEASE)
         self.assertLess(RELEASE.index("needs: build-test"),
                         RELEASE.index("test-package-appdata-preservation.ps1"))
+
+    def test_packaged_bridge_does_not_rerun_prepackage_recovery_after_long_x86_fixture(self):
+        # Regression: x86 packaged Phase04 bridge reaches real recovery *again*
+        # after a measured >5-minute SQLCipher/69-route workload. The unwanted
+        # extra recovery session check timed out; pre-package Core and Release
+        # already require recovery in their own isolated real Windows processes.
+        package = (ROOT / "build/test-package-appdata-preservation.ps1").read_text(encoding="utf-8")
+        run = (ROOT / "build/test-webview-ui-e2e.ps1").read_text(encoding="utf-8")
+        host = (ROOT / "src/AlTamam.DesktopHost/MainWindow.xaml.cs").read_text(encoding="utf-8")
+        import re
+        match = re.search(r'Run-Checked \$file @\(([^)]*)\) \$bridgeTimeoutSeconds', package)
+        self.assertIsNotNone(match, "packaged SQLCipher must use an actual bounded Windows process")
+        args = re.findall(r'"([^"]+)"', match.group(1))
+        self.assertEqual(args, [
+            "--webview-selfcheck",
+            "--webview-ui-e2e",
+            "--webview-bridge-e2e",
+            "--webview-split-route-e2e",
+            "--webview-split-recovery-e2e"
+        ], "the packaged process must not repeat the independently proven recovery suite")
+        # Both x86/x64 Portable and Installer must still run the REAL bridge.
+        for expected in ('Run-PackagedWebViewChecked $portableExe "Portable ZIP" $true',
+                         'Run-PackagedWebViewChecked $installedExe "Installer" $true',
+                         'Run-Checked $file @("--webview-selfcheck","--webview-route-e2e") 120'):
+            self.assertIn(expected, package)
+        self.assertIn("if (!splitRecovery && syntheticDatabase is not null", host)
+        self.assertIn("await Phase04RecoveryUiSelfCheck.RunAsync", host)
+        self.assertIn('Name = "recovery"', run)
+        self.assertIn('Name = "modal-bridge-routes"', run)
+        self.assertIn('PASS R01 real backup restore-preview reset UI and independent encrypted rescue', run)
+        self.assertIn('if ($process.ExitCode -ne 0)', run)
+        self.assertIn('if (-not $passed) { throw', package)
+        for workflow in (CORE, RELEASE):
+            self.assertIn('pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1', workflow)
 
     def test_every_windows_manifest_contract_exit_code_is_checked_immediately(self):
         for workflow in (CORE, RELEASE):

@@ -57,7 +57,14 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verify
                     # Use the measured architecture-specific cap for BOTH actual
                     # customer binaries. All mandatory success evidence stays required.
                     $bridgeTimeoutSeconds = Get-PackagedBridgeTimeoutSeconds -Runtime $ExpectedArch
-                    Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e") $bridgeTimeoutSeconds
+                    # Pre-package Windows Core + Release already REQUIRE the complete
+                    # recovery/reset UI in a separate real WebView2+SQLCipher process.
+                    # The shipped x86/x64 bridge acceptance must prove the packed
+                    # bridge/UI/SQLCipher behavior, not accidentally repeat recovery
+                    # after an expensive five-minute native fixture. Independent
+                    # packaged 69-route acceptance still runs below in another process.
+                    # Neither flag bypasses the mandatory pre-package recovery suite.
+                    Run-Checked $file @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-route-e2e","--webview-split-recovery-e2e") $bridgeTimeoutSeconds
                     Assert-True (Test-Path -LiteralPath $trace -PathType Leaf) "No packaged native bridge trace: $phase"
                     $text = Get-Content -LiteralPath $trace -Raw
                     foreach ($required in @(
