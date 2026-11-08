@@ -79,7 +79,12 @@ internal static class Phase04RecoveryUiSelfCheck
                   if(!sidebar)return null;
                   if(sidebar.hidden===true&&viewport().querySelector(".auth-form"))
                     return "login";
-                  if(sidebar.hidden===false&&viewport().querySelector(".daily-roster-panel"))
+                  // The shipped UI may automatically display settings instead of
+                  // the daily roster when its backup/output drive is unavailable.
+                  // A visible native logout control is the actual authenticated
+                  // UI signal, independently of which legitimate screen is open.
+                  if(sidebar.hidden===false&&
+                     document.getElementById("logoutAction")?.hidden===false)
                     return "authenticated";
                   return null;
                 },"settled initial session view");
@@ -96,8 +101,10 @@ internal static class Phase04RecoveryUiSelfCheck
                 auth.querySelector('input[type="password"]').value=__OWNER__;
                 stage="founder-authentication";
                 auth.requestSubmit();
-                await wait(()=>viewport().querySelector(".daily-roster-panel")&&
-                  document.querySelector(".app-sidebar")?.hidden===false,"real founder login");
+                await wait(()=>document.querySelector(".app-sidebar")?.hidden===false&&
+                  document.getElementById("logoutAction")?.hidden===false&&
+                  (viewport().querySelector(".daily-roster-panel")||
+                   viewport().querySelector(".settings-heading")),"real founder login");
                 stage="founder-session-check";
                 const authenticated=await api.invoke("GetCurrentSession",{});
                 if(authenticated.data?.username!=="phase04-owner"||
