@@ -20,6 +20,52 @@ public sealed class DesktopBridgeGateway
     private readonly NativeOfflineOperationDrain _operations = new();
     private CoreWebView2? _core;
 
+    // Only the session nonce observed after a successful authenticated native
+    // dispatcher response is eligible for a separate physical WPF operation.
+    // This is not authority by itself: every native command re-resolves the
+    // current account/role from SQLCipher and asks for its fresh password.
+    private string? _lastTrustedSessionNonce;
+    internal BridgeSharedServices Sessions => _services;
+
+    public async Task<BridgePrincipal?> CurrentGeneralAdministratorAsync(
+        CancellationToken ct = default)
+    {
+        if (_operations.IsStopped) return null;
+        string? nonce = Volatile.Read(ref _lastTrustedSessionNonce);
+        if (string.IsNullOrEmpty(nonce)) return null;
+        var principal = await _services.ResolveSessionAsync(nonce, ct)
+            .ConfigureAwait(false);
+        return principal?.Role == AlTamam.Domain.Enums.UserRole.GeneralAdministration
+            ? principal : null;
+    }
+
+    private async Task TrackValidatedSessionAsync(string requestJson,
+        BridgeResponse response)
+    {
+        if (!response.Success) return;
+        string? nonce = null;
+        if (response.Data is System.Text.Json.Nodes.JsonObject data &&
+            data["sessionNonce"] is System.Text.Json.Nodes.JsonNode issued &&
+            issued.GetValueKind() == JsonValueKind.String)
+            nonce = issued.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(nonce))
+        {
+            try
+            {
+                using var message = JsonDocument.Parse(requestJson);
+                if (message.RootElement.TryGetProperty("sessionNonce", out var supplied) &&
+                    supplied.ValueKind == JsonValueKind.String)
+                    nonce = supplied.GetString();
+            }
+            catch (JsonException) { return; }
+        }
+        if (string.IsNullOrEmpty(nonce) ||
+            !BridgeProtocol.IsValidSessionNonceFormat(nonce)) return;
+        var principal = await _services.ResolveSessionAsync(nonce).ConfigureAwait(true);
+        if (principal is not null)
+            Interlocked.Exchange(ref _lastTrustedSessionNonce, nonce);
+    }
+
     // Genuine browser mouse/key/touch input is visible to Windows via
     // GetLastInputInfo even when WebView2 does not bubble input to WPF.
     // A JavaScript flag is NOT sufficient evidence of human activity.
@@ -154,6 +200,8 @@ public sealed class DesktopBridgeGateway
                 originUri,
                 isMainFrame,
                 nonce => _services.ResolveSessionAsync(nonce)).ConfigureAwait(true);
+
+            await TrackValidatedSessionAsync(raw, result.Response).ConfigureAwait(true);
 
             // A successful authenticated session check is not enough to
             // refresh inactivity: verify actual recent Windows user input.
