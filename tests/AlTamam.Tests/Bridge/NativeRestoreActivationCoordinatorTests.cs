@@ -158,6 +158,37 @@ public sealed class NativeRestoreActivationCoordinatorTests : IDisposable
             ".altamam-restore-activation.pending.json")));
     }
 
+    [Fact]
+    public async Task RegisteredEncryptedBackupWithMismatchedCatalogSha_CannotBeActivated()
+    {
+        await InitializeAsync();
+        using (var connection = _db.CreateOpenConnection())
+        using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO BackupHistory(BackupId,BackupFilePath,Sha256Checksum,
+                    SchemaVersion,IsAutomatic,VerificationPassed,KeyProtectionMode,
+                    CreatedByUserId,CreatedAtUtc,NotesArabic)
+                VALUES('TST-RESTORE-CATALOG-MISMATCH',$path,$digest,$version,0,1,
+                    'SQLCipher','USR-SYSTEM','2026-11-08T00:00:00Z','فحص بصمة النسخة');
+                """;
+            insert.Parameters.AddWithValue("$path", Path.GetFullPath(_candidate));
+            insert.Parameters.AddWithValue("$digest", new string('A', 64));
+            insert.Parameters.AddWithValue("$version", AlTamamDbContext.CurrentSchemaVersion);
+            await insert.ExecuteNonQueryAsync();
+        }
+        bool reviewed = false, drained = false;
+        var coordinator = new NativeRestoreActivationCoordinator(_db, _sessions);
+        var outcome = await coordinator.TryActivateAsync(
+            _founder, Password, _candidate, _sha, Key,
+            (_, _) => { reviewed = true; return Task.FromResult(true); },
+            _ => { drained = true; return Task.CompletedTask; });
+        Assert.Null(outcome);
+        Assert.False(reviewed);
+        Assert.False(drained);
+        Assert.Equal("changed-after-backup", ReadMarker(_live));
+    }
+
     public void Dispose()
     {
         _db?.Dispose();
