@@ -216,6 +216,8 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
                                 capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
         self.assertIn("Recovery UI: browser probe startup acknowledged", source)
+        # Verify native C# receipt comparison is compilable without an escaped-quote slip.
+        self.assertIn('if (acknowledged != JsonSerializer.Serialize("R01_RECOVERY_INJECTED"))', source)
 
     def test_recovery_native_probe_records_actual_navigation_and_start_boundaries(self):
         # A timed-out Windows process was last observed to have passed the actual
