@@ -37,6 +37,22 @@ internal static class Phase04RecoveryUiSelfCheck
             (()=>{
               window.__r01RecoveryUi={status:"running",stage:"modules-ready",uiState:"initializing"};
               let stage="modules-ready",resetDispatches=0,logoutCompletions=0;
+              // Test-only, one-way browser -> native event transport. Avoid asking
+              // WebView2 to synchronously evaluate JavaScript while a live native
+              // WebMessageReceived handler or a UI navigation is settling.
+              // The production application title is unchanged.
+              const titlePrefix="ALTAMAM_R01_RECOVERY:";
+              let reportSequence=0;
+              const reportProgress=()=>{
+                const state=window.__r01RecoveryUi;
+                if(!state)return;
+                document.title=titlePrefix+JSON.stringify({
+                  status:state.status,stage:state.stage||stage,
+                  uiState:state.uiState||"initializing",
+                  reason:state.reason||"",sequence:++reportSequence
+                });
+              };
+              reportProgress();
               
               const countReset=event=>{
                 if(event.detail?.action==="CommitFullReset"&&event.detail.busy)resetDispatches++;
@@ -72,11 +88,19 @@ internal static class Phase04RecoveryUiSelfCheck
                   try {window.__r01RecoveryUi.uiState=safeUiState();}
                   catch {window.__r01RecoveryUi.uiState="[DOM transition]";}
                 }
+                reportProgress();
               };
               async function wait(read,label,timeoutMs=60000){
                 const deadline=performance.now()+timeoutMs;
+                let nextReport=performance.now()+2000;
                 while(performance.now()<deadline){
                   const found=read();if(found)return found;
+                  if(performance.now()>=nextReport&&window.__r01RecoveryUi?.status==="running"){
+                    try{window.__r01RecoveryUi.uiState=safeUiState();}
+                    catch{window.__r01RecoveryUi.uiState="[DOM transition]";}
+                    reportProgress();
+                    nextReport=performance.now()+2000;
+                  }
                   await new Promise(resolve=>setTimeout(resolve,50));
                 }
                 throw Error("recovery UI did not reach "+label+" "+safeUiState());
@@ -203,53 +227,84 @@ internal static class Phase04RecoveryUiSelfCheck
                 const state=await api.invoke("GetProvisioningState",{});
                 if(state.data.provisioned!==false)throw Error("reset UI reported success without first setup");
                 if(resetDispatches!==2)throw Error("unexpected reset command count");
-                window.__r01RecoveryUi={status:"pass"};
-              })().catch(error=>{window.__r01RecoveryUi={status:"failed",reason:stage+": "+error.message};})
+                window.__r01RecoveryUi={status:"pass",stage};
+                reportProgress();
+              })().catch(error=>{
+                window.__r01RecoveryUi={status:"failed",stage,
+                  reason:stage+": "+String(error?.message||error)};
+                reportProgress();
+              })
                 .finally(()=>document.removeEventListener("altamam:bridge-loading",countReset));
               return "R01_RECOVERY_INJECTED";
             })();
             """;
         javascript = javascript.Replace("__OWNER__", JsonSerializer.Serialize(ownerPassword), StringComparison.Ordinal)
             .Replace("__OUTPUT__", JsonSerializer.Serialize(output), StringComparison.Ordinal);
-        string acknowledged = await core.ExecuteScriptAsync(javascript).WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(true);
-        if (acknowledged != JsonSerializer.Serialize("R01_RECOVERY_INJECTED"))
-            throw new InvalidOperationException("Recovery UI script injection did not return its startup receipt: " + acknowledged);
-        MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe injection completed");
-        MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe startup acknowledged");
-        string? lastStage = null;
-        int missingStateCount = 0;
-        for (int i = 0; i < 1200; i++)
+        // Regression: the old ExecuteScriptAsync(JSON.stringify(...)) polling
+        // hung after injection in genuine Windows Core/Release WebView2 processes.
+        // This browser-side title event is observable by the native host without
+        // another cross-process ExecuteScript call. No production page uses it.
+        const string titlePrefix = "ALTAMAM_R01_RECOVERY:";
+        var reports = new Queue<string>();
+        using var reported = new SemaphoreSlim(0);
+        EventHandler<object> onRecoveryTitleChanged = (_, _) =>
         {
-            string? raw = JsonSerializer.Deserialize<string>(await core.ExecuteScriptAsync(
-                "JSON.stringify(window.__r01RecoveryUi||null)").WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(true));
-            if (raw is null || raw == "null")
+            string title = core.DocumentTitle;
+            if (!title.StartsWith(titlePrefix, StringComparison.Ordinal)) return;
+            reports.Enqueue(title[titlePrefix.Length..]);
+            reported.Release();
+        };
+        core.DocumentTitleChanged += onRecoveryTitleChanged;
+        try
+        {
+            string acknowledged = await core.ExecuteScriptAsync(javascript)
+                .WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(true);
+            if (acknowledged != JsonSerializer.Serialize("R01_RECOVERY_INJECTED"))
+                throw new InvalidOperationException("Recovery UI script injection did not return its startup receipt: " + acknowledged);
+            MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe injection completed");
+            MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe startup acknowledged");
+            string? lastStage = null;
+            string? lastUiState = null;
+            // Bounded independently of the original 240-second Windows process.
+            // Full 15.06/SQLCipher recovery requirements remain mandatory.
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(115));
+            while (true)
             {
-                if (++missingStateCount >= 12)
-                    throw new InvalidOperationException("Recovery UI probe lost from browser document after acknowledged injection");
-            }
-            else
-            {
-                missingStateCount = 0;
+                try { await reported.WaitAsync(deadline.Token).ConfigureAwait(true); }
+                catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+                {
+                    throw new TimeoutException("Native recovery UI acceptance did not complete; stage="
+                        + (lastStage ?? "unreported") + "; state=" + (lastUiState ?? "unreported"));
+                }
+                string raw = reports.Dequeue();
                 using var state = JsonDocument.Parse(raw);
                 string? status = state.RootElement.GetProperty("status").GetString();
-                if (status == "running" &&
-                    state.RootElement.TryGetProperty("stage", out var stageProperty))
+                if (status == "running")
                 {
-                    string? stageName = stageProperty.GetString();
+                    string? stageName = state.RootElement.GetProperty("stage").GetString();
                     if (stageName != lastStage)
                     {
                         MainWindow.TraceWebViewSelfCheck("Recovery UI stage: " + stageName);
                         lastStage = stageName;
                     }
-                    // This is only read-only UI metadata: never log the password,
-                    // session nonce, bridge payload or recovery file contents.
-                    if (i % 40 == 0 &&
-                        state.RootElement.TryGetProperty("uiState", out var uiProperty))
-                        MainWindow.TraceWebViewSelfCheck("Recovery UI state: " + uiProperty.GetString());
+                    if (state.RootElement.TryGetProperty("uiState", out var uiProperty)
+                        && uiProperty.ValueKind == JsonValueKind.String)
+                    {
+                        string? currentUiState = uiProperty.GetString();
+                        if (currentUiState != lastUiState)
+                        {
+                            MainWindow.TraceWebViewSelfCheck("Recovery UI state: " + currentUiState);
+                            lastUiState = currentUiState;
+                        }
+                    }
                 }
-                if (status == "failed") throw new InvalidOperationException(state.RootElement.GetProperty("reason").GetString());
+                if (status == "failed")
+                    throw new InvalidOperationException(state.RootElement.GetProperty("reason").GetString()
+                        + "; last state=" + (lastUiState ?? "unreported"));
                 if (status == "pass")
                 {
+                    // Even a forged browser-side success cannot bypass actual
+                    // independent native SQLCipher/rescue and file-preservation checks.
                     if (Count(database, "Persons") != 0 || Count(database, "Users") != 0 || !database.HasValidIntegrity())
                         throw new InvalidOperationException("Reset UI did not leave an intact empty database");
                     string rescue = Directory.GetFiles(Path.Combine(Path.GetDirectoryName(database.DatabasePath)!, "backups"),
@@ -263,8 +318,7 @@ internal static class Phase04RecoveryUiSelfCheck
                     return;
                 }
             }
-            await Task.Delay(150).ConfigureAwait(true);
         }
-        throw new TimeoutException("Native recovery UI acceptance did not complete");
+        finally { core.DocumentTitleChanged -= onRecoveryTitleChanged; }
     }
 }

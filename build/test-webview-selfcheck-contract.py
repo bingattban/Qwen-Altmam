@@ -458,6 +458,54 @@ assert.doesNotThrow(()=>JSON.stringify(ctx.__r01RecoveryUi),
             self.assertLess(test_job.index("dotnet build AlTamam.slnx"),
                             test_job.index("pwsh -NoProfile -File ./build/test-webview-ui-e2e.ps1"))
 
+    def test_recovery_ui_native_event_transport_and_actual_browser_probe(self):
+        # The previous C# ExecuteScriptAsync state-poll hung on real Windows
+        # during a browser login/navigation transition, after injection succeeded.
+        # Keep the actual WebView2 + SQLCipher acceptance mandatory in both tracks.
+        import json
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
+        script = re.search(r'string javascript = """\s*([\s\S]*?)\s*""";', source).group(1)
+        self.assertIn("core.DocumentTitleChanged += onRecoveryTitleChanged", source)
+        self.assertIn("core.DocumentTitleChanged -= onRecoveryTitleChanged", source)
+        self.assertIn("await reported.WaitAsync(deadline.Token)", source)
+        self.assertNotIn('"JSON.stringify(window.__r01RecoveryUi||null)"', source)
+        for evidence in ("Count(database, \"Persons\") != 0", "copy.HasValidIntegrity()",
+                         'Count(copy, "Persons") != people', 'Count(copy, "Users") != users',
+                         'File.ReadAllText(Path.Combine(output, "invalid.dbbackup"))',
+                         'PASS R01 real backup restore-preview reset UI and independent encrypted rescue'):
+            self.assertIn(evidence, source)
+        probe = r"""
+const vm=require('node:vm'),assert=require('node:assert/strict');
+let now=0;const callbacks=[],signals=[];
+const doc={addEventListener(){},removeEventListener(){},
+  getElementById(){return null;},querySelector(){return null;}};
+Object.defineProperty(doc,'title',{set(value){
+  assert.ok(value.startsWith('ALTAMAM_R01_RECOVERY:'));
+  signals.push(JSON.parse(value.slice('ALTAMAM_R01_RECOVERY:'.length)));
+}});
+const context={document:doc,performance:{now:()=>now},
+  location:{hash:'#dashboard'},setTimeout:fn=>{callbacks.push(fn)},console};
+context.window=context;
+vm.createContext(context);vm.runInContext(SCRIPT,context);
+(async()=>{
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(signals[0]?.status,'running');
+  assert.equal(signals[0]?.stage,'modules-ready');
+  for(let i=0;i<9;i++){
+    now+=10000;callbacks.splice(0).forEach(fn=>fn());
+    await new Promise(resolve=>setImmediate(resolve));
+  }
+  const last=signals.at(-1);
+  assert.equal(last.status,'failed','native must see explicit negative result');
+  assert.match(last.reason,/shipped bridge and UI modules/);
+  assert.ok(signals.length>=2,'intermediate updates survive without native JavaScript polling');
+  assert.equal(signals.filter(x=>x.status==='pass').length,0);
+})().catch(e=>{console.error(e);process.exitCode=1;});
+""".replace("SCRIPT", json.dumps(script))
+        check = subprocess.run(["node", "-"], input=probe.encode("utf-8"),
+                               capture_output=True, timeout=20)
+        self.assertEqual(check.returncode, 0, check.stderr.decode("utf-8", errors="replace"))
+
 
 if __name__ == "__main__":
     unittest.main()
