@@ -45,7 +45,14 @@ internal static class Phase04RecoveryUiSelfCheck
                   const found=read();if(found)return found;
                   await new Promise(resolve=>setTimeout(resolve,50));
                 }
-                throw Error("recovery UI did not reach "+label);
+                const current=viewport();
+                const issue=current?.querySelector(".settings-feedback .admin-warning,.settings-feedback .ui-error,.auth-status .ui-error");
+                throw Error("recovery UI did not reach "+label+
+                  " [route="+location.hash+
+                  ",settings="+!!current?.querySelector(".settings-heading")+
+                  ",auth="+!!current?.querySelector(".auth-form")+
+                  ",dashboard="+!!current?.querySelector(".daily-roster-panel")+
+                  ",error="+(issue?.textContent||"none").trim().slice(0,180)+"]");
               }
               async function modal(text){
                 const control=await wait(()=>button(document.getElementById("appModalBody"),text),text);
@@ -70,9 +77,17 @@ internal static class Phase04RecoveryUiSelfCheck
                 auth.querySelector('input[autocomplete="username"]').value="phase04-owner";
                 auth.querySelector('input[type="password"]').value=__OWNER__;
                 auth.requestSubmit();
-                await wait(()=>viewport().querySelector(".daily-roster-panel"),"real founder login");
+                await wait(()=>viewport().querySelector(".daily-roster-panel")&&
+                  document.querySelector(".app-sidebar")?.hidden===false,"real founder login");
+                const authenticated=await api.invoke("GetCurrentSession",{});
+                if(authenticated.data?.username!=="phase04-owner"||
+                   !authenticated.data?.sessionNonce)
+                  throw Error("real founder session not active before settings navigation");
                 await api.invoke("SetOutputDirectory",{directory:__OUTPUT__});
-                window.AltamamFunctional.render("settings");
+                const settingsNav=document.getElementById("navBtn-settings");
+                if(!settingsNav||settingsNav.hidden||!settingsNav.isConnected)
+                  throw Error("real settings navigation control unavailable");
+                settingsNav.click();
                 await wait(()=>button(viewport(),"إنشاء نسخة احتياطية الآن"),"real settings");
                 stage="backup";
                 const save=button(viewport(),"إنشاء نسخة احتياطية الآن");
