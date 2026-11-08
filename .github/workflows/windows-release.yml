@@ -156,6 +156,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
           node build/test-session-idle.js
           if ($LASTEXITCODE -ne 0) { throw '5-minute session inactivity regression' }
+          node build/test-login-gate-singleflight.js
+          if ($LASTEXITCODE -ne 0) { throw 'Native logout/login form single-flight regression' }
           node build/test-operation-dialogs.js
           if ($LASTEXITCODE -ne 0) { throw "Centered operation dialog regression" }
           node build/test-modal-first-design.js

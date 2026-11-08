@@ -60,6 +60,8 @@ internal static class Phase04RecoveryUiSelfCheck
                   ",bridgeHasTransport="+!!window.AltamamBridge?.hasBridge?.()+
                   ",settings="+!!current?.querySelector(".settings-heading")+
                   ",auth="+!!current?.querySelector(".auth-form")+
+                  ",authReady="+(current?.querySelector(".auth-form")?.dataset?.authReady??"missing")+
+                  ",authSubmitDisabled="+(current?.querySelector('.auth-form button[type="submit"]')?.disabled??"missing")+
                   ",dashboard="+!!current?.querySelector(".daily-roster-panel")+
                   ",error="+(issue?.textContent||"none").trim().slice(0,180)+"]";
               };

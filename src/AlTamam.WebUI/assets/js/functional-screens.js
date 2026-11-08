@@ -301,6 +301,18 @@
     submit.disabled=false;
   }
 
+  // One native Logout response can both resolve the UI click and broadcast
+  // SessionEnded. Coordinate concurrent boot/invalidations through a single
+  // provisioning request and a single bound login form.
+  let loginGateInFlight=null;
+  async function openLoginGateOnce(){
+    if(loginGateInFlight)return loginGateInFlight;
+    const pending=loginGate();
+    loginGateInFlight=pending;
+    try {return await pending;}
+    finally {if(loginGateInFlight===pending)loginGateInFlight=null;}
+  }
+
   async function loadSites() {
     const data=parseData(await bridge().invoke("QuerySites",{}));
     return Array.isArray(data)?data:[];
@@ -1364,7 +1376,7 @@
   function render(section, requestedRoute=null) {
     if(section!=="dashboard")dismissAutoPrepared();
     if(section!=="dashboard")stopDashboardClock();
-    if (!STATE.session) { loginGate();return; }
+    if (!STATE.session) { void openLoginGateOnce();return; }
     if (!sections.has(section)) section="dashboard";
     if(section!=="dashboard")view().classList.toggle("daily-dashboard",false);
     if(section!=="monthly")view().classList.toggle("monthly-dashboard",false);
@@ -1417,7 +1429,7 @@
       if(window.AltamamIdleGuard?.shouldLogout()){
         try{await bridge().invoke("Logout",{});}catch{ /* already expired */ }
         bridge().setSessionNonce(null);
-        return await loginGate();
+        return await openLoginGateOnce();
       }
       const state=parseData(await bridge().invoke("GetCurrentSession",{}));
       if(state && state.sessionNonce) {
@@ -1437,8 +1449,8 @@
           if(automatic)openAutoPreparedList();
           if(initialSection==="dashboard")void checkOutputAfterLogin();
         }
-      } else await loginGate();
-    } catch { await loginGate(); }
+      } else await openLoginGateOnce();
+    } catch { await openLoginGateOnce(); }
   }
 
   async function logout(){
@@ -1451,7 +1463,7 @@
       bridge().setSessionNonce(null);
       STATE.session=null;
       window.AltamamTheme?.clearAuthorization();
-      await loginGate();
+      await openLoginGateOnce();
     }
   }
   document.getElementById("logoutAction")?.addEventListener("click",logout);
@@ -1489,6 +1501,6 @@
       // Administration refreshes its own nested screen after a write; keep its context.
      if(sections.has(section)&&section!=="admin"&&STATE.session)render(section);
     }
-    if(name==="SessionEnded"){window.AltamamReminders?.stop();dismissAutoPrepared();window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);window.AltamamTheme?.clearAuthorization();loginGate();}
+    if(name==="SessionEnded"){window.AltamamReminders?.stop();dismissAutoPrepared();window.AltamamIdleGuard?.stop();STATE.session=null;bridge().setSessionNonce(null);window.AltamamTheme?.clearAuthorization();void openLoginGateOnce();}
   });
 })();
