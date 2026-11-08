@@ -54,14 +54,14 @@ assert.equal(vm.runInContext('class Derived extends Date {}; new Derived() insta
         import json
         probe = """
 const vm=require('node:vm'),assert=require('node:assert/strict');
-const timers=[],sidebar={hidden:true};
-const auth={querySelector:()=>({value:''}),requestSubmit(){sidebar.hidden=false;}};
+const timers=[],sidebar={hidden:true},logout={hidden:true,isConnected:true};
+const auth={querySelector:()=>({value:''}),requestSubmit(){sidebar.hidden=false;logout.hidden=false;}};
 const root={querySelector:sel=>sel==='.auth-form'&&sidebar.hidden?auth:
   sel==='.daily-roster-panel'&&!sidebar.hidden?{}:null,querySelectorAll:()=>[]};
 let calls=0;
 const lateBridge={hasBridge:()=>true,invoke:async()=>{calls++;throw Error('readiness-test-stop');}};
 const context={document:{addEventListener(){},removeEventListener(){},
-    getElementById:id=>id==='appViewport'?root:null,
+    getElementById:id=>id==='appViewport'?root:id==='logoutAction'?logout:null,
     querySelector:sel=>sel==='.app-sidebar'?sidebar:null},
   location:{hash:'#dashboard'},setTimeout:fn=>{timers.push(fn);return timers.length;},console};
 context.window=context;if(EARLY_BRIDGE)context.AltamamBridge=lateBridge;
@@ -89,7 +89,8 @@ vm.createContext(context);vm.runInContext(SCRIPT,context);
                 self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
 
     def test_recovery_login_uses_real_ui_session_transition_not_extra_native_logout(self):
-        # Run the ACTUAL embedded browser script against both settled views.
+        # Run the ACTUAL embedded browser script with dashboard, auto-opened
+        # settings and login states, including auto-settings after authentication.
         # This JS-only contract is not a substitute for real Windows SQLCipher E2E.
         import json
         source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
@@ -102,7 +103,7 @@ async function check(initialMode){
   const calls=[],sidebar={hidden:mode==='login'||mode==='login-auto-settings'};
   const auth={querySelector:selector=>({value:''}),requestSubmit(){
     submits++;mode=initialMode==='login-auto-settings'?'settings':'dashboard';
-    sidebar.hidden=false;
+    sidebar.hidden=false;logoutAction.hidden=false;
   }};
   const viewport={querySelector(selector){
     if(selector==='.daily-roster-panel,.auth-form')return {};
@@ -112,7 +113,7 @@ async function check(initialMode){
     return null;
   },querySelectorAll(){return []}};
   const logoutAction={hidden:sidebar.hidden,isConnected:true,click(){
-    logoutClicks++;mode='login';sidebar.hidden=true;
+    logoutClicks++;mode='login';sidebar.hidden=true;logoutAction.hidden=true;
   }};
   const document={addEventListener(){},removeEventListener(){},
     getElementById(id){return id==='appViewport'?viewport:
