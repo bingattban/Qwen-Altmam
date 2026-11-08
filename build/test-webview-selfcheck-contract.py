@@ -182,6 +182,27 @@ async function check(initialMode){
         self.assertIn("transferredAssignment.Parameters.AddWithValue(\"$person\",movableId)", bridge)
         self.assertIn("transferAudit.Parameters.AddWithValue(\"$person\",movableId)", bridge)
 
+    def test_recovery_native_probe_records_actual_navigation_and_start_boundaries(self):
+        # A timed-out Windows process was last observed to have passed the actual
+        # bridge but showed no recovery stage at all. Until these boundaries are
+        # recorded we cannot distinguish native DB blocking from WebView2 reload.
+        source = (ROOT / "src/AlTamam.DesktopHost/Bridge/Phase04RecoveryUiSelfCheck.cs").read_text(encoding="utf-8")
+        required = (
+            "Recovery UI: entered native fixture",
+            "Recovery UI: native person/user census complete",
+            "Recovery UI: navigation requested",
+            "Recovery UI: root navigation completed",
+            "Recovery UI: browser probe injection completed",
+        )
+        for marker in required:
+            with self.subTest(marker=marker):
+                self.assertIn(marker, source)
+        self.assertIn("Recovery UI state:", source)
+        # Provenance is never inferred from a partial trace or prewritten flags.
+        runner = (ROOT / "build/test-webview-ui-e2e.ps1").read_text(encoding="utf-8")
+        self.assertIn("PASS R01 real backup restore-preview reset UI and independent encrypted rescue", runner)
+        self.assertIn('if ($process.ExitCode -ne 0)', runner)
+
     def test_prepackage_recovery_is_a_separate_bounded_real_windows_process(self):
         # Do not let earlier modal/69-route work consume the recovery budget.
         # This is a harness contract; both actual Windows processes must pass CI.
