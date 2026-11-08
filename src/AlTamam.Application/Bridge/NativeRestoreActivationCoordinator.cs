@@ -58,6 +58,19 @@ public sealed class NativeRestoreActivationCoordinator
                 .ConfigureAwait(false);
             if (grant is null) return null;
 
+            // Catalog-integrity is an independent trust boundary: a valid
+            // SQLCipher file might have overwritten a previously registered
+            // backup while retaining a valid encryption key. Never approve
+            // that change merely because a newly computed SHA matches.
+            var catalogCheck = await new BackupInspectionService(_database)
+                .VerifyAsync(selectedEncryptedBackup, cancellationToken)
+                .ConfigureAwait(false);
+            if (!catalogCheck.Success ||
+                catalogCheck.Data is not System.Text.Json.Nodes.JsonObject catalogData ||
+                !string.Equals(catalogData["sha256"]?.GetValue<string>(),
+                    expectedSha256, StringComparison.OrdinalIgnoreCase))
+                return null;
+
             prepared = await reauthentication.ConsumeAndStageAsync(
                 grant, actor, cancellationToken).ConfigureAwait(false);
             if (prepared is null) return null;
