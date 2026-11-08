@@ -9,38 +9,72 @@ $exe = Join-Path $repository "src/AlTamam.DesktopHost/bin/Release/net10.0-window
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
     throw "UI-E2E FAIL: built Windows executable absent: $exe"
 }
-$trace = Join-Path ([IO.Path]::GetTempPath()) ("AlTamam-UI-E2E-" + [Guid]::NewGuid().ToString("N") + ".log")
+# Two real native runs must succeed. The original combined 240-second process
+# starved the stage-two recovery flow after running modal, bridge, and all 69 routes.
+# Both runs retain independent random-key SQLCipher fixtures and isolated WebView2
+# profiles; neither is a simulated outcome or a skipped security assertion.
+$requiredPhases = @(
+    @{
+        Name = "modal-bridge-routes"
+        Arguments = @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e","--webview-split-recovery-e2e")
+        Markers = @(
+            "UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus",
+            "PASS bundled offline WebUI title verified",
+            "PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests",
+            "PASS all 69 manifest routes opened in real Windows WebView2",
+            "PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations",
+            "PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher"
+        )
+    },
+    @{
+        Name = "recovery"
+        Arguments = @("--webview-selfcheck","--webview-bridge-e2e","--webview-split-route-e2e")
+        Markers = @(
+            "PASS bundled offline WebUI title verified",
+            "PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests",
+            "PASS R01 real backup restore-preview reset UI and independent encrypted rescue"
+        )
+    }
+)
 $previousTrace = [Environment]::GetEnvironmentVariable("ALTAMAM_WEBVIEW_SELFCHECK_TRACE")
+$traces = [System.Collections.Generic.List[string]]::new()
+$allEvidence = [System.Collections.Generic.List[string]]::new()
 $process = $null
 try {
-    $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $trace
-    $process = Start-Process -FilePath $exe -ArgumentList @("--webview-selfcheck","--webview-ui-e2e","--webview-bridge-e2e") -PassThru
-    if (-not $process.WaitForExit(240000)) {
-        $process.Kill($true)
-        $process.WaitForExit()
-        # A timed-out native process must fail, but its last real stage is crucial
-        # for diagnosis; otherwise a killed Core run looks like an unexplained stall.
-        $diagnostic = if (Test-Path -LiteralPath $trace) {
-            Get-Content -LiteralPath $trace -Raw
-        } else { "<no native execution trace>" }
-        throw "UI-E2E FAIL: Windows WebView2 did not complete within 240 seconds; $diagnostic"
+    foreach ($phase in $requiredPhases) {
+        $trace = Join-Path ([IO.Path]::GetTempPath()) ("AlTamam-UI-E2E-" + [Guid]::NewGuid().ToString("N") + ".log")
+        $traces.Add($trace)
+        $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $trace
+        Write-Host "UI-E2E: launching mandatory real Windows phase $($phase.Name)"
+        $process = Start-Process -FilePath $exe -ArgumentList $phase.Arguments -PassThru
+        if (-not $process.WaitForExit(240000)) {
+            $process.Kill($true)
+            $process.WaitForExit()
+            $diagnostic = if (Test-Path -LiteralPath $trace) {
+                Get-Content -LiteralPath $trace -Raw
+            } else { "<no native execution trace>" }
+            throw "UI-E2E FAIL: $($phase.Name) real Windows process did not complete within 240 seconds; $diagnostic"
+        }
+        if ($process.ExitCode -ne 0) {
+            $diagnostic = if (Test-Path -LiteralPath $trace) {
+                Get-Content -LiteralPath $trace -Raw
+            } else { "<no native execution trace>" }
+            throw "UI-E2E FAIL: $($phase.Name) exit code $($process.ExitCode); $diagnostic"
+        }
+        if (-not (Test-Path -LiteralPath $trace -PathType Leaf)) {
+            throw "UI-E2E FAIL: $($phase.Name) no real WebView2 execution trace"
+        }
+        $phaseEvidence = Get-Content -LiteralPath $trace -Raw
+        foreach ($marker in $phase.Markers) {
+            if (-not $phaseEvidence.Contains($marker)) {
+                throw "UI-E2E FAIL: $($phase.Name) required real Windows evidence missing: $marker; $phaseEvidence"
+            }
+        }
+        $allEvidence.Add("$($phase.Name): $phaseEvidence")
+        Write-Host "UI-E2E PASS: $($phase.Name) verified in a genuine bounded Windows process"
+        $process = $null
     }
-    if ($process.ExitCode -ne 0) {
-        $diagnostic = if (Test-Path -LiteralPath $trace) { Get-Content -LiteralPath $trace -Raw } else { "<no trace>" }
-        throw "UI-E2E FAIL: exit code $($process.ExitCode); $diagnostic"
-    }
-    if (-not (Test-Path -LiteralPath $trace -PathType Leaf)) {
-        throw "UI-E2E FAIL: no real WebView2 execution trace"
-    }
-    $evidence = Get-Content -LiteralPath $trace -Raw
-    if ($evidence -notmatch 'UI-E2E PASS real Windows RTL/modal/form/validation/Escape/focus' -or
-        $evidence -notmatch 'PASS bundled offline WebUI title verified' -or
-        $evidence -notmatch 'PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests' -or
-        $evidence -notmatch 'PASS all 69 manifest routes opened in real Windows WebView2' -or
-        $evidence -notmatch 'PASS real Windows GeneralAdmin Admin Supervisor SQLCipher bridge authorizations' -or
-        $evidence -notmatch 'PASS real Windows modal-confirmed internal transfer persisted exactly once in SQLCipher') {
-        throw "UI-E2E FAIL: modal interaction or offline navigation evidence missing; $evidence"
-    }
+    $evidence = [string]::Join("`n", $allEvidence)
     # An evidence file is written only AFTER the native process exits 0 and all
     # mandatory real-WebView2 trace markers are verified. Never predeclare success.
     $phase13 = [Environment]::GetEnvironmentVariable("ALTAMAM_PHASE13_EVIDENCE_PATH")
@@ -69,6 +103,7 @@ try {
                 all69CanonicalManifestRoutesOpened = $true
                 generalAdminAdminSupervisorBridgeRoleProbes = $true
                 modalConfirmedInternalTransferSqlCipher = $true
+                backupPreviewResetAndEncryptedRescueSqlCipher = $true
             }
             notExecutedByThisProbe = @(
                 "Every role exercising every nested screen business control",
@@ -90,5 +125,7 @@ finally {
     if ($process -and -not $process.HasExited) {
         try { $process.Kill($true) } catch { }
     }
-    Remove-Item -LiteralPath $trace -Force -ErrorAction SilentlyContinue
+    foreach ($path in $traces) {
+        Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+    }
 }
