@@ -68,22 +68,42 @@ internal static class Phase04RecoveryUiSelfCheck
                   typeof window.AltamamDialog?.detailsReview==="function"&&
                   typeof window.AltamamDialog?.alert==="function"&&viewport()
                     ?window.AltamamBridge:null,"shipped bridge and UI modules");
-                stage="login";
-                await wait(()=>viewport().querySelector(".daily-roster-panel,.auth-form"),"initial root");
-                try{await api.invoke("Logout",{});}catch(e){if(e.errorCode!=="SessionExpired")throw e;}
-                api.setSessionNonce(null);
-                await api.invoke("GetProvisioningState",{});
-                const auth=await wait(()=>viewport().querySelector(".auth-form"),"real login form");
+                stage="session-transition";
+                // After a root reload, boot() may still be resolving the inherited
+                // authenticated session. Do not race its GetCurrentSession or issue
+                // a second native Logout directly from the acceptance script.
+                const initial=await wait(()=>{
+                  const sidebar=document.querySelector(".app-sidebar");
+                  if(!sidebar)return null;
+                  if(sidebar.hidden===true&&viewport().querySelector(".auth-form"))
+                    return "login";
+                  if(sidebar.hidden===false&&viewport().querySelector(".daily-roster-panel"))
+                    return "authenticated";
+                  return null;
+                },"settled initial session view");
+                if(initial==="authenticated"){
+                  const logoutAction=document.getElementById("logoutAction");
+                  if(!logoutAction||logoutAction.hidden||!logoutAction.isConnected)
+                    throw Error("real logout control unavailable for recovered session");
+                  logoutAction.click();
+                }
+                stage="login-form";
+                const auth=await wait(()=>document.querySelector(".app-sidebar")?.hidden===true
+                  ?viewport().querySelector(".auth-form"):null,"real login form");
                 auth.querySelector('input[autocomplete="username"]').value="phase04-owner";
                 auth.querySelector('input[type="password"]').value=__OWNER__;
+                stage="founder-authentication";
                 auth.requestSubmit();
                 await wait(()=>viewport().querySelector(".daily-roster-panel")&&
                   document.querySelector(".app-sidebar")?.hidden===false,"real founder login");
+                stage="founder-session-check";
                 const authenticated=await api.invoke("GetCurrentSession",{});
                 if(authenticated.data?.username!=="phase04-owner"||
                    !authenticated.data?.sessionNonce)
                   throw Error("real founder session not active before settings navigation");
+                stage="configure-recovery-output";
                 await api.invoke("SetOutputDirectory",{directory:__OUTPUT__});
+                stage="settings-navigation";
                 const settingsNav=document.getElementById("navBtn-settings");
                 if(!settingsNav||settingsNav.hidden||!settingsNav.isConnected)
                   throw Error("real settings navigation control unavailable");
