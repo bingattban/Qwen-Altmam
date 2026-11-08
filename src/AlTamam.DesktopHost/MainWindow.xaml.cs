@@ -742,8 +742,28 @@ public partial class MainWindow : Window
                 await CheckActualWebViewModalInteractionsAsync(core).ConfigureAwait(true);
             if (syntheticDatabase is not null)
             {
-                fixtureOwnerPassword = await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase, selfCheckTime ?? TimeProvider.System).ConfigureAwait(true);
-                TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
+                // Step one retains the COMPLETE real browser/native SQLCipher,
+                // all-role, attendance and 69-route suite. Step two previously
+                // repeated its entire expensive setup, starving the independent
+                // 240-second recovery process before its final reset assertions.
+                // A dedicated encrypted nonempty recovery fixture avoids only
+                // that duplication; it still exercises every recovery UI action.
+                bool recoveryOnly = Environment.GetCommandLineArgs().Contains(
+                    "--webview-recovery-only-e2e", StringComparer.Ordinal);
+                if (recoveryOnly)
+                {
+                    fixtureOwnerPassword =
+                        await Phase04RecoveryUiSelfCheck.PrepareSyntheticRecoveryFixtureAsync(
+                            syntheticDatabase).ConfigureAwait(true);
+                    TraceWebViewSelfCheck("PASS recovery-only native SQLCipher founder fixture");
+                }
+                else
+                {
+                    fixtureOwnerPassword = await Phase04BridgeRoundTripSelfCheck.RunAsync(
+                        core, syntheticDatabase, selfCheckTime ?? TimeProvider.System)
+                        .ConfigureAwait(true);
+                    TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
+                }
             }
             // Packaged acceptance can run the two real browser suites in distinct
             // bounded processes on slow x86 runners. Ordinary pre-package E2E
