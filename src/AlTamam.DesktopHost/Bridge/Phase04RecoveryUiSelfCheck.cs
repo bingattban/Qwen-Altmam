@@ -118,8 +118,11 @@ internal static class Phase04RecoveryUiSelfCheck
                   logoutAction.click();
                 }
                 setStage("login-form");
-                const auth=await wait(()=>document.querySelector(".app-sidebar")?.hidden===true
-                  ?viewport().querySelector(".auth-form"):null,"real login form");
+                const auth=await wait(()=>{
+                  if(document.querySelector(".app-sidebar")?.hidden!==true)return null;
+                  const form=viewport()?.querySelector(".auth-form");
+                  return form?.dataset?.authReady==="true"?form:null;
+                },"real login form with bound submit handler");
                 auth.querySelector('input[autocomplete="username"]').value="phase04-owner";
                 auth.querySelector('input[type="password"]').value=__OWNER__;
                 setStage("founder-authentication");
