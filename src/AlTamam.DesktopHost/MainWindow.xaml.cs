@@ -27,6 +27,10 @@ public partial class MainWindow : Window
     private Scheduling.EightPmSchedulerService? _scheduler;
     private Scheduling.AutomaticBackupSchedulerService? _backupScheduler;
     private Scheduling.AutomaticMonthlyExcelSchedulerService? _autoMonthlyExcelScheduler;
+    private bool _restoreInProgress;
+    private bool _restoreQuiescing;
+    private bool _restoreMayClose;
+
 
     // Diagnostics are written only for the explicit CI smoke-test flag; production
     // startup never creates a trace file or changes its persistent browser profile.
@@ -64,8 +68,15 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = _startupViewModel;
         webViewHost.Children.Add(_webView);
+        Grid.SetRow(_webView, 1); // native trusted menu is row zero
         Panel.SetZIndex(_webView, 0); // keep the native Arabic startup message above the browser
         Loaded += OnLoadedOrSelfCheck;
+        // An in-progress native restore cannot lose the single-instance mutex
+        // by closing WPF halfway through its critical database-switch sequence.
+        Closing += (_, e) =>
+        {
+            if (_restoreInProgress && !_restoreMayClose) e.Cancel = true;
+        };
         // Native WPF keyboard/mouse/touch events are real user input, unlike
         // dispatcher timers or background WebUI refreshes. Browser input is
         // independently observed via trusted WebView2 DOM events.
@@ -86,6 +97,160 @@ public partial class MainWindow : Window
                 _dbContext?.Dispose();
             }
         };
+    }
+
+
+    /// <summary>
+    /// Physical Windows menu command, NOT a JavaScript/bridge action.
+    /// The only accepted authority is the currently authenticated native
+    /// SQLCipher GeneralAdministration session, reauthenticated in WPF.
+    /// </summary>
+    private async void OnNativeRestoreMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (_restoreInProgress || _restoreQuiescing) return;
+        _restoreInProgress = true;
+        try
+        {
+            var gateway = _gateway;
+            var database = _dbContext;
+            if (gateway is null || database is null)
+            {
+                MessageBox.Show(this, "أكمل تشغيل التطبيق وسجل الدخول أولا.",
+                    "الاستعادة الآمنة", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            BridgePrincipal? founder = await gateway.CurrentGeneralAdministratorAsync();
+            if (founder is null)
+            {
+                MessageBox.Show(this,
+                    "الاستعادة الفعلية متاحة فقط لجلسة الإدارة العامة الحالية. " +
+                    "لا يمكن استخدام حساب مشرف أو إدارة عادية.",
+                    "رفض الاستعادة", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var selection = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "اختر النسخة المشفرة المراد استعادتها",
+                Filter = "Encrypted AlTamam backup (*.dbbackup)|*.dbbackup",
+                CheckFileExists = true, CheckPathExists = true,
+                Multiselect = false, RestoreDirectory = true
+            };
+            if (selection.ShowDialog(this) != true) return;
+            string selectedFile = selection.FileName;
+
+            // Selection occurs in the actual Windows dialog; the candidate is
+            // validated with the ORIGINAL SQLCipher key, not a JS file path.
+            var registeredCheck = await new BackupInspectionService(database)
+                .VerifyAsync(selectedFile, CancellationToken.None);
+            if (!registeredCheck.Success)
+            {
+                MessageBox.Show(this,
+                    registeredCheck.UserMessage ?? "بصمة النسخة أو سلامتها غير صحيحة.",
+                    "رفض نسخة غير موثوقة", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            var candidate = await database.InspectEncryptedBackupAsync(selectedFile);
+            if (candidate.SchemaVersion != AlTamamDbContext.CurrentSchemaVersion)
+            {
+                MessageBox.Show(this,
+                    "إصدار قاعدة البيانات في النسخة المختارة غير متوافق. " +
+                    "لا يمكن الاستعادة قبل الترحيل المعتمد.",
+                    "إصدار غير متوافق", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            long existingCount;
+            using (var sql = database.CreateOpenConnection())
+            using (var query = sql.CreateCommand())
+            {
+                query.CommandText = "SELECT COUNT(*) FROM Persons;";
+                existingCount = Convert.ToInt64(await query.ExecuteScalarAsync());
+            }
+
+            string? password = NativeRestoreConfirmationDialog.RequestFreshPassword(
+                this, Path.GetFileName(candidate.FullPath), candidate.Sha256,
+                candidate.PeopleCount, existingCount);
+            if (password is null) return;
+
+            // Load the ORIGINAL protected local key. Never derive a replacement
+            // from the incoming backup and never send key/password into WebView.
+            string existingKey = new AlTamam.Infrastructure.Security.WindowsDatabaseKeyStore(
+                Path.Combine(AppDataLayout.DataRoot, "db.key.protected"))
+                .LoadOrCreate(database.DatabasePath);
+
+            var coordinator = new NativeRestoreActivationCoordinator(
+                database, gateway.Sessions);
+            var result = await coordinator.TryActivateAsync(
+                founder, password, candidate.FullPath, candidate.Sha256, existingKey,
+                (verified, ct) => Dispatcher.InvokeAsync(() =>
+                    NativeRestoreConfirmationDialog.ConfirmFinal(this, verified)).Task,
+                ct => Dispatcher.InvokeAsync(() => StopForNativeRestoreAsync(ct)).Task.Unwrap());
+
+            if (result is null)
+            {
+                MessageBox.Show(this,
+                    "لم تُنفذ الاستعادة: أُلغيت الموافقة أو رُفض التحقق " +
+                    "من الحساب أو النسخة أو المفتاح. بقيت قاعدة البيانات الحالية دون استبدال.",
+                    "لم تُنفذ الاستعادة", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            MessageBox.Show(this,
+                "اكتملت عملية استبدال قاعدة البيانات المشفرة بعد إنشاء نسخ الإنقاذ. " +
+                "سيُغلق البرنامج الآن؛ افتحه مجددا لتسجيل الدخول ببيانات النسخة المستعادة.",
+                "اكتملت الاستعادة", MessageBoxButton.OK, MessageBoxImage.Information);
+            _restoreMayClose = true;
+            Close();
+        }
+        catch (Exception)
+        {
+            // After the quiescence boundary we MUST NOT resume services on the
+            // original session. Next startup reconciles any durable intent;
+            // original encrypted rescue/rollback is never removed here.
+            bool stopped = _restoreQuiescing;
+            MessageBox.Show(this,
+                stopped
+                    ? "توقفت الاستعادة أثناء التبديل. سيُغلق البرنامج للحفاظ على البيانات. " +
+                      "سيُفحص سجل التعافي المشفر عند بدء التشغيل التالي؛ احتفظ بنسخ الإنقاذ."
+                    : "تعذّر فحص أو تجهيز النسخة. لم يبدأ تبديل قاعدة البيانات. " +
+                      "تحقق من سلامة النسخة ومسارها ومفتاحها ثم حاول مجددا.",
+                "تعذر استكمال الاستعادة", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (stopped)
+            {
+                _restoreMayClose = true;
+                Close();
+            }
+        }
+        finally { _restoreInProgress = false; }
+    }
+
+    private async Task StopForNativeRestoreAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _restoreQuiescing = true; // prevent a WebView navigation from restarting schedulers
+        if (_gateway is not null)
+            await _gateway.StopReceivingAndDrainAsync().ConfigureAwait(true);
+        if (_scheduler is not null)
+        {
+            var scheduled = _scheduler;
+            _scheduler = null;
+            await scheduled.DisposeAsync();
+        }
+        if (_backupScheduler is not null)
+        {
+            var scheduled = _backupScheduler;
+            _backupScheduler = null;
+            await scheduled.DisposeAsync();
+        }
+        if (_autoMonthlyExcelScheduler is not null)
+        {
+            var scheduled = _autoMonthlyExcelScheduler;
+            _autoMonthlyExcelScheduler = null;
+            await scheduled.DisposeAsync();
+        }
+        _dbContext?.Dispose();
+        _dbContext = null;
+        // The top-level App single-instance mutex remains owned; only the
+        // native coordinator may now enter OfflineRestoreSwitch.
     }
 
     private DateTimeOffset _lastNativeActivityPing=DateTimeOffset.MinValue;
@@ -375,6 +540,7 @@ public partial class MainWindow : Window
         // --- 04.03: failed-load recovery (reload once, then a local error page route). ---
         core.NavigationCompleted += async (_, args) =>
         {
+            if (_restoreQuiescing) return;
             if (webViewSelfCheck) return;
             if (args.IsSuccess)
             {
@@ -576,8 +742,28 @@ public partial class MainWindow : Window
                 await CheckActualWebViewModalInteractionsAsync(core).ConfigureAwait(true);
             if (syntheticDatabase is not null)
             {
-                fixtureOwnerPassword = await Phase04BridgeRoundTripSelfCheck.RunAsync(core, syntheticDatabase, selfCheckTime ?? TimeProvider.System).ConfigureAwait(true);
-                TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
+                // Step one retains the COMPLETE real browser/native SQLCipher,
+                // all-role, attendance and 69-route suite. Step two previously
+                // repeated its entire expensive setup, starving the independent
+                // 240-second recovery process before its final reset assertions.
+                // A dedicated encrypted nonempty recovery fixture avoids only
+                // that duplication; it still exercises every recovery UI action.
+                bool recoveryOnly = Environment.GetCommandLineArgs().Contains(
+                    "--webview-recovery-only-e2e", StringComparer.Ordinal);
+                if (recoveryOnly)
+                {
+                    fixtureOwnerPassword =
+                        await Phase04RecoveryUiSelfCheck.PrepareSyntheticRecoveryFixtureAsync(
+                            syntheticDatabase).ConfigureAwait(true);
+                    TraceWebViewSelfCheck("PASS recovery-only native SQLCipher founder fixture");
+                }
+                else
+                {
+                    fixtureOwnerPassword = await Phase04BridgeRoundTripSelfCheck.RunAsync(
+                        core, syntheticDatabase, selfCheckTime ?? TimeProvider.System)
+                        .ConfigureAwait(true);
+                    TraceWebViewSelfCheck("PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests");
+                }
             }
             // Packaged acceptance can run the two real browser suites in distinct
             // bounded processes on slow x86 runners. Ordinary pre-package E2E

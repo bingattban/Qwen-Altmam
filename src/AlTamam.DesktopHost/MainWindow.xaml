@@ -8,8 +8,21 @@
         WindowState="Normal">
     <!-- The WebView2 control is created in code-behind and fills the window. -->
     <Grid x:Name="webViewHost" Background="#F5F7FA">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <!-- Trusted WPF menu lives OUTSIDE WebView2; no browser request can
+             trigger the physical native password + confirmation workflow. -->
+        <Menu Grid.Row="0" FlowDirection="RightToLeft"
+              Background="#EAF0F6" FontFamily="Segoe UI" FontSize="13">
+            <MenuItem Header="ملف">
+                <MenuItem Header="استعادة نسخة احتياطية بأمان"
+                          Click="OnNativeRestoreMenuClick" />
+            </MenuItem>
+        </Menu>
         <!-- Native startup feedback is visible immediately while WebView2 and the encrypted DB initialize. -->
-        <Border x:Name="startupPanel" Visibility="{Binding PanelVisibility}" Panel.ZIndex="10"
+        <Border Grid.RowSpan="2" x:Name="startupPanel" Visibility="{Binding PanelVisibility}" Panel.ZIndex="10"
                 Background="#F1F5F9" FlowDirection="RightToLeft">
             <Border Width="470" MaxWidth="470" Padding="32" HorizontalAlignment="Center"
                     VerticalAlignment="Center" Background="#FFFFFF"

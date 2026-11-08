@@ -35,6 +35,33 @@ public sealed class OfflineRestoreSwitch
            !string.Equals(Path.GetExtension(stage),".dbbackup",StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The stage must be a verified sibling of the live DB.");
     }
+    /// <summary>
+    /// Early native-only key and stage preflight. Invalid keys are rejected
+    /// BEFORE stopping healthy schedulers or SQLCipher connections. The actual
+    /// atomic switch repeats the complete verification after quiescence.
+    /// </summary>
+    public static async Task<bool> CanUsePreparedKeyAsync(
+        string live, string keyHex, StagedRestorePreparation prepared,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            ValidateStagePath(live, prepared.StageFilePath);
+            var candidate = await EncryptedBackupInspector.VerifyAsync(
+                prepared.StageFilePath, live, keyHex, ct).ConfigureAwait(false);
+            return candidate.SchemaVersion == AlTamamDbContext.CurrentSchemaVersion &&
+                string.Equals(candidate.Sha256, prepared.StageSha256,
+                    StringComparison.OrdinalIgnoreCase);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            InvalidDataException or ArgumentException or FormatException or
+            CryptographicException or SqliteException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private static void RequireOffline(string live)
     {
         if(File.Exists(live+"-wal")||File.Exists(live+"-shm")||File.Exists(live+"-journal"))

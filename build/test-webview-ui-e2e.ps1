@@ -28,10 +28,10 @@ $requiredPhases = @(
     },
     @{
         Name = "recovery"
-        Arguments = @("--webview-selfcheck","--webview-bridge-e2e","--webview-split-route-e2e")
+        Arguments = @("--webview-selfcheck","--webview-bridge-e2e","--webview-split-route-e2e","--webview-recovery-only-e2e")
         Markers = @(
             "PASS bundled offline WebUI title verified",
-            "PASS actual HTML-C#-SQLCipher-HTML roundtrip and forbidden requests",
+            "PASS recovery-only native SQLCipher founder fixture",
             "PASS R01 real backup restore-preview reset UI and independent encrypted rescue"
         )
     }
