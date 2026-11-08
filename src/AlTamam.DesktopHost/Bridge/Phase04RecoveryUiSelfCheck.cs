@@ -42,19 +42,33 @@ internal static class Phase04RecoveryUiSelfCheck
               document.addEventListener("altamam:bridge-loading",countReset);
               const viewport=()=>document.getElementById("appViewport");
               const button=(root,text)=>[...(root?.querySelectorAll("button")||[])].find(b=>b.textContent.trim()===text);
-              async function wait(read,label){
-                for(let i=0;i<1200;i++){
-                  const found=read();if(found)return found;
-                  await new Promise(resolve=>setTimeout(resolve,50));
-                }
+              // Real browser performance clock is monotonic even in the disposable
+              // frozen-business-date fixture. A fixed number of 50-ms timers can
+              // drift for minutes under WPF/WebView2 load, concealing the failure.
+              const safeUiState=()=>{
                 const current=viewport();
+                const sidebar=document.querySelector(".app-sidebar");
+                const logout=document.getElementById("logoutAction");
                 const issue=current?.querySelector(".settings-feedback .admin-warning,.settings-feedback .ui-error,.auth-status .ui-error");
-                throw Error("recovery UI did not reach "+label+
-                  " [route="+location.hash+
+                return "[route="+location.hash+
+                  ",documentState="+document.readyState+
+                  ",sidebarHidden="+(sidebar?.hidden??"missing")+
+                  ",logoutHidden="+(logout?.hidden??"missing")+
+                  ",bridgeHasTransport="+!!window.AltamamBridge?.hasBridge?.()+
                   ",settings="+!!current?.querySelector(".settings-heading")+
                   ",auth="+!!current?.querySelector(".auth-form")+
                   ",dashboard="+!!current?.querySelector(".daily-roster-panel")+
-                  ",error="+(issue?.textContent||"none").trim().slice(0,180)+"]");
+                  ",error="+(issue?.textContent||"none").trim().slice(0,180)+"]";
+              };
+              Object.defineProperty(window.__r01RecoveryUi,"uiState",
+                {enumerable:true,get:safeUiState});
+              async function wait(read,label,timeoutMs=60000){
+                const deadline=performance.now()+timeoutMs;
+                while(performance.now()<deadline){
+                  const found=read();if(found)return found;
+                  await new Promise(resolve=>setTimeout(resolve,50));
+                }
+                throw Error("recovery UI did not reach "+label+" "+safeUiState());
               }
               async function modal(text){
                 const control=await wait(()=>button(document.getElementById("appModalBody"),text),text);
@@ -201,6 +215,11 @@ internal static class Phase04RecoveryUiSelfCheck
                         MainWindow.TraceWebViewSelfCheck("Recovery UI stage: " + stageName);
                         lastStage = stageName;
                     }
+                    // This is only read-only UI metadata: never log the password,
+                    // session nonce, bridge payload or recovery file contents.
+                    if (i % 40 == 0 &&
+                        state.RootElement.TryGetProperty("uiState", out var uiProperty))
+                        MainWindow.TraceWebViewSelfCheck("Recovery UI state: " + uiProperty.GetString());
                 }
                 if (status == "failed") throw new InvalidOperationException(state.RootElement.GetProperty("reason").GetString());
                 if (status == "pass")
