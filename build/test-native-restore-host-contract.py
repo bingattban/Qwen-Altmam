@@ -23,9 +23,14 @@ class NativeRestoreHostContract(unittest.TestCase):
 
     def test_native_host_quiesces_bridge_and_all_three_schedulers(self):
         host = (HOST / "MainWindow.xaml.cs").read_text(encoding="utf-8")
-        for needle in ("StopReceivingAndDrainAsync", "_scheduler.DisposeAsync()",
-                       "_backupScheduler.DisposeAsync()",
-                       "_autoMonthlyExcelScheduler.DisposeAsync()",
+        for needle in ("StopReceivingAndDrainAsync",
+                       "if (_scheduler is not null)",
+                       "if (_backupScheduler is not null)",
+                       "if (_autoMonthlyExcelScheduler is not null)",
+                       "_scheduler = null;", "_backupScheduler = null;",
+                       "_autoMonthlyExcelScheduler = null;",
+                       "await scheduled.DisposeAsync()",
+                       "_shutdownGate.StopAndDrainAsync",
                        "_restoreQuiescing", "TryActivateAsync"):
             self.assertIn(needle, host)
         gateway = (HOST / "Bridge/DesktopBridgeGateway.cs").read_text(encoding="utf-8")
