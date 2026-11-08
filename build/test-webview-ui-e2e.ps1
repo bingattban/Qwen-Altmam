@@ -18,7 +18,12 @@ try {
     if (-not $process.WaitForExit(240000)) {
         $process.Kill($true)
         $process.WaitForExit()
-        throw "UI-E2E FAIL: Windows WebView2 did not complete within 240 seconds"
+        # A timed-out native process must fail, but its last real stage is crucial
+        # for diagnosis; otherwise a killed Core run looks like an unexplained stall.
+        $diagnostic = if (Test-Path -LiteralPath $trace) {
+            Get-Content -LiteralPath $trace -Raw
+        } else { "<no native execution trace>" }
+        throw "UI-E2E FAIL: Windows WebView2 did not complete within 240 seconds; $diagnostic"
     }
     if ($process.ExitCode -ne 0) {
         $diagnostic = if (Test-Path -LiteralPath $trace) { Get-Content -LiteralPath $trace -Raw } else { "<no trace>" }
