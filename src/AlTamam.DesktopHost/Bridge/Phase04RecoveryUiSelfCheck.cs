@@ -207,7 +207,7 @@ internal static class Phase04RecoveryUiSelfCheck
         javascript = javascript.Replace("__OWNER__", JsonSerializer.Serialize(ownerPassword), StringComparison.Ordinal)
             .Replace("__OUTPUT__", JsonSerializer.Serialize(output), StringComparison.Ordinal);
         string acknowledged = await core.ExecuteScriptAsync(javascript).WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(true);
-        if (acknowledged != "\\"R01_RECOVERY_INJECTED\\"")
+        if (acknowledged != JsonSerializer.Serialize("R01_RECOVERY_INJECTED"))
             throw new InvalidOperationException("Recovery UI script injection did not return its startup receipt: " + acknowledged);
         MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe injection completed");
         MainWindow.TraceWebViewSelfCheck("Recovery UI: browser probe startup acknowledged");
