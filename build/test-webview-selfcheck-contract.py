@@ -63,7 +63,8 @@ const lateBridge={hasBridge:()=>true,invoke:async()=>{calls++;throw Error('readi
 const context={document:{addEventListener(){},removeEventListener(){},
     getElementById:id=>id==='appViewport'?root:id==='logoutAction'?logout:null,
     querySelector:sel=>sel==='.app-sidebar'?sidebar:null},
-  location:{hash:'#dashboard'},setTimeout:fn=>{timers.push(fn);return timers.length;},console};
+  location:{hash:'#dashboard'},performance:{now:()=>Date.now()},
+  setTimeout:fn=>{timers.push(fn);return timers.length;},console};
 context.window=context;if(EARLY_BRIDGE)context.AltamamBridge=lateBridge;
 vm.createContext(context);vm.runInContext(SCRIPT,context);
 (async()=>{
@@ -124,7 +125,7 @@ async function check(initialMode){
   },setSessionNonce(){}};
   // Fast deterministic scheduling exposes a 60-second UI readiness bug in milliseconds.
   const context={document,location:{hash:'#dashboard'},console,
-    setTimeout:callback=>setImmediate(callback)};
+    performance:{now:()=>Date.now()},setTimeout:callback=>setImmediate(callback)};
   context.window=context;context.AltamamBridge=bridge;
   context.AltamamFunctional={render(){}};
   context.AltamamAdminSettings={renderSettings(){}};
