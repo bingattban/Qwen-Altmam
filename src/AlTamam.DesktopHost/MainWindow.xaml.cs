@@ -30,6 +30,8 @@ public partial class MainWindow : Window
     private bool _restoreInProgress;
     private bool _restoreQuiescing;
     private bool _restoreMayClose;
+    private readonly NativeHostShutdownGate _shutdownGate = new();
+    private bool _shutdownCloseAttempted;
 
 
     // Diagnostics are written only for the explicit CI smoke-test flag; production
@@ -71,34 +73,58 @@ public partial class MainWindow : Window
         Grid.SetRow(_webView, 1); // native trusted menu is row zero
         Panel.SetZIndex(_webView, 0); // keep the native Arabic startup message above the browser
         Loaded += OnLoadedOrSelfCheck;
-        // An in-progress native restore cannot lose the single-instance mutex
-        // by closing WPF halfway through its critical database-switch sequence.
-        Closing += (_, e) =>
-        {
-            if (_restoreInProgress && !_restoreMayClose) e.Cancel = true;
-        };
+        // Cancel the physical WPF Close synchronously until all native database
+        // activity has actually drained. App.OnExit must never release the
+        // single-instance mutex while backup/attendance/export work is running.
+        Closing += OnWindowClosing;
         // Native WPF keyboard/mouse/touch events are real user input, unlike
         // dispatcher timers or background WebUI refreshes. Browser input is
         // independently observed via trusted WebView2 DOM events.
         ForegroundActivityHooks.Attach(this, RefreshIdleFromNativeInput);
-        Closed += async (_, _) =>
-        {
-            try
-            {
-                if (_scheduler is not null)
-                    await _scheduler.DisposeAsync();
-                if (_backupScheduler is not null)
-                    await _backupScheduler.DisposeAsync();
-                if (_autoMonthlyExcelScheduler is not null)
-                    await _autoMonthlyExcelScheduler.DisposeAsync();
-            }
-            finally
-            {
-                _dbContext?.Dispose();
-            }
-        };
     }
 
+
+    /// <summary>
+    /// WPF Closing is synchronous: e.Cancel MUST be set before the first await.
+    /// Never permit App.OnExit to release the existing single-instance mutex
+    /// while the SQLCipher writer, WebView2 bridge or schedulers are live.
+    /// The test-only WebView2 process uses a separate synthetic DB and its own
+    /// existing explicit cleanup and Shutdown path, so it is not intercepted.
+    /// </summary>
+    private async void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_restoreInProgress && !_restoreMayClose)
+        {
+            e.Cancel = true;
+            return;
+        }
+        if (Environment.GetCommandLineArgs().Contains("--webview-selfcheck",
+                StringComparer.Ordinal) || _shutdownGate.IsCompleted)
+            return;
+        e.Cancel = true;
+        if (_shutdownCloseAttempted) return;
+        _shutdownCloseAttempted = true;
+        try
+        {
+            await _shutdownGate.StopAndDrainAsync(
+                () => StopForNativeRestoreAsync(CancellationToken.None))
+                .ConfigureAwait(true);
+            // A second physical close is safe only after all native operations
+            // finished; App.OnExit may now release the original mutex.
+            Close();
+        }
+        catch (Exception)
+        {
+            // Keep WPF alive and the mutex owned if the shutdown cannot be
+            // proven complete. Never swallow a scheduler failure and claim
+            // a clean exit; a second instance would endanger active WAL work.
+            MessageBox.Show(this,
+                "تعذر إيقاف جميع عمليات قاعدة البيانات بأمان. " +
+                "لم يتم السماح بإغلاق البرنامج تلقائيا حتى لا تعمل نسخة ثانية " +
+                "على قاعدة مشغولة. لا تبدأ نسخة أخرى قبل إنهاء هذا البرنامج.",
+                "تعذر الإغلاق الآمن", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
 
     /// <summary>
     /// Physical Windows menu command, NOT a JavaScript/bridge action.
@@ -184,7 +210,8 @@ public partial class MainWindow : Window
                 founder, password, candidate.FullPath, candidate.Sha256, existingKey,
                 (verified, ct) => Dispatcher.InvokeAsync(() =>
                     NativeRestoreConfirmationDialog.ConfirmFinal(this, verified)).Task,
-                ct => Dispatcher.InvokeAsync(() => StopForNativeRestoreAsync(ct)).Task.Unwrap());
+                ct => Dispatcher.InvokeAsync(() => _shutdownGate.StopAndDrainAsync(
+                    () => StopForNativeRestoreAsync(ct))).Task.Unwrap());
 
             if (result is null)
             {
