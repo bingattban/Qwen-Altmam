@@ -54,7 +54,7 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
 
     private static (long PersonTables,long Users) ReadLogicalSnapshot(string database,string key)
     {
-        using var context=new AlTamamDbContext(database,key);
+        using var context=new AlTamamDbContext(database,key,useConnectionPooling:false);
         Assert.True(context.HasValidIntegrity());
         using var connection=context.CreateOpenConnection();
         using var command=connection.CreateCommand();
@@ -93,13 +93,21 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         Assert.Throws<IOException>(()=>
             sourceStore.ExportPortableRecoveryKey(sourcePath,recoveryPath,Phrase));
         File.Copy(backup,targetDb);
-        var before=ReadLogicalSnapshot(targetDb,secret);
+        // Snapshot counts are read from the backup, NOT from the destination
+        // before key import. A writable target read would enable SQLite WAL
+        // and invalidate a clean pre-login recovery fixture.
+        var before=ReadLogicalSnapshot(backup,secret);
+        var untouchedTargetSha=Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(targetDb)));
         var targetStore=new WindowsDatabaseKeyStore(targetKey);
         Assert.Throws<CryptographicException>(()=>
             targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,
                 "Incorrect password long enough to be accepted"));
         Assert.False(File.Exists(targetKey));
-        Assert.Equal(before,ReadLogicalSnapshot(targetDb,secret));
+        Assert.Equal(untouchedTargetSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(targetDb))));
+        Assert.False(File.Exists(targetDb+"-wal"));
+        Assert.False(File.Exists(targetDb+"-shm"));
         targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,Phrase);
         Assert.Equal(secret,targetStore.LoadOrCreate(targetDb));
         using(var db=new AlTamamDbContext(targetDb,targetStore.LoadOrCreate(targetDb)))
@@ -107,6 +115,99 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         Assert.Throws<InvalidOperationException>(()=>
             targetStore.RecoverExistingDatabaseKey(targetDb,recoveryPath,Phrase));
         Assert.Equal(before,ReadLogicalSnapshot(targetDb,secret));
+    }
+
+    [Fact]
+    public async Task RecoverExistingKey_ReadOnlyPreflight_LeavesTargetEncryptedDatabaseByteIdentical()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        string source=Path.Combine(_root,"readonly-source.db");
+        string sourceKeyPath=Path.Combine(_root,"readonly-source.key");
+        string candidate=Path.Combine(_root,"readonly-copy.dbbackup");
+        string recovery=Path.Combine(_root,"readonly-key.altrecovery");
+        string targetRoot=Path.Combine(_root,"readonly-target");
+        Directory.CreateDirectory(targetRoot);
+        string target=Path.Combine(targetRoot,"altamam.db");
+        string targetKey=Path.Combine(targetRoot,"db.key.protected");
+        var sourceStore=new WindowsDatabaseKeyStore(sourceKeyPath);
+        string originalKey=sourceStore.LoadOrCreate(source);
+        using(var db=new AlTamamDbContext(source,originalKey,useConnectionPooling:false))
+        {
+            await db.InitializeAsync();
+            await db.CreateVerifiedEncryptedBackupAsync(candidate);
+        }
+        sourceStore.ExportPortableRecoveryKey(source,recovery,Phrase);
+        File.Copy(candidate,target);
+        string before=Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(target)));
+        Assert.False(File.Exists(target+"-wal"));
+        Assert.False(File.Exists(target+"-shm"));
+
+        new WindowsDatabaseKeyStore(targetKey)
+            .RecoverExistingDatabaseKey(target,recovery,Phrase);
+
+        Assert.True(File.Exists(targetKey));
+        // A verification-only credential import is not allowed to turn an
+        // offline SQLCipher backup from DELETE into WAL or alter ANY DB bytes.
+        Assert.Equal(before,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(target))));
+        Assert.False(File.Exists(target+"-wal"));
+        Assert.False(File.Exists(target+"-shm"));
+        Assert.Equal(originalKey,new WindowsDatabaseKeyStore(targetKey).LoadOrCreate(target));
+    }
+
+    [Fact]
+    public async Task RecoverExistingKey_RejectsFutureSchemaWithoutWritingDpapiKeyOrDatabase()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        string source=Path.Combine(_root,"future-source.db");
+        string sourceKeyPath=Path.Combine(_root,"future-source.key");
+        string backup=Path.Combine(_root,"future.dbbackup");
+        string recovery=Path.Combine(_root,"future-key.altrecovery");
+        string targetRoot=Path.Combine(_root,"future-target");
+        Directory.CreateDirectory(targetRoot);
+        string target=Path.Combine(targetRoot,"altamam.db");
+        string targetKey=Path.Combine(targetRoot,"db.key.protected");
+        var sourceStore=new WindowsDatabaseKeyStore(sourceKeyPath);
+        string originalKey=sourceStore.LoadOrCreate(source);
+        using(var db=new AlTamamDbContext(source,originalKey,useConnectionPooling:false))
+        {
+            await db.InitializeAsync();
+            await db.CreateVerifiedEncryptedBackupAsync(backup);
+        }
+        sourceStore.ExportPortableRecoveryKey(source,recovery,Phrase);
+        File.Copy(backup,target);
+
+        // A synthetically future-dated schema is still an INTEGRITY-CHECK-OK
+        // SQLCipher DB, but is not a compatible application database.
+        using(var db=new AlTamamDbContext(target,originalKey,useConnectionPooling:false))
+        using(var connection=db.CreateOpenConnection())
+        {
+            using(var mutate=connection.CreateCommand())
+            {
+                mutate.CommandText=
+                    "UPDATE SchemaVersions SET SchemaVersion=999 "+
+                    "WHERE SchemaVersion=(SELECT MAX(SchemaVersion) FROM SchemaVersions);";
+                Assert.Equal(1,mutate.ExecuteNonQuery());
+            }
+            using(var mode=connection.CreateCommand())
+            {
+                mode.CommandText="PRAGMA journal_mode=DELETE;";
+                Assert.Equal("delete",mode.ExecuteScalar()?.ToString(),
+                    ignoreCase:true);
+            }
+        }
+        string before=Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(target)));
+
+        Assert.Throws<CryptographicException>(()=>
+            new WindowsDatabaseKeyStore(targetKey)
+                .RecoverExistingDatabaseKey(target,recovery,Phrase));
+        Assert.False(File.Exists(targetKey));
+        Assert.Equal(before,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(target))));
+        Assert.False(File.Exists(target+"-wal"));
+        Assert.False(File.Exists(target+"-shm"));
     }
 
     [Fact]
@@ -122,13 +223,27 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
         using(var db=new AlTamamDbContext(first,key))await db.InitializeAsync();
         store.ExportPortableRecoveryKey(first,package,Phrase);
         string wrongKey=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        using(var other=new AlTamamDbContext(encrypted,wrongKey))await other.InitializeAsync();
-        var originalState=ReadLogicalSnapshot(encrypted,wrongKey);
+        // The original test left pooled SQLite/WAL handles open on the
+        // candidate, so it failed at a Windows sharing violation instead of
+        // actually exercising the wrong-key verification boundary.
+        string wrongBackup=Path.Combine(_root,"wrong-database.dbbackup");
+        using(var other=new AlTamamDbContext(encrypted,wrongKey,useConnectionPooling:false))
+        {
+            await other.InitializeAsync();
+            await other.CreateVerifiedEncryptedBackupAsync(wrongBackup);
+        }
+        string offlineCandidate=Path.Combine(_root,"wrong-offline-target.db");
+        File.Copy(wrongBackup,offlineCandidate);
+        string originalSha=Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(offlineCandidate)));
         Assert.Throws<CryptographicException>(()=>
             new WindowsDatabaseKeyStore(otherProtected)
-                .RecoverExistingDatabaseKey(encrypted,package,Phrase));
+                .RecoverExistingDatabaseKey(offlineCandidate,package,Phrase));
         Assert.False(File.Exists(otherProtected));
-        Assert.Equal(originalState,ReadLogicalSnapshot(encrypted,wrongKey));
+        Assert.Equal(originalSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(offlineCandidate))));
+        Assert.False(File.Exists(offlineCandidate+"-wal"));
+        Assert.False(File.Exists(offlineCandidate+"-shm"));
     }
 
     public void Dispose()
