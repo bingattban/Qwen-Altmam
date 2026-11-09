@@ -145,54 +145,93 @@ public sealed class WindowsDatabaseKeyStore
         string key;
         try{key=PortableRecoveryKeyPackage.Unseal(wrapped,passphrase);}
         finally{CryptographicOperations.ZeroMemory(wrapped);}
-        // A key must also be recoverable on a genuinely fresh Windows
-        // process before any AlTamamDbContext static constructor has run.
-        // Initialize the SQLCipher native provider explicitly before opening
-        // the read-only inspection connection.
-        SQLitePCL.Batteries_V2.Init();
-        // This is PRE-LOGIN verification. Do not use AlTamamDbContext:
-        // CreateOpenConnection() is ReadWriteCreate and sets journal_mode=WAL,
-        // which can modify the customer database even for integrity_check.
-        // Instead inspect the exact existing encrypted image with a READ-ONLY,
-        // non-pooled SQLCipher connection and verify integrity, foreign keys,
-        // expected schema, and application tables before installing any key.
-        try
-        {
-            var inspected=AlTamam.Infrastructure.Persistence.EncryptedBackupInspector
-                .VerifyAsync(database,database+".native-key-verify-not-live",
-                    key,CancellationToken.None).GetAwaiter().GetResult();
-            if(inspected.SchemaVersion!=
-               AlTamam.Infrastructure.Persistence.AlTamamDbContext.CurrentSchemaVersion)
-                throw new CryptographicException(RecoveryRequired);
-        }
-        catch(Exception ex) when(ex is Microsoft.Data.Sqlite.SqliteException ||
-                                 ex is InvalidOperationException ||
-                                 ex is InvalidDataException ||
-                                 ex is FormatException ||
-                                 ex is OverflowException)
-        {
+        // The verification MUST NOT open the customer's database with SQLite:
+        // even ReadOnly mode can create -wal/-shm sidecars on a WAL-format DB.
+        // A separate encrypted, isolated copy is used for every SQLCipher query.
+        // Do not accept an active WAL/journal: a standalone copy would omit
+        // uncheckpointed transactions and could validate incomplete history.
+        if(File.Exists(database+"-wal") || File.Exists(database+"-shm") ||
+           File.Exists(database+"-journal"))
             throw new CryptographicException(RecoveryRequired);
-        }
-        byte[] plaintext=Encoding.ASCII.GetBytes(key);
-        byte[] protectedBlob=Array.Empty<byte>();
-        string temp=_keyPath+"."+Guid.NewGuid().ToString("N")+".pending";
+        string inspectionDirectory=Path.Combine(
+            Path.GetDirectoryName(database)!,
+            ".altamam-key-preflight-"+Guid.NewGuid().ToString("N"));
+        string inspectionCopy=Path.Combine(inspectionDirectory,"candidate.dbbackup");
+        Directory.CreateDirectory(inspectionDirectory);
         try
         {
-            protectedBlob=ProtectedData.Protect(plaintext,null,DataProtectionScope.CurrentUser);
-            using(var stream=new FileStream(temp,FileMode.CreateNew,
-                FileAccess.Write,FileShare.None))
+            // Read sharing denies an active database writer and prevents new
+            // writers while the byte-exact copy is inspected and key saved.
+            using var original=new FileStream(database,FileMode.Open,FileAccess.Read,
+                FileShare.Read,81920,FileOptions.SequentialScan);
+            using(var staged=new FileStream(inspectionCopy,FileMode.CreateNew,
+                FileAccess.Write,FileShare.None,81920,FileOptions.WriteThrough))
             {
-                stream.Write(protectedBlob);
-                stream.Flush(flushToDisk:true);
+                original.CopyTo(staged);
+                staged.Flush(flushToDisk:true);
             }
-            File.Move(temp,_keyPath,overwrite:false);
+            // A brand-new Windows process has not initialized AlTamamDbContext.
+            SQLitePCL.Batteries_V2.Init();
+            AlTamam.Infrastructure.Persistence.EncryptedBackupInspection inspected;
+            try
+            {
+                inspected=AlTamam.Infrastructure.Persistence.EncryptedBackupInspector
+                    .VerifyAsync(inspectionCopy,database,key,CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                if(inspected.SchemaVersion!=
+                   AlTamam.Infrastructure.Persistence.AlTamamDbContext.CurrentSchemaVersion)
+                    throw new CryptographicException(RecoveryRequired);
+            }
+            catch(Exception ex) when(ex is Microsoft.Data.Sqlite.SqliteException ||
+                                     ex is InvalidOperationException ||
+                                     ex is InvalidDataException ||
+                                     ex is FormatException ||
+                                     ex is OverflowException)
+            {
+                throw new CryptographicException(RecoveryRequired);
+            }
+            // The original has been locked read-only since BEFORE the copy.
+            // It cannot be replaced between verification and DPAPI key write.
+            original.Position=0;
+            string liveSha=Convert.ToHexString(SHA256.HashData(original));
+            if(!string.Equals(liveSha,inspected.Sha256,
+                StringComparison.OrdinalIgnoreCase))
+                throw new CryptographicException(RecoveryRequired);
+            if(File.Exists(database+"-wal") || File.Exists(database+"-shm") ||
+               File.Exists(database+"-journal"))
+                throw new CryptographicException(RecoveryRequired);
+
+            byte[] plaintext=Encoding.ASCII.GetBytes(key);
+            byte[] protectedBlob=Array.Empty<byte>();
+            string temp=_keyPath+"."+Guid.NewGuid().ToString("N")+".pending";
+            try
+            {
+                protectedBlob=ProtectedData.Protect(plaintext,null,DataProtectionScope.CurrentUser);
+                using(var stream=new FileStream(temp,FileMode.CreateNew,
+                    FileAccess.Write,FileShare.None))
+                {
+                    stream.Write(protectedBlob);
+                    stream.Flush(flushToDisk:true);
+                }
+                File.Move(temp,_keyPath,overwrite:false);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(plaintext);
+                if(protectedBlob.Length>0)CryptographicOperations.ZeroMemory(protectedBlob);
+                if(File.Exists(temp))File.Delete(temp);
+            }
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(plaintext);
-            if(protectedBlob.Length>0)CryptographicOperations.ZeroMemory(protectedBlob);
-            if(File.Exists(temp))File.Delete(temp);
+            // This isolated directory contains ONLY the disposable encrypted
+            // inspection copy and its SQLCipher sidecars. It is never a customer
+            // backup. An interrupted cleanup must never delete the original DB.
+            try { Directory.Delete(inspectionDirectory,recursive:true); }
+            catch(IOException) { }
+            catch(UnauthorizedAccessException) { }
         }
+
     }
 
     private string ReadExisting()
