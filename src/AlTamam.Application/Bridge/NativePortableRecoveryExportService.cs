@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using AlTamam.Contracts.Bridge;
 using AlTamam.Domain.Enums;
 using AlTamam.Infrastructure.Persistence;
@@ -11,6 +12,7 @@ namespace AlTamam.Application.Bridge;
 /// a currently active native session and freshly verified SQLCipher password.
 /// Raw SQLCipher key and passphrase are never returned to JavaScript.
 /// </summary>
+[SupportedOSPlatform("windows")]
 public sealed class NativePortableRecoveryExportService
 {
     private readonly AlTamamDbContext _db;
