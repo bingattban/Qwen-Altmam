@@ -145,15 +145,26 @@ public sealed class WindowsDatabaseKeyStore
         string key;
         try{key=PortableRecoveryKeyPackage.Unseal(wrapped,passphrase);}
         finally{CryptographicOperations.ZeroMemory(wrapped);}
-        // Wrong package must be rejected without touching the existing DB.
+        // This is PRE-LOGIN verification. Do not use AlTamamDbContext:
+        // CreateOpenConnection() is ReadWriteCreate and sets journal_mode=WAL,
+        // which can modify the customer database even for integrity_check.
+        // Instead inspect the exact existing encrypted image with a READ-ONLY,
+        // non-pooled SQLCipher connection and verify integrity, foreign keys,
+        // expected schema, and application tables before installing any key.
         try
         {
-            using var candidate=new AlTamam.Infrastructure.Persistence.AlTamamDbContext(database,key);
-            if(!candidate.HasValidIntegrity())
+            var inspected=AlTamam.Infrastructure.Persistence.EncryptedBackupInspector
+                .VerifyAsync(database,database+".native-key-verify-not-live",
+                    key,CancellationToken.None).GetAwaiter().GetResult();
+            if(inspected.SchemaVersion!=
+               AlTamam.Infrastructure.Persistence.AlTamamDbContext.CurrentSchemaVersion)
                 throw new CryptographicException(RecoveryRequired);
         }
         catch(Exception ex) when(ex is Microsoft.Data.Sqlite.SqliteException ||
-                                 ex is InvalidOperationException)
+                                 ex is InvalidOperationException ||
+                                 ex is InvalidDataException ||
+                                 ex is FormatException ||
+                                 ex is OverflowException)
         {
             throw new CryptographicException(RecoveryRequired);
         }
