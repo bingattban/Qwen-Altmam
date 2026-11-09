@@ -1,0 +1,53 @@
+{
+  "schema": "AlTamam.Phase15.CandidateInventory.v1",
+  "status": "CI_CANDIDATE_ONLY_NOT_PRODUCTION_ACCEPTANCE",
+  "testedCheckoutSha": "859cc9c7e889d73f0f23debd0235c3c912f397c8",
+  "sourceHeadSha": "859cc9c7e889d73f0f23debd0235c3c912f397c8",
+  "version": "0.0.1135-ci",
+  "githubRunId": "42698618694",
+  "coreRunId": "42698618350",
+  "releaseFiles": [
+    {
+      "architecture": "Windows-32bit",
+      "class": "Portable",
+      "file": "AlTamamDaily_0.0.1135-ci_Portable_win-x86.zip",
+      "bytes": 253746971,
+      "sha256": "aaca9136c1181ab40d491b3b193931c28bcc7607bc8e2bfe415112cd4c5a3f15",
+      "githubArtifactName": "AlTamam-Portable-Windows-32bit-rc-0.0.1135-ci",
+      "runtimeIdentifier": "win-x86"
+    },
+    {
+      "architecture": "Windows-32bit",
+      "class": "Installer",
+      "file": "AlTamamDaily_0.0.1135-ci_Setup_win-x86.exe",
+      "bytes": 235043511,
+      "sha256": "9d5e3a9ac380237a42540daf7815ec5ac213e186ff32fced1e095b2865ec77a5",
+      "githubArtifactName": "AlTamam-Installer-Windows-32bit-rc-0.0.1135-ci",
+      "runtimeIdentifier": "win-x86"
+    },
+    {
+      "architecture": "Windows-64bit",
+      "class": "Portable",
+      "file": "AlTamamDaily_0.0.1135-ci_Portable_win-x64.zip",
+      "bytes": 282676889,
+      "sha256": "ede4296d5e96a347063dcdb317be4f5c47f58b5a076c29767d1d737e99cbc324",
+      "githubArtifactName": "AlTamam-Portable-Windows-64bit-rc-0.0.1135-ci",
+      "runtimeIdentifier": "win-x64"
+    },
+    {
+      "architecture": "Windows-64bit",
+      "class": "Installer",
+      "file": "AlTamamDaily_0.0.1135-ci_Setup_win-x64.exe",
+      "bytes": 263063937,
+      "sha256": "16fe3623685d5011b770d81b7de0f5ab2d7ba4a5765d04348a68cca40a3ad594",
+      "githubArtifactName": "AlTamam-Installer-Windows-64bit-rc-0.0.1135-ci",
+      "runtimeIdentifier": "win-x64"
+    }
+  ],
+  "releasePackageCount": 4,
+  "checksPassed": "four file bytes, exact per-architecture SHA256SUMS and metadata, same checkout/source/version",
+  "independentCleanOfflineWindowsAcceptance": "NOT_EXECUTED",
+  "differentMachineEncryptedRecovery": "NOT_EXECUTED",
+  "realPowerFailureRecovery": "NOT_EXECUTED",
+  "ownerSignedFinalRelease": false
+}

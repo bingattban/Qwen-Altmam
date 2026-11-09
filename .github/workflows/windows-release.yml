@@ -123,6 +123,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native portable key export GA/WPF security contract failed' }
           python build/test-current-recovery-operator-guidance.py
           if ($LASTEXITCODE -ne 0) { throw 'Live native restore and operator guidance drift contract failed' }
+          python build/test-frozen-candidate-evidence.py
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen customer SHA-256 ledger / production NO-GO contract failed' }
+          python build/validate-frozen-candidate.py artifacts/R17_MAIN_AUDITED_CANDIDATE_2026-11-09.json
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen audited main candidate metadata is inconsistent' }
           python build/test-webview-recovery-fixture-contract.py
           if ($LASTEXITCODE -ne 0) { throw 'Real Windows recovery fixture contract failed' }
           node build/test-phase04-bridge-schema.js
