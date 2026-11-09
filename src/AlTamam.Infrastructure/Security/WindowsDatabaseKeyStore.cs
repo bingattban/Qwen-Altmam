@@ -96,26 +96,106 @@ public sealed class WindowsDatabaseKeyStore
             FileAccess.ReadWrite,FileShare.None);
         if(!File.Exists(_keyPath))throw new CryptographicException(RecoveryRequired);
         string key=ReadExisting();
-        using(var databaseContext=new AlTamam.Infrastructure.Persistence.AlTamamDbContext(database,key))
-            if(!databaseContext.HasValidIntegrity())
-                throw new CryptographicException(RecoveryRequired);
-        byte[] body=PortableRecoveryKeyPackage.Seal(key,passphrase);
-        string temp=output+"."+Guid.NewGuid().ToString("N")+".pending";
+
+        // This is a key export, NOT a request to open or migrate the customer's
+        // live database. HasValidIntegrity() uses ReadWriteCreate and sets
+        // journal_mode=WAL; calling it against an OFFLINE database mutates the
+        // source and can leave new -wal/-shm sidecars. Inspect an isolated,
+        // encrypted SQLCipher image instead.
+        string scratch=Path.Combine(Path.GetDirectoryName(database)!,
+            ".altamam-key-preflight-"+Guid.NewGuid().ToString("N"));
+        string candidate=Path.Combine(scratch,"candidate.dbbackup");
+        Directory.CreateDirectory(scratch);
+        FileStream? offlineSourceLock=null;
         try
         {
-            using(var stream=new FileStream(temp,FileMode.CreateNew,
-                FileAccess.Write,FileShare.None))
+            bool hasJournal=File.Exists(database+"-wal") ||
+                File.Exists(database+"-shm") || File.Exists(database+"-journal");
+            if(hasJournal)
             {
-                stream.Write(body);
-                stream.Flush(flushToDisk:true);
+                // An ACTIVE WAL database cannot be copied as raw bytes: its
+                // most recent committed rows may exist only in the WAL file.
+                // Use SQLite's transactionally consistent encrypted backup
+                // under the existing writer integration. The live database
+                // already uses WAL; do not introduce the mode on an offline DB.
+                using var context=new AlTamam.Infrastructure.Persistence.AlTamamDbContext(
+                    database,key,useConnectionPooling:false);
+                context.CreateVerifiedEncryptedBackupAsync(candidate)
+                    .GetAwaiter().GetResult();
             }
-            // Never overwrite a previously protected recovery package.
-            File.Move(temp,output,overwrite:false);
+            else
+            {
+                // On a genuinely closed encrypted DB, hold the source open
+                // read-only with sharing that excludes new writers. Do not
+                // invoke SQLite against the source, even in ReadOnly mode.
+                offlineSourceLock=new FileStream(database,FileMode.Open,FileAccess.Read,
+                    FileShare.Read,81920,FileOptions.SequentialScan);
+                using(var copy=new FileStream(candidate,FileMode.CreateNew,
+                    FileAccess.Write,FileShare.None,81920,FileOptions.WriteThrough))
+                {
+                    offlineSourceLock.CopyTo(copy);
+                    copy.Flush(flushToDisk:true);
+                }
+            }
+
+            SQLitePCL.Batteries_V2.Init();
+            AlTamam.Infrastructure.Persistence.EncryptedBackupInspection inspected;
+            try
+            {
+                inspected=AlTamam.Infrastructure.Persistence.EncryptedBackupInspector
+                    .VerifyAsync(candidate,database,key,CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                if(inspected.SchemaVersion!=
+                    AlTamam.Infrastructure.Persistence.AlTamamDbContext.CurrentSchemaVersion)
+                    throw new CryptographicException(RecoveryRequired);
+            }
+            catch(Exception ex) when(ex is Microsoft.Data.Sqlite.SqliteException or
+                InvalidOperationException or InvalidDataException or FormatException or
+                OverflowException)
+            {
+                throw new CryptographicException(RecoveryRequired);
+            }
+            if(offlineSourceLock is not null)
+            {
+                // A successful inspection must describe the same original
+                // bytes; the source remained locked for the entire operation.
+                offlineSourceLock.Position=0;
+                string originalDigest=Convert.ToHexString(SHA256.HashData(offlineSourceLock));
+                if(!string.Equals(originalDigest,inspected.Sha256,
+                    StringComparison.OrdinalIgnoreCase) ||
+                   File.Exists(database+"-wal") || File.Exists(database+"-shm") ||
+                   File.Exists(database+"-journal"))
+                    throw new CryptographicException(RecoveryRequired);
+            }
+
+            byte[] body=PortableRecoveryKeyPackage.Seal(key,passphrase);
+            string temp=output+"."+Guid.NewGuid().ToString("N")+".pending";
+            try
+            {
+                using(var stream=new FileStream(temp,FileMode.CreateNew,
+                    FileAccess.Write,FileShare.None))
+                {
+                    stream.Write(body);
+                    stream.Flush(flushToDisk:true);
+                }
+                // An existing recovery package is immutable and never replaced.
+                File.Move(temp,output,overwrite:false);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(body);
+                if(File.Exists(temp))File.Delete(temp);
+            }
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(body);
-            if(File.Exists(temp))File.Delete(temp);
+            offlineSourceLock?.Dispose();
+            // A crash can leave this GUID-named directory as recovery evidence,
+            // which the R15 missing-key guard already recognises. Never delete
+            // the customer's live database or any backup through cleanup.
+            try{Directory.Delete(scratch,recursive:true);}
+            catch(IOException){}
+            catch(UnauthorizedAccessException){}
         }
     }
 
