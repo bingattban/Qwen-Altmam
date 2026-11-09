@@ -122,6 +122,69 @@ public sealed class WindowsDatabaseKeyStoreTests : IDisposable
         Assert.False(File.Exists(DatabasePath));
     }
 
+    [Theory]
+    [InlineData("empty-preflight")]
+    [InlineData("copied-encrypted-db")]
+    [InlineData("preflight-wal")]
+    [InlineData("dpapi-key-temporary")]
+    [InlineData("dpapi-key-pending")]
+    public void InterruptedKeyPreflightOrDpapiWrite_IsNeverMistakenForFreshInstall(
+        string interruptedAt)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        string tempKeySuffix = Guid.NewGuid().ToString("N");
+        string artifact;
+        if (interruptedAt.StartsWith("dpapi-key-",StringComparison.Ordinal))
+        {
+            artifact = KeyPath + "." + tempKeySuffix +
+                (interruptedAt=="dpapi-key-pending" ? ".pending" : ".tmp");
+            File.WriteAllBytes(artifact, new byte[] { 0x32, 0x44, 0x55 });
+        }
+        else
+        {
+            string scratch=Path.Combine(_root,
+                ".altamam-key-preflight-" + tempKeySuffix);
+            Directory.CreateDirectory(scratch);
+            artifact = interruptedAt switch
+            {
+                "copied-encrypted-db" => Path.Combine(scratch,"candidate.dbbackup"),
+                "preflight-wal" => Path.Combine(scratch,"candidate.dbbackup-wal"),
+                "empty-preflight" => scratch,
+                _ => throw new InvalidOperationException("Unknown synthetic crash point.")
+            };
+            if (artifact!=scratch)
+                File.WriteAllBytes(artifact, new byte[] { 0x01, 0xF0, 0x09 });
+        }
+        // SQLCipher live DB, key, WAL and backups directory are absent. The
+        // pending recovery preflight/key material is the ONLY old-data evidence.
+        Assert.False(File.Exists(DatabasePath));
+        Assert.False(File.Exists(KeyPath));
+        Assert.False(Directory.Exists(Path.Combine(_root,"backups")));
+        var failure=Assert.Throws<CryptographicException>(() =>
+            new WindowsDatabaseKeyStore(KeyPath).LoadOrCreate(DatabasePath));
+        Assert.Equal(DatabaseStartupFailureClassifier.MissingEncryptionKey,
+            failure.Message);
+        Assert.False(File.Exists(KeyPath));
+        Assert.True(File.Exists(artifact) || Directory.Exists(artifact));
+    }
+
+    [Fact]
+    public void UnrelatedDirectoriesAndNoncanonicalPreflightName_KeepFreshInstallAvailable()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        Directory.CreateDirectory(Path.Combine(_root,"unrelated-files"));
+        Directory.CreateDirectory(Path.Combine(_root,
+            ".altamam-key-preflight-instructions"));
+        File.WriteAllText(Path.Combine(_root,"unrelated-files","candidate.dbbackup"),
+            "not a recovery preflight");
+        string first=new WindowsDatabaseKeyStore(KeyPath).LoadOrCreate(DatabasePath);
+        Assert.Matches("^[0-9A-F]{64}$",first);
+        Assert.Equal(first,new WindowsDatabaseKeyStore(KeyPath).LoadOrCreate(DatabasePath));
+        Assert.False(File.Exists(DatabasePath));
+    }
+
     [Fact]
     public void CorruptProtectedBlob_FailsClosedAndNeverChangesTheKey()
     {
