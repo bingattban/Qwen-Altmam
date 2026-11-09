@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using AlTamam.Infrastructure.Persistence;
 using AlTamam.Tests.Fixtures;
@@ -101,6 +102,62 @@ public sealed class OfflineRestoreSwitchTests : IDisposable
             ?"after-backup":null,ReadSentinel());
         Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.NothingPending,
             await service.ReconcileAtStartupAsync(Live,Key));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InterruptedReplacement_ReconcilesOriginalAndPreservesRollbackAndRescue(
+        bool liveDatabaseMissing)
+    {
+        var prepared = await PreparedAsync();
+        SqliteConnection.ClearAllPools();
+        var service = new OfflineRestoreSwitch();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ActivateOfflineAsync(Live, Key, prepared, point =>
+            {
+                if (point == OfflineRestoreSwitch.Checkpoint.AfterReplace)
+                    throw new InvalidOperationException("simulated power interruption after atomic swap");
+            }));
+
+        string journal = Path.Combine(_dir, ".altamam-restore-activation.pending.json");
+        Assert.True(File.Exists(journal));
+        JsonObject pending = JsonNode.Parse(await File.ReadAllTextAsync(journal))!.AsObject();
+        string rollback = pending["Rollback"]!.GetValue<string>();
+        string rescue = pending["Rescue"]!.GetValue<string>();
+        Assert.True(File.Exists(rollback));
+        Assert.True(File.Exists(rescue));
+        string originalRollbackHash = Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rollback)));
+
+        SqliteConnection.ClearAllPools();
+        if (liveDatabaseMissing)
+            File.Delete(Live);
+        else
+        {
+            // Deliberately damage only a DISPOSABLE SQLCipher fixture.
+            // An interrupted process may have left an incomplete or corrupt live DB.
+            byte[] damaged = await File.ReadAllBytesAsync(Live);
+            damaged[0] ^= 0x7f;
+            await File.WriteAllBytesAsync(Live, damaged);
+        }
+
+        Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.OriginalRecovered,
+            await service.ReconcileAtStartupAsync(Live, Key));
+
+        // A rescue is not an adequate substitute for the actual original
+        // rollback image. Both MUST remain available to the operator.
+        Assert.True(File.Exists(rollback));
+        Assert.Equal(originalRollbackHash, Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rollback))));
+        Assert.True(File.Exists(rescue));
+        Assert.Equal("after-backup", ReadSentinel());
+        Assert.False(File.Exists(journal));
+        Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.NothingPending,
+            await service.ReconcileAtStartupAsync(Live, Key));
+
+        if (!liveDatabaseMissing)
+            Assert.Single(Directory.GetFiles(_dir, "altamam.db.failed-restore-*"));
     }
 
     [Fact]
