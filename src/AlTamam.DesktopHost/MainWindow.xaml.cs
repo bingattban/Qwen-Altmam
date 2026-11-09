@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private bool _restoreInProgress;
     private bool _restoreQuiescing;
     private bool _restoreMayClose;
+    private bool _nativeRecoveryExportInProgress;
     private readonly NativeHostShutdownGate _shutdownGate = new();
     private bool _shutdownCloseAttempted;
 
@@ -93,7 +94,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_restoreInProgress && !_restoreMayClose)
+        if ((_restoreInProgress && !_restoreMayClose) || _nativeRecoveryExportInProgress)
         {
             e.Cancel = true;
             return;
@@ -133,7 +134,8 @@ public partial class MainWindow : Window
     /// </summary>
     private async void OnNativeRestoreMenuClick(object sender, RoutedEventArgs e)
     {
-        if (_restoreInProgress || _restoreQuiescing) return;
+        if (_restoreInProgress || _nativeRecoveryExportInProgress ||
+            _restoreQuiescing || _shutdownCloseAttempted) return;
         _restoreInProgress = true;
         try
         {
@@ -248,6 +250,80 @@ public partial class MainWindow : Window
             }
         }
         finally { _restoreInProgress = false; }
+    }
+
+    /// <summary>
+    /// Non-destructive physical WPF command. A fresh SQLCipher general-admin
+    /// password and separate recovery passphrase are captured only in WPF
+    /// PasswordBoxes; raw key and secrets never enter WebView2 or JS.
+    /// </summary>
+    private async void OnNativeRecoveryKeyExportClick(object sender, RoutedEventArgs e)
+    {
+        if (_restoreInProgress || _nativeRecoveryExportInProgress ||
+            _restoreQuiescing || _shutdownCloseAttempted) return;
+        _nativeRecoveryExportInProgress = true;
+        try
+        {
+            var gateway = _gateway;
+            var database = _dbContext;
+            if (gateway is null || database is null)
+            {
+                MessageBox.Show(this,"أكمل تشغيل التطبيق وسجل الدخول أولا.",
+                    "تصدير مفتاح الاسترداد",MessageBoxButton.OK,MessageBoxImage.Information);
+                return;
+            }
+            BridgePrincipal? founder=await gateway.CurrentGeneralAdministratorAsync();
+            if (founder is null)
+            {
+                MessageBox.Show(this,
+                    "هذه العملية متاحة فقط لجلسة الإدارة العامة الحالية.",
+                    "رفض تصدير المفتاح",MessageBoxButton.OK,MessageBoxImage.Warning);
+                return;
+            }
+            var picker=new Microsoft.Win32.SaveFileDialog
+            {
+                Title="حفظ ملف مفتاح الاسترداد المشفر (جديد فقط)",
+                Filter="AlTamam recovery key (*.altrecovery)|*.altrecovery",
+                DefaultExt=".altrecovery",
+                AddExtension=true,OverwritePrompt=false,
+                CheckPathExists=true,RestoreDirectory=true
+            };
+            if(picker.ShowDialog(this)!=true)return;
+            string destination=picker.FileName;
+            if(File.Exists(destination))
+            {
+                MessageBox.Show(this,
+                    "هذا الملف موجود مسبقا. اختر اسما جديدا؛ لا يجوز استبدال مفاتيح الاسترداد.",
+                    "ملف موجود",MessageBoxButton.OK,MessageBoxImage.Warning);
+                return;
+            }
+            NativeRecoveryKeyExportDialog.Credentials? credentials =
+                NativeRecoveryKeyExportDialog.RequestCredentials(this,destination);
+            if(credentials is null)return;
+            var keyStore=new AlTamam.Infrastructure.Security.WindowsDatabaseKeyStore(
+                Path.Combine(AppDataLayout.DataRoot,"db.key.protected"));
+            var exporter=new NativePortableRecoveryExportService(
+                database,gateway.Sessions,keyStore);
+            bool saved=await exporter.TryExportAsync(founder,
+                credentials.CurrentAdminPassword,credentials.RecoveryPassphrase,
+                destination);
+            MessageBox.Show(this,
+                saved
+                  ? "حُفظ ملف مفتاح الاسترداد المشفر بنجاح. "+
+                    "احتفظ بالملف وكلمة مروره بشكل منفصل عن النسخ الاحتياطية."
+                  : "رُفض تصدير المفتاح. تحقق من جلسة الإدارة العامة "+
+                    "وكلمة مرورها الحالية وكلمة الاسترداد المستقلة.",
+                "تصدير مفتاح الاسترداد",MessageBoxButton.OK,
+                saved?MessageBoxImage.Information:MessageBoxImage.Warning);
+        }
+        catch(Exception)
+        {
+            MessageBox.Show(this,
+                "تعذر إنشاء ملف الاسترداد. تحقق من صلاحية المسار "+
+                "وعدم وجود ملف سابق، ومن سلامة قاعدة البيانات والمفتاح الحالي.",
+                "لم يكتمل التصدير",MessageBoxButton.OK,MessageBoxImage.Error);
+        }
+        finally { _nativeRecoveryExportInProgress=false; }
     }
 
     private async Task StopForNativeRestoreAsync(CancellationToken cancellationToken)

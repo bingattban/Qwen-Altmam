@@ -19,6 +19,8 @@
             <MenuItem Header="ملف">
                 <MenuItem Header="استعادة نسخة احتياطية بأمان"
                           Click="OnNativeRestoreMenuClick" />
+                <MenuItem Header="تصدير مفتاح الاسترداد المشفر"
+                          Click="OnNativeRecoveryKeyExportClick" />
             </MenuItem>
         </Menu>
         <!-- Native startup feedback is visible immediately while WebView2 and the encrypted DB initialize. -->

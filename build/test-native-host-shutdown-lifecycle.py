@@ -30,7 +30,7 @@ class NativeShutdownLifecycle(unittest.TestCase):
         self.assertIn("StopAndDrainAsync", APP)
         self.assertIn("await", APP)
         self.assertIn("Close();", HOST)
-        self.assertIn("if (_restoreInProgress && !_restoreMayClose)", HOST)
+        self.assertIn("if ((_restoreInProgress && !_restoreMayClose) || _nativeRecoveryExportInProgress)", HOST)
         self.assertIn("--webview-selfcheck", HOST)
         self.assertIn("CancellationToken.None", HOST)
 
