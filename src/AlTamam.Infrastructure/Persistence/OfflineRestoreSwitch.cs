@@ -27,13 +27,6 @@ public sealed class OfflineRestoreSwitch
     private static string Journal(string live)
         =>Path.Combine(Path.GetDirectoryName(Path.GetFullPath(live))!,JournalName);
 
-    private static async Task<string> HashAsync(string file,CancellationToken ct)
-    {
-        await using var f=new FileStream(file,FileMode.Open,FileAccess.Read,
-            FileShare.Read,81920,FileOptions.SequentialScan);
-        return Convert.ToHexString(await SHA256.HashDataAsync(f,ct)
-            .ConfigureAwait(false)).ToLowerInvariant();
-    }
     private static void ValidateStagePath(string live,string stage)
     {
         if(!string.Equals(Path.GetDirectoryName(Path.GetFullPath(live)),
