@@ -27,13 +27,6 @@ public sealed class OfflineRestoreSwitch
     private static string Journal(string live)
         =>Path.Combine(Path.GetDirectoryName(Path.GetFullPath(live))!,JournalName);
 
-    private static async Task<string> HashAsync(string file,CancellationToken ct)
-    {
-        await using var f=new FileStream(file,FileMode.Open,FileAccess.Read,
-            FileShare.Read,81920,FileOptions.SequentialScan);
-        return Convert.ToHexString(await SHA256.HashDataAsync(f,ct)
-            .ConfigureAwait(false)).ToLowerInvariant();
-    }
     private static void ValidateStagePath(string live,string stage)
     {
         if(!string.Equals(Path.GetDirectoryName(Path.GetFullPath(live)),
@@ -109,17 +102,56 @@ public sealed class OfflineRestoreSwitch
         string live,string key,CancellationToken ct)
     {
         if(!File.Exists(path))return false;
-        if(!string.Equals(await HashAsync(path,ct),digest,StringComparison.OrdinalIgnoreCase))
-            return false;
+
+        // Even opening a WAL-mode SQLCipher DB with SqliteOpenMode.ReadOnly can
+        // create -wal/-shm files beside that DB. This must NEVER happen to the
+        // restored customer live DB or the only original encrypted rollback.
+        // Verify a separate disposable encrypted image instead; fail closed
+        // if the extra disk space is unavailable. R13/R15 recognise the
+        // uniquely named replay prefix as old recovery evidence after crashes.
+        string replay=Path.Combine(Path.GetDirectoryName(live)!,
+            ".altamam-restore-reconcile-"+Guid.NewGuid().ToString("N")+".dbbackup");
         try
         {
-            var result=await EncryptedBackupInspector.VerifyAsync(path,
-                Path.Combine(Path.GetDirectoryName(live)!,"unused-not-live.db"),key,ct)
+            // Hold a shared READ lock while hashing and making the copy,
+            // excluding concurrent writers/deletions during verification.
+            await using var original=new FileStream(path,FileMode.Open,
+                FileAccess.Read,FileShare.Read,81920,FileOptions.SequentialScan);
+            string originalDigest=Convert.ToHexString(
+                await SHA256.HashDataAsync(original,ct).ConfigureAwait(false));
+            if(!string.Equals(originalDigest,digest,StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            original.Position=0;
+            await using(var output=new FileStream(replay,FileMode.CreateNew,
+                FileAccess.Write,FileShare.None,81920,FileOptions.WriteThrough))
+            {
+                await original.CopyToAsync(output,ct).ConfigureAwait(false);
+                output.Flush(flushToDisk:true);
+            }
+            var result=await EncryptedBackupInspector.VerifyAsync(replay,live,key,ct)
                 .ConfigureAwait(false);
-            return result.SchemaVersion==AlTamamDbContext.CurrentSchemaVersion;
+            return result.SchemaVersion==AlTamamDbContext.CurrentSchemaVersion &&
+                string.Equals(result.Sha256,digest,StringComparison.OrdinalIgnoreCase);
         }
         catch(Exception ex) when(ex is SqliteException or IOException or
             InvalidDataException or FormatException or InvalidOperationException){return false;}
+        finally
+        {
+            // Remove only our GUID-generated scratch encrypted image and its
+            // SQLite sidecars, not customer backups, live DB or original
+            // rollback. If cleanup is interrupted, leave evidence intact.
+            foreach(string suffix in new[]{"-wal","-shm","-journal",""})
+            {
+                try
+                {
+                    string file=replay+suffix;
+                    if(File.Exists(file))File.Delete(file);
+                }
+                catch(IOException){}
+                catch(UnauthorizedAccessException){}
+            }
+        }
     }
     private static async Task WriteIntentAsync(string path,Intent intent,CancellationToken ct)
     {
