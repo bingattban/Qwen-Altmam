@@ -251,7 +251,13 @@ public sealed class OfflineRestoreSwitchTests : IDisposable
                         throw new IOException("synthetic process stopped before journal cleanup");
                 }));
         Assert.True(File.Exists(journal));
-        Assert.Equal("after-backup",ReadSentinel());
+        // Recovery runs BEFORE any writable SQLCipher connection on startup.
+        // ReadSentinel() opens AlTamamDbContext, whose connection enables WAL
+        // and can change the live-file SHA even for a SELECT. That would create
+        // a DIFFERENT state than a real startup reconciliation and force a
+        // redundant (but safe) second rollback. Compare bytes first instead.
+        Assert.Equal(originalSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(Live))));
         Assert.Equal(originalSha,Convert.ToHexString(
             SHA256.HashData(await File.ReadAllBytesAsync(rollback))));
 
@@ -263,6 +269,8 @@ public sealed class OfflineRestoreSwitchTests : IDisposable
         Assert.False(File.Exists(journal));
         Assert.Equal(originalSha,Convert.ToHexString(
             SHA256.HashData(await File.ReadAllBytesAsync(rollback))));
+        // Only now may the application open its writable connection and WAL.
+        Assert.Equal("after-backup",ReadSentinel());
     }
 
     [Fact]
