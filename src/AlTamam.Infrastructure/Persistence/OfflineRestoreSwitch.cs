@@ -241,12 +241,45 @@ public sealed class OfflineRestoreSwitch
             .ConfigureAwait(false))
             throw new InvalidDataException(
                 "Unknown DB state without a valid rollback; no overwrite performed.");
-        if(!File.Exists(live))File.Copy(state.Rollback,live,overwrite:false);
-        else File.Replace(state.Rollback,live,
-            live+".failed-restore-"+Guid.NewGuid().ToString("N"));
-        if(!await ValidExactAsync(live,state.OldDigest,live,key,ct).ConfigureAwait(false))
-            throw new InvalidDataException("Rollback verification failed; intent retained.");
-        File.Delete(Journal(live));
-        return RecoveryOutcome.OriginalRecovered;
+        // Never pass the ONLY verified pre-restore rollback to File.Replace:
+        // File.Replace consumes its source. A damaged new live DB after power
+        // loss must not erase the original encrypted rollback evidence.
+        // Copy to a same-volume, uniquely named, write-through disposable
+        // image and verify it independently before entering the atomic swap.
+        // On disk-full/copy failure, the journal and original stay untouched.
+        string replay=Path.Combine(Path.GetDirectoryName(live)!,
+            ".altamam-restore-reconcile-"+Guid.NewGuid().ToString("N")+".dbbackup");
+        try
+        {
+            await using(var original=new FileStream(state.Rollback,FileMode.Open,
+                FileAccess.Read,FileShare.Read,81920,FileOptions.SequentialScan))
+            await using(var output=new FileStream(replay,FileMode.CreateNew,
+                FileAccess.Write,FileShare.None,81920,FileOptions.WriteThrough))
+            {
+                await original.CopyToAsync(output,ct).ConfigureAwait(false);
+                output.Flush(flushToDisk:true);
+            }
+            if(!await ValidExactAsync(replay,state.OldDigest,live,key,ct)
+                .ConfigureAwait(false))
+                throw new InvalidDataException(
+                    "Rollback replay copy is not valid; original and intent retained.");
+            if(!File.Exists(live))File.Move(replay,live);
+            else File.Replace(replay,live,
+                live+".failed-restore-"+Guid.NewGuid().ToString("N"));
+            if(!await ValidExactAsync(live,state.OldDigest,live,key,ct)
+                .ConfigureAwait(false))
+                throw new InvalidDataException(
+                    "Rollback verification failed; intent and original retained.");
+            File.Delete(Journal(live));
+            return RecoveryOutcome.OriginalRecovered;
+        }
+        finally
+        {
+            // Best-effort cleanup of the disposable replay ONLY. Even if File
+            // replacement fails, NEVER remove the source rollback or rescues.
+            try { if(File.Exists(replay))File.Delete(replay); }
+            catch(IOException) { }
+            catch(UnauthorizedAccessException) { }
+        }
     }
 }
