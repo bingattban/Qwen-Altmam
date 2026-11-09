@@ -1,3 +1,7 @@
+> **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** The original Phase 12.06 implementation was infrastructure-only. Since R08/R09, native WPF File-menu cutover, native GeneralAdministration password prompt, bridge+scheduler quiescence and bounded shutdown exist. The untrusted WebView2 `RestoreDatabaseAtomically` bridge remains **disabled**. R10/R11/R14/R15 add recovery evidence protection. The paragraphs below referring to missing native gates are a **historical snapshot**, not proof those implementations are absent today. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](CURRENT_RECOVERY_OPERATOR_GUIDE.md).
+
+---
+
 # Phase 12.06 — Offline atomic database-switch core (partial)
 
 This is native infrastructure, NOT an enabled end-user restore workflow.
