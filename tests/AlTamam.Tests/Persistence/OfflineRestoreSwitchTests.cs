@@ -160,6 +160,119 @@ public sealed class OfflineRestoreSwitchTests : IDisposable
             Assert.Single(Directory.GetFiles(_dir, "altamam.db.failed-restore-*"));
     }
 
+    [Theory]
+    [InlineData(OfflineRestoreSwitch.RecoveryCheckpoint.BeforeReplayCopy)]
+    [InlineData(OfflineRestoreSwitch.RecoveryCheckpoint.AfterReplayCopy)]
+    [InlineData(OfflineRestoreSwitch.RecoveryCheckpoint.BeforeRecoveryReplace)]
+    public async Task SimulatedDiskOrIoFailureBeforeReconciliationSwap_PreservesEvidenceAndRetries(
+        OfflineRestoreSwitch.RecoveryCheckpoint failAt)
+    {
+        var prepared=await PreparedAsync();
+        SqliteConnection.ClearAllPools();
+        var service=new OfflineRestoreSwitch();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ActivateOfflineAsync(Live,Key,prepared,point =>
+            {
+                if(point==OfflineRestoreSwitch.Checkpoint.AfterReplace)
+                    throw new InvalidOperationException("synthetic process interruption");
+            }));
+
+        string journal=Path.Combine(_dir,".altamam-restore-activation.pending.json");
+        JsonObject intent=JsonNode.Parse(await File.ReadAllTextAsync(journal))!.AsObject();
+        string rollback=intent["Rollback"]!.GetValue<string>();
+        string rescue=intent["Rescue"]!.GetValue<string>();
+        string rollbackSha=Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rollback)));
+        string rescueSha=Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rescue)));
+
+        // Only synthetic temp SQLCipher files are deliberately damaged.
+        SqliteConnection.ClearAllPools();
+        byte[] damaged=await File.ReadAllBytesAsync(Live);
+        damaged[0]^=0x7f;
+        await File.WriteAllBytesAsync(Live,damaged);
+        string failedLiveSha=Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(Live)));
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            service.ReconcileAtStartupAsync(Live,Key,
+                testCheckpoint: checkpoint =>
+                {
+                    if(checkpoint==failAt)
+                        throw new IOException("synthetic disk full / access denied");
+                }));
+        Assert.True(File.Exists(journal)); // no false success or journal loss
+        Assert.Equal(failedLiveSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(Live))));
+        Assert.Equal(rollbackSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rollback))));
+        Assert.Equal(rescueSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rescue))));
+        Assert.Empty(Directory.GetFiles(_dir,".altamam-restore-reconcile-*.dbbackup"));
+
+        SqliteConnection.ClearAllPools();
+        Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.OriginalRecovered,
+            await service.ReconcileAtStartupAsync(Live,Key));
+        Assert.Equal("after-backup",ReadSentinel());
+        Assert.False(File.Exists(journal));
+        Assert.Equal(rollbackSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rollback))));
+        Assert.Equal(rescueSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rescue))));
+    }
+
+    [Fact]
+    public async Task InterruptionAfterRecoverySwap_DoesNotLoseJournalOrOriginalRollback()
+    {
+        var prepared=await PreparedAsync();
+        SqliteConnection.ClearAllPools();
+        var service=new OfflineRestoreSwitch();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ActivateOfflineAsync(Live,Key,prepared,point =>
+            {
+                if(point==OfflineRestoreSwitch.Checkpoint.AfterReplace)
+                    throw new InvalidOperationException("synthetic power interruption");
+            }));
+        string journal=Path.Combine(_dir,".altamam-restore-activation.pending.json");
+        JsonObject intent=JsonNode.Parse(await File.ReadAllTextAsync(journal))!.AsObject();
+        string rollback=intent["Rollback"]!.GetValue<string>();
+        string originalSha=Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rollback)));
+        SqliteConnection.ClearAllPools();
+        byte[] damaged=await File.ReadAllBytesAsync(Live);
+        damaged[0]^=0x7f;
+        await File.WriteAllBytesAsync(Live,damaged);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            service.ReconcileAtStartupAsync(Live,Key,
+                testCheckpoint: point =>
+                {
+                    if(point==OfflineRestoreSwitch.RecoveryCheckpoint.AfterRecoveryReplace)
+                        throw new IOException("synthetic process stopped before journal cleanup");
+                }));
+        Assert.True(File.Exists(journal));
+        // Recovery runs BEFORE any writable SQLCipher connection on startup.
+        // ReadSentinel() opens AlTamamDbContext, whose connection enables WAL
+        // and can change the live-file SHA even for a SELECT. That would create
+        // a DIFFERENT state than a real startup reconciliation and force a
+        // redundant (but safe) second rollback. Compare bytes first instead.
+        Assert.Equal(originalSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(Live))));
+        Assert.Equal(originalSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rollback))));
+
+        SqliteConnection.ClearAllPools();
+        Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.OriginalRetained,
+            await service.ReconcileAtStartupAsync(Live,Key));
+        Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.NothingPending,
+            await service.ReconcileAtStartupAsync(Live,Key));
+        Assert.False(File.Exists(journal));
+        Assert.Equal(originalSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(rollback))));
+        // Only now may the application open its writable connection and WAL.
+        Assert.Equal("after-backup",ReadSentinel());
+    }
+
     [Fact]
     public async Task ChangedEncryptedStage_IsRejectedWithoutSwitchingLiveDb()
     {

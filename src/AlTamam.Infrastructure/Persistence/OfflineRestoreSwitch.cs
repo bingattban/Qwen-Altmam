@@ -13,6 +13,13 @@ namespace AlTamam.Infrastructure.Persistence;
 public sealed class OfflineRestoreSwitch
 {
     public enum Checkpoint { BeforeReplace, AfterReplace }
+    // Fault injection used only by real disposable SQLCipher integration tests.
+    // The production caller never supplies a checkpoint callback.
+    public enum RecoveryCheckpoint
+    {
+        BeforeReplayCopy, AfterReplayCopy,
+        BeforeRecoveryReplace, AfterRecoveryReplace
+    }
     public enum RecoveryOutcome { NothingPending, OriginalRetained, ReplacementVerified, OriginalRecovered }
     private sealed record Intent(string Live,string Stage,string Rollback,string Rescue,
         string OldDigest,string NewDigest);
@@ -221,7 +228,7 @@ public sealed class OfflineRestoreSwitch
 
     /// <summary>Run under the single-instance lock, BEFORE opening the DB.</summary>
     public async Task<RecoveryOutcome> ReconcileAtStartupAsync(string live,string key,
-        CancellationToken ct=default)
+        CancellationToken ct=default,Action<RecoveryCheckpoint>? testCheckpoint=null)
     {
         live=Path.GetFullPath(live);
         if(!File.Exists(Journal(live)))return RecoveryOutcome.NothingPending;
@@ -251,6 +258,7 @@ public sealed class OfflineRestoreSwitch
             ".altamam-restore-reconcile-"+Guid.NewGuid().ToString("N")+".dbbackup");
         try
         {
+            testCheckpoint?.Invoke(RecoveryCheckpoint.BeforeReplayCopy);
             await using(var original=new FileStream(state.Rollback,FileMode.Open,
                 FileAccess.Read,FileShare.Read,81920,FileOptions.SequentialScan))
             await using(var output=new FileStream(replay,FileMode.CreateNew,
@@ -259,13 +267,16 @@ public sealed class OfflineRestoreSwitch
                 await original.CopyToAsync(output,ct).ConfigureAwait(false);
                 output.Flush(flushToDisk:true);
             }
+            testCheckpoint?.Invoke(RecoveryCheckpoint.AfterReplayCopy);
             if(!await ValidExactAsync(replay,state.OldDigest,live,key,ct)
                 .ConfigureAwait(false))
                 throw new InvalidDataException(
                     "Rollback replay copy is not valid; original and intent retained.");
+            testCheckpoint?.Invoke(RecoveryCheckpoint.BeforeRecoveryReplace);
             if(!File.Exists(live))File.Move(replay,live);
             else File.Replace(replay,live,
                 live+".failed-restore-"+Guid.NewGuid().ToString("N"));
+            testCheckpoint?.Invoke(RecoveryCheckpoint.AfterRecoveryReplace);
             if(!await ValidExactAsync(live,state.OldDigest,live,key,ct)
                 .ConfigureAwait(false))
                 throw new InvalidDataException(
