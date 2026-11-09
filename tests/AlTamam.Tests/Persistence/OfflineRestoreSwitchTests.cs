@@ -79,6 +79,65 @@ public sealed class OfflineRestoreSwitchTests : IDisposable
             await service.ReconcileAtStartupAsync(Live,Key));
     }
 
+    [Fact]
+    public async Task NativeActivation_VerificationNeverCreatesWalOrShmForJustSwitchedLiveDatabase()
+    {
+        var prepared=await PreparedAsync();
+        SqliteConnection.ClearAllPools();
+        string rollback=await new OfflineRestoreSwitch()
+            .ActivateOfflineAsync(Live,Key,prepared);
+
+        // No application connection has been opened after the native switch.
+        // The SQLCipher read-only verifier MUST NOT create WAL/SHM beside the
+        // customer's newly switched encrypted DB (even if its header is WAL).
+        Assert.False(File.Exists(Live+"-wal"));
+        Assert.False(File.Exists(Live+"-shm"));
+        Assert.False(File.Exists(Live+"-journal"));
+        Assert.False(File.Exists(rollback+"-wal"));
+        Assert.False(File.Exists(rollback+"-shm"));
+        Assert.True(File.Exists(rollback));
+        Assert.Empty(Directory.GetFiles(_dir,
+            ".altamam-restore-reconcile-*.dbbackup"));
+        Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.NothingPending,
+            await new OfflineRestoreSwitch().ReconcileAtStartupAsync(Live,Key));
+    }
+
+    [Theory]
+    [InlineData(OfflineRestoreSwitch.Checkpoint.BeforeReplace,
+        OfflineRestoreSwitch.RecoveryOutcome.OriginalRetained)]
+    [InlineData(OfflineRestoreSwitch.Checkpoint.AfterReplace,
+        OfflineRestoreSwitch.RecoveryOutcome.ReplacementVerified)]
+    public async Task StartupReconciliation_VerificationPreservesLiveShaAndNeverCreatesSqliteSidecars(
+        OfflineRestoreSwitch.Checkpoint stopped,
+        OfflineRestoreSwitch.RecoveryOutcome outcome)
+    {
+        var prepared=await PreparedAsync();
+        SqliteConnection.ClearAllPools();
+        var service=new OfflineRestoreSwitch();
+        await Assert.ThrowsAsync<InvalidOperationException>(()=>
+            service.ActivateOfflineAsync(Live,Key,prepared,point=>
+            {
+                if(point==stopped)
+                    throw new InvalidOperationException("synthetic abrupt process stop");
+            }));
+        string before=Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(Live)));
+        SqliteConnection.ClearAllPools();
+        Assert.False(File.Exists(Live+"-wal"));
+        Assert.False(File.Exists(Live+"-shm"));
+
+        Assert.Equal(outcome,await service.ReconcileAtStartupAsync(Live,Key));
+        Assert.Equal(before,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(Live))));
+        Assert.False(File.Exists(Live+"-wal"));
+        Assert.False(File.Exists(Live+"-shm"));
+        Assert.False(File.Exists(Live+"-journal"));
+        Assert.Empty(Directory.GetFiles(_dir,
+            ".altamam-restore-reconcile-*.dbbackup"));
+        Assert.Equal(OfflineRestoreSwitch.RecoveryOutcome.NothingPending,
+            await service.ReconcileAtStartupAsync(Live,Key));
+    }
+
     [Theory]
     [InlineData(OfflineRestoreSwitch.Checkpoint.BeforeReplace,
         OfflineRestoreSwitch.RecoveryOutcome.OriginalRetained)]
