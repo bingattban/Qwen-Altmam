@@ -270,7 +270,7 @@ public sealed class WindowsDatabaseKeyStore
         }
     }
 
-    private static bool ContainsRecoveryArtifacts(string databasePath)
+    private bool ContainsRecoveryArtifacts(string databasePath)
     {
         // Missing live DB + missing DPAPI key is NOT sufficient evidence of a
         // clean installation. Power loss may leave only a durable restore
@@ -279,6 +279,45 @@ public sealed class WindowsDatabaseKeyStore
         string? dataRoot = Path.GetDirectoryName(databasePath);
         if (dataRoot is null) return false;
         string databaseFile = Path.GetFileName(databasePath);
+
+        // R14 copies the original encrypted DB into a uniquely GUID-named
+        // scratch DIRECTORY during pre-login recovery verification. Abrupt
+        // process termination can leave this directory as the only surviving
+        // encrypted evidence. R13's file-only scan did not detect it.
+        const string preflightPrefix=".altamam-key-preflight-";
+        if (Directory.Exists(dataRoot) &&
+            Directory.EnumerateDirectories(dataRoot,"*",SearchOption.TopDirectoryOnly)
+                .Any(dir =>
+                {
+                    string name=Path.GetFileName(dir);
+                    return name.StartsWith(preflightPrefix,StringComparison.OrdinalIgnoreCase) &&
+                           name.Length==preflightPrefix.Length+32 &&
+                           name.AsSpan(preflightPrefix.Length).ToString().All(Uri.IsHexDigit);
+                }))
+            return true;
+
+        // DPAPI write-through is also two-phase (.tmp for new keys, .pending
+        // for explicitly recovered originals). If power fails before rename,
+        // the original protected key may exist only as an orphan temp file.
+        // Inspect the ACTUAL key folder, which need not be the DB folder.
+        string? keyRoot=Path.GetDirectoryName(_keyPath);
+        string keyPrefix=Path.GetFileName(_keyPath)+".";
+        if(keyRoot is not null && Directory.Exists(keyRoot) &&
+           Directory.EnumerateFiles(keyRoot,"*",SearchOption.TopDirectoryOnly)
+               .Any(file =>
+               {
+                   string name=Path.GetFileName(file);
+                   if(!name.StartsWith(keyPrefix,StringComparison.OrdinalIgnoreCase))
+                       return false;
+                   string tail=name[keyPrefix.Length..];
+                   string guid=tail.EndsWith(".tmp",StringComparison.OrdinalIgnoreCase)
+                       ?tail[..^4]
+                       :tail.EndsWith(".pending",StringComparison.OrdinalIgnoreCase)
+                           ?tail[..^8] : "";
+                   return guid.Length==32 && guid.All(Uri.IsHexDigit);
+               }))
+            return true;
+
         if (Directory.Exists(dataRoot) &&
             Directory.EnumerateFiles(dataRoot, "*", SearchOption.TopDirectoryOnly)
                 .Any(file =>
