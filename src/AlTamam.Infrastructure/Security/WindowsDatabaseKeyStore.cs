@@ -145,6 +145,11 @@ public sealed class WindowsDatabaseKeyStore
         string key;
         try{key=PortableRecoveryKeyPackage.Unseal(wrapped,passphrase);}
         finally{CryptographicOperations.ZeroMemory(wrapped);}
+        // A key must also be recoverable on a genuinely fresh Windows
+        // process before any AlTamamDbContext static constructor has run.
+        // Initialize the SQLCipher native provider explicitly before opening
+        // the read-only inspection connection.
+        SQLitePCL.Batteries_V2.Init();
         // This is PRE-LOGIN verification. Do not use AlTamamDbContext:
         // CreateOpenConnection() is ReadWriteCreate and sets journal_mode=WAL,
         // which can modify the customer database even for integrity_check.
