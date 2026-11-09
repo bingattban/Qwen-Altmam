@@ -1,3 +1,7 @@
+> **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** As of this later checkpoint (not a revision of the historical 2026-11-03 candidate), the latest merged recovery guard is R15 PR #266, main `0e1021fa29438f34c61df2db57cf01b7fae534ce`. [Windows Core 42632103102](https://github.com/bingattban/Qwen-Altmam/actions/runs/42632103102) and [Windows Release 42632102975](https://github.com/bingattban/Qwen-Altmam/actions/runs/42632102975) both succeeded on PR HEAD `49a185b6aa6d6e8fabebb9b1b725b4a1b29ad7f8` with four x86/x64 Portable/Installer packages and independent customer SHA-256 audit. The host now has a **native WPF** GA-only restore and encrypted-key export, while the WebView2 restore action remains **disabled**. The release's independent clean-machine matrix job was **skipped**: real x86/x64 clean offline devices, cross-PC recovery, power interruption, disk-full and owner signoff are still **NOT EXECUTED/PENDING**. The rest of this file is historical audit evidence tied to older, immutable SHAs. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](../support/CURRENT_RECOVERY_OPERATOR_GUIDE.md).
+
+---
+
 # AL-TAMAM DAILY — Phase 15 GO/NO-GO gate
 Date of review: 2026-11-03. Repository: bingattban/Qwen-Altmam.
 **Decision: NO-GO — not production-ready; owner signoff NOT GIVEN.**
