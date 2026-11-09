@@ -17,3 +17,13 @@ The test above is a second *DPAPI location* in a Windows runner, NOT an independ
 
 ## Required delivery
 Two workflows: Windows Core and Windows Release concurrently on the **same exact SHA**, each required check green. Full Release tests **before** producing x86 and x64 Portable and Installer; independently verify all four delivered customer-file SHA-256 values. No merge on failed job or missing artifacts; no production release GO without manually documented acceptance.
+
+
+## CI failure diagnosis and correction (2026-11-09)
+The first R14 Windows Core/Release full suites each reported three failing tests. Two old recovery tests opened the target SQLCipher file through writable, pooled fixture connections before invoking a pre-login recovery, leaving WAL/locks and causing an `IOException` instead of reaching wrong-key verification. The new byte-identity test found that even SQLite `ReadOnly` inspection can create a `-wal` file beside a WAL-format **customer target**.
+
+**Actual correction:** before installing any DPAPI key, reject source `-wal/-shm/-journal` sidecars, hold a shared **read-only file lock** on the exact target, copy its encrypted bytes to a uniquely named isolated scratch directory with write-through flush, run existing SQLCipher read-only integrity/schema/foreign-key verification **only on the copy**, compare the locked source SHA-256 with the independently verified copy, and recheck source sidecars. Only then atomically install the original key. Scratch cleanup deletes only its own directory. In particular, the original target never becomes the SQLite connection's DataSource and can never acquire a WAL/SHM file as a side effect of verification.
+
+Updated fixtures validate actual OFFLINE target snapshots rather than generating WAL sidecars through a test helper before testing key import. The wrong-key test now supplies an independently encrypted wrong-key backup and must return `CryptographicException` with no new target DPAPI key or target byte mutation. This is a functional fix, not a suppression of failing assertions, compiler analyzers, or CI gates.
+
+These are synthetic Windows runner tests; a real different-user/different-PC proof of possession and physical interrupted-disk acceptance remain NOT EXECUTED.
