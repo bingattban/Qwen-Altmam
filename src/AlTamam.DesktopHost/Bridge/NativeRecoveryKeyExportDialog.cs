@@ -39,16 +39,6 @@ internal static class NativeRecoveryKeyExportDialog
             Text="الملف الجديد: "+Path.GetFileName(destinationName),
             TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)
         });
-        static PasswordBox AddSecret(StackPanel parent,string caption)
-        {
-            parent.Children.Add(new TextBlock
-            {
-                Text=caption,Margin=new Thickness(0,4,0,4)
-            });
-            var box=new PasswordBox{MaxLength=1024,Margin=new Thickness(0,0,0,8)};
-            parent.Children.Add(box);
-            return box;
-        }
         // Three physical, independently owned input widgets; all values are
         // discarded on cancellation and never passed to the browser.
         var admin = new PasswordBox { MaxLength=1024 };
