@@ -61,6 +61,67 @@ public sealed class WindowsDatabaseKeyStoreTests : IDisposable
         Assert.Equal(new byte[] { 0x03, 0x18 }, File.ReadAllBytes(filename));
     }
 
+    [Theory]
+    [InlineData("pending-intent")]
+    [InlineData("journal-temp")]
+    [InlineData("original-rollback")]
+    [InlineData("staged-backup")]
+    [InlineData("replay-copy")]
+    [InlineData("failed-live-image")]
+    [InlineData("sqlite-journal")]
+    [InlineData("portable-recovery")]
+    public void MissingKeyWithOnlyRootRecoveryEvidence_FailsClosedBeforeNewKeyCreation(
+        string kind)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        string artifact = kind switch
+        {
+            "pending-intent" => Path.Combine(_root,
+                ".altamam-restore-activation.pending.json"),
+            "journal-temp" => Path.Combine(_root,
+                ".altamam-restore-activation.pending.json.123.tmp"),
+            "original-rollback" => Path.Combine(_root,
+                ".altamam-restore-rollback-" + Guid.NewGuid().ToString("N") + ".dbbackup"),
+            "staged-backup" => Path.Combine(_root,
+                ".altamam-restore-stage-" + Guid.NewGuid().ToString("N") + ".dbbackup"),
+            "replay-copy" => Path.Combine(_root,
+                ".altamam-restore-reconcile-" + Guid.NewGuid().ToString("N") + ".dbbackup"),
+            "failed-live-image" => DatabasePath + ".failed-restore-" +
+                Guid.NewGuid().ToString("N"),
+            "sqlite-journal" => DatabasePath + "-journal",
+            "portable-recovery" => Path.Combine(_root, "portable.altrecovery"),
+            _ => throw new InvalidOperationException("Unknown test recovery kind.")
+        };
+        // No live database, no key, and no backup-directory files. Historically
+        // that combination incorrectly allowed a fresh DPAPI SQLCipher key.
+        byte[] original = new byte[] { 0x09, 0x18, 0x27, 0x36 };
+        File.WriteAllBytes(artifact, original);
+        var store = new WindowsDatabaseKeyStore(KeyPath);
+
+        var rejected = Assert.Throws<CryptographicException>(() =>
+            store.LoadOrCreate(DatabasePath));
+        Assert.Equal(DatabaseStartupFailureClassifier.MissingEncryptionKey,
+            rejected.Message);
+        Assert.False(File.Exists(KeyPath));
+        Assert.False(File.Exists(DatabasePath));
+        Assert.Equal(original, File.ReadAllBytes(artifact));
+    }
+
+    [Fact]
+    public void EmptyBackupDirectoryAndUnrelatedSibling_DoNotBlockFirstUseKeyCreation()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(Path.Combine(_root, "backups"));
+        string unrelated = Path.Combine(_root, "notes.txt");
+        File.WriteAllText(unrelated, "first-use setup note");
+        string created = new WindowsDatabaseKeyStore(KeyPath).LoadOrCreate(DatabasePath);
+        Assert.Matches("^[0-9A-F]{64}$", created);
+        Assert.Equal(created, new WindowsDatabaseKeyStore(KeyPath).LoadOrCreate(DatabasePath));
+        Assert.Equal("first-use setup note", File.ReadAllText(unrelated));
+        Assert.False(File.Exists(DatabasePath));
+    }
+
     [Fact]
     public void CorruptProtectedBlob_FailsClosedAndNeverChangesTheKey()
     {
