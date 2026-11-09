@@ -1,3 +1,25 @@
+> **Audited R17 main CI candidate — 2026-11-10 — NO-GO for production.**
+> R17 PR #268 has been merged into `main` at `859cc9c7e889d73f0f23debd0235c3c912f397c8`.
+> [Windows Core 42698618350](https://github.com/bingattban/Qwen-Altmam/actions/runs/42698618350)
+> and [Windows Release 42698618694](https://github.com/bingattban/Qwen-Altmam/actions/runs/42698618694)
+> both completed **SUCCESS** on this exact same SHA. All Release tests ran before
+> x86/x64 Portable and Installer packaging. The **Independent four-file SHA-256**
+> audit completed SUCCESS; the exact binary filenames, byte lengths and actual
+> customer-file SHA-256 values are frozen in
+> [R17_MAIN_AUDITED_CANDIDATE_2026-11-09.json](../../artifacts/R17_MAIN_AUDITED_CANDIDATE_2026-11-09.json)
+> from the authentic Release provenance artifact. This record refers to the
+> R17 source SHA only, **not** to a future R18 documentation commit or a
+> signed GitHub Release. The historic earlier checkpoints below remain immutable.
+>
+> **Physical clean offline x86/x64 trials, two-version upgrade, independent
+> recovery across Windows accounts/computers, actual power interruption, disk-full,
+> full 10k WPF/Excel acceptance and owner signoff: NOT EXECUTED / PENDING. NO-GO.**
+> The Clean-machine acceptance matrix in ordinary CI was **skipped**;
+> the source provenance test is NOT an independent device rehash or production
+> approval. See [R18 evidence and remaining field gates](R18_MAIN_R17_PROVENANCE_2026-11-10.md).
+
+---
+
 > **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** As of this later checkpoint (not a revision of the historical 2026-11-03 candidate), the latest merged recovery guard is R15 PR #266, main `0e1021fa29438f34c61df2db57cf01b7fae534ce`. [Windows Core 42632103102](https://github.com/bingattban/Qwen-Altmam/actions/runs/42632103102) and [Windows Release 42632102975](https://github.com/bingattban/Qwen-Altmam/actions/runs/42632102975) both succeeded on PR HEAD `49a185b6aa6d6e8fabebb9b1b725b4a1b29ad7f8` with four x86/x64 Portable/Installer packages and independent customer SHA-256 audit. The host now has a **native WPF** GA-only restore and encrypted-key export, while the WebView2 restore action remains **disabled**. The release's independent clean-machine matrix job was **skipped**: real x86/x64 clean offline devices, cross-PC recovery, power interruption, disk-full and owner signoff are still **NOT EXECUTED/PENDING**. The rest of this file is historical audit evidence tied to older, immutable SHAs. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](../support/CURRENT_RECOVERY_OPERATOR_GUIDE.md).
 
 ---
