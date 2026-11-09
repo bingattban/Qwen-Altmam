@@ -1,3 +1,7 @@
+> **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** The actual native WPF restore/key export File-menu entries exist in code, while the WebView2 `RestoreDatabaseAtomically` action is still disabled. This document tests external offline distribution smoke only; it cannot certify physical SQLCipher restore, missing-DPAPI recovery or owner authorization. Do not interpret references to 'destructive restore disabled' below as meaning the physical WPF menu does not exist. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](CURRENT_RECOVERY_OPERATOR_GUIDE.md).
+
+---
+
 # SECTION 11 — Independent clean, disconnected Windows smoke execution
 
 **Status: tooling implemented; independent physical customer acceptance NOT EXECUTED.**

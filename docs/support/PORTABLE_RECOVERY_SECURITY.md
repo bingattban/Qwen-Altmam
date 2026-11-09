@@ -1,3 +1,7 @@
+> **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** Portable recovery key export now has a real **trusted WPF File-menu** dialog restricted to a freshly reauthenticated GeneralAdministration session (R12). The **pre-login import UI does not exist**, despite the protected import infrastructure (R14/R15); approval and real cross-device acceptance remain open. The historical paragraph below saying export dialogs are missing describes the original Phase 12.07 batch, not today's code. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](CURRENT_RECOVERY_OPERATOR_GUIDE.md).
+
+---
+
 # Phase 12.07 — Portable encrypted recovery material
 
 The project uses a random 256-bit SQLCipher database key protected for ordinary

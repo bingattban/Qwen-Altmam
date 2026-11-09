@@ -1,3 +1,7 @@
+> **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** A separate trusted WPF File-menu restore flow has since been added (R08/R09) and uses native fresh GeneralAdministration reauthentication; the native key export also exists (R12). The historical 'not attached to MainWindow' paragraph below refers to the earlier stand-alone staging prerequisite, NOT the current host code. The WebView2 `RestoreDatabaseAtomically` action remains disabled. This is **not** a production restoration approval. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](CURRENT_RECOVERY_OPERATOR_GUIDE.md).
+
+---
+
 # Native restore reauthentication prerequisite — safe staging only
 
 This batch adds `NativeRestoreReauthenticationGate` in

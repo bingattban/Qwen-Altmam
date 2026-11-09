@@ -1,3 +1,7 @@
+> **Current implementation checkpoint — 2026-11-09 — NO-GO (historical details below).** A physically triggered **native WPF** backup restoration path now exists (R08/R09) with fresh GeneralAdministration reauthentication, shutdown/drain, encrypted rescue, atomic switch and restart. The WebView2 action `RestoreDatabaseAtomically` remains **disabled**. This corrects the older 'no native workflow exists' text below. It is **not physically accepted on customer hardware**; never use real personnel data without explicit release signoff. For current operator instructions and the precise separate native-vs-browser boundary see [CURRENT_RECOVERY_OPERATOR_GUIDE.md](CURRENT_RECOVERY_OPERATOR_GUIDE.md).
+
+---
+
 # Backup, recovery and migration — offline security boundaries
 
 **Current state: NO-GO for production atomic restore.** Read-only `PreviewRestore` and native encrypted staging/rollback infrastructure do **not** make a customer-accessible atomic restoration workflow. `RestoreDatabaseAtomically` is deliberately unavailable while final native and owner gates remain open.
