@@ -110,6 +110,99 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
     }
 
     [Fact]
+    public async Task RecoverExistingKey_ReadOnlyPreflight_LeavesTargetEncryptedDatabaseByteIdentical()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        string source=Path.Combine(_root,"readonly-source.db");
+        string sourceKeyPath=Path.Combine(_root,"readonly-source.key");
+        string candidate=Path.Combine(_root,"readonly-copy.dbbackup");
+        string recovery=Path.Combine(_root,"readonly-key.altrecovery");
+        string targetRoot=Path.Combine(_root,"readonly-target");
+        Directory.CreateDirectory(targetRoot);
+        string target=Path.Combine(targetRoot,"altamam.db");
+        string targetKey=Path.Combine(targetRoot,"db.key.protected");
+        var sourceStore=new WindowsDatabaseKeyStore(sourceKeyPath);
+        string originalKey=sourceStore.LoadOrCreate(source);
+        using(var db=new AlTamamDbContext(source,originalKey,useConnectionPooling:false))
+        {
+            await db.InitializeAsync();
+            await db.CreateVerifiedEncryptedBackupAsync(candidate);
+        }
+        sourceStore.ExportPortableRecoveryKey(source,recovery,Phrase);
+        File.Copy(candidate,target);
+        string before=Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(target)));
+        Assert.False(File.Exists(target+"-wal"));
+        Assert.False(File.Exists(target+"-shm"));
+
+        new WindowsDatabaseKeyStore(targetKey)
+            .RecoverExistingDatabaseKey(target,recovery,Phrase);
+
+        Assert.True(File.Exists(targetKey));
+        // A verification-only credential import is not allowed to turn an
+        // offline SQLCipher backup from DELETE into WAL or alter ANY DB bytes.
+        Assert.Equal(before,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(target))));
+        Assert.False(File.Exists(target+"-wal"));
+        Assert.False(File.Exists(target+"-shm"));
+        Assert.Equal(originalKey,new WindowsDatabaseKeyStore(targetKey).LoadOrCreate(target));
+    }
+
+    [Fact]
+    public async Task RecoverExistingKey_RejectsFutureSchemaWithoutWritingDpapiKeyOrDatabase()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        string source=Path.Combine(_root,"future-source.db");
+        string sourceKeyPath=Path.Combine(_root,"future-source.key");
+        string backup=Path.Combine(_root,"future.dbbackup");
+        string recovery=Path.Combine(_root,"future-key.altrecovery");
+        string targetRoot=Path.Combine(_root,"future-target");
+        Directory.CreateDirectory(targetRoot);
+        string target=Path.Combine(targetRoot,"altamam.db");
+        string targetKey=Path.Combine(targetRoot,"db.key.protected");
+        var sourceStore=new WindowsDatabaseKeyStore(sourceKeyPath);
+        string originalKey=sourceStore.LoadOrCreate(source);
+        using(var db=new AlTamamDbContext(source,originalKey,useConnectionPooling:false))
+        {
+            await db.InitializeAsync();
+            await db.CreateVerifiedEncryptedBackupAsync(backup);
+        }
+        sourceStore.ExportPortableRecoveryKey(source,recovery,Phrase);
+        File.Copy(backup,target);
+
+        // A synthetically future-dated schema is still an INTEGRITY-CHECK-OK
+        // SQLCipher DB, but is not a compatible application database.
+        using(var db=new AlTamamDbContext(target,originalKey,useConnectionPooling:false))
+        using(var connection=db.CreateOpenConnection())
+        {
+            using(var mutate=connection.CreateCommand())
+            {
+                mutate.CommandText=
+                    "UPDATE SchemaVersions SET SchemaVersion=999 "+
+                    "WHERE SchemaVersion=(SELECT MAX(SchemaVersion) FROM SchemaVersions);";
+                Assert.Equal(1,mutate.ExecuteNonQuery());
+            }
+            using(var mode=connection.CreateCommand())
+            {
+                mode.CommandText="PRAGMA journal_mode=DELETE;";
+                Assert.Equal("delete",mode.ExecuteScalar()?.ToString(),
+                    ignoreCase:true);
+            }
+        }
+        string before=Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(target)));
+
+        Assert.Throws<CryptographicException>(()=>
+            new WindowsDatabaseKeyStore(targetKey)
+                .RecoverExistingDatabaseKey(target,recovery,Phrase));
+        Assert.False(File.Exists(targetKey));
+        Assert.Equal(before,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(target))));
+        Assert.False(File.Exists(target+"-wal"));
+        Assert.False(File.Exists(target+"-shm"));
+    }
+
+    [Fact]
     public async Task WrongDatabaseEvenWithCorrectPackage_CannotInstallAnyKey()
     {
         if(!OperatingSystem.IsWindows())return;
