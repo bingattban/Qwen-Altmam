@@ -165,6 +165,32 @@ public sealed class NativeRestoreReauthenticationGate
             File.Delete(stage);
     }
 
+    /// <summary>
+    /// Shared native-only current-GeneralAdmin password check. Unlike a
+    /// restore grant, this does not stage a file or create any token.
+    /// Explicitly intended for non-destructive portable recovery-key export.
+    /// Always re-resolves the session before and after credential verification;
+    /// no JavaScript bridge handler may call this method.
+    /// </summary>
+    public async Task<bool> VerifyCurrentGeneralAdministratorPasswordAsync(
+        BridgePrincipal? actor, string? password, CancellationToken ct=default)
+    {
+        if (actor is null || actor.Role!=UserRole.GeneralAdministration ||
+            string.IsNullOrEmpty(password) || password.Length>1024)
+            return false;
+        BridgePrincipal? live=await _sessions.ResolveSessionAsync(
+            actor.SessionNonce,ct).ConfigureAwait(false);
+        if (live is null || live.Role!=UserRole.GeneralAdministration ||
+            live.UserId!=actor.UserId || live.Username!=actor.Username)
+            return false;
+        if (!await RevalidatePasswordAsync(actor,password,ct).ConfigureAwait(false))
+            return false;
+        live=await _sessions.ResolveSessionAsync(actor.SessionNonce,ct)
+            .ConfigureAwait(false);
+        return live is not null && live.Role==UserRole.GeneralAdministration &&
+            live.UserId==actor.UserId && live.Username==actor.Username;
+    }
+
     private async Task<bool> RevalidatePasswordAsync(BridgePrincipal actor,
         string password,CancellationToken ct)
     {
