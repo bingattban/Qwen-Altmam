@@ -41,7 +41,8 @@ public sealed class WindowsDatabaseKeyStore
 
         // A missing key is NOT a fresh installation if any encrypted data may remain.
         if (File.Exists(database) || File.Exists(database + "-wal") ||
-            File.Exists(database + "-shm") || ContainsRecoveryArtifacts(database))
+            File.Exists(database + "-shm") || File.Exists(database + "-journal") ||
+            ContainsRecoveryArtifacts(database))
             throw new CryptographicException(RecoveryRequired);
 
         byte[] key = RandomNumberGenerator.GetBytes(32);
@@ -216,9 +217,36 @@ public sealed class WindowsDatabaseKeyStore
 
     private static bool ContainsRecoveryArtifacts(string databasePath)
     {
-        // A backup is a recovery candidate, not permission to issue a new key.
+        // Missing live DB + missing DPAPI key is NOT sufficient evidence of a
+        // clean installation. Power loss may leave only a durable restore
+        // intent, pre-restore rollback, replay image, stage or failed live DB
+        // beside the missing database. Never mint an unrelated SQLCipher key.
         string? dataRoot = Path.GetDirectoryName(databasePath);
         if (dataRoot is null) return false;
+        string databaseFile = Path.GetFileName(databasePath);
+        if (Directory.Exists(dataRoot) &&
+            Directory.EnumerateFiles(dataRoot, "*", SearchOption.TopDirectoryOnly)
+                .Any(file =>
+                {
+                    string name = Path.GetFileName(file);
+                    return name.StartsWith(".altamam-restore-activation.pending.json",
+                               StringComparison.OrdinalIgnoreCase) ||
+                           name.StartsWith(".altamam-restore-rollback-",
+                               StringComparison.OrdinalIgnoreCase) ||
+                           name.StartsWith(".altamam-restore-stage-",
+                               StringComparison.OrdinalIgnoreCase) ||
+                           name.StartsWith(".altamam-restore-reconcile-",
+                               StringComparison.OrdinalIgnoreCase) ||
+                           name.StartsWith(databaseFile + ".failed-restore-",
+                               StringComparison.OrdinalIgnoreCase) ||
+                           name.EndsWith(".altrecovery",
+                               StringComparison.OrdinalIgnoreCase);
+                }))
+            return true;
+
+        // Backups remain recovery candidates even if the primary database
+        // vanished. Access/permission errors must fail closed, not silently
+        // become permission to create a new key.
         string backupDirectory = Path.Combine(dataRoot, "backups");
         return Directory.Exists(backupDirectory) &&
             Directory.EnumerateFiles(backupDirectory, "*", SearchOption.AllDirectories).Any();
