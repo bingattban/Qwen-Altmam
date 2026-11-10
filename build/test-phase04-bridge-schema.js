@@ -11,7 +11,7 @@ assert.deepEqual(schema.required,["requestId","protocolVersion","action","sessio
 assert.equal(schema.additionalProperties,false);
 assert.equal(schema.$defs.response.properties.success.type,"boolean");
 assert.deepEqual(schema.properties.action.enum,actions.map(a=>a.action));
-assert.equal(schema.allOf.length,104);
+assert.equal(schema.allOf.length,actions.length);
 for(const a of actions){
   const branch=schema.allOf.find(x=>x.if.properties.action.const===a.action);
   assert.ok(branch,a.action+" missing");

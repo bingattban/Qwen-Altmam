@@ -81,6 +81,7 @@
         "GetCustomFieldDefinitions",
         "CreateCustomFieldDefinition",
         "UpdateCustomFieldMetadata",
+        "UpdateCustomFieldValues",
         "DeactivateCustomField",
         "SelectImportWorkbook",
         "AnalyzeImport",
@@ -1237,6 +1238,25 @@
         "properties": {
           "payload": {
             "$ref": "#/$defs/payload_UpdateCustomFieldMetadata"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "UpdateCustomFieldValues"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/payload_UpdateCustomFieldValues"
           }
         }
       }
@@ -3930,6 +3950,45 @@
           "minimum": 0
         }
       },
+      "additionalProperties": false
+    },
+    "payload_UpdateCustomFieldValues": {
+      "type": "object",
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "personId": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 128
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 64,
+          "propertyNames": {
+            "pattern": "^FLD-[A-Za-z0-9-]+$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 250
+          }
+        }
+      },
+      "required": [
+        "operationId",
+        "personId",
+        "expectedRevision",
+        "values"
+      ],
       "additionalProperties": false
     }
   }
