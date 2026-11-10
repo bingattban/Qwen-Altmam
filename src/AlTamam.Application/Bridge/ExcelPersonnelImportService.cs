@@ -139,59 +139,114 @@ public sealed class ExcelPersonnelImportService
         }).ToList();
     }
 
-    private static async Task<(JsonArray accepted, JsonArray issues)> InspectAsync(
-        SqliteConnection connection, SqliteTransaction? tx, List<PersonInput> rows, CancellationToken ct)
+    private static async Task<(JsonArray accepted, JsonArray issues,JsonArray updates)> InspectAsync(
+        SqliteConnection connection,SqliteTransaction? tx,List<PersonInput> rows,
+        CancellationToken ct,bool allowCustomUpdates=false)
     {
-        var accepted = new JsonArray();
-        var issues = new JsonArray();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        using var exists = connection.CreateCommand();
-        exists.Transaction = tx;
-        exists.CommandText = """
-            SELECT CASE
-              WHEN EXISTS(SELECT 1 FROM Persons WHERE NormalizedServiceNumberA=$number
-                           AND ActiveFlag=1) THEN 1
-              WHEN EXISTS(SELECT 1 FROM Persons WHERE NormalizedServiceNumberA=$number
-                           AND ActiveFlag=0 AND OrganizationalStatus IN (2,3,4)) THEN 2
-              ELSE 0 END;
+        var accepted=new JsonArray();
+        var issues=new JsonArray();
+        var updates=new JsonArray();
+        var seen=new HashSet<string>(StringComparer.Ordinal);
+        using var exists=connection.CreateCommand();
+        exists.Transaction=tx;
+        exists.CommandText="""
+            SELECT PersonId,CurrentVisibleName,NormalizedName,RowVersion,
+                ActiveFlag,OrganizationalStatus
+            FROM Persons WHERE NormalizedServiceNumberA=$number LIMIT 1;
             """;
-        var param = exists.Parameters.Add("$number", SqliteType.Text);
-        foreach (var item in rows)
+        var param=exists.Parameters.Add("$number",SqliteType.Text);
+        foreach(var item in rows)
         {
             ct.ThrowIfCancellationRequested();
-            string? reason = item.Issue;
-            if (reason is null && (item.Name.Length is < 3 or > 180 ||
-                item.Name.Any(char.IsControl) || item.NormalizedName.Length == 0 ||
-                item.NormalizedName != ArabicTextNormalizer.NormalizeForSearch(item.Name) ||
-                !ServiceNumberPolicy.TryCanonicalize(item.Number, out string canonical) ||
-                item.NormalizedNumber != canonical))
-                reason = "الرقم (ع) يجب أن يتكون من أربعة أرقام على الأقل، وهو غير الرقم التسلسلي العادي.";
-            else if (reason is null && (item.SiteName.Length is < 2 or > 100 || item.SiteName.Any(char.IsControl)))
-                reason = "اسم الموقع غير صالح.";
-            else if (reason is null && !seen.Add(item.NormalizedNumber))
-                reason = "«الرقم (ع)» مكرر داخل الملف.";
-            else if(reason is null)
+            string? reason=item.Issue;
+            if(reason is null && (item.Name.Length is <3 or >180 ||
+                item.Name.Any(char.IsControl) || item.NormalizedName.Length==0 ||
+                item.NormalizedName!=ArabicTextNormalizer.NormalizeForSearch(item.Name) ||
+                !ServiceNumberPolicy.TryCanonicalize(item.Number,out string canonical) ||
+                item.NormalizedNumber!=canonical))
+                reason="الرقم (ع) يجب أن يتكون من أربعة أرقام على الأقل، وهو غير الرقم التسلسلي العادي.";
+            else if(reason is null && (item.SiteName.Length is <2 or >100 ||
+                item.SiteName.Any(char.IsControl)))
+                reason="اسم الموقع غير صالح.";
+            else if(reason is null && !seen.Add(item.NormalizedNumber))
+                reason="«الرقم (ع)» مكرر داخل الملف.";
+            JsonObject? candidate=null;
+            if(reason is null)
             {
-                param.Value = item.NormalizedNumber;
-                int clash=Convert.ToInt32(await exists.ExecuteScalarAsync(ct).ConfigureAwait(false));
-                if(clash==1)
-                    reason = "«الرقم (ع)» موجود مسبقاً في القوة؛ لن يتم استبداله.";
-                else if(clash==2)
-                    reason = "«الرقم (ع)» محفوظ لهوية مؤرشفة؛ أضف الفرد يدوياً بعد التحقق والموافقة. لا يُسمح بالاستبدال عبر Excel.";
+                param.Value=item.NormalizedNumber;
+                using(var reader=await exists.ExecuteReaderAsync(ct).ConfigureAwait(false))
+                {
+                    if(await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        string personId=reader.GetString(0);
+                        string originalName=reader.GetString(1);
+                        string normalizedName=reader.GetString(2);
+                        long revision=reader.GetInt64(3);
+                        bool active=reader.GetInt32(4)==1 && reader.GetInt32(5)==1;
+                        if(!active)
+                            reason="«الرقم (ع)» محفوظ لهوية مؤرشفة؛ لا يمكن تعديله عبر Excel.";
+                        else if(!allowCustomUpdates || item.CustomFields is null ||
+                                item.CustomFields.Count==0)
+                            reason="«الرقم (ع)» موجود مسبقاً في القوة؛ لن يتم استبداله.";
+                        else if(normalizedName!=item.NormalizedName)
+                            reason="«الرقم (ع)» موجود لكن الاسم مختلف؛ راجع الهوية قبل تحديث الأعمدة.";
+                        else
+                            candidate=new JsonObject {
+                                ["personId"]=personId,["expectedRevision"]=revision,
+                                ["name"]=originalName,["number"]=item.Number,
+                                ["worksheet"]=item.Worksheet,["row"]=item.Row,
+                                ["customFields"]=item.CustomFields.DeepClone()
+                            };
+                    }
+                }
             }
-            if (reason is not null)
-                issues.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
-                    ["serviceNumberA"] = item.Number, ["siteName"] = item.SiteName,
-                    ["worksheet"] = item.Worksheet, ["reason"] = reason });
-            else
-                accepted.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
-                    ["serviceNumberA"] = item.Number, ["normalizedName"] = item.NormalizedName,
-                    ["normalizedNumber"] = item.NormalizedNumber, ["siteName"] = item.SiteName,
-                    ["worksheet"] = item.Worksheet });
+            if(candidate is not null)
+            {
+                var changed=new JsonObject();
+                var previous=new JsonObject();
+                foreach(var cell in (JsonObject)candidate["customFields"]!)
+                {
+                    using var read=connection.CreateCommand();
+                    read.Transaction=tx;
+                    read.CommandText="""
+                        SELECT FieldValueText FROM CustomFieldValues
+                        WHERE PersonId=$person AND FieldDefinitionId=$field;
+                        """;
+                    read.Parameters.AddWithValue("$person",candidate["personId"]!.GetValue<string>());
+                    read.Parameters.AddWithValue("$field",cell.Key);
+                    string old=(await read.ExecuteScalarAsync(ct).ConfigureAwait(false)) as string??"";
+                    string next=cell.Value?.GetValue<string>()??"";
+                    if(!string.Equals(old,next,StringComparison.Ordinal))
+                    {
+                        previous[cell.Key]=old;
+                        changed[cell.Key]=next;
+                    }
+                }
+                if(changed.Count==0)
+                    reason="قيم الأعمدة الإضافية مطابقة لما هو محفوظ؛ لا يوجد تحديث.";
+                else
+                {
+                    candidate["oldCustomFields"]=previous;
+                    candidate["customFields"]=changed;
+                    updates.Add(candidate);
+                }
+            }
+            if(reason is not null)
+                issues.Add(new JsonObject {
+                    ["row"]=item.Row,["name"]=item.Name,
+                    ["serviceNumberA"]=item.Number,["siteName"]=item.SiteName,
+                    ["worksheet"]=item.Worksheet,["reason"]=reason
+                });
+            else if(candidate is null)
+                accepted.Add(new JsonObject {
+                    ["row"]=item.Row,["name"]=item.Name,
+                    ["serviceNumberA"]=item.Number,["normalizedName"]=item.NormalizedName,
+                    ["normalizedNumber"]=item.NormalizedNumber,["siteName"]=item.SiteName,
+                    ["worksheet"]=item.Worksheet,["customFields"]=item.CustomFields?.DeepClone()
+                });
         }
-        return (accepted, issues);
+        return (accepted,issues,updates);
     }
-
 
     private static async Task<JsonArray> NewSitesAsync(SqliteConnection connection,
         SqliteTransaction? tx, JsonArray rows, CancellationToken ct)
