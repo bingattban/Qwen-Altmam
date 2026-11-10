@@ -187,6 +187,32 @@ public sealed class PersonnelMovementService
             foreach(var p in entries)
             {
                 string movementId="MOV-"+Guid.NewGuid().ToString("N");
+                // Establish immutable movement evidence before closing the first-day
+                // source assignment; both remain atomic with the audit and receipt.
+                using var move=c.CreateCommand();move.Transaction=t;
+                move.CommandText="""
+                    INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
+                        ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
+                        DestinationSiteId,DestinationSiteNameSnapshot,DestinationExternalName,
+                        SeparationReason,EffectiveLocalDate,CommittedAtUtc,ActorUserId,IdempotencyKey)
+                    VALUES($id,$person,$name,$number,$type,$source,$sourceName,
+                           $dest,$destName,$external,NULL,$date,$now,$actor,$key);
+                    """;
+                move.Parameters.AddWithValue("$id",movementId);
+                move.Parameters.AddWithValue("$person",p.Id);
+                move.Parameters.AddWithValue("$name",p.Name);
+                move.Parameters.AddWithValue("$number",p.Number);
+                move.Parameters.AddWithValue("$type",external?2:1);
+                move.Parameters.AddWithValue("$source",p.SiteId);
+                move.Parameters.AddWithValue("$sourceName",p.SiteName);
+                move.Parameters.AddWithValue("$dest",external?DBNull.Value:destId);
+                move.Parameters.AddWithValue("$destName",external?DBNull.Value:destName);
+                move.Parameters.AddWithValue("$external",external?destName:DBNull.Value);
+                move.Parameters.AddWithValue("$date",date);
+                move.Parameters.AddWithValue("$now",timestamp);
+                move.Parameters.AddWithValue("$actor",actor.UserId);
+                move.Parameters.AddWithValue("$key",token+":"+p.Id);
+                await move.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
                 using var q=c.CreateCommand();q.Transaction=t;
                 q.CommandText="""
                     UPDATE PersonAssignments SET ValidToLocalDate=$date
@@ -223,30 +249,7 @@ public sealed class PersonnelMovementService
                     if(await state.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
                         throw new InvalidOperationException("Concurrent personnel revision.");
                 }
-                using var move=c.CreateCommand();move.Transaction=t;
-                move.CommandText="""
-                    INSERT INTO PersonnelMovements(MovementId,PersonId,PersonNameSnapshot,
-                        ServiceNumberASnapshot,MovementType,SourceSiteId,SourceSiteNameSnapshot,
-                        DestinationSiteId,DestinationSiteNameSnapshot,DestinationExternalName,
-                        SeparationReason,EffectiveLocalDate,CommittedAtUtc,ActorUserId,IdempotencyKey)
-                    VALUES($id,$person,$name,$number,$type,$source,$sourceName,
-                           $dest,$destName,$external,NULL,$date,$now,$actor,$key);
-                    """;
-                move.Parameters.AddWithValue("$id",movementId);
-                move.Parameters.AddWithValue("$person",p.Id);
-                move.Parameters.AddWithValue("$name",p.Name);
-                move.Parameters.AddWithValue("$number",p.Number);
-                move.Parameters.AddWithValue("$type",external?2:1);
-                move.Parameters.AddWithValue("$source",p.SiteId);
-                move.Parameters.AddWithValue("$sourceName",p.SiteName);
-                move.Parameters.AddWithValue("$dest",external?DBNull.Value:destId);
-                move.Parameters.AddWithValue("$destName",external?DBNull.Value:destName);
-                move.Parameters.AddWithValue("$external",external?destName:DBNull.Value);
-                move.Parameters.AddWithValue("$date",date);
-                move.Parameters.AddWithValue("$now",timestamp);
-                move.Parameters.AddWithValue("$actor",actor.UserId);
-                move.Parameters.AddWithValue("$key",token+":"+p.Id);
-                await move.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+
                 await BridgeAuditWriter.WriteAsync(c,t,_time,
                     external?"TRANSFER_EXTERNAL":"TRANSFER_INTERNAL",
                     external?"نقل خارجي":"نقل داخلي",

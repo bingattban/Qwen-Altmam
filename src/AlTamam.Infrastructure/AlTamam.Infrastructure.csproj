@@ -19,5 +19,6 @@
     <EmbeddedResource Include="Persistence/Migrations/V012_AutoAttendanceOutcomeCounts.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V013_MovementAttendanceImmutableKeys.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V014_AttendanceDateRanges.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/V015_SameDayFirstAssignmentTransfer.sql" />
   </ItemGroup>
 </Project>
