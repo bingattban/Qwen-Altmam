@@ -31,9 +31,10 @@ const responses={
       matches:[{personId:"OLD-ID",name:"أحمد صالح",serviceNumberA:"0001",active:false}]}]},
   PreviewImportPlan:{previewToken:"B".repeat(64),newCount:2,issueCount:1,
     requiresExplicitConfirmation:true,issues:[],
+    newSites:[{name:"موقع مستورد جديد",personCount:1}],
     acceptedPreview:[{name:"أحمد صالح",serviceNumberA:"002"},
       {name:"حسن سعيد",serviceNumberA:"003"}]},
-  CommitImport:{createdCount:2,importBatchId:"IMP-TEST-1",rejectedCount:1},
+  CommitImport:{createdCount:2,createdSitesCount:1,importBatchId:"IMP-TEST-1",rejectedCount:1},
   ExportImportIssues:{format:"xlsx",filePath:"C:/Users/Test/Documents/AlTamam/Exports/issues.xlsx"}
 };
 const bridge={invoke:async (name,body)=>{
@@ -98,13 +99,20 @@ async function run(){
   await button("معاينة خطة الإضافة").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,0,
     "server-side preview must not persist rows");
-  assert.equal(importReviews.length,1,"import preview opens directly in a modal");
+  assert.equal(importReviews.length,1,"only the final batch confirmation is required");
   assert.equal(importReviews[0].data.items.length,2,"modal shows both accepted identities");
+  assert.ok(importReviews[0].data.rows.some(row=>row[0]==="مواقع جديدة ستُنشأ تلقائيا"&&row[1]===1));
+  assert.ok(importReviews[0].data.rows.some(row=>row[0]==="أسماء المواقع الجديدة"&&
+    row[1]==="موقع مستورد جديد"));
   allowImport=true;
   await button("معاينة خطة الإضافة").handlers.click();
   assert.equal(calls.filter(x=>x.name==="CommitImport").length,1);
   assert.equal(calls.find(x=>x.name==="CommitImport").body.previewToken,"B".repeat(64));
+  assert.equal(calls.find(x=>x.name==="CommitImport").body.confirmNewSites,undefined,
+    "signed approved import plan automatically creates sites");
+  assert.equal(calls.find(x=>x.name==="CommitImport").body.approvedSiteNames,undefined);
   assert.ok(all().some(x=>x.textContent.includes("تم إنشاء 2 فرداً جديداً")));
+  assert.ok(all().some(x=>x.textContent.includes("وإنشاء 1 موقع جديد")));
   assert.ok(button("عرض الدفعة"),"saved history includes the new batch");
   await button("عرض الدفعة").handlers.click();
   assert.ok(button("حفظ تقرير الأخطاء Excel"),"rejected row report is available");
@@ -147,7 +155,7 @@ async function run(){
   responses.PreviewImportPlan={previewToken:"C".repeat(64),newCount:0,
     issueCount:2,requiresExplicitConfirmation:true,newSites:[],
     issues:responses.AnalyzeImport.issues,acceptedPreview:[]};
-  responses.CommitImport={createdCount:0,rejectedCount:2,importBatchId:"IMP-REJECT-ONLY"};
+  responses.CommitImport={createdCount:0,createdSitesCount:0,rejectedCount:2,importBatchId:"IMP-REJECT-ONLY"};
   picker.files=[{name:"مرفوض_كله.xlsx",size:80,base64:"UEsDBBQ"}];
   await button("تحليل الملف").handlers.click();
   assert.ok(button("معاينة اعتماد صفوف الرفض فقط"));

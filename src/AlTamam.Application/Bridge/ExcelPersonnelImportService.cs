@@ -404,17 +404,11 @@ public sealed class ExcelPersonnelImportService
             var proposedSites=plan["newSites"] as JsonArray ?? new JsonArray();
             var missingSites=await NewSitesAsync(connection,tx,accepted,ct).ConfigureAwait(false);
             if(proposedSites.ToJsonString()!=missingSites.ToJsonString())return Stale();
-            if(proposedSites.Count>0)
-            {
-                bool approved=false;
-                try{approved=payload?["confirmNewSites"]?.GetValue<bool>()==true;}
-                catch(InvalidOperationException){}
-                var names=payload?["approvedSiteNames"] as JsonArray;
-                if(!approved || names is null || names.Count!=proposedSites.Count ||
-                   !names.Select(x=>x?.ToString()??"").SequenceEqual(
-                       proposedSites.Select(x=>Read((JsonObject)x!,"name")),StringComparer.Ordinal))
-                    return Invalid("إنشاء المواقع يتطلب معاينة منفصلة وتأكيد أسمائها وعدد أفرادها.");
-            }
+            // The signed, user-confirmed import plan is the authorization to
+            // create missing sites automatically in the SAME write transaction.
+            // A changed site catalog invalidates the plan before any insert.
+            // Preview and analysis remain read-only; only accepted new rows
+            // can introduce sites. SITE_CREATE keeps its independent audit.
             long? consumed = await BridgePreviewTokens.ConsumeAsync(_db, _time, connection,
                 tx, token, PlanOperation, actor, rows.Count, ct).ConfigureAwait(false);
             if (consumed != rows.Count) return Stale();

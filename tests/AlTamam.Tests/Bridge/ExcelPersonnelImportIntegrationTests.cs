@@ -242,7 +242,7 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
     }
 
     [Fact]
-    public async Task NewSiteRequiresSeparateExplicitApproval_AndIsAuditedOnce()
+    public async Task NewSiteCreatedAutomaticallyOnConfirmedImport_AndAuditedOnce()
     {
         var file=await Service.SelectAsync(FilePayload(WorkbookAtSite("موقع المطار",
             ("فرد تجريبي أول","00771"),("فرد تجريبي ثان","00772"))),Owner,CancellationToken.None);
@@ -256,25 +256,33 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         var first=Assert.IsType<JsonObject>(Assert.Single(sites));
         Assert.Equal("موقع المطار",first["name"]!.GetValue<string>());
         Assert.Equal(2,first["personCount"]!.GetValue<int>());
-        string ticket=data["previewToken"]!.GetValue<string>();
-        var denied=await Service.CommitAsync(new JsonObject{
-            ["previewToken"]=ticket},Owner,"owner",CancellationToken.None);
-        Assert.False(denied.Success);
+        // Analysis and preview never create a site or person.
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Persons"));
         Assert.Equal("0",Scalar("SELECT COUNT(*) FROM Sites WHERE VisibleName='موقع المطار'"));
-        var wrong=await Service.CommitAsync(new JsonObject{
-            ["previewToken"]=ticket,["confirmNewSites"]=true,
-            ["approvedSiteNames"]=new JsonArray("موقع آخر")
-        },Owner,"owner",CancellationToken.None);
-        Assert.False(wrong.Success);
-        var approved=await Service.CommitAsync(new JsonObject{
-            ["previewToken"]=ticket,["confirmNewSites"]=true,
-            ["approvedSiteNames"]=new JsonArray("موقع المطار")
-        },Owner,"owner",CancellationToken.None);
+        string ticket=data["previewToken"]!.GetValue<string>();
+        var intent=new JsonObject {["previewToken"]=ticket,
+            ["operationId"]="TST-AUTO-SITE-"+Guid.NewGuid().ToString("N")};
+        // The signed, accepted import plan is sufficient; no second site-approval dialog.
+        var approved=await Service.CommitAsync(intent,Owner,"owner",CancellationToken.None);
         Assert.True(approved.Success,approved.UserMessage);
+        var receipt=Assert.IsType<JsonObject>(approved.Data);
+        Assert.Equal(1,receipt["createdSitesCount"]!.GetValue<int>());
+        Assert.Equal(2,receipt["createdCount"]!.GetValue<int>());
         Assert.Equal("2",Scalar("SELECT COUNT(*) FROM Persons"));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Sites WHERE VisibleName='موقع المطار'"));
+        Assert.Equal("2",Scalar("""
+            SELECT COUNT(*) FROM PersonAssignments a
+            JOIN Sites s ON s.SiteId=a.SiteId
+            WHERE s.VisibleName='موقع المطار';
+            """));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='SITE_CREATE'"));
+        // A lost response must not duplicate the new site, people or audits.
+        var replay=await Service.CommitAsync((JsonObject)intent.DeepClone(),Owner,"owner",CancellationToken.None);
+        Assert.True(replay.Success,replay.UserMessage);
+        Assert.True(JsonNode.DeepEquals(receipt,replay.Data));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Sites WHERE VisibleName='موقع المطار'"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='SITE_CREATE'"));
+        Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSONNEL_IMPORT'"));
     }
 
     [Fact]
