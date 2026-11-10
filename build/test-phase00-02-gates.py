@@ -16,7 +16,8 @@ class PhaseGateTests(unittest.TestCase):
     def test_manifest_and_database_drift(self):
         f=gate.collect(ROOT)
         for key,bad in [("screen_count",68),("action_count",102),
-                        ("registered_migrations",[1,2,4]),("embedded_migrations",[1])]:
+                        ("registered_migrations",[1,2,4]),("embedded_migrations",[1]),
+                        ("schema_version",14)]:
             self.assertTrue(gate.verify(dict(f,**{key:bad})),key)
     def test_sqlcipher_and_destructive_restore_gates(self):
         f=gate.collect(ROOT)
