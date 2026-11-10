@@ -68,6 +68,77 @@ public sealed class PortableRecoveryKeyPackageTests : IDisposable
     }
 
     [Fact]
+    public async Task ExportFromClosedEncryptedImage_DoesNotModifySourceOrCreateWalShm()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        string live=Path.Combine(_root,"export-live.db");
+        string originalKeyPath=Path.Combine(_root,"export-live.key");
+        string backup=Path.Combine(_root,"export-standalone.dbbackup");
+        string offline=Path.Combine(_root,"export-offline.db");
+        string wrappedPackage=Path.Combine(_root,"export-offline.altrecovery");
+        var store=new WindowsDatabaseKeyStore(originalKeyPath);
+        string key=store.LoadOrCreate(live);
+        using(var db=new AlTamamDbContext(live,key,useConnectionPooling:false))
+        {
+            await db.InitializeAsync();
+            await db.CreateVerifiedEncryptedBackupAsync(backup);
+        }
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        File.Copy(backup,offline);
+        var originalSha=Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(offline)));
+        Assert.False(File.Exists(offline+"-wal"));
+        Assert.False(File.Exists(offline+"-shm"));
+
+        // A portable-key export is a credential operation only. It must not
+        // open an offline customer database with ReadWriteCreate nor turn it
+        // into a WAL DB while claiming to "verify integrity".
+        store.ExportPortableRecoveryKey(offline,wrappedPackage,Phrase);
+
+        Assert.Equal(key,PortableRecoveryKeyPackage.Unseal(
+            await File.ReadAllBytesAsync(wrappedPackage),Phrase));
+        Assert.Equal(originalSha,Convert.ToHexString(
+            SHA256.HashData(await File.ReadAllBytesAsync(offline))));
+        Assert.False(File.Exists(offline+"-wal"));
+        Assert.False(File.Exists(offline+"-shm"));
+        Assert.False(File.Exists(offline+"-journal"));
+        Assert.Empty(Directory.GetDirectories(_root,".altamam-key-preflight-*"));
+    }
+
+    [Fact]
+    public async Task ExportWithLiveWal_PreservesNewestCommittedSqlcipherStateAndKey()
+    {
+        if(!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(_root);
+        string live=Path.Combine(_root,"live-wal.db");
+        string protectedKey=Path.Combine(_root,"live-wal.key");
+        string wrapped=Path.Combine(_root,"live-wal.altrecovery");
+        var store=new WindowsDatabaseKeyStore(protectedKey);
+        string key=store.LoadOrCreate(live);
+        using(var db=new AlTamamDbContext(live,key,useConnectionPooling:false))
+        {
+            await db.InitializeAsync();
+            using(var writer=db.CreateOpenConnection())
+            {
+                using(var change=writer.CreateCommand())
+                {
+                    change.CommandText="PRAGMA user_version = 467;";
+                    change.ExecuteNonQuery();
+                }
+                Assert.True(File.Exists(live+"-wal"));
+                store.ExportPortableRecoveryKey(live,wrapped,Phrase);
+                using var check=writer.CreateCommand();
+                check.CommandText="PRAGMA user_version;";
+                Assert.Equal(467,Convert.ToInt32(check.ExecuteScalar()));
+            }
+        }
+        Assert.Equal(key,PortableRecoveryKeyPackage.Unseal(
+            await File.ReadAllBytesAsync(wrapped),Phrase));
+        Assert.Empty(Directory.GetDirectories(_root,".altamam-key-preflight-*"));
+    }
+
+    [Fact]
     public async Task ExportAndRecoverOnIndependentDpapiLocation_ExactOriginalDatabaseAndIdentity()
     {
         if(!OperatingSystem.IsWindows())return;
