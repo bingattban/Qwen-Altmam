@@ -158,7 +158,7 @@ public sealed class PersonRosterService
         using var histCmd = connection.CreateCommand();
         histCmd.CommandText = """
             SELECT NameSnapshot, ServiceNumberASnapshot, ValidFromLocalDate, ValidToLocalDate, Reason, RecordedAtUtc
-            FROM PersonIdentityHistory WHERE PersonId = $id ORDER BY ValidFromLocalDate DESC LIMIT 50;
+            FROM PersonIdentityHistory WHERE PersonId = $id ORDER BY ValidFromLocalDate DESC, HistoryId DESC LIMIT 50;
             """;
         histCmd.Parameters.Add("$id", SqliteType.Text).Value = personId;
         var history = new JsonArray();
@@ -571,22 +571,33 @@ public sealed class PersonRosterService
                         "الرقم (ع) محفوظ لهوية مؤرشفة؛ لا يمكن إعادة استخدامه عبر تعديل فرد نشط.");
             }
 
-            // A single calendar day cannot hold two identity snapshots: refuse a
-            // same-day/backdated edit before any write, rather than relying on a
-            // database constraint exception that would become an opaque UI error.
+            // Only admission-day identity corrections can close a snapshot that
+            // starts today. All prior-day and backdated edits stay locked.
+            // Old values are NEVER rewritten; audit + zero-day history preserve
+            // each spelling/number and committed attendance is untouched.
             using (var existing = connection.CreateCommand())
             {
                 existing.Transaction = tx;
                 existing.CommandText = """
-                    SELECT ValidFromLocalDate FROM PersonIdentityHistory
-                    WHERE PersonId = $id AND ValidToLocalDate IS NULL
-                    ORDER BY ValidFromLocalDate DESC, HistoryId DESC LIMIT 1;
+                    SELECT h.ValidFromLocalDate,p.FirstRecordedLocalDate
+                    FROM PersonIdentityHistory h
+                    JOIN Persons p ON p.PersonId=h.PersonId
+                    WHERE h.PersonId=$id AND h.ValidToLocalDate IS NULL
+                    ORDER BY h.ValidFromLocalDate DESC,h.HistoryId DESC LIMIT 1;
                     """;
                 existing.Parameters.AddWithValue("$id", personId);
-                string? from = await existing.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
-                if (from is not null && string.CompareOrdinal(effectiveDate, from) <= 0)
+                using var currentHistory = await existing.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                if (!await currentHistory.ReadAsync(ct).ConfigureAwait(false))
+                    return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale,
+                        "سجل الهوية الحالي غير موجود؛ أعد تحميل الفرد قبل التعديل.");
+                string from = currentHistory.GetString(0);
+                string admitted = currentHistory.GetString(1);
+                bool admissionDayCorrection =
+                    effectiveDate == Today() && effectiveDate == admitted &&
+                    from == effectiveDate;
+                if (!admissionDayCorrection && string.CompareOrdinal(effectiveDate, from) <= 0)
                     return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
-                        "لا يمكن تغيير هوية الفرد مرتين في اليوم نفسه أو بتاريخ يسبق هويته الحالية.");
+                        "لا يمكن تغيير هوية الفرد بتاريخ سابق؛ التصحيح في نفس اليوم مسموح فقط في يوم إضافته.");
             }
 
             // Update the concurrency-guarded person row FIRST, so a stale revision
@@ -610,12 +621,23 @@ public sealed class PersonRosterService
                 return BridgeHelpers.Error(BridgeErrorCodes.ConflictStale, "تعذر التحديث: نسخة الصف لم تعد مطابقة.");
 
 
+            // The audited before/after evidence must exist before SQLCipher
+            // permits the narrow first-day zero-length history interval.
+            await BridgeAuditWriter.WriteAsync(connection, tx, _time,
+                operationCode: "PERSON_IDENTITY_UPDATE", operationArabicName: "تعديل هوية فرد",
+                actorUserId: userId, actorUsername: username, actorDisplayName: loaded.Row.VisibleName,
+                targetEntityType: "Person", targetEntityId: personId, targetDisplay: $"{newName} ({newNumber})",
+                oldValueJson: new JsonObject { ["name"] = loaded.Row.VisibleName, ["serviceNumberA"] = loaded.Row.ServiceNumberA }.ToJsonString(),
+                newValueJson: new JsonObject { ["name"] = newName, ["serviceNumberA"] = newNumber }.ToJsonString(),
+                description: $"عُدّلت هوية الفرد اعتباراً من {effectiveDate} مع حفظ لقطة الهوية السابقة.",
+                reason: reason, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
+
             // Close the open identity snapshot exactly at the effective date (exclusive end).
             using var close = connection.CreateCommand();
             close.Transaction = tx;
             close.CommandText = """
                 UPDATE PersonIdentityHistory SET ValidToLocalDate = $date
-                WHERE PersonId = $id AND ValidToLocalDate IS NULL AND ValidFromLocalDate < $date;
+                WHERE PersonId = $id AND ValidToLocalDate IS NULL AND ValidFromLocalDate <= $date;
                 """;
             close.Parameters.Add("$date", SqliteType.Text).Value = effectiveDate;
             close.Parameters.Add("$id", SqliteType.Text).Value = personId;
@@ -637,14 +659,7 @@ public sealed class PersonRosterService
             snapshot.Parameters.Add("$reason", SqliteType.Text).Value = reason;
             await snapshot.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
-            await BridgeAuditWriter.WriteAsync(connection, tx, _time,
-                operationCode: "PERSON_IDENTITY_UPDATE", operationArabicName: "تعديل هوية فرد",
-                actorUserId: userId, actorUsername: username, actorDisplayName: loaded.Row.VisibleName,
-                targetEntityType: "Person", targetEntityId: personId, targetDisplay: $"{newName} ({newNumber})",
-                oldValueJson: new JsonObject { ["name"] = loaded.Row.VisibleName, ["serviceNumberA"] = loaded.Row.ServiceNumberA }.ToJsonString(),
-                newValueJson: new JsonObject { ["name"] = newName, ["serviceNumberA"] = newNumber }.ToJsonString(),
-                description: $"عُدّلت هوية الفرد اعتباراً من {effectiveDate} مع حفظ لقطة الهوية السابقة.",
-                reason: reason, effectiveLocalDate: effectiveDate, correlationId: ct.CorrelationId(), ct).ConfigureAwait(false);
+
 
             var outcome = new JsonObject {
                 ["personId"] = personId, ["revision"] = expectedRevision + 1 };

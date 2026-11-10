@@ -80,7 +80,7 @@ public sealed class PersonnelSeparationService
             "الفرد غير نشط، أو نُقل، أو لا يمتلك موقعاً صالحاً للفصل.");
         if(await Forbidden(c,null,id,date,ct).ConfigureAwait(false))
             return Fail(BridgeErrorCodes.TransferDayAttendanceForbidden,
-                "يوجد تحضير أو نقل أو إغلاق يوم للفرد؛ لن يتم تنفيذ الفصل أو المساس بسجله.");
+                "سبق تسجيل حركة للفرد اليوم أو تم إغلاق اليوم أو الشهر؛ لم يتغير سجل الفرد.");
         var snapshot=new JsonObject
         {
             ["personId"]=person.Id,["name"]=person.Name,["serviceNumberA"]=person.Number,
@@ -145,37 +145,15 @@ public sealed class PersonnelSeparationService
                person.Number!=Text(preview,"serviceNumberA") ||
                await Forbidden(c,tx,id,date,ct).ConfigureAwait(false))
                 return Fail(BridgeErrorCodes.ConflictStale,
-                    "تغيرت بيانات الفرد أو تحضيره بعد المعاينة؛ ألغي الفصل دون تعديل.");
+                    "تغيرت بيانات الفرد أو موقعه أو أُغلق اليوم أو سُجلت حركة جديدة؛ ألغي الفصل دون تعديل.");
             long? consumed=await BridgePreviewTokens.ConsumeAsync(_db,_time,c,tx,token,
                 Operation,actor.UserId,version,ct).ConfigureAwait(false);
             if(consumed!=version)return Fail(BridgeErrorCodes.ConflictStale,
                 "المعاينة غير صالحة أو استُخدمت بالفعل.");
             string movementId="MOV-"+Guid.NewGuid().ToString("N");
             string now=_time.GetUtcNow().ToString("O"),reason=Text(preview,"reason");
-            using(var close=c.CreateCommand())
-            {
-                close.Transaction=tx;
-                close.CommandText="""
-                    UPDATE PersonAssignments SET ValidToLocalDate=$date
-                    WHERE AssignmentId=$assignment AND ValidToLocalDate IS NULL;
-                    """;
-                close.Parameters.AddWithValue("$date",date);
-                close.Parameters.AddWithValue("$assignment",person.Assignment);
-                if(await close.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
-                    throw new InvalidOperationException("Stale membership during separation.");
-            }
-            using(var update=c.CreateCommand())
-            {
-                update.Transaction=tx;
-                update.CommandText="""
-                    UPDATE Persons SET OrganizationalStatus=3,ActiveFlag=0,RowVersion=RowVersion+1
-                    WHERE PersonId=$id AND RowVersion=$version AND ActiveFlag=1;
-                    """;
-                update.Parameters.AddWithValue("$id",id);
-                update.Parameters.AddWithValue("$version",version);
-                if(await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
-                    throw new InvalidOperationException("Stale person revision during separation.");
-            }
+            // Immutable movement evidence must precede the same-day first
+            // assignment closure. Both are committed atomically with audit.
             using(var move=c.CreateCommand())
             {
                 move.Transaction=tx;
@@ -201,6 +179,31 @@ public sealed class PersonnelSeparationService
                 move.Parameters.AddWithValue("$idempotency",token+":"+person.Id);
                 await move.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
+            using(var close=c.CreateCommand())
+            {
+                close.Transaction=tx;
+                close.CommandText="""
+                    UPDATE PersonAssignments SET ValidToLocalDate=$date
+                    WHERE AssignmentId=$assignment AND ValidToLocalDate IS NULL;
+                    """;
+                close.Parameters.AddWithValue("$date",date);
+                close.Parameters.AddWithValue("$assignment",person.Assignment);
+                if(await close.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
+                    throw new InvalidOperationException("Stale membership during separation.");
+            }
+            using(var update=c.CreateCommand())
+            {
+                update.Transaction=tx;
+                update.CommandText="""
+                    UPDATE Persons SET OrganizationalStatus=3,ActiveFlag=0,RowVersion=RowVersion+1
+                    WHERE PersonId=$id AND RowVersion=$version AND ActiveFlag=1;
+                    """;
+                update.Parameters.AddWithValue("$id",id);
+                update.Parameters.AddWithValue("$version",version);
+                if(await update.ExecuteNonQueryAsync(ct).ConfigureAwait(false)!=1)
+                    throw new InvalidOperationException("Stale person revision during separation.");
+            }
+
             await BridgeAuditWriter.WriteAsync(c,tx,_time,"PERSON_SEPARATE","فصل فرد",
                 actor.UserId,actor.Username,actor.Username,"Person",person.Id,person.Name,
                 new JsonObject{["active"]=true,["siteId"]=person.SiteId,

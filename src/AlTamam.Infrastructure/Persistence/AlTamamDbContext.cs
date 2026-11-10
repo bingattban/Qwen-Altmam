@@ -7,8 +7,8 @@ namespace AlTamam.Infrastructure.Persistence;
 /// <summary>Encrypted SQLite connection management and atomic initialization of schema V001.</summary>
 public sealed class AlTamamDbContext : IDisposable
 {
-    /// <summary>Highest known schema (V015 permits evidenced first-day transfers).</summary>
-    public const int CurrentSchemaVersion = 15;
+    /// <summary>Highest known schema (V016 adds audited first-day separation and identity corrections).</summary>
+    public const int CurrentSchemaVersion = 16;
 
     /// <summary>The canonical, ordered migration set shipped with this build.</summary>
     public static readonly SchemaMigration[] CanonicalMigrations =
@@ -28,6 +28,7 @@ public sealed class AlTamamDbContext : IDisposable
         new(13, "V013_MovementAttendanceImmutableKeys", "AlTamam.Infrastructure.Persistence.Migrations.V013_MovementAttendanceImmutableKeys.sql"),
         new(14, "V014_AttendanceDateRanges", "AlTamam.Infrastructure.Persistence.Migrations.V014_AttendanceDateRanges.sql"),
         new(15, "V015_SameDayFirstAssignmentTransfer", "AlTamam.Infrastructure.Persistence.Migrations.V015_SameDayFirstAssignmentTransfer.sql"),
+        new(16, "V016_SameDaySeparationAndIdentity", "AlTamam.Infrastructure.Persistence.Migrations.V016_SameDaySeparationAndIdentity.sql"),
     ];
     private readonly string _databasePath;
     private readonly string _databaseKey;
