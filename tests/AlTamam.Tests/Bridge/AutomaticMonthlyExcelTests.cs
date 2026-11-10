@@ -143,6 +143,34 @@ public sealed class AutomaticMonthlyExcelTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task FirstEnableBeforeScheduledTime_WaitsUntilDue_ThenExportsCurrentValues()
+    {
+        _clock.At = new DateTimeOffset(2026,11,5,9,0,0,TimeSpan.Zero);
+        var svc = new AutomaticMonthlyExcelService(_db,_clock);
+        Assert.True((await svc.ConfigureAsync(Configuration(true,_folder,
+            "test-auto-first-before-due-001"),Admin,default)).Success);
+        Assert.False(await svc.RunIfDueAsync());
+        Assert.Empty(Directory.GetFiles(_folder,"*.xlsx",SearchOption.AllDirectories));
+        Assert.Equal("",(await svc.ReadAsync()).LastSuccessDate);
+
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText = "UPDATE CustomFieldValues SET FieldValueText='ماجستير' " +
+                "WHERE PersonId='TST-AUTO-P' AND FieldDefinitionId='FLD-AUTO-SCHOOL';";
+            await q.ExecuteNonQueryAsync();
+        }
+        _clock.At = new DateTimeOffset(2026,11,5,21,0,0,TimeSpan.Zero);
+        Assert.True(await svc.RunIfDueAsync());
+        Assert.Equal("2026-11-05",(await svc.ReadAsync()).LastSuccessDate);
+        var files = Directory.GetFiles(_folder,"*.xlsx",SearchOption.AllDirectories);
+        Assert.Equal(2,files.Length);
+        Assert.Contains("ماجستير",ReadStrings(files.Single(x =>
+            x.Contains("التمام الكلي للقوة",StringComparison.Ordinal))));
+        Assert.False(await svc.RunIfDueAsync());
+    }
+
+    [Fact]
     public async Task DisablingScheduleNeverRemovesExistingMonthlyWorkbooks()
     {
         var svc=new AutomaticMonthlyExcelService(_db,_clock);
