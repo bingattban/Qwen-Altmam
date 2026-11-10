@@ -87,7 +87,7 @@ public sealed class RosterCustomFieldValueService
             var (replay,receipt)=await MutationIdempotency.StartAsync(c,tx,
                 "UpdateCustomFieldValues",actor.UserId,payload,ct).ConfigureAwait(false);
             if(replay is not null)return replay;
-            var result=await SaveInTransactionAsync(c,tx,actor,personId,expected,
+            var result=await SaveInTransactionAsync(c,tx,actor.UserId,actor.Username,personId,expected,
                 values,"تعديل بيانات الأعمدة الإضافية من شاشة إدارة القوة",ct)
                 .ConfigureAwait(false);
             if(!result.Success)return result;
@@ -98,7 +98,7 @@ public sealed class RosterCustomFieldValueService
     }
 
     internal static async Task<BridgeResponse> SaveInTransactionAsync(
-        SqliteConnection c,SqliteTransaction tx,BridgePrincipal actor,
+        SqliteConnection c,SqliteTransaction tx,string actorUserId,string actorUsername,
         string personId,long expectedRevision,JsonObject values,
         string reason,CancellationToken ct,TimeProvider? clock=null)
     {
@@ -191,7 +191,7 @@ public sealed class RosterCustomFieldValueService
             }
             await BridgeAuditWriter.WriteAsync(c,tx,now,
                 "CUSTOM_FIELD_VALUE_UPDATE","تعديل قيمة عمود إضافي",
-                actor.UserId,actor.Username,actor.Username,"Person",personId,personName,
+                actorUserId,actorUsername,actorUsername,"Person",personId,personName,
                 new JsonObject {["columnId"]=update.Id,["column"]=update.Caption,
                     ["value"]=update.Old??""}.ToJsonString(),
                 new JsonObject {["columnId"]=update.Id,["column"]=update.Caption,

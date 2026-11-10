@@ -359,6 +359,45 @@ public sealed class ExcelPersonnelImportService
             var plan = await ReadStagedAsync(token, PlanOperation, actor, connection, tx, ct).ConfigureAwait(false);
             if (plan is null) return Stale();
             var rows = Rows(plan,allowEmpty:true);
+            var updateRows=plan["updateRows"] as JsonArray ?? new JsonArray();
+            if(updateRows.Count>0 && payload?["approveCustomUpdates"]?.ToString()!="true")
+                return Invalid("تحديث أعمدة الأفراد الموجودين يتطلب موافقة مستقلة بعد مقارنة القيم.");
+            // All compare-and-swap checks run before ANY new person is inserted.
+            // No direct workbook may overwrite another person's identity/site/attendance.
+            foreach(var item in updateRows)
+            {
+                if(item is not JsonObject update)return Stale();
+                string id=Read(update,"personId");
+                long rev=update["expectedRevision"]?.GetValue<long>()??0;
+                using(var current=connection.CreateCommand())
+                {
+                    current.Transaction=tx;
+                    current.CommandText="""
+                        SELECT RowVersion FROM Persons
+                        WHERE PersonId=$id AND ActiveFlag=1 AND OrganizationalStatus=1;
+                        """;
+                    current.Parameters.AddWithValue("$id",id);
+                    object? value=await current.ExecuteScalarAsync(ct).ConfigureAwait(false);
+                    if(value is null || Convert.ToInt64(value)!=rev)return Stale();
+                }
+                var changes=update["customFields"] as JsonObject;
+                var oldValues=update["oldCustomFields"] as JsonObject;
+                if(changes is null || changes.Count==0 || oldValues is null ||
+                   oldValues.Count!=changes.Count)return Stale();
+                foreach(var cell in oldValues)
+                {
+                    using var before=connection.CreateCommand();
+                    before.Transaction=tx;
+                    before.CommandText="""
+                        SELECT FieldValueText FROM CustomFieldValues
+                        WHERE PersonId=$person AND FieldDefinitionId=$field;
+                        """;
+                    before.Parameters.AddWithValue("$person",id);
+                    before.Parameters.AddWithValue("$field",cell.Key);
+                    string actual=(await before.ExecuteScalarAsync(ct).ConfigureAwait(false)) as string??"";
+                    if(actual!=(cell.Value?.GetValue<string>()??""))return Stale();
+                }
+            }
             var (accepted, issues, _) = await InspectAsync(connection, tx, rows, ct).ConfigureAwait(false);
             if (issues.Count > 0 || accepted.Count != rows.Count)
                 return Stale();
@@ -395,8 +434,8 @@ public sealed class ExcelPersonnelImportService
                 record.Parameters.AddWithValue("$id", batchId);
                 record.Parameters.AddWithValue("$file", Read(plan, "fileName"));
                 record.Parameters.AddWithValue("$hash", Read(plan, "sha256"));
-                record.Parameters.AddWithValue("$total", rows.Count + plannedIssues.Count);
-                record.Parameters.AddWithValue("$accepted", rows.Count);
+                record.Parameters.AddWithValue("$total", rows.Count + updateRows.Count + plannedIssues.Count);
+                record.Parameters.AddWithValue("$accepted", rows.Count + updateRows.Count);
                 record.Parameters.AddWithValue("$rejected", plannedIssues.Count);
                 record.Parameters.AddWithValue("$actor", actor);
                 record.Parameters.AddWithValue("$now", now);
@@ -517,6 +556,20 @@ public sealed class ExcelPersonnelImportService
                 }
                 createdIds.Add(personId);
             }
+            foreach(var item in updateRows)
+            {
+                var update=(JsonObject)item!;
+                var changes=(JsonObject)update["customFields"]!;
+                var applied=await RosterCustomFieldValueService.SaveInTransactionAsync(
+                    connection,tx,actor,username,Read(update,"personId"),
+                    update["expectedRevision"]!.GetValue<long>(),changes,
+                    "تحديث أعمدة فرد موجود بعد معاينة واعتماد استيراد Excel",ct,_time)
+                    .ConfigureAwait(false);
+                if(!applied.Success)
+                    throw new InvalidOperationException(
+                        "تغيرت قيم أحد الأفراد أثناء الاستيراد؛ تراجعت الدفعة كاملة: "+applied.UserMessage);
+                createdIds.Add(Read(update,"personId"));
+            }
             using (var updateBatch = connection.CreateCommand())
             {
                 updateBatch.Transaction = tx;
@@ -529,11 +582,13 @@ public sealed class ExcelPersonnelImportService
                 "PERSONNEL_IMPORT", "استيراد أفراد من ملف Excel",
                 actor, username, username, "PersonImport", batchId, "دفعة استيراد",
                 null, new JsonObject { ["importBatchId"] = batchId,
-                    ["createdCount"] = rows.Count, ["rejectedCount"] = plannedIssues.Count,
+                    ["createdCount"] = rows.Count,["customUpdatedCount"]=updateRows.Count,
+                    ["rejectedCount"] = plannedIssues.Count,
                     ["rows"] = new JsonArray(rows.Select(r => (JsonNode?)JsonValue.Create(r.Number)).ToArray()) }.ToJsonString(),
-                $"إنشاء {rows.Count} سجل فرد جديد فقط دون تعديل أي تحضير أو هوية موجودة.",
+                $"إنشاء {rows.Count} فرد جديد وتحديث أعمدة {updateRows.Count} فرد موجود دون تعديل الأسماء أو المواقع أو التحضير.",
                 "اعتماد كشف Excel بعد المعاينة", today, ct.CorrelationId(), ct).ConfigureAwait(false);
             var outcome = new JsonObject { ["createdCount"] = rows.Count,
+                ["customUpdatedCount"] = updateRows.Count,
                 ["committedAtUtc"] = now, ["importToken"] = token,
                 ["importBatchId"] = batchId, ["rejectedCount"] = plannedIssues.Count,
                 ["createdSitesCount"] = createdSites };
