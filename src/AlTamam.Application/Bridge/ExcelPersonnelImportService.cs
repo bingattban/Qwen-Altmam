@@ -285,13 +285,16 @@ public sealed class ExcelPersonnelImportService
         using var connection = _db.CreateOpenConnection();
         var staged = await ReadStagedAsync(ticket, WorkbookOperation, actor, connection, null, ct).ConfigureAwait(false);
         if (staged is null) return Stale();
-        var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
+        var (accepted, issues, updates) = await InspectAsync(connection, null, Rows(staged), ct,
+            staged["updateExistingCustomFields"]?.ToString()=="true").ConfigureAwait(false);
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
         var similarNameMatches=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
             ["newSites"]=newSites,["similarNames"]=similarNameMatches.Items,["similarNameCount"]=similarNameMatches.Total,
-            ["totalRows"] = accepted.Count + issues.Count, ["newCount"] = accepted.Count,
+            ["totalRows"] = accepted.Count + updates.Count + issues.Count,
+            ["newCount"] = accepted.Count,["customUpdateCount"]=updates.Count,
+            ["customUpdatesPreview"]=PreviewCustomUpdates(updates),
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted)
         });
@@ -303,8 +306,9 @@ public sealed class ExcelPersonnelImportService
         using var connection = _db.CreateOpenConnection();
         var staged = await ReadStagedAsync(ticket, WorkbookOperation, actor, connection, null, ct).ConfigureAwait(false);
         if (staged is null) return Stale();
-        var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
-        if (accepted.Count == 0 && issues.Count == 0)
+        var (accepted, issues, updates) = await InspectAsync(connection, null, Rows(staged), ct,
+            staged["updateExistingCustomFields"]?.ToString()=="true").ConfigureAwait(false);
+        if (accepted.Count == 0 && issues.Count == 0 && updates.Count == 0)
             return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد بيانات تحليل قابلة للحفظ.");
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
         var similarNameMatches=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
@@ -313,8 +317,9 @@ public sealed class ExcelPersonnelImportService
             new JsonObject { ["fileName"] = Read(staged, "fileName"),
                 ["sha256"] = Read(staged, "sha256"),
                 ["newSites"] = newSites.DeepClone(),
-                ["totalRows"] = accepted.Count + issues.Count,
+                ["totalRows"] = accepted.Count + updates.Count + issues.Count,
                 ["issues"] = issues.DeepClone(),
+                ["updateRows"] = updates.DeepClone(),
                 ["rows"] = new JsonArray(accepted.Select(node =>
             {
                 var p = (JsonObject)node!;
@@ -334,6 +339,8 @@ public sealed class ExcelPersonnelImportService
             ["similarNames"] = similarNameMatches.Items,
             ["similarNameCount"] = similarNameMatches.Total,
             ["newCount"] = accepted.Count,
+            ["customUpdateCount"] = updates.Count,
+            ["customUpdatesPreview"] = PreviewCustomUpdates(updates),
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted),
             ["requiresExplicitConfirmation"] = true
@@ -352,7 +359,7 @@ public sealed class ExcelPersonnelImportService
             var plan = await ReadStagedAsync(token, PlanOperation, actor, connection, tx, ct).ConfigureAwait(false);
             if (plan is null) return Stale();
             var rows = Rows(plan,allowEmpty:true);
-            var (accepted, issues) = await InspectAsync(connection, tx, rows, ct).ConfigureAwait(false);
+            var (accepted, issues, _) = await InspectAsync(connection, tx, rows, ct).ConfigureAwait(false);
             if (issues.Count > 0 || accepted.Count != rows.Count)
                 return Stale();
             var proposedSites=plan["newSites"] as JsonArray ?? new JsonArray();
@@ -536,6 +543,26 @@ public sealed class ExcelPersonnelImportService
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonIdentityUpdated,
                     today, createdIds));
         }, ct).ConfigureAwait(false);
+    }
+
+    private static JsonArray PreviewCustomUpdates(JsonArray updates)
+    {
+        var rows=new JsonArray();
+        foreach(var update in updates.OfType<JsonObject>())
+        {
+            var previous=(JsonObject)update["oldCustomFields"]!;
+            var changed=(JsonObject)update["customFields"]!;
+            foreach(var item in changed)
+                rows.Add(new JsonObject {
+                    ["row"]=update["row"]?.GetValue<int>()??0,
+                    ["name"]=Read(update,"name"),
+                    ["serviceNumberA"]=Read(update,"number"),
+                    ["columnId"]=item.Key,
+                    ["oldValue"]=previous[item.Key]?.GetValue<string>()??"",
+                    ["newValue"]=item.Value?.GetValue<string>()??""
+                });
+        }
+        return rows;
     }
 
     private static JsonArray PreviewNames(JsonArray accepted)
