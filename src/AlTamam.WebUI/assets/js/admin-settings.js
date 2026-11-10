@@ -601,8 +601,8 @@
           String(item.reason||"").includes("هوية مؤرشفة")))
           summary.append(btn("معالجة هويات الأرشيف عبر إضافة فرد",()=>
             navigate("persons","AddPerson"),"btn btn-outline"));
-        const preview=btn(Number(report.newCount)>0||Number(report.customUpdateCount)>0?
-           "معاينة خطة الإضافة والتحديث":"معاينة اعتماد صفوف الرفض فقط",async()=>{
+        const preview=btn(Number(report.customUpdateCount)>0?"معاينة خطة الإضافة والتحديث":
+           Number(report.newCount)>0?"معاينة خطة الإضافة":"معاينة اعتماد صفوف الرفض فقط",async()=>{
           preview.disabled=true;confirmBox.replaceChildren();previewToken="";
           try{
             const result=await api().invoke("PreviewImportPlan",{workbookToken});

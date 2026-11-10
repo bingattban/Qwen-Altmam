@@ -143,6 +143,46 @@ public sealed class AutomaticMonthlyExcelTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task FirstActivationWaitsUntilSelectedClock_NotDuringMorning()
+    {
+        _clock.At=new DateTimeOffset(2026,11,5,10,0,0,TimeSpan.Zero);
+        var svc=new AutomaticMonthlyExcelService(_db,_clock);
+        Assert.True((await svc.ConfigureAsync(Configuration(true,_folder,
+            "test-auto-schedule-first-check"),Admin,default)).Success);
+        Assert.False(await svc.RunIfDueAsync());
+        Assert.Empty(Directory.GetFiles(_folder,"*.xlsx",SearchOption.AllDirectories));
+        _clock.At=new DateTimeOffset(2026,11,5,21,30,0,TimeSpan.Zero);
+        Assert.True(await svc.RunIfDueAsync());
+        Assert.NotEmpty(Directory.GetFiles(_folder,"*.xlsx",SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task ClosedCurrentDayNeverCreatesAutomaticExcelFiles()
+    {
+        _clock.At=new DateTimeOffset(2026,11,5,21,30,0,TimeSpan.Zero);
+        var svc=new AutomaticMonthlyExcelService(_db,_clock);
+        Assert.True((await svc.ConfigureAsync(Configuration(true,_folder,
+            "test-auto-closed-day-first-check"),Admin,default)).Success);
+        using(var connection=_db.CreateOpenConnection())
+        using(var close=connection.CreateCommand())
+        {
+            close.CommandText="""
+                INSERT INTO PeriodClosures
+                  (PeriodKey,PeriodType,IsClosed,ClosedAtUtc,ClosedByActor,PolicyVersion)
+                VALUES('2026-11-05','DAY',1,'2026-11-05T20:00:00Z',
+                    'USR-SYSTEM','test-closed-day');
+                """;
+            await close.ExecuteNonQueryAsync();
+        }
+        Assert.False(await svc.RunIfDueAsync());
+        Assert.Empty(Directory.GetFiles(_folder,"*.xlsx",SearchOption.AllDirectories));
+        Assert.Equal("",(await svc.ReadAsync()).LastSuccessDate);
+        _clock.At=new DateTimeOffset(2026,11,6,21,30,0,TimeSpan.Zero);
+        Assert.True(await svc.RunIfDueAsync());
+        Assert.NotEmpty(Directory.GetFiles(_folder,"*.xlsx",SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task DisablingScheduleNeverRemovesExistingMonthlyWorkbooks()
     {
         var svc=new AutomaticMonthlyExcelService(_db,_clock);

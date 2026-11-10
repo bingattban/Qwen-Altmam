@@ -88,7 +88,7 @@ public sealed class RosterCustomFieldValueService
                 "UpdateCustomFieldValues",actor.UserId,payload,ct).ConfigureAwait(false);
             if(replay is not null)return replay;
             var result=await SaveInTransactionAsync(c,tx,actor.UserId,actor.Username,personId,expected,
-                values,"تعديل بيانات الأعمدة الإضافية من شاشة إدارة القوة",ct)
+                values,"تعديل بيانات الأعمدة الإضافية من شاشة إدارة القوة",ct,_clock)
                 .ConfigureAwait(false);
             if(!result.Success)return result;
             await MutationIdempotency.StoreAsync(c,tx,receipt,
