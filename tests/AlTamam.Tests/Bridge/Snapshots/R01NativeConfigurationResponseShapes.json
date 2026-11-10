@@ -132,12 +132,12 @@
   "GetDashboardSummary": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{attendanceEligible:integer,automaticallyPrepared:integer,businessDate:string,completionPercentage:integer,internalTransferDay:integer,siteId:string,statusCounts:array<object{color:string,count:integer,name:string,statusId:string,symbol:string}>,totalForce:integer,unprepared:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
+  "GetExportablePeriods": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<string>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
   "GetExportProgress": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{cancelRequested:boolean,completed:boolean,filePath:string,jobId:string,kind:string,percentage:integer,processed:integer,startedAtUtc:string,status:string,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{cancelRequested:boolean,completed:boolean,filePath:null,jobId:string,kind:string,percentage:integer,processed:integer,startedAtUtc:string,status:string,total:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
-  ],
-  "GetExportablePeriods": [
-    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:array<string>,errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "GetMonthlyCellDetails": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{attendance:object{actorUserId:string,color:string,committedAtUtc:string,revisionNumber:integer,siteId:string,siteName:string,source:string,statusId:string,statusName:string,symbol:string},businessDate:string,movement:null,personId:string,personName:string,revisions:array<object{actorUserId:string,afterStatus:string,authorizationMethod:string,beforeStatus:string,executedAtUtc:string,reason:string}>,serviceNumberA:string,siteId:string,siteName:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
@@ -178,11 +178,11 @@
   "PreviewAdministrativeAttendanceCatchUp": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,eligibleCount:integer,fingerprint:string,pendingCount:integer,previewToken:string,reason:string,requiresExplicitConfirmation:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
-  "PreviewArchivePersons": [
-    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{baseRevision:integer,candidates:array<object{attendanceDays:integer,blocker:null,currentSiteName:string,displayName:string,organizationalStatus:integer,personId:string,serviceNumberA:string}>,effectiveLocalDate:string,expectedVersions:array<object{personId:string,rowVersion:integer}>,previewToken:string,reversible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
-  ],
   "PreviewArchivedIdentity": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,candidates:array<object{exitDate:string,exitType:string,name:string,nameMatch:boolean,numberMatch:boolean,organizationalStatus:integer,personId:string,previousSiteName:string,revision:integer,serviceNumberA:string}>,numberContested:boolean,previewToken:string,requiresResolution:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "PreviewArchivePersons": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{baseRevision:integer,candidates:array<object{attendanceDays:integer,blocker:null,currentSiteName:string,displayName:string,organizationalStatus:integer,personId:string,serviceNumberA:string}>,effectiveLocalDate:string,expectedVersions:array<object{personId:string,rowVersion:integer}>,previewToken:string,reversible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "PreviewAttendanceChange": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{businessDate:string,count:integer,mode:string,persons:array<object{assignmentId:string,name:string,personId:string,previousRevision:integer,previousStatusId:null,previousStatusName:string,serviceNumberA:string,siteId:string,siteName:string}>,previewToken:string,rangeEndDate:null,rangeStartDate:null,reason:string,statusColor:string,statusId:string,statusName:string,statusSymbol:string},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}",
@@ -326,6 +326,10 @@
   ],
   "UpdateCustomFieldMetadata": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{active:boolean,caption:string,columnId:string,displayOrder:integer,fieldType:integer,isSystemProtected:boolean,snapshot:string,storedValueCount:integer,technicalKey:string,visible:boolean},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
+  ],
+  "UpdateCustomFieldValues": [
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{changedCount:integer,personId:string,revision:integer},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:integer,success:boolean,userMessage:null,validationErrors:null}",
+    "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{changedCount:integer,personId:string,revision:integer},errorCode:null,expectedVersion:null,invalidationEvents:null,messageAr:string,requestId:string,revision:null,success:boolean,userMessage:null,validationErrors:null}"
   ],
   "UpdatePersonIdentity": [
     "object{actualVersion:null,auditEventId:null,code:string,conflictInfo:null,data:object{personId:string,revision:integer},errorCode:null,expectedVersion:null,invalidationEvents:array<object{affectedEntityIds:array<string>,effectiveLocalDate:string,eventName:string,revision:integer}>,messageAr:string,requestId:string,revision:integer,success:boolean,userMessage:null,validationErrors:null}",
