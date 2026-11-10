@@ -135,6 +135,7 @@ public sealed class SameDayFirstAssignmentTransferTests : IAsyncLifetime, IDispo
             q.Parameters.AddWithValue("$person", personId);
             Assert.Equal(1L, Convert.ToInt64(await q.ExecuteScalarAsync()));
 
+            q.Parameters.Clear();
             q.CommandText = """
                 SELECT ValidFromLocalDate,ValidToLocalDate FROM PersonAssignments
                 WHERE AssignmentId=$assignment;
@@ -147,6 +148,8 @@ public sealed class SameDayFirstAssignmentTransferTests : IAsyncLifetime, IDispo
                 Assert.Equal(date, reader.GetString(1));
             }
 
+            q.Parameters.Clear();
+            q.Parameters.AddWithValue("$person", personId);
             q.CommandText = "SELECT COUNT(*) FROM AttendanceRecords WHERE PersonId=$person;";
             Assert.Equal(prepared ? 1L : 0L, Convert.ToInt64(await q.ExecuteScalarAsync()));
             if (!external)
