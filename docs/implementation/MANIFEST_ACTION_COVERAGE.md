@@ -4,8 +4,8 @@ Generated from the current shipped `action-manifest.json` and explicit `BridgeHa
 This table is a **routing inventory**, not an assertion that every command passes feature,
 Windows E2E, clean-machine or physical restore acceptance tests.
 
-**Manifest:** 104 actions / 11 owning services.
-**Explicit native handlers:** 103.
+**Manifest:** 105 actions / 12 owning services.
+**Explicit native handlers:** 104.
 **Intentionally unavailable:** `RestoreDatabaseAtomically` (native physical restore acceptance gate).
 
 ## Service-level coverage
@@ -21,6 +21,7 @@ Windows E2E, clean-machine or physical restore acceptance tests.
 | MovementService | 11 | 11 |
 | PersonRosterService | 10 | 10 |
 | ReportingService | 6 | 6 |
+| RosterCustomFieldValueService | 1 | 1 |
 | SettingsBackupService | 18 | 17 |
 | UserAuditService | 11 | 11 |
 
@@ -149,6 +150,12 @@ Idempotency and role data remain authoritative in the JSON manifest and C# mirro
 | `QueryPersonAttendanceTotals` | READ | no | WIRED |
 | `QueryPersonMovements` | READ | no | WIRED |
 | `QueryPersonOperationsTimeline` | READ | no | WIRED |
+
+### RosterCustomFieldValueService
+
+| Canonical action | Kind | Declared idempotency | Native routing |
+|---|---|---|---|
+| `UpdateCustomFieldValues` | MUTATION | yes | WIRED |
 
 ### SettingsBackupService
 

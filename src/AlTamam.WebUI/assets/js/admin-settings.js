@@ -375,6 +375,12 @@
     const mapName=field("عنوان عمود الاسم (اختياري إذا تعرف عليه البرنامج)");
     const mapNumber=field("عنوان عمود الرقم (ع) (اختياري)");
     const mapSite=field("عنوان عمود الموقع (اختياري)");
+    const updateExistingLabel=node("label","admin-input");
+    const updateExisting=node("input");updateExisting.type="checkbox";
+    updateExisting.checked=false;
+    updateExisting.setAttribute("aria-label","تحديث بيانات الأعمدة للأفراد الموجودين");
+    updateExistingLabel.append(updateExisting,node("span","",
+      "تحديث قيم الأعمدة للأفراد الموجودين بعد مطابقة الاسم والرقم (ع) ومعاينة مستقلة"));
     const picker=node("label","admin-input");
     picker.append(node("span","","اختر الملف من الجهاز"),choose);
     const status=node("div","admin-note");
@@ -525,7 +531,8 @@
           ...(allSheets?{allSheets:true}:{sheetIndexes}),
           nameHeading:mapName.input.value.trim(),
           numberHeading:mapNumber.input.value.trim(),
-          siteHeading:mapSite.input.value.trim()
+          siteHeading:mapSite.input.value.trim(),
+           updateExistingCustomFields:updateExisting.checked
         });
         if(current!==serial||!valid())return;
         workbookToken=selected.data?.workbookToken||"";
@@ -535,7 +542,9 @@
         const report=analyzed.data||{};
         const summary=node("div","settings-properties");
         for(const [key,value] of [["إجمالي الصفوف",report.totalRows],
-          ["أفراد جدد",report.newCount],["صفوف متعارضة أو غير صالحة",report.issueCount]])
+          ["أفراد جدد",report.newCount],
+           ["تحديث أعمدة أفراد موجودين",report.customUpdateCount||0],
+           ["صفوف متعارضة أو غير صالحة",report.issueCount]])
           summary.appendChild(settingsValue(key,value));
         const acceptedRows=Array.isArray(report.acceptedPreview)?report.acceptedPreview:[];
         if(acceptedRows.length){
@@ -547,7 +556,19 @@
             "الأفراد المقبولون — عرض "+Math.min(50,acceptedRows.length)+" من "+report.newCount),
             acceptedTable.wrap);
         }
-        const proposedSites=Array.isArray(report.newSites)?report.newSites:[];
+        const customChanges=Array.isArray(report.customUpdatesPreview)?report.customUpdatesPreview:[];
+         const defs=customChanges.length?
+           (await api().invoke("GetCustomFieldDefinitions",{})).data?.items||[]:[];
+         const customCaptions=new Map(defs.map(x=>[x.columnId,x.caption]));
+         if(customChanges.length){
+           const changesTable=table(["الصف","الاسم","الرقم (ع)","العمود","القديم","الجديد"]);
+           for(const x of customChanges.slice(0,200))
+             addRow(changesTable.body,[x.row,x.name,x.serviceNumberA,
+               customCaptions.get(x.columnId)||x.columnId,x.oldValue||"—",x.newValue||"—"]);
+           summary.append(node("h3","section-title",
+             "القيم الجديدة للأفراد الموجودين — لا تحفظ إلا بعد الموافقة"),changesTable.wrap);
+         }
+         const proposedSites=Array.isArray(report.newSites)?report.newSites:[];
         if(proposedSites.length){
           const siteTable=table(["الموقع المقترح","عدد الأفراد"]);
           for(const item of proposedSites)
@@ -580,7 +601,8 @@
           String(item.reason||"").includes("هوية مؤرشفة")))
           summary.append(btn("معالجة هويات الأرشيف عبر إضافة فرد",()=>
             navigate("persons","AddPerson"),"btn btn-outline"));
-        const preview=btn(Number(report.newCount)>0?"معاينة خطة الإضافة":"معاينة اعتماد صفوف الرفض فقط",async()=>{
+        const preview=btn(Number(report.customUpdateCount)>0?"معاينة خطة الإضافة والتحديث":
+           Number(report.newCount)>0?"معاينة خطة الإضافة":"معاينة اعتماد صفوف الرفض فقط",async()=>{
           preview.disabled=true;confirmBox.replaceChildren();previewToken="";
           try{
             const result=await api().invoke("PreviewImportPlan",{workbookToken});
@@ -607,19 +629,38 @@
               });
               if(!siteApproved){previewToken="";return;}
             }
-            const details={rows:[
-              ["أفراد جدد",plan.newCount],["صفوف مستبعدة",plan.issueCount],
+            const customCount=Number(plan.customUpdateCount||0);
+             if(customCount>0){
+               const changes=Array.isArray(plan.customUpdatesPreview)?plan.customUpdatesPreview:[];
+               const approved=await detailsReview({
+                 rows:[["أفراد موجودون ستحدث أعمدتهم",customCount],
+                   ["الأثر","لا تتغير الهوية أو الموقع أو التحضير"]],
+                 columns:["الاسم","الرقم (ع)","العمود","القديم","الجديد"],
+                 items:changes.slice(0,300).map(x=>[x.name,x.serviceNumberA,
+                   customCaptions.get(x.columnId)||x.columnId,x.oldValue||"—",x.newValue||"—"])
+               },{
+                 title:"معاينة تحديث الأعمدة للأفراد الموجودين",
+                 message:"راجع القيم القديمة والجديدة؛ لن يغير الاستيراد الأسماء أو الأرقام أو المواقع.",
+                 confirmLabel:"أوافق على تحديث الأعمدة"
+               });
+               if(!approved){previewToken="";return;}
+             }
+             const details={rows:[
+              ["أفراد جدد",plan.newCount],["تحديث أعمدة أفراد موجودين",customCount],
+               ["صفوف مستبعدة",plan.issueCount],
               ["أسماء مشابهة تستدعي مراجعة بشرية",plan.similarNameCount??(plan.similarNames||[]).length],
               ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
             ],columns:["الورقة","الصف","الاسم الجديد","الرقم (ع)","الموقع"],
               items:(plan.acceptedPreview||[]).map(p=>
                 [p.worksheet||"—",p.row||"—",p.name,p.serviceNumberA,p.siteName||"غير محدد"])};
             const accepted=await detailsReview(details,{
-              title:Number(plan.newCount)>0?"معاينة خطة إضافة الأفراد":"معاينة أرشفة أخطاء الاستيراد",
-              message:Number(plan.newCount)>0?
+              title:Number(plan.newCount)>0||customCount>0?
+                 "معاينة خطة إضافة الأفراد وتحديث الأعمدة":"معاينة أرشفة أخطاء الاستيراد",
+              message:Number(plan.newCount)>0||customCount>0?
                 "راجع الأسماء والأرقام (ع) والتعارضات قبل الاعتماد.":
                 "لن يُضاف أي فرد؛ يُحفظ فقط سجل الصفوف المرفوضة مع أسبابها لتتمكن من تصدير Excel.",
-              confirmLabel:Number(plan.newCount)>0?"تأكيد استيراد الأفراد الجدد":"تأكيد حفظ سجل الأخطاء"
+              confirmLabel:Number(plan.newCount)>0||customCount>0?
+                 "تأكيد حفظ الدفعة وتحديث الأعمدة":"تأكيد حفظ سجل الأخطاء"
             });
             if(!accepted){previewToken="";return;}
             const token=previewToken;
@@ -634,6 +675,7 @@
               confirmBox.replaceChildren(warning("جارٍ حفظ الاستيراد وتسجيل الدفعة في قاعدة البيانات..."));
               try{
                 const done=await api().invoke("CommitImport",{previewToken:token,operationId,
+                   approveCustomUpdates:customCount>0,
                   confirmNewSites:newSites.length>0,approvedSiteNames},{timeoutMs:180000});
                 if(!valid()||current!==serial)return;
                 const receipt=done?.data;
@@ -646,9 +688,10 @@
                 previewToken="";
                 analysis.replaceChildren();
                 confirmBox.replaceChildren(node("p","settings-success",
-                  (receipt.createdCount===0?
+                  (receipt.createdCount===0&&!receipt.customUpdatedCount?
                     "تم حفظ صفوف الرفض فقط دون إضافة أي فرد.":
-                    "تم إنشاء "+receipt.createdCount+" فرداً جديداً وحُفظت العملية في سجل التدقيق.")+
+                    "تم إنشاء "+receipt.createdCount+" فرداً جديداً وتحديث أعمدة "+
+                       (receipt.customUpdatedCount||0)+" فرد موجود مع توثيق العملية.")+
                   " معرف الدفعة: "+receipt.importBatchId));
                 workbookToken="";
                 // The history refresh is read-only and has its own error panel;
@@ -684,7 +727,8 @@
           examine.focus?.();
         },"btn btn-outline app-modal-close");
         analysis.replaceChildren(closeAnalysis,summary);
-        if(Number(report.newCount)>0 || Number(report.issueCount)>0)
+        if(Number(report.newCount)>0 || Number(report.customUpdateCount)>0 ||
+           Number(report.issueCount)>0)
           analysis.appendChild(preview);
         closeAnalysis.focus?.();
         status.replaceChildren(node("p","settings-success","اكتمل التحليل؛ راجع الصفوف قبل اعتماد الخطة."));
@@ -692,6 +736,7 @@
       finally{examine.disabled=false;}
     },"btn btn-primary");
     shell.append(picker,sheetSelector.wrap,mapName.wrap,mapNumber.wrap,mapSite.wrap,
+      updateExistingLabel,
       examine,status,analysis,confirmBox);
     page.append(shell,history);
     void loadHistory();
@@ -1913,6 +1958,9 @@
             row.appendChild(node("td","roster-custom-cell",value||"—"));
           const actions=node("td","admin-row-buttons");
           actions.appendChild(btn("تعديل الاسم والرقم",()=>editPerson(person)));
+          if(customColumns.length)
+            actions.appendChild(btn("تعديل بيانات الأعمدة",
+              ()=>editCustomValues(person,customColumns)));
           // The native manifest independently restricts ArchivePersons to
           // GeneralAdministration / OrdinaryAdministration. Never show this
           // destructive roster-membership operation to Supervisors.
@@ -2026,6 +2074,54 @@
         await load();
       }catch(error){await dialogs.alert(error.message||"تعذر أرشفة الفرد.");}
     }
+    async function editCustomValues(person,columns) {
+      const showForm=window.AltamamDialog?.form;
+      const review=window.AltamamDialog?.detailsReview;
+      if(typeof showForm!=="function"||typeof review!=="function"){
+        await dialogs.alert("نموذج تعديل الأعمدة أو نافذة التأكيد غير متاحة.");
+        return;
+      }
+      const fields=columns.map(col=>({
+        name:col.columnId,label:col.caption+
+          (col.fieldType===2?" (رقم)":col.fieldType===3?" (YYYY-MM-DD)":
+            col.fieldType===4?" (نعم أو لا)":""),
+        type:"text",value:String(person.customFields?.[col.columnId]??""),
+        required:false,maxLength:250
+      }));
+      const values=await showForm(fields,{title:"تعديل بيانات الأعمدة الإضافية",
+        confirmLabel:"معاينة القيم",size:"lg"});
+      if(values===null)return;
+      const modified=columns.filter(col=>
+        String(person.customFields?.[col.columnId]??"")!==String(values[col.columnId]??"").trim());
+      if(!modified.length){
+        await dialogs.alert("لم تتغير أي قيمة؛ لا توجد تعديلات لحفظها.");
+        return;
+      }
+      const details=modified.map(col=>[col.caption,
+        String(person.customFields?.[col.columnId]??"")||"—",
+        String(values[col.columnId]??"").trim()||"—"]);
+      const approved=await review({
+        rows:[["الفرد",person.displayName],["الرقم (ع)",person.serviceNumberA],
+          ["عدد الأعمدة المتغيرة",modified.length]],
+        columns:["العمود","القيمة السابقة","القيمة الجديدة"],items:details
+      },{
+        title:"تأكيد تعديل بيانات الأعمدة",
+        message:"سيحفظ البرنامج القيم السابقة والجديدة في سجل التدقيق دون مساس بالتحضير.",
+        confirmLabel:"تأكيد حفظ التغييرات"
+      });
+      if(!approved)return;
+      const changed={};
+      for(const col of modified)changed[col.columnId]=String(values[col.columnId]??"").trim();
+      try{
+        const result=await api().invoke("UpdateCustomFieldValues",{
+          personId:person.personId,expectedRevision:person.revision,
+          values:changed,operationId:makeOperationId()
+        });
+        if(!result.data?.changedCount)throw Error("لم يؤكد الخادم حفظ قيم الأعمدة.");
+        await load();
+      }catch(error){await dialogs.alert(error.message||"تعذر تحديث قيم الأعمدة.");}
+    }
+
     async function editPerson(person) {
       const showForm=window.AltamamDialog?.form;
       if(typeof showForm!=="function"){

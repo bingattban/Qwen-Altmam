@@ -34,6 +34,7 @@
     "RemoveSiteAndReassignCurrentPersons",
     "CreateCustomFieldDefinition",
     "UpdateCustomFieldMetadata",
+    "UpdateCustomFieldValues",
     "DeactivateCustomField",
     "CommitImport",
     "ExportImportIssues",

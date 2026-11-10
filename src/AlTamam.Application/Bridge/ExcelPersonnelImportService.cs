@@ -33,13 +33,29 @@ public sealed class ExcelPersonnelImportService
     public ExcelPersonnelImportService(AlTamamDbContext db, TimeProvider? time = null)
     { _db = db; _time = time ?? TimeProvider.System; }
 
+    private Dictionary<string,(string Id,int Type)> ReadCustomColumnHeadings()
+    {
+        using var c=_db.CreateOpenConnection();
+        using var query=c.CreateCommand();
+        query.CommandText="""
+            SELECT FieldDefinitionId,ArabicCaption,FieldType FROM CustomFieldDefinitions
+            WHERE IsSystemProtected=0 AND ActiveFlag=1 AND VisibleFlag=1;
+            """;
+        var result=new Dictionary<string,(string Id,int Type)>(StringComparer.Ordinal);
+        using var rows=query.ExecuteReader();
+        while(rows.Read())
+            result.Add(ArabicTextNormalizer.NormalizeForSearch(rows.GetString(1)),
+                (rows.GetString(0),rows.GetInt32(2)));
+        return result;
+    }
+
     private static string Read(JsonObject? payload, string key)
     {
         try { return payload?[key]?.GetValue<string>()?.Trim() ?? ""; }
         catch { return ""; }
     }
 
-    private sealed record PersonInput(int Row, string Name, string Number, string NormalizedName, string NormalizedNumber, string SiteName, string Worksheet, string? Issue=null);
+    private sealed record PersonInput(int Row, string Name, string Number, string NormalizedName, string NormalizedNumber, string SiteName, string Worksheet, string? Issue=null, JsonObject? CustomFields=null);
 
     public async Task<BridgeResponse> SelectAsync(JsonObject? payload, string actor, CancellationToken ct)
     {
@@ -54,7 +70,7 @@ public sealed class ExcelPersonnelImportService
         try
         {
             if (bytes.Length > MaxWorkbookBytes) return Invalid("ملف Excel كبير جداً (الحد 160 كيلوبايت).");
-            var rows = ParseWorkbook(bytes, payload);
+            var rows = ParseWorkbook(bytes, payload, ReadCustomColumnHeadings());
             // Even entirely rejected worksheets must reach analysis so users can
             // inspect every validation error without changing the database.
             if (rows.Count == 0)
@@ -66,13 +82,14 @@ public sealed class ExcelPersonnelImportService
                     ["row"] = row.Row, ["name"] = row.Name, ["number"] = row.Number,
                     ["normalizedName"] = row.NormalizedName, ["normalizedNumber"] = row.NormalizedNumber,
                     ["siteName"] = row.SiteName, ["worksheet"] = row.Worksheet,
-                    ["issue"] = row.Issue
+                    ["issue"] = row.Issue, ["customFields"] = row.CustomFields?.DeepClone()
                 });
             string sha256 = Convert.ToHexString(
                 System.Security.Cryptography.SHA256.HashData(bytes));
             string token = BridgePreviewTokens.Issue(_db, _time, WorkbookOperation, actor,
                 new JsonObject { ["rows"] = data, ["fileName"] = fileName,
-                    ["sha256"] = sha256 }, 0, ct);
+                    ["sha256"] = sha256,
+                    ["updateExistingCustomFields"] = payload?["updateExistingCustomFields"]?.ToString()=="true" }, 0, ct);
             return BridgeHelpers.Ok(new JsonObject { ["workbookToken"] = token,
                 ["rowCount"] = rows.Count, ["fileName"] = fileName,
                 ["maxRows"] = MaxRecords,
@@ -118,63 +135,118 @@ public sealed class ExcelPersonnelImportService
                 obj["normalizedName"]!.GetValue<string>(), obj["normalizedNumber"]!.GetValue<string>(),
                 obj["siteName"]?.GetValue<string>() ?? "غير محدد",
                 obj["worksheet"]?.GetValue<string>() ?? "الورقة الأولى",
-                obj["issue"]?.GetValue<string>());
+                obj["issue"]?.GetValue<string>(),obj["customFields"] as JsonObject);
         }).ToList();
     }
 
-    private static async Task<(JsonArray accepted, JsonArray issues)> InspectAsync(
-        SqliteConnection connection, SqliteTransaction? tx, List<PersonInput> rows, CancellationToken ct)
+    private static async Task<(JsonArray accepted, JsonArray issues,JsonArray updates)> InspectAsync(
+        SqliteConnection connection,SqliteTransaction? tx,List<PersonInput> rows,
+        CancellationToken ct,bool allowCustomUpdates=false)
     {
-        var accepted = new JsonArray();
-        var issues = new JsonArray();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        using var exists = connection.CreateCommand();
-        exists.Transaction = tx;
-        exists.CommandText = """
-            SELECT CASE
-              WHEN EXISTS(SELECT 1 FROM Persons WHERE NormalizedServiceNumberA=$number
-                           AND ActiveFlag=1) THEN 1
-              WHEN EXISTS(SELECT 1 FROM Persons WHERE NormalizedServiceNumberA=$number
-                           AND ActiveFlag=0 AND OrganizationalStatus IN (2,3,4)) THEN 2
-              ELSE 0 END;
+        var accepted=new JsonArray();
+        var issues=new JsonArray();
+        var updates=new JsonArray();
+        var seen=new HashSet<string>(StringComparer.Ordinal);
+        using var exists=connection.CreateCommand();
+        exists.Transaction=tx;
+        exists.CommandText="""
+            SELECT PersonId,CurrentVisibleName,NormalizedName,RowVersion,
+                ActiveFlag,OrganizationalStatus
+            FROM Persons WHERE NormalizedServiceNumberA=$number LIMIT 1;
             """;
-        var param = exists.Parameters.Add("$number", SqliteType.Text);
-        foreach (var item in rows)
+        var param=exists.Parameters.Add("$number",SqliteType.Text);
+        foreach(var item in rows)
         {
             ct.ThrowIfCancellationRequested();
-            string? reason = item.Issue;
-            if (reason is null && (item.Name.Length is < 3 or > 180 ||
-                item.Name.Any(char.IsControl) || item.NormalizedName.Length == 0 ||
-                item.NormalizedName != ArabicTextNormalizer.NormalizeForSearch(item.Name) ||
-                !ServiceNumberPolicy.TryCanonicalize(item.Number, out string canonical) ||
-                item.NormalizedNumber != canonical))
-                reason = "الرقم (ع) يجب أن يتكون من أربعة أرقام على الأقل، وهو غير الرقم التسلسلي العادي.";
-            else if (reason is null && (item.SiteName.Length is < 2 or > 100 || item.SiteName.Any(char.IsControl)))
-                reason = "اسم الموقع غير صالح.";
-            else if (reason is null && !seen.Add(item.NormalizedNumber))
-                reason = "«الرقم (ع)» مكرر داخل الملف.";
-            else if(reason is null)
+            string? reason=item.Issue;
+            if(reason is null && (item.Name.Length is <3 or >180 ||
+                item.Name.Any(char.IsControl) || item.NormalizedName.Length==0 ||
+                item.NormalizedName!=ArabicTextNormalizer.NormalizeForSearch(item.Name) ||
+                !ServiceNumberPolicy.TryCanonicalize(item.Number,out string canonical) ||
+                item.NormalizedNumber!=canonical))
+                reason="الرقم (ع) يجب أن يتكون من أربعة أرقام على الأقل، وهو غير الرقم التسلسلي العادي.";
+            else if(reason is null && (item.SiteName.Length is <2 or >100 ||
+                item.SiteName.Any(char.IsControl)))
+                reason="اسم الموقع غير صالح.";
+            else if(reason is null && !seen.Add(item.NormalizedNumber))
+                reason="«الرقم (ع)» مكرر داخل الملف.";
+            JsonObject? candidate=null;
+            if(reason is null)
             {
-                param.Value = item.NormalizedNumber;
-                int clash=Convert.ToInt32(await exists.ExecuteScalarAsync(ct).ConfigureAwait(false));
-                if(clash==1)
-                    reason = "«الرقم (ع)» موجود مسبقاً في القوة؛ لن يتم استبداله.";
-                else if(clash==2)
-                    reason = "«الرقم (ع)» محفوظ لهوية مؤرشفة؛ أضف الفرد يدوياً بعد التحقق والموافقة. لا يُسمح بالاستبدال عبر Excel.";
+                param.Value=item.NormalizedNumber;
+                using(var reader=await exists.ExecuteReaderAsync(ct).ConfigureAwait(false))
+                {
+                    if(await reader.ReadAsync(ct).ConfigureAwait(false))
+                    {
+                        string personId=reader.GetString(0);
+                        string originalName=reader.GetString(1);
+                        string normalizedName=reader.GetString(2);
+                        long revision=reader.GetInt64(3);
+                        bool active=reader.GetInt32(4)==1 && reader.GetInt32(5)==1;
+                        if(!active)
+                            reason="«الرقم (ع)» محفوظ لهوية مؤرشفة؛ لا يمكن تعديله عبر Excel.";
+                        else if(!allowCustomUpdates || item.CustomFields is null ||
+                                item.CustomFields.Count==0)
+                            reason="«الرقم (ع)» موجود مسبقاً في القوة؛ لن يتم استبداله.";
+                        else if(normalizedName!=item.NormalizedName)
+                            reason="«الرقم (ع)» موجود لكن الاسم مختلف؛ راجع الهوية قبل تحديث الأعمدة.";
+                        else
+                            candidate=new JsonObject {
+                                ["personId"]=personId,["expectedRevision"]=revision,
+                                ["name"]=originalName,["number"]=item.Number,
+                                ["worksheet"]=item.Worksheet,["row"]=item.Row,
+                                ["customFields"]=item.CustomFields.DeepClone()
+                            };
+                    }
+                }
             }
-            if (reason is not null)
-                issues.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
-                    ["serviceNumberA"] = item.Number, ["siteName"] = item.SiteName,
-                    ["worksheet"] = item.Worksheet, ["reason"] = reason });
-            else
-                accepted.Add(new JsonObject { ["row"] = item.Row, ["name"] = item.Name,
-                    ["serviceNumberA"] = item.Number, ["normalizedName"] = item.NormalizedName,
-                    ["normalizedNumber"] = item.NormalizedNumber, ["siteName"] = item.SiteName,
-                    ["worksheet"] = item.Worksheet });
+            if(candidate is not null)
+            {
+                var changed=new JsonObject();
+                var previous=new JsonObject();
+                foreach(var cell in (JsonObject)candidate["customFields"]!)
+                {
+                    using var read=connection.CreateCommand();
+                    read.Transaction=tx;
+                    read.CommandText="""
+                        SELECT FieldValueText FROM CustomFieldValues
+                        WHERE PersonId=$person AND FieldDefinitionId=$field;
+                        """;
+                    read.Parameters.AddWithValue("$person",candidate["personId"]!.GetValue<string>());
+                    read.Parameters.AddWithValue("$field",cell.Key);
+                    string old=(await read.ExecuteScalarAsync(ct).ConfigureAwait(false)) as string??"";
+                    string next=cell.Value?.GetValue<string>()??"";
+                    if(!string.Equals(old,next,StringComparison.Ordinal))
+                    {
+                        previous[cell.Key]=old;
+                        changed[cell.Key]=next;
+                    }
+                }
+                if(changed.Count==0)
+                    reason="قيم الأعمدة الإضافية مطابقة لما هو محفوظ؛ لا يوجد تحديث.";
+                else
+                {
+                    candidate["oldCustomFields"]=previous;
+                    candidate["customFields"]=changed;
+                    updates.Add(candidate);
+                }
+            }
+            if(reason is not null)
+                issues.Add(new JsonObject {
+                    ["row"]=item.Row,["name"]=item.Name,
+                    ["serviceNumberA"]=item.Number,["siteName"]=item.SiteName,
+                    ["worksheet"]=item.Worksheet,["reason"]=reason
+                });
+            else if(candidate is null)
+                accepted.Add(new JsonObject {
+                    ["row"]=item.Row,["name"]=item.Name,
+                    ["serviceNumberA"]=item.Number,["normalizedName"]=item.NormalizedName,
+                    ["normalizedNumber"]=item.NormalizedNumber,["siteName"]=item.SiteName,
+                    ["worksheet"]=item.Worksheet,["customFields"]=item.CustomFields?.DeepClone()
+                });
         }
-        return (accepted, issues);
+        return (accepted,issues,updates);
     }
-
 
     private static async Task<JsonArray> NewSitesAsync(SqliteConnection connection,
         SqliteTransaction? tx, JsonArray rows, CancellationToken ct)
@@ -213,13 +285,16 @@ public sealed class ExcelPersonnelImportService
         using var connection = _db.CreateOpenConnection();
         var staged = await ReadStagedAsync(ticket, WorkbookOperation, actor, connection, null, ct).ConfigureAwait(false);
         if (staged is null) return Stale();
-        var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
+        var (accepted, issues, updates) = await InspectAsync(connection, null, Rows(staged), ct,
+            staged["updateExistingCustomFields"]?.ToString()=="true").ConfigureAwait(false);
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
         var similarNameMatches=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(new JsonObject
         {
             ["newSites"]=newSites,["similarNames"]=similarNameMatches.Items,["similarNameCount"]=similarNameMatches.Total,
-            ["totalRows"] = accepted.Count + issues.Count, ["newCount"] = accepted.Count,
+            ["totalRows"] = accepted.Count + updates.Count + issues.Count,
+            ["newCount"] = accepted.Count,["customUpdateCount"]=updates.Count,
+            ["customUpdatesPreview"]=PreviewCustomUpdates(updates),
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted)
         });
@@ -231,8 +306,9 @@ public sealed class ExcelPersonnelImportService
         using var connection = _db.CreateOpenConnection();
         var staged = await ReadStagedAsync(ticket, WorkbookOperation, actor, connection, null, ct).ConfigureAwait(false);
         if (staged is null) return Stale();
-        var (accepted, issues) = await InspectAsync(connection, null, Rows(staged), ct).ConfigureAwait(false);
-        if (accepted.Count == 0 && issues.Count == 0)
+        var (accepted, issues, updates) = await InspectAsync(connection, null, Rows(staged), ct,
+            staged["updateExistingCustomFields"]?.ToString()=="true").ConfigureAwait(false);
+        if (accepted.Count == 0 && issues.Count == 0 && updates.Count == 0)
             return BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, "لا توجد بيانات تحليل قابلة للحفظ.");
         var newSites=await NewSitesAsync(connection,null,accepted,ct).ConfigureAwait(false);
         var similarNameMatches=await ImportNameCollisionHints.QueryAsync(connection,accepted,ct).ConfigureAwait(false);
@@ -241,8 +317,9 @@ public sealed class ExcelPersonnelImportService
             new JsonObject { ["fileName"] = Read(staged, "fileName"),
                 ["sha256"] = Read(staged, "sha256"),
                 ["newSites"] = newSites.DeepClone(),
-                ["totalRows"] = accepted.Count + issues.Count,
+                ["totalRows"] = accepted.Count + updates.Count + issues.Count,
                 ["issues"] = issues.DeepClone(),
+                ["updateRows"] = updates.DeepClone(),
                 ["rows"] = new JsonArray(accepted.Select(node =>
             {
                 var p = (JsonObject)node!;
@@ -252,7 +329,8 @@ public sealed class ExcelPersonnelImportService
                     ["normalizedName"] = p["normalizedName"]!.GetValue<string>(),
                     ["normalizedNumber"] = p["normalizedNumber"]!.GetValue<string>(),
                     ["siteName"] = p["siteName"]!.GetValue<string>(),
-                    ["worksheet"] = p["worksheet"]?.GetValue<string>() ?? "الورقة الأولى"
+                    ["worksheet"] = p["worksheet"]?.GetValue<string>() ?? "الورقة الأولى",
+                    ["customFields"] = p["customFields"]?.DeepClone()
                 };
             }).ToArray()) }, accepted.Count, ct);
         return BridgeHelpers.Ok(new JsonObject
@@ -261,6 +339,8 @@ public sealed class ExcelPersonnelImportService
             ["similarNames"] = similarNameMatches.Items,
             ["similarNameCount"] = similarNameMatches.Total,
             ["newCount"] = accepted.Count,
+            ["customUpdateCount"] = updates.Count,
+            ["customUpdatesPreview"] = PreviewCustomUpdates(updates),
             ["issueCount"] = issues.Count, ["issues"] = issues,
             ["acceptedPreview"] = PreviewNames(accepted),
             ["requiresExplicitConfirmation"] = true
@@ -279,7 +359,46 @@ public sealed class ExcelPersonnelImportService
             var plan = await ReadStagedAsync(token, PlanOperation, actor, connection, tx, ct).ConfigureAwait(false);
             if (plan is null) return Stale();
             var rows = Rows(plan,allowEmpty:true);
-            var (accepted, issues) = await InspectAsync(connection, tx, rows, ct).ConfigureAwait(false);
+            var updateRows=plan["updateRows"] as JsonArray ?? new JsonArray();
+            if(updateRows.Count>0 && payload?["approveCustomUpdates"]?.ToString()!="true")
+                return Invalid("تحديث أعمدة الأفراد الموجودين يتطلب موافقة مستقلة بعد مقارنة القيم.");
+            // All compare-and-swap checks run before ANY new person is inserted.
+            // No direct workbook may overwrite another person's identity/site/attendance.
+            foreach(var item in updateRows)
+            {
+                if(item is not JsonObject update)return Stale();
+                string id=Read(update,"personId");
+                long rev=update["expectedRevision"]?.GetValue<long>()??0;
+                using(var current=connection.CreateCommand())
+                {
+                    current.Transaction=tx;
+                    current.CommandText="""
+                        SELECT RowVersion FROM Persons
+                        WHERE PersonId=$id AND ActiveFlag=1 AND OrganizationalStatus=1;
+                        """;
+                    current.Parameters.AddWithValue("$id",id);
+                    object? value=await current.ExecuteScalarAsync(ct).ConfigureAwait(false);
+                    if(value is null || Convert.ToInt64(value)!=rev)return Stale();
+                }
+                var changes=update["customFields"] as JsonObject;
+                var oldValues=update["oldCustomFields"] as JsonObject;
+                if(changes is null || changes.Count==0 || oldValues is null ||
+                   oldValues.Count!=changes.Count)return Stale();
+                foreach(var cell in oldValues)
+                {
+                    using var before=connection.CreateCommand();
+                    before.Transaction=tx;
+                    before.CommandText="""
+                        SELECT FieldValueText FROM CustomFieldValues
+                        WHERE PersonId=$person AND FieldDefinitionId=$field;
+                        """;
+                    before.Parameters.AddWithValue("$person",id);
+                    before.Parameters.AddWithValue("$field",cell.Key);
+                    string actual=(await before.ExecuteScalarAsync(ct).ConfigureAwait(false)) as string??"";
+                    if(actual!=(cell.Value?.GetValue<string>()??""))return Stale();
+                }
+            }
+            var (accepted, issues, _) = await InspectAsync(connection, tx, rows, ct).ConfigureAwait(false);
             if (issues.Count > 0 || accepted.Count != rows.Count)
                 return Stale();
             var proposedSites=plan["newSites"] as JsonArray ?? new JsonArray();
@@ -315,8 +434,8 @@ public sealed class ExcelPersonnelImportService
                 record.Parameters.AddWithValue("$id", batchId);
                 record.Parameters.AddWithValue("$file", Read(plan, "fileName"));
                 record.Parameters.AddWithValue("$hash", Read(plan, "sha256"));
-                record.Parameters.AddWithValue("$total", rows.Count + plannedIssues.Count);
-                record.Parameters.AddWithValue("$accepted", rows.Count);
+                record.Parameters.AddWithValue("$total", rows.Count + updateRows.Count + plannedIssues.Count);
+                record.Parameters.AddWithValue("$accepted", rows.Count + updateRows.Count);
                 record.Parameters.AddWithValue("$rejected", plannedIssues.Count);
                 record.Parameters.AddWithValue("$actor", actor);
                 record.Parameters.AddWithValue("$now", now);
@@ -417,7 +536,39 @@ public sealed class ExcelPersonnelImportService
                 insert.Parameters.AddWithValue("$assignment", "ASG-" + Guid.NewGuid().ToString("N"));
                 insert.Parameters.AddWithValue("$site", siteId);
                 await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                if(item.CustomFields is not null)
+                {
+                    foreach(var fieldValue in item.CustomFields)
+                    {
+                        using var col=connection.CreateCommand();
+                        col.Transaction=tx;
+                        col.CommandText="""
+                            INSERT INTO CustomFieldValues
+                                (PersonId,FieldDefinitionId,FieldValueText,UpdatedAtUtc)
+                            VALUES($person,$field,$value,$at);
+                            """;
+                        col.Parameters.AddWithValue("$person",personId);
+                        col.Parameters.AddWithValue("$field",fieldValue.Key);
+                        col.Parameters.AddWithValue("$value",fieldValue.Value?.GetValue<string>()??"");
+                        col.Parameters.AddWithValue("$at",now);
+                        await col.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                    }
+                }
                 createdIds.Add(personId);
+            }
+            foreach(var item in updateRows)
+            {
+                var update=(JsonObject)item!;
+                var changes=(JsonObject)update["customFields"]!;
+                var applied=await RosterCustomFieldValueService.SaveInTransactionAsync(
+                    connection,tx,actor,username,Read(update,"personId"),
+                    update["expectedRevision"]!.GetValue<long>(),changes,
+                    "تحديث أعمدة فرد موجود بعد معاينة واعتماد استيراد Excel",ct,_time)
+                    .ConfigureAwait(false);
+                if(!applied.Success)
+                    throw new InvalidOperationException(
+                        "تغيرت قيم أحد الأفراد أثناء الاستيراد؛ تراجعت الدفعة كاملة: "+applied.UserMessage);
+                createdIds.Add(Read(update,"personId"));
             }
             using (var updateBatch = connection.CreateCommand())
             {
@@ -431,11 +582,13 @@ public sealed class ExcelPersonnelImportService
                 "PERSONNEL_IMPORT", "استيراد أفراد من ملف Excel",
                 actor, username, username, "PersonImport", batchId, "دفعة استيراد",
                 null, new JsonObject { ["importBatchId"] = batchId,
-                    ["createdCount"] = rows.Count, ["rejectedCount"] = plannedIssues.Count,
+                    ["createdCount"] = rows.Count,["customUpdatedCount"]=updateRows.Count,
+                    ["rejectedCount"] = plannedIssues.Count,
                     ["rows"] = new JsonArray(rows.Select(r => (JsonNode?)JsonValue.Create(r.Number)).ToArray()) }.ToJsonString(),
-                $"إنشاء {rows.Count} سجل فرد جديد فقط دون تعديل أي تحضير أو هوية موجودة.",
+                $"إنشاء {rows.Count} فرد جديد وتحديث أعمدة {updateRows.Count} فرد موجود دون تعديل الأسماء أو المواقع أو التحضير.",
                 "اعتماد كشف Excel بعد المعاينة", today, ct.CorrelationId(), ct).ConfigureAwait(false);
             var outcome = new JsonObject { ["createdCount"] = rows.Count,
+                ["customUpdatedCount"] = updateRows.Count,
                 ["committedAtUtc"] = now, ["importToken"] = token,
                 ["importBatchId"] = batchId, ["rejectedCount"] = plannedIssues.Count,
                 ["createdSitesCount"] = createdSites };
@@ -445,6 +598,26 @@ public sealed class ExcelPersonnelImportService
                 events: BridgeHelpers.InvalidationEvent(UiInvalidationEvents.PersonIdentityUpdated,
                     today, createdIds));
         }, ct).ConfigureAwait(false);
+    }
+
+    private static JsonArray PreviewCustomUpdates(JsonArray updates)
+    {
+        var rows=new JsonArray();
+        foreach(var update in updates.OfType<JsonObject>())
+        {
+            var previous=(JsonObject)update["oldCustomFields"]!;
+            var changed=(JsonObject)update["customFields"]!;
+            foreach(var item in changed)
+                rows.Add(new JsonObject {
+                    ["row"]=update["row"]?.GetValue<int>()??0,
+                    ["name"]=Read(update,"name"),
+                    ["serviceNumberA"]=Read(update,"number"),
+                    ["columnId"]=item.Key,
+                    ["oldValue"]=previous[item.Key]?.GetValue<string>()??"",
+                    ["newValue"]=item.Value?.GetValue<string>()??""
+                });
+        }
+        return rows;
     }
 
     private static JsonArray PreviewNames(JsonArray accepted)
@@ -468,7 +641,8 @@ public sealed class ExcelPersonnelImportService
         BridgeErrorCodes.ImportPlanStale, "انتهت صلاحية المعاينة أو تغيرت البيانات؛ أعد استيراد الملف.");
     private static BridgeResponse Invalid(string text) => BridgeHelpers.Error(BridgeErrorCodes.InvalidWorkbook, text);
 
-    private static List<PersonInput> ParseWorkbook(byte[] bytes, JsonObject? options)
+    private static List<PersonInput> ParseWorkbook(byte[] bytes, JsonObject? options,
+        IReadOnlyDictionary<string,(string Id,int Type)> customColumns)
     {
         try
         {
@@ -584,6 +758,22 @@ public sealed class ExcelPersonnelImportService
             }
             if (headerIndex < 0)
                 throw new InvalidDataException("تحتاج ورقة Excel إلى عمودي «الاسم» و«الرقم (ع)» ضمن الصفوف الخمسة الأولى.");
+            // ColumnId is captured in the signed staging payload; mutable captions
+            // are used only to discover the corresponding spreadsheet column.
+            var extras=new List<(int Column,string Id,int Type)>();
+            var extraIds=new HashSet<string>(StringComparer.Ordinal);
+            foreach(var header in rows[headerIndex].Elements(Ns+"c"))
+            {
+                int column=Col(header);
+                if(column==nameCol || column==numberCol || column==siteCol)continue;
+                string heading=ArabicTextNormalizer.NormalizeForSearch(Value(header));
+                if(customColumns.TryGetValue(heading,out var field))
+                {
+                    if(!extraIds.Add(field.Id))
+                        throw new InvalidDataException("عنوان عمود إضافي مكرر في Excel.");
+                    extras.Add((column,field.Id,field.Type));
+                }
+            }
             foreach (var row in rows.Skip(headerIndex + 1))
             {
                 int rowIndex = int.TryParse((string?)row.Attribute("r"), out int n) ? n : records.Count + 2;
@@ -599,9 +789,31 @@ public sealed class ExcelPersonnelImportService
                 if (string.IsNullOrWhiteSpace(siteName)) siteName = "غير محدد";
                 if (name.Length == 0 && number.Length == 0) continue;
                 bool isValidNumber=ServiceNumberPolicy.TryCanonicalize(number,out string canonical);
+                var customValues=new JsonObject();
+                string? cellIssue=null;
+                foreach(var extra in extras)
+                {
+                    cells.TryGetValue(extra.Column,out var rawCell);
+                    if(rawCell is null)continue;
+                    if(rawCell.Element(Ns+"f") is not null)
+                    {
+                        cellIssue="صيغة Excel الحسابية ممنوعة في الأعمدة الإضافية.";
+                        break;
+                    }
+                    string rawCustom=Value(rawCell);
+                    if(rawCustom.Length==0)continue; // blank Excel cells never erase saved values
+                    if(!RosterCustomFieldValueService.TryCanonicalize(
+                        rawCustom,extra.Type,out string normalized))
+                    {
+                        cellIssue="قيمة العمود الإضافي لا تطابق نوعه أو تجاوزت الحد الآمن.";
+                        break;
+                    }
+                    customValues[extra.Id]=normalized;
+                }
                 records.Add(new PersonInput(rowIndex, name, isValidNumber ? canonical : number,
                     ArabicTextNormalizer.NormalizeForSearch(name),
-                    isValidNumber ? canonical : ArabicTextNormalizer.NormalizeForSearch(number), siteName,worksheet));
+                    isValidNumber ? canonical : ArabicTextNormalizer.NormalizeForSearch(number),
+                    siteName,worksheet,cellIssue,customValues));
                 }
                 catch(Exception ex) when(ex is InvalidDataException or ArgumentException or OverflowException or FormatException or InvalidOperationException)
                 {

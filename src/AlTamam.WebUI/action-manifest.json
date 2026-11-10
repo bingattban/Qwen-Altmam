@@ -1495,6 +1495,33 @@
       }
     },
     {
+      "action": "UpdateCustomFieldValues",
+      "owningService": "RosterCustomFieldValueService",
+      "allowedRoles": [
+        "GeneralAdministration",
+        "OrdinaryAdministration",
+        "Supervisor"
+      ],
+      "isMutating": true,
+      "idempotentByRequestId": true,
+      "errorCodes": [
+        "ValidationError",
+        "ConflictStale",
+        "Unauthorized",
+        "StorageBusy"
+      ],
+      "requestSchema": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "protocolVersion",
+          "action",
+          "sessionNonce",
+          "payload"
+        ]
+      }
+    },
+    {
       "action": "DeactivateCustomField",
       "owningService": "ConfigurationService",
       "allowedRoles": [

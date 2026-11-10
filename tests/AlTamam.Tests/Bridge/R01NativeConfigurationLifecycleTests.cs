@@ -159,13 +159,34 @@ public sealed class R01NativeConfigurationLifecycleTests : IAsyncLifetime, IDisp
         var column = await Object("CreateCustomFieldDefinition", intent);
         string id = column["columnId"]!.GetValue<string>();
         await ReplayWithoutNewAudit("CreateCustomFieldDefinition", intent, column);
-        using (var c = _db.CreateOpenConnection())
-        using (var q = c.CreateCommand())
-        {
-            q.CommandText = "INSERT INTO CustomFieldValues(PersonId,FieldDefinitionId,FieldValueText,UpdatedAtUtc) VALUES($person,$field,'007','2026-01-01T00:00:00Z');";
-            q.Parameters.AddWithValue("$person", personId); q.Parameters.AddWithValue("$field", id);
-            await q.ExecuteNonQueryAsync();
-        }
+        // Execute the newly enabled action through the REAL authenticated dispatcher,
+        // rather than seeding the value directly with SQL. This is mandatory R01
+        // native evidence for both the wire shape and persisted audit trail.
+        var saveValueIntent = new JsonObject {
+            ["personId"] = personId,
+            ["expectedRevision"] = person["revision"]!.DeepClone(),
+            ["values"] = new JsonObject { [id] = "007" }
+        };
+        long previousAuditCount = AuditCount();
+        var savedValue = await Object("UpdateCustomFieldValues", saveValueIntent);
+        Assert.Equal(personId, savedValue["personId"]!.GetValue<string>());
+        Assert.Equal(person["revision"]!.GetValue<long>() + 1,
+            savedValue["revision"]!.GetValue<long>());
+        Assert.Equal(1, savedValue["changedCount"]!.GetValue<int>());
+        Assert.Equal(previousAuditCount + 1, AuditCount());
+        Assert.Equal("007", Scalar(
+            "SELECT FieldValueText FROM CustomFieldValues WHERE PersonId=$id;", personId));
+        Assert.Equal("1", Scalar(
+            "SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='CUSTOM_FIELD_VALUE_UPDATE' AND TargetEntityId=$id;",
+            personId));
+        await ReplayWithoutNewAudit("UpdateCustomFieldValues", saveValueIntent, savedValue);
+        var staleValue = (JsonObject)saveValueIntent.DeepClone();
+        staleValue["operationId"] = Guid.NewGuid().ToString("N");
+        var staleReply = await Dispatch("UpdateCustomFieldValues", staleValue);
+        Assert.False(staleReply.Success);
+        Assert.Equal(BridgeErrorCodes.ConflictStale, staleReply.ErrorCode);
+        Assert.Equal("007", Scalar(
+            "SELECT FieldValueText FROM CustomFieldValues WHERE PersonId=$id;", personId));
         var columns = await Object("GetCustomFieldDefinitions");
         var current = Assert.IsType<JsonObject>(Assert.Single(Assert.IsType<JsonArray>(columns["items"]),
             row => row!["columnId"]!.GetValue<string>() == id));

@@ -160,85 +160,122 @@ public sealed class AutomaticMonthlyExcelService
 
     private sealed record Plan(string SiteId, string FolderName, string FileName);
 
-    private async Task GenerateMonthAsync(string root, int year, int month, CancellationToken ct)
+    private async Task GenerateMonthAsync(string root,int year,int month,CancellationToken ct)
     {
-        string label = MonthLabel(year, month);
-        string monthFolder = Path.Combine(root, "تمام شهر " + label);
-        string staging = Path.Combine(root, ".altamam-auto-month-" + Guid.NewGuid().ToString("N"));
-        var plans = new List<Plan>
+        string label=MonthLabel(year,month);
+        string monthFolder=Path.Combine(root,"تمام شهر "+label);
+        string staging=Path.Combine(root,".altamam-auto-month-"+Guid.NewGuid().ToString("N"));
+        string backupPrefix=".altamam-auto-backup-"+year.ToString("D4",CultureInfo.InvariantCulture)+
+            month.ToString("D2",CultureInfo.InvariantCulture)+"-";
+        string backup=Path.Combine(root,backupPrefix+Guid.NewGuid().ToString("N"));
+        // Recover a previous process crash after old-folder rename but before
+        // the all-or-nothing monthly directory swap.
+        if(!Directory.Exists(monthFolder))
         {
-            new("", "التمام الكلي للقوة",
-                "التمام الكلي للقوة لشهر " + label + ".xlsx")
-        };
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        { "التمام الكلي للقوة" };
-        using (var c = _db.CreateOpenConnection())
-        using (var q = c.CreateCommand())
-        {
-            q.CommandText = "SELECT SiteId,VisibleName FROM Sites ORDER BY VisibleName,SiteId;";
-            using var reader = await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
-            while (await reader.ReadAsync(ct).ConfigureAwait(false))
+            foreach(string old in Directory.EnumerateDirectories(root,backupPrefix+"*"))
             {
-                string id = reader.GetString(0);
-                string name = ExcelOutputNames.Caption(reader.GetString(1), 40);
-                string folder = name;
-                if (!names.Add(folder))
+                if(File.Exists(Path.Combine(old,".altamam-auto-monthly-managed")))
                 {
-                    folder = name + " " + ExcelOutputNames.Caption(id, 16);
-                    if (!names.Add(folder))
-                        throw new InvalidOperationException("تعذر إنشاء أسماء مجلدات مواقع مستقلة.");
+                    Directory.Move(old,monthFolder);
+                    break;
                 }
-                plans.Add(new Plan(id, folder, name + " لشهر " + label + ".xlsx"));
             }
         }
+        var plans=new List<Plan>
+        {
+            new("","التمام الكلي للقوة","التمام الكلي للقوة لشهر "+label+".xlsx")
+        };
+        var names=new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "التمام الكلي للقوة" };
+        using(var connection=_db.CreateOpenConnection())
+        using(var query=connection.CreateCommand())
+        {
+            query.CommandText="SELECT SiteId,VisibleName FROM Sites ORDER BY VisibleName,SiteId;";
+            using var reader=await query.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while(await reader.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string id=reader.GetString(0);
+                string name=ExcelOutputNames.Caption(reader.GetString(1),40);
+                string folder=name;
+                if(!names.Add(folder))
+                {
+                    folder=name+" "+ExcelOutputNames.Caption(id,16);
+                    if(!names.Add(folder))
+                        throw new InvalidOperationException("تعذر إنشاء أسماء مجلدات مواقع مستقلة.");
+                }
+                plans.Add(new Plan(id,folder,name+" لشهر "+label+".xlsx"));
+            }
+        }
+        bool oldRenamed=false,newPublished=false;
         try
         {
             Directory.CreateDirectory(staging);
-            // All XLSX files are fully constructed and validated BEFORE any
-            // customer workbook is replaced. No accidental .part files remain.
-            var staged = new List<(string Source, string Destination)>();
-            foreach (var plan in plans)
+            foreach(var plan in plans)
             {
                 ct.ThrowIfCancellationRequested();
-                var request = new JsonObject
-                {
-                    ["year"]=year, ["month"]=month, ["siteId"]=plan.SiteId,
-                    ["directory"]=staging, ["fileName"]=plan.FileName,
-                    ["consolidatedOnly"]=true
-                };
-                var result = await new MonthlyExcelExportService(_db)
-                    .ExportScheduledSingleAsync(request, ct).ConfigureAwait(false);
-                if (!result.Success)
-                    throw new IOException("فشل تصدير " + plan.FolderName + ": " +
-                        result.UserMessage);
-                string source = ((JsonObject)result.Data!)["filePath"]!.GetValue<string>();
-                staged.Add((source, Path.Combine(monthFolder, plan.FolderName, plan.FileName)));
+                string output=Path.Combine(staging,plan.FolderName);
+                Directory.CreateDirectory(output);
+                // Each site has an independent staging folder, so even matching
+                // normalized captions cannot collide before publication.
+                var result=await new MonthlyExcelExportService(_db)
+                    .ExportScheduledSingleAsync(new JsonObject {
+                        ["year"]=year,["month"]=month,["siteId"]=plan.SiteId,
+                        ["directory"]=output,["fileName"]=plan.FileName,
+                        ["consolidatedOnly"]=true
+                    },ct).ConfigureAwait(false);
+                if(!result.Success)
+                    throw new IOException("فشل تصدير "+plan.FolderName+": "+result.UserMessage);
+                string file=((JsonObject)result.Data!)["filePath"]!.GetValue<string>();
+                if(!File.Exists(file) || new FileInfo(file).Length==0)
+                    throw new IOException("لم يجتز ملف الموقع فحص إنشاء XLSX.");
             }
-            // Restrict replacement to this feature's own managed monthly folder.
-            // Refuse to overwrite an unrelated user's coincidentally named folder.
-            string marker = Path.Combine(monthFolder, ".altamam-auto-monthly-managed");
-            if (Directory.Exists(monthFolder) && !File.Exists(marker))
-                throw new IOException("مجلد شهر موجود دون علامة إدارة التصدير التلقائي؛ لم تُستبدل ملفاته.");
-            Directory.CreateDirectory(monthFolder);
-            if (!File.Exists(marker))
-                File.WriteAllText(marker, "AlTamam automatic monthly Excel; generated folder.");
-            foreach (var (source, destination) in staged)
+            File.WriteAllText(Path.Combine(staging,".altamam-auto-monthly-managed"),
+                "AlTamam automatic monthly Excel; generated folder.");
+            string marker=Path.Combine(monthFolder,".altamam-auto-monthly-managed");
+            if(Directory.Exists(monthFolder))
             {
-                ct.ThrowIfCancellationRequested();
-                string destinationFolder = Path.GetDirectoryName(destination)!;
-                if (Directory.Exists(destinationFolder) &&
-                    (new DirectoryInfo(destinationFolder).Attributes & FileAttributes.ReparsePoint) != 0)
-                    throw new IOException("مجلد موقع مرتبط بمسار آخر؛ لن تتم الكتابة خارجه.");
-                Directory.CreateDirectory(destinationFolder);
-                // Same-volume atomic rename, never truncate a previously valid XLSX.
-                File.Move(source, destination, overwrite: true);
+                if(!File.Exists(marker))
+                    throw new IOException("مجلد الشهر موجود دون علامة إدارة التصدير؛ لم يُستبدل.");
+                if((new DirectoryInfo(monthFolder).Attributes & FileAttributes.ReparsePoint)!=0)
+                    throw new IOException("مجلد الشهر مرتبط بمسار خارجي؛ توقف التصدير.");
+                Directory.Move(monthFolder,backup);
+                oldRenamed=true;
+            }
+            try
+            {
+                Directory.Move(staging,monthFolder); // same-volume, one folder-level publish
+                newPublished=true;
+            }
+            catch
+            {
+                // Never expose half-replaced destination files. Restore
+                // the complete previous folder if final publishing fails.
+                if(oldRenamed && !Directory.Exists(monthFolder) && Directory.Exists(backup))
+                {
+                    Directory.Move(backup,monthFolder);
+                    oldRenamed=false;
+                }
+                throw;
+            }
+            if(oldRenamed)
+            {
+                try {Directory.Delete(backup,recursive:true);}
+                catch(IOException) {/* a complete old backup remains for manual cleanup */}
+                catch(UnauthorizedAccessException) {}
             }
         }
         finally
         {
-            try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); }
-            catch (IOException) { /* next unique staging directory cannot collide */ }
-            catch (UnauthorizedAccessException) { }
+            if(!newPublished && oldRenamed &&
+               !Directory.Exists(monthFolder) && Directory.Exists(backup))
+            {
+                try {Directory.Move(backup,monthFolder);}
+                catch(IOException) {/* preserve the complete backup folder */}
+                catch(UnauthorizedAccessException) {}
+            }
+            try {if(Directory.Exists(staging))Directory.Delete(staging,recursive:true);}
+            catch(IOException) {}
+            catch(UnauthorizedAccessException) {}
         }
     }
 
@@ -261,7 +298,25 @@ public sealed class AutomaticMonthlyExcelService
                 throw new IOException("مجلد التصدير التلقائي غير متاح؛ لم تُسجل عملية ناجحة.");
             var now = _clock.GetLocalNow();
             DateOnly today = DateOnly.FromDateTime(now.DateTime);
+            // Never execute an automatic export when the current business day
+            // or month was explicitly closed, even when catching up old months.
+            using(var connection=_db.CreateOpenConnection())
+            using(var query=connection.CreateCommand())
+            {
+                query.CommandText="""
+                    SELECT EXISTS(SELECT 1 FROM PeriodClosures
+                      WHERE IsClosed=1 AND
+                        ((PeriodType='DAY' AND PeriodKey=$day) OR
+                         (PeriodType='MONTH' AND PeriodKey=$month)));
+                    """;
+                query.Parameters.AddWithValue("$day",today.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture));
+                query.Parameters.AddWithValue("$month",today.ToString("yyyy-MM",CultureInfo.InvariantCulture));
+                if(Convert.ToInt32(await query.ExecuteScalarAsync(ct).ConfigureAwait(false))!=0)
+                    return false;
+            }
             bool first = string.IsNullOrEmpty(settings.LastSuccessDate);
+            // Initial activation does not bypass the selected schedule.
+            if(first && TimeOnly.FromDateTime(now.DateTime)<scheduled)return false;
             DateOnly through = TimeOnly.FromDateTime(now.DateTime) >= scheduled
                 ? today : today.AddDays(-1);
             if (first) through = today; // provision the actual monthly files once

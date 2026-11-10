@@ -506,6 +506,13 @@ public static class BridgeHandlerCatalog
             BridgeResponse inner = await svc.EditAsync(principal,req.Payload,ct).ConfigureAwait(false);
             return inner with { RequestId = req.RequestId };
         },
+        "UpdateCustomFieldValues" => async (req, principal, ct) =>
+        {
+            var svc=new RosterAuthorizedCommands(services.Db,services.Time);
+            BridgeResponse response=await svc.UpdateCustomFieldValuesAsync(
+                principal,req.Payload,ct).ConfigureAwait(false);
+            return response with {RequestId=req.RequestId};
+        },
         "PreviewArchivePersons" => async (req, principal, ct) =>
         {
             var svc = new RosterAuthorizedCommands(services.Db,services.Time);

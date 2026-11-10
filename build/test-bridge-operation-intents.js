@@ -31,7 +31,7 @@ vm.runInNewContext(source,context,{filename:"bridge-client.js"});
 const bridge=window.AltamamBridge;
 (async()=>{
   const mutations=manifest.actions.filter(a=>a.isMutating&&a.action!=="Logout");
-  assert.equal(mutations.length,43,"all 43 current mutation actions covered");
+  assert.equal(mutations.length,44,"all 44 current mutation actions covered");
   for(const {action} of mutations){
     const payload={example:"value"};
     await bridge.invoke(action,payload);
@@ -86,5 +86,5 @@ const bridge=window.AltamamBridge;
   automaticReply=true;
   await bridge.invoke("GetActiveAttendanceStatuses",{});
   assert.equal(sent.at(-1).sessionNonce,"d".repeat(32),"fresh login can read again");
-  console.log("SECTION02 mutation UI bridge PASS: 42 actions, persistent intent, explicit ID, reads and logout");
+  console.log("SECTION02 mutation UI bridge PASS: 44 actions, persistent intent, explicit ID, reads and logout");
 })().catch(e=>{console.error(e);process.exitCode=1;});
