@@ -238,20 +238,25 @@ public sealed class PersonnelFourDigitsAndSitesTests : IAsyncLifetime, IDisposab
         var proposedSite=Assert.IsType<JsonObject>(Assert.Single(proposed));
         Assert.Equal("الموقع الشرقي",proposedSite["name"]!.GetValue<string>());
         Assert.Equal(2,proposedSite["personCount"]!.GetValue<int>());
-        var unapproved=await service.CommitAsync(new JsonObject{
-            ["previewToken"]=token},Actor,"tester",CancellationToken.None);
-        Assert.False(unapproved.Success);
+        // Analysis and preview must not create people or sites.
         Assert.Equal(0,Count("SELECT COUNT(*) FROM Persons"));
+        Assert.Equal(0,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='الموقع الشرقي'"));
+        Assert.Equal(0,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='الموقع الغربي'"));
+        Assert.Equal(0,Count("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='SITE_CREATE'"));
+        // Confirming the signed import plan creates only sites for accepted rows;
+        // no separate site approval payload is required.
         var committed=await service.CommitAsync(new JsonObject {
-            ["previewToken"]=token,["confirmNewSites"]=true,
-            ["approvedSiteNames"]=new JsonArray("الموقع الشرقي")
+            ["previewToken"]=token
         },Actor,"tester",CancellationToken.None);
         Assert.True(committed.Success,committed.UserMessage);
         Assert.Equal(2,Count("SELECT COUNT(*) FROM Persons"));
         Assert.Equal(1,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='الموقع الشرقي'"));
         Assert.Equal(0,Count("SELECT COUNT(*) FROM Sites WHERE VisibleName='الموقع الغربي'"));
         Assert.Equal(2,Count("SELECT COUNT(*) FROM PersonAssignments WHERE SiteId IN (SELECT SiteId FROM Sites WHERE VisibleName='الموقع الشرقي')"));
-        Assert.Equal(1,((JsonObject)committed.Data!)["createdSitesCount"]!.GetValue<int>());
+        var receipt=Assert.IsType<JsonObject>(committed.Data);
+        Assert.Equal(2,receipt["createdCount"]!.GetValue<int>());
+        Assert.Equal(1,receipt["createdSitesCount"]!.GetValue<int>());
+        Assert.Equal(1,Count("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='SITE_CREATE'"));
         Assert.Equal("الموقع الغربي",Read("SELECT RawSiteName FROM ImportIssues LIMIT 1"));
         Assert.Equal(1,Count("SELECT COUNT(*) FROM ImportIssues"));
     }
