@@ -262,9 +262,13 @@ public sealed class AutomaticMonthlyExcelService
             var now = _clock.GetLocalNow();
             DateOnly today = DateOnly.FromDateTime(now.DateTime);
             bool first = string.IsNullOrEmpty(settings.LastSuccessDate);
+            // First enablement obeys the same configured time as every later run.
+            // Provisioning before the due time would mark today successful and
+            // prevent a fresh workbook after attendance changes that evening.
+            if (first && TimeOnly.FromDateTime(now.DateTime) < scheduled)
+                return false;
             DateOnly through = TimeOnly.FromDateTime(now.DateTime) >= scheduled
                 ? today : today.AddDays(-1);
-            if (first) through = today; // provision the actual monthly files once
             if (!first && (!DateOnly.TryParseExact(settings.LastSuccessDate,
                     "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None,
                     out DateOnly previous) || previous >= through))
