@@ -279,7 +279,7 @@ public sealed class ExcelPersonnelImportIntegrationTests : IAsyncLifetime, IDisp
         // A lost response must not duplicate the new site, people or audits.
         var replay=await Service.CommitAsync((JsonObject)intent.DeepClone(),Owner,"owner",CancellationToken.None);
         Assert.True(replay.Success,replay.UserMessage);
-        Assert.True(JsonNode.DeepEquals(receipt,replay.Data));
+        Assert.True(JsonNode.DeepEquals(receipt,Assert.IsType<JsonObject>(replay.Data)));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM Sites WHERE VisibleName='موقع المطار'"));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='SITE_CREATE'"));
         Assert.Equal("1",Scalar("SELECT COUNT(*) FROM AuditEvents WHERE OperationCode='PERSONNEL_IMPORT'"));
