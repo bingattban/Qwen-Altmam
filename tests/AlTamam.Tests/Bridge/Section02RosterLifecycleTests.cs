@@ -10,7 +10,9 @@ public sealed class Section02RosterLifecycleTests : IAsyncLifetime, IDisposable
 {
     private readonly string _path = SyntheticFixtures.CreateTempDatabasePath();
     private AlTamamDbContext _db = null!;
-    private static readonly string Day = DateTime.Today.ToString("yyyy-MM-dd");
+    // Resolve the local calendar day for each test, not once at test assembly load.
+    // A suite running across midnight must not send yesterday's effective date.
+    private static string Day => DateTime.Today.ToString("yyyy-MM-dd");
     private const string Actor = "TST-LIFECYCLE-ADMIN";
 
     public async Task InitializeAsync()
