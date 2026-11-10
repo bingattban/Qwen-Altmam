@@ -88,6 +88,14 @@ public sealed class RosterAuthorizedCommands
         return await _roster.UpdatePersonIdentityAsync(actor!.UserId,actor.Username,
             data??new JsonObject(),ct).ConfigureAwait(false);
     }
+    public async Task<BridgeResponse> UpdateCustomFieldValuesAsync(
+        BridgePrincipal? actor,JsonObject? data,CancellationToken ct)
+    {
+        if(!await Allowed(actor,false,ct).ConfigureAwait(false))return Denied();
+        return await new RosterCustomFieldValueService(_db,_time)
+            .UpdateAsync(data,actor!,ct).ConfigureAwait(false);
+    }
+
     public async Task<BridgeResponse> PreviewRemovalAsync(BridgePrincipal? actor,JsonObject? data,CancellationToken ct)
     {
         if(!await Allowed(actor,true,ct).ConfigureAwait(false))return Denied();

@@ -1913,6 +1913,9 @@
             row.appendChild(node("td","roster-custom-cell",value||"—"));
           const actions=node("td","admin-row-buttons");
           actions.appendChild(btn("تعديل الاسم والرقم",()=>editPerson(person)));
+          if(customColumns.length)
+            actions.appendChild(btn("تعديل بيانات الأعمدة",
+              ()=>editCustomValues(person,customColumns)));
           // The native manifest independently restricts ArchivePersons to
           // GeneralAdministration / OrdinaryAdministration. Never show this
           // destructive roster-membership operation to Supervisors.
@@ -2026,6 +2029,54 @@
         await load();
       }catch(error){await dialogs.alert(error.message||"تعذر أرشفة الفرد.");}
     }
+    async function editCustomValues(person,columns) {
+      const showForm=window.AltamamDialog?.form;
+      const review=window.AltamamDialog?.detailsReview;
+      if(typeof showForm!=="function"||typeof review!=="function"){
+        await dialogs.alert("نموذج تعديل الأعمدة أو نافذة التأكيد غير متاحة.");
+        return;
+      }
+      const fields=columns.map(col=>({
+        name:col.columnId,label:col.caption+
+          (col.fieldType===2?" (رقم)":col.fieldType===3?" (YYYY-MM-DD)":
+            col.fieldType===4?" (نعم أو لا)":""),
+        type:"text",value:String(person.customFields?.[col.columnId]??""),
+        required:false,maxLength:250
+      }));
+      const values=await showForm(fields,{title:"تعديل بيانات الأعمدة الإضافية",
+        confirmLabel:"معاينة القيم",size:"lg"});
+      if(values===null)return;
+      const modified=columns.filter(col=>
+        String(person.customFields?.[col.columnId]??"")!==String(values[col.columnId]??"").trim());
+      if(!modified.length){
+        await dialogs.alert("لم تتغير أي قيمة؛ لا توجد تعديلات لحفظها.");
+        return;
+      }
+      const details=modified.map(col=>[col.caption,
+        String(person.customFields?.[col.columnId]??"")||"—",
+        String(values[col.columnId]??"").trim()||"—"]);
+      const approved=await review({
+        rows:[["الفرد",person.displayName],["الرقم (ع)",person.serviceNumberA],
+          ["عدد الأعمدة المتغيرة",modified.length]],
+        columns:["العمود","القيمة السابقة","القيمة الجديدة"],items:details
+      },{
+        title:"تأكيد تعديل بيانات الأعمدة",
+        message:"سيحفظ البرنامج القيم السابقة والجديدة في سجل التدقيق دون مساس بالتحضير.",
+        confirmLabel:"تأكيد حفظ التغييرات"
+      });
+      if(!approved)return;
+      const changed={};
+      for(const col of modified)changed[col.columnId]=String(values[col.columnId]??"").trim();
+      try{
+        const result=await api().invoke("UpdateCustomFieldValues",{
+          personId:person.personId,expectedRevision:person.revision,
+          values:changed,operationId:makeOperationId()
+        });
+        if(!result.data?.changedCount)throw Error("لم يؤكد الخادم حفظ قيم الأعمدة.");
+        await load();
+      }catch(error){await dialogs.alert(error.message||"تعذر تحديث قيم الأعمدة.");}
+    }
+
     async function editPerson(person) {
       const showForm=window.AltamamDialog?.form;
       if(typeof showForm!=="function"){

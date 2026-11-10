@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
+using AlTamam.Contracts.Events;
 using AlTamam.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -67,7 +68,8 @@ public sealed class RosterCustomFieldValueService
         try
         {
             personId=payload?["personId"]?.GetValue<string>()?.Trim()??"";
-            expected=payload?["expectedRevision"]?.GetValue<long>()??0;
+            try{expected=payload?["expectedRevision"]?.GetValue<long>()??0;}
+            catch{expected=payload?["expectedRevision"]?.GetValue<int>()??0;}
             values=payload?["values"] as JsonObject;
         }
         catch(InvalidOperationException)
