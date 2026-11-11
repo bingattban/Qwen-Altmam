@@ -314,7 +314,7 @@
     if (!routeKey || refreshing) return;
     const action = ROUTE_ACTIONS[routeKey];
     if (!action) {
-      setStatus("هذه الشاشة قيد الاستكمال ضمن مرحلتها المعتمدة؛ لا يوجد تحديث بيانات فعلي هنا.", "warn");
+      setStatus("افتح الواجهة الرئيسية لعرض البيانات وإدارة هذا القسم.", "warn");
       return;
     }
     const mount = document.getElementById("routeResults");
@@ -386,10 +386,10 @@
     if (routeKey && !ROUTE_ACTIONS[routeKey]) {
       document.querySelectorAll('[data-bridge-action="REFRESH"]').forEach(button => {
         button.disabled = true;
-        button.textContent = "قيد التطوير";
-        button.title = "لم يكتمل الربط الوظيفي لهذه الشاشة بعد";
+        button.textContent = "تحديث";
+        button.title = "افتح الواجهة الرئيسية لعرض البيانات";
       });
-      setStatus("هذه الشاشة قيد الاستكمال ضمن مرحلتها؛ افتح الواجهة الرئيسية للوظائف المتاحة.", "warn");
+      setStatus("افتح الواجهة الرئيسية لعرض البيانات وإدارة هذا القسم.", "warn");
     }
   });
 

@@ -198,7 +198,7 @@ async function run() {
     "legacy unimplemented routes must not retain active fake refresh buttons");
   await unsupported.bridge.refresh();
   assert.equal(unsupported.posted.length,0,"no false success by GetApplicationVersion");
-  assert.match(unsupported.nodes.bridgeStatusText.textContent,/قيد الاستكمال|قيد التطوير/);
+  assert.match(unsupported.nodes.bridgeStatusText.textContent,/افتح الواجهة الرئيسية/);
   for(const item of [search,site,dedicatedSites,statuses,drafts,unsupported]) {
     assert.ok(item.posted.every(req=>!["CreateSite","DeleteAttendanceDraft",
       "UpdateAuditPresentation"].includes(req.action)),"read-only route may not mutate");

@@ -28,7 +28,7 @@ class RecoveryOperatorGuidanceContract(unittest.TestCase):
         self.assertIn('Click="OnNativeRestoreMenuClick"',xaml)
         self.assertIn('Click="OnNativeRecoveryKeyExportClick"',xaml)
         self.assertIn('"RestoreDatabaseAtomically" =>',bridge)
-        self.assertIn("الاستعادة الفعلية معطلة",bridge)
+        self.assertIn("استخدم قائمة «استعادة نسخة احتياطية بأمان»",bridge)
         for phrase in (
             "استعادة نسخة احتياطية بأمان",
             "تصدير مفتاح الاسترداد المشفر",

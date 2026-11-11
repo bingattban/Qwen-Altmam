@@ -2680,7 +2680,7 @@
         });
       }
       const scheduleInfo=node("p","section-description",info.automaticBackupNote||
-        "الجدولة غير مفعلة بعد.");
+        "الجدولة متوقفة.");
       backup.appendChild(scheduleInfo);
       if(["GeneralAdministration","OrdinaryAdministration"].includes(session.role)){
         const scheduleControls=node("div","functional-toolbar");
@@ -2861,10 +2861,10 @@
       const planned=settingsCard("التحقق من النسخ والاستعادة","⚙");
       planned.classList.add("settings-restore-panel");
       planned.appendChild(node("p","settings-copy",
-        "هذه الإجراءات تحتاج إلى اختبارات حماية البيانات قبل السماح بتشغيلها."));
+        "افحص النسخة وقارن بياناتها هنا. لتنفيذ الاستعادة، استخدم قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة."));
       const forthcoming=node("div","settings-properties");
       for(const [name,detail] of [
-        ["استيراد نسخة احتياطية","غير متاح حتى اكتمال اختبارات الاستعادة الآمنة"],
+        ["استيراد نسخة احتياطية","من قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة"],
       ]) forthcoming.appendChild(settingsValue(name,detail));
       planned.appendChild(forthcoming);
       const inspectFeedback=node("div","settings-feedback app-popup-when-properties");
@@ -2931,11 +2931,11 @@
               ["المستخدمون: في النسخة / الحالي",String(incoming.users??"—")+" / "+String(current.users??"—")]
             ];
             await review({rows},{title:"معاينة الاستعادة — قراءة فقط",
-              message:"لم تُستبدل قاعدة البيانات أو تُعدّل أي سجلات. الاستعادة الفعلية غير مفعلة حتى اكتمال اعتماد الأمان.",
+              message:"هذه معاينة للمقارنة فقط. لتنفيذ الاستعادة، استخدم قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة.",
               confirmLabel:"إغلاق المعاينة"});
             if(token===currentRequest&&serial===selectionSerial)
               previewFeedback.replaceChildren(node("p","settings-success",
-                "اكتملت المقارنة دون تعديل البيانات. الاستعادة الفعلية غير مفعلة."));
+                "اكتملت المقارنة دون تعديل البيانات. تتوفر الاستعادة من قائمة «استعادة نسخة احتياطية بأمان»."));
           }catch(e){
             if(token===currentRequest&&serial===selectionSerial)errors(previewFeedback,e);
           }finally{
