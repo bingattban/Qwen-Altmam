@@ -68,7 +68,8 @@ public sealed class R01DisabledRestoreDispatchTests
                 result.Response.ErrorCode);
             Assert.False(string.IsNullOrWhiteSpace(result.Response.UserMessage));
             if (liveSession)
-                Assert.Contains("معطلة", result.Response.UserMessage!);
+                Assert.Equal("استخدم قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة؛ لم يتم تعديل البيانات.",
+                    result.Response.UserMessage);
             Assert.Null(result.Response.Data);
             Assert.Null(result.Response.AuditEventId);
             Assert.True(result.Response.InvalidationEvents is null ||
