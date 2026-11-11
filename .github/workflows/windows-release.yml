@@ -316,8 +316,9 @@ jobs:
     name: Publish and package (${{ matrix.arch }}) after tests
     needs: build-test
     runs-on: windows-latest
-    # Hard fail-closed cap for each architecture; all real package tests remain mandatory.
-    timeout-minutes: 30
+    # Two packaged bridge suites can each retry a 480s x86 probe plus routes.
+    # Leave room for their bounded retries, install checks, cleanup and uploads.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -487,12 +488,21 @@ jobs:
           $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
           Move-Item "artifacts/AlTamam-Installer-$env:DISPLAY_ARCH-setup.exe" "artifacts/$setupName" -Force
       - name: Real packaged Portable vs Installer install/uninstall/reinstall and AppData preservation (15.06 automated subset)
+        timeout-minutes: 50
         shell: pwsh
         run: |
           $portableName = 'AlTamamDaily_{0}_Portable_{1}.zip' -f $env:RELEASE_VERSION,$env:RUNTIME
           $setupName = 'AlTamamDaily_{0}_Setup_{1}.exe' -f $env:RELEASE_VERSION,$env:RUNTIME
           & ./build/test-package-appdata-preservation.ps1 -PortableArchive "artifacts/$portableName" -InstallerPath "artifacts/$setupName" -ExpectedArch $env:RUNTIME
           if ($LASTEXITCODE -ne 0) { throw 'Windows package preservation acceptance subset failed' }
+      - name: Preserve packaged acceptance diagnostics even after failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-acceptance-diagnostics-${{ matrix.runtime }}
+          path: ${{ runner.temp }}/altamam-package-diagnostics-*
+          if-no-files-found: warn
+          retention-days: 14
       - name: Generate SHA-256 checksums + build metadata (15.07)
         run: python build/make-metadata.py artifacts $env:PUBLISH_DIR "$env:RELEASE_VERSION" $env:DISPLAY_ARCH
       - name: Verify bytes, checksums and exact tested commit BEFORE upload (05.12)
