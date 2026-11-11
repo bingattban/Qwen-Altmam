@@ -1385,22 +1385,28 @@ body{min-width:0}
 .monthly-force-totals small{display:block;flex-basis:100%;font-size:12px;line-height:1.5;color:var(--text-muted)}
 #appViewport.monthly-dashboard>.monthly-force-totals{flex:0 0 auto}
 
-/* Settings grouped in orderly action-oriented widths without uneven narrow cards. */
-.settings-grid{grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:stretch}
-.settings-grid>.settings-panel{min-width:0;height:100%}
-.settings-account-panel{grid-column:span 4}
-.settings-attendance-panel{grid-column:span 8}
-.settings-backup-panel{grid-column:span 8}
-.settings-integrity-panel{grid-column:span 4}
-.settings-restore-panel{grid-column:1 / -1}
-.settings-panel .settings-action{min-height:42px}
-.settings-attendance-panel .settings-action{align-self:flex-end;min-width:min(100%,290px)}
-.settings-attendance-panel .settings-attendance-fields{width:100%}
-.settings-attendance-panel .admin-input{display:flex;flex-direction:column;gap:5px}
-.settings-attendance-panel .form-control{width:100%;min-width:0}
-@media(max-width:1150px){
- .settings-grid{grid-template-columns:minmax(0,1fr)}
- .settings-grid>.settings-panel{grid-column:1 / -1}
+/* Equal settings cards: preserve the shared palette and readable RTL fields. */
+.settings-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-auto-rows:1fr;gap:16px;align-items:stretch;
+}
+.settings-grid>.settings-panel{
+  grid-column:auto;min-width:0;min-height:360px;height:100%;
+  box-sizing:border-box;padding:22px;gap:14px;
+}
+.settings-panel-title{min-height:54px;align-items:center;line-height:1.7}
+.settings-panel-icon{flex:0 0 38px}
+.settings-panel .settings-copy{margin:0}
+.settings-panel .settings-action{
+  align-self:stretch;width:100%;min-height:42px;
+  white-space:normal;line-height:1.6;
+}
+.settings-panel .settings-attendance-fields{width:100%;min-width:0}
+.settings-panel .admin-input{display:flex;flex-direction:column;gap:5px;min-width:0}
+.settings-panel .form-control{width:100%;min-width:0;box-sizing:border-box}
+@media(max-width:760px){
+  .settings-grid{grid-template-columns:minmax(0,1fr);grid-auto-rows:auto}
+  .settings-grid>.settings-panel{min-height:0;height:auto;padding:16px}
 }
 /* Plain count by the editing screen title (no extra rows or table changes). */
 .admin-force-inline-count{margin-inline-start:8px;font-size:.95em;font-weight:800;
