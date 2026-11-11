@@ -663,57 +663,11 @@ public sealed class PersonnelExcelExportService
                 w.WriteAttributeString("r","id",relationships,"rId"+(i+1));
                 w.WriteEndElement();
             }
-            w.WriteEndElement();w.WriteEndElement();
-        });
-        Part(zip,"xl/styles.xml",w=>{
-            w.WriteStartElement("styleSheet",baseNs);
-            w.WriteStartElement("numFmts",baseNs);
-            w.WriteAttributeString("count","2");
-            foreach(var (id,format) in new[]{("164","yyyy-mm-dd"),("165","yyyy-mm-dd hh:mm")})
-            {
-                w.WriteStartElement("numFmt",baseNs);
-                w.WriteAttributeString("numFmtId",id);
-                w.WriteAttributeString("formatCode",format);
-                w.WriteEndElement();
-            }
             w.WriteEndElement();
-            w.WriteStartElement("fonts",baseNs);w.WriteAttributeString("count","1");
-            w.WriteStartElement("font",baseNs);
-            w.WriteStartElement("sz",baseNs);w.WriteAttributeString("val","11");w.WriteEndElement();
-            w.WriteStartElement("name",baseNs);w.WriteAttributeString("val","Aptos");w.WriteEndElement();
-            w.WriteEndElement();w.WriteEndElement();
-            w.WriteStartElement("fills",baseNs);w.WriteAttributeString("count","2");
-            foreach(string pattern in new[]{"none","gray125"})
-            {
-                w.WriteStartElement("fill",baseNs);w.WriteStartElement("patternFill",baseNs);
-                w.WriteAttributeString("patternType",pattern);
-                w.WriteEndElement();w.WriteEndElement();
-            }
-            w.WriteEndElement();
-            w.WriteStartElement("borders",baseNs);w.WriteAttributeString("count","1");
-            w.WriteStartElement("border",baseNs);w.WriteEndElement();w.WriteEndElement();
-            w.WriteStartElement("cellStyleXfs",baseNs);w.WriteAttributeString("count","1");
-            w.WriteStartElement("xf",baseNs);w.WriteAttributeString("numFmtId","0");
-            w.WriteAttributeString("fontId","0");w.WriteAttributeString("fillId","0");
-            w.WriteAttributeString("borderId","0");w.WriteEndElement();
-            w.WriteEndElement();
-            w.WriteStartElement("cellXfs",baseNs);w.WriteAttributeString("count","3");
-            foreach(string id in new[]{"0","164","165"})
-            {
-                w.WriteStartElement("xf",baseNs);
-                w.WriteAttributeString("numFmtId",id);
-                w.WriteAttributeString("fontId","0");w.WriteAttributeString("fillId","0");
-                w.WriteAttributeString("borderId","0");w.WriteAttributeString("xfId","0");
-                if(id!="0")w.WriteAttributeString("applyNumberFormat","1");
-                w.WriteEndElement();
-            }
-            w.WriteEndElement();
-            w.WriteStartElement("cellStyles",baseNs);w.WriteAttributeString("count","1");
-            w.WriteStartElement("cellStyle",baseNs);
-            w.WriteAttributeString("name","Normal");w.WriteAttributeString("xfId","0");
-            w.WriteAttributeString("builtinId","0");w.WriteEndElement();w.WriteEndElement();
+            ExcelReportLayout.PrintTitles(w,sheets.Select(sheet=>(sheet.Name,1)).ToArray());
             w.WriteEndElement();
         });
+        Part(zip,"xl/styles.xml",ExcelReportLayout.Styles);
         for(int i=0;i<sheets.Count;i++)
         {
             var sheet=sheets[i];
@@ -721,6 +675,7 @@ public sealed class PersonnelExcelExportService
                 throw new InvalidDataException("تجاوز Excel الحد الأقصى للصفوف؛ لم يُقتطع أي سجل.");
             Part(zip,$"xl/worksheets/sheet{i+1}.xml",w=>{
                 w.WriteStartElement("worksheet",baseNs);
+                ExcelReportLayout.SheetProperties(w);
                 w.WriteStartElement("sheetViews",baseNs);
                 w.WriteStartElement("sheetView",baseNs);
                 w.WriteAttributeString("workbookViewId","0");
@@ -731,23 +686,14 @@ public sealed class PersonnelExcelExportService
                 w.WriteAttributeString("activePane","bottomLeft");
                 w.WriteAttributeString("state","frozen");
                 w.WriteEndElement();w.WriteEndElement();w.WriteEndElement();
-                w.WriteStartElement("cols",baseNs);
-                for(int c=0;c<sheet.Rows[0].Length;c++)
-                {
-                    w.WriteStartElement("col",baseNs);
-                    w.WriteAttributeString("min",(c+1).ToString(CultureInfo.InvariantCulture));
-                    w.WriteAttributeString("max",(c+1).ToString(CultureInfo.InvariantCulture));
-                    w.WriteAttributeString("width",c<4?"24":"34");
-                    w.WriteAttributeString("customWidth","1");
-                    w.WriteEndElement();
-                }
-                w.WriteEndElement();
+                ExcelReportLayout.Columns(w,sheet.Rows[0]);
                 w.WriteStartElement("sheetData",baseNs);
                 for(int row=0;row<sheet.Rows.Count;row++)
                 {
                     ct.ThrowIfCancellationRequested();
                     w.WriteStartElement("row",baseNs);
                     w.WriteAttributeString("r",(row+1).ToString(CultureInfo.InvariantCulture));
+                    if(row==0){w.WriteAttributeString("ht","34");w.WriteAttributeString("customHeight","1");}
                     int col=0;
                     foreach(var val in sheet.Rows[row])
                     {
@@ -760,11 +706,12 @@ public sealed class PersonnelExcelExportService
                         if(row>0 && NumericReportCell(header,val??"",out var serial,out var style))
                         {
                             w.WriteAttributeString("t","n");
-                            if(style is not null)w.WriteAttributeString("s",style);
+                            w.WriteAttributeString("s",ExcelReportLayout.Style(row+1,1,style));
                             w.WriteElementString("v",baseNs,serial);
                         }
                         else
                         {
+                            w.WriteAttributeString("s",ExcelReportLayout.Style(row+1,1));
                             w.WriteAttributeString("t","inlineStr");
                             w.WriteStartElement("is",baseNs);w.WriteStartElement("t",baseNs);
                             w.WriteString(val??"");
@@ -777,7 +724,9 @@ public sealed class PersonnelExcelExportService
                     if(completedRows%50==0 || completedRows==totalRows)
                         progress?.Invoke(completedRows,totalRows);
                 }
-                w.WriteEndElement();w.WriteEndElement();
+                w.WriteEndElement();
+                ExcelReportLayout.FinishSheet(w,sheet.Rows[0].Length,sheet.Rows.Count,1);
+                w.WriteEndElement();
             });
         }
     }

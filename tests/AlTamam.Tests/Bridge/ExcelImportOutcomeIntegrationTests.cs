@@ -137,6 +137,7 @@ public sealed class ExcelImportOutcomeIntegrationTests : IAsyncLifetime, IDispos
         Assert.StartsWith("أخطاء الاستيراد_",Path.GetFileName(filename));
         Assert.False(File.Exists(filename+".part"),"Verified error workbook must not leave .part file.");
         using var archive = ZipFile.OpenRead(filename);
+        ExcelLayoutAssertions.Verify(archive,3);
         foreach (string part in new[] {
             "[Content_Types].xml", "_rels/.rels", "xl/workbook.xml",
             "xl/_rels/workbook.xml.rels", "xl/worksheets/sheet1.xml"
