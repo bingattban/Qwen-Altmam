@@ -41,9 +41,9 @@ function Run-PackagedWebViewChecked([string]$file, [string]$phase, [bool]$verify
     $passed = $false
     try {
         for ($attempt = 1; $attempt -le 2; $attempt++) {
-            $trace = Join-Path $work ("webview-" + ($phase -replace '[^A-Za-z0-9]', '-') +
+            $trace = Join-Path $diagnostics ("webview-" + ($phase -replace '[^A-Za-z0-9]', '-') +
                 "-attempt-" + $attempt + ".log")
-            $routeTrace = Join-Path $work ("webview-routes-" + ($phase -replace '[^A-Za-z0-9]', '-') +
+            $routeTrace = Join-Path $diagnostics ("webview-routes-" + ($phase -replace '[^A-Za-z0-9]', '-') +
                 "-attempt-" + $attempt + ".log")
             Remove-Item -LiteralPath $trace, $routeTrace -Force -ErrorAction SilentlyContinue
             $env:ALTAMAM_WEBVIEW_SELFCHECK_TRACE = $trace
@@ -135,6 +135,11 @@ Assert-True ($portableZip.EndsWith(".zip", [StringComparison]::OrdinalIgnoreCase
 Assert-True ($installerExe.EndsWith(".exe", [StringComparison]::OrdinalIgnoreCase)) "Not an installer"
 Assert-True (-not [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) "Requires isolated Windows CI runner"
 $work = Join-Path $env:RUNNER_TEMP ("altamam-package-acceptance-" + [guid]::NewGuid().ToString("N"))
+# Keep trace evidence outside the disposable installation tree. The workflow
+# uploads it with always(), including failed/timed-out acceptance attempts.
+$diagnostics = Join-Path $env:RUNNER_TEMP ("altamam-package-diagnostics-" + $ExpectedArch + "-" + [guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $diagnostics -Force | Out-Null
+Write-Host "PACKAGE DIAGNOSTICS: $diagnostics"
 $portableDir = Join-Path $work "extracted-portable"
 $installedDir = Join-Path $work "installed"
 $movedPortableDir = Join-Path $work "relocated-portable"
