@@ -885,7 +885,7 @@ public static class BridgeHandlerCatalog
         "RestoreDatabaseAtomically" => (req, principal, ct) =>
             Task.FromResult(Fail(req, BridgeSharedServices.Error(
                 BridgeErrorCodes.MissingData,
-                "الاستعادة الفعلية معطلة حتى اكتمال اعتماد الاستعادة الآمنة؛ لم يتم تعديل البيانات."))),
+                "استخدم قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة؛ لم يتم تعديل البيانات."))),
         _ => throw new InvalidOperationException(
             $"No concrete bridge handler is registered for action '{action}'.")
     };

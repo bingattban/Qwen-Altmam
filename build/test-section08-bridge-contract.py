@@ -72,7 +72,7 @@ class Section08Contract(unittest.TestCase):
         source = CATALOG.read_text(encoding="utf-8")
         self.assertIn("BridgeErrorCodes.MissingData", source)
         self.assertIn('"RestoreDatabaseAtomically" =>', source)
-        self.assertIn("الاستعادة الفعلية معطلة", source)
+        self.assertIn("استخدم قائمة «استعادة نسخة احتياطية بأمان»", source)
         self.assertIn("_ => throw new InvalidOperationException", source)
 
     def test_auto_operation_id_registry_matches_canonical_mutating_actions(self):

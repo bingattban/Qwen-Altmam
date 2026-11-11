@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const label = link.textContent.trim();
     if (label !== "تشغيل التفاعل الكامل" && label !== "↗ فتح في المنظومة الكاملة") return;
     link.textContent = "العودة إلى الواجهة الرئيسية";
-    link.title = "فتح الواجهة الرئيسية؛ لا يعني اكتمال وظيفة هذا المسار المستقل";
+    link.title = "فتح الواجهة الرئيسية";
   });
   // Screens without an independent business owner must not display empty shells.
   // Reopen the existing authenticated owner by its registered route key. Existing

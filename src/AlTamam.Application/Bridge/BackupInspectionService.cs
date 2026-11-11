@@ -139,7 +139,7 @@ public sealed class BackupInspectionService
             ["sha256"]=candidate["sha256"]?.DeepClone(),
             ["schemaVersion"]=candidate["schemaVersion"]?.DeepClone(),
             ["incoming"]=incoming,["current"]=current,
-            ["message"]="هذه معاينة قراءة فقط للمقارنة. لم تُستبدل قاعدة البيانات أو تُعدَّل السجلات. الاستعادة الفعلية ما زالت معطلة حتى اعتماد فحوص الأمان."
+            ["message"]="هذه معاينة للمقارنة فقط دون تعديل البيانات. لتنفيذ الاستعادة، استخدم قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة."
         });
     }
 

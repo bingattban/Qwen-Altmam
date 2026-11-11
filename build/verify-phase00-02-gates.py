@@ -80,7 +80,7 @@ def collect(root: Path) -> dict:
                 r'"RestoreDatabaseAtomically"\s*=>\s*\(req, principal, ct\)\s*=>\s*'
                 r'Task\.FromResult\(Fail\(req, BridgeSharedServices\.Error\(\s*'
                 r'BridgeErrorCodes\.MissingData,\s*'
-                r'"الاستعادة الفعلية معطلة حتى اكتمال اعتماد الاستعادة الآمنة؛ لم يتم تعديل البيانات\."\)\)\),',
+                r'"استخدم قائمة «استعادة نسخة احتياطية بأمان» بحساب الإدارة العامة؛ لم يتم تعديل البيانات\."\)\)\),',
                 bridge)),
         "offline_contract": (
             actions.get("offlineModeEnforced") is True and

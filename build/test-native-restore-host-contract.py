@@ -40,7 +40,7 @@ class NativeRestoreHostContract(unittest.TestCase):
     def test_untrusted_bridge_cannot_directly_activate_restore(self):
         catalog = (APP / "BridgeHandlerCatalog.cs").read_text(encoding="utf-8")
         self.assertIn('"RestoreDatabaseAtomically" =>', catalog)
-        self.assertIn("الاستعادة الفعلية معطلة", catalog)
+        self.assertIn("استخدم قائمة «استعادة نسخة احتياطية بأمان»", catalog)
         self.assertNotIn("NativeRestoreActivationCoordinator", catalog)
         for script in (ROOT / "src/AlTamam.WebUI/assets/js").glob("*.js"):
             self.assertNotIn('.invoke("RestoreDatabaseAtomically"', script.read_text(encoding="utf-8"))

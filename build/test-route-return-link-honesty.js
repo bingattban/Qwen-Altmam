@@ -58,7 +58,7 @@ assert.equal(typeof events.DOMContentLoaded,"function","normalization must run w
 events.DOMContentLoaded();
 assert.equal(elements[0].textContent,"العودة إلى الواجهة الرئيسية");
 assert.equal(elements[1].textContent,"العودة إلى الواجهة الرئيسية");
-assert.match(elements[0].title,/لا يعني اكتمال/);
+assert.equal(elements[0].title,"فتح الواجهة الرئيسية");
 assert.equal(elements[2].textContent,"العودة إلى الرئيسية","existing honest link must be preserved");
 assert.equal(elements[3].textContent,"تشغيل التفاعل الكامل","external unrelated links must be preserved");
 assert.equal(elements[0].href,"../../../index.html#AuditLog","no route destination changed");
