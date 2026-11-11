@@ -110,6 +110,8 @@ public sealed class AutomaticMonthlyExcelTests : IAsyncLifetime, IDisposable
         string combined=Path.Combine(monthRoot,"التمام الكلي للقوة",
             "التمام الكلي للقوة لشهر "+november+".xlsx");
         Assert.True(File.Exists(combined));
+        using(var workbook=System.IO.Compression.ZipFile.OpenRead(combined))
+            ExcelLayoutAssertions.Verify(workbook,3);
         Assert.Equal(2,Directory.GetFiles(monthRoot,"*.xlsx",SearchOption.AllDirectories).Length);
         string[] first=ReadStrings(combined);
         foreach(var expected in new[]{"م","الرقم (ع)","الاسم","الموقع",

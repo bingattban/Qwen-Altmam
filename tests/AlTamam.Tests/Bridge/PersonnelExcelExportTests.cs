@@ -172,6 +172,7 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             var exported=await svc.ExportAsync(request,Actor,CancellationToken.None);
             Assert.True(exported.Success,exported.UserMessage);
             using var archive=ZipFile.OpenRead(File(Assert.IsType<JsonObject>(exported.Data)));
+            ExcelLayoutAssertions.Verify(archive,1);
             var rows=Rows(archive,1).ToArray();
             Assert.Contains("التخصص",Text(rows[0]));
             Assert.Contains(rows.Skip(1),row=>Text(row).Contains("هندسة"));

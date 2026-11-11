@@ -187,13 +187,16 @@ public sealed class MonthlyExcelExportService
                     ContentType(w, "rels", "application/vnd.openxmlformats-package.relationships+xml");
                     ContentType(w, "xml", "application/xml");
                     Override(w, "/xl/workbook.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml");
+                    Override(w, "/xl/styles.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml");
                     Override(w, "/xl/worksheets/sheet1.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml");
                     w.WriteEndElement();
                 });
                 AddPart(archive, "_rels/.rels", w => WriteRelationships(w,
                     ("rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument", "xl/workbook.xml")));
                 AddPart(archive, "xl/_rels/workbook.xml.rels", w => WriteRelationships(w,
-                    ("rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet", "worksheets/sheet1.xml")));
+                    ("rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet", "worksheets/sheet1.xml"),
+                    ("rId2", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles", "styles.xml")));
+                AddPart(archive,"xl/styles.xml",ExcelReportLayout.Styles);
                 AddPart(archive, "xl/workbook.xml", w =>
                 {
                     w.WriteStartElement("workbook", SpreadsheetNs);
@@ -205,6 +208,7 @@ public sealed class MonthlyExcelExportService
                     w.WriteAttributeString("r", "id", OfficeRelNs, "rId1");
                     w.WriteEndElement();
                     w.WriteEndElement();
+                    ExcelReportLayout.PrintTitles(w,new[]{("التمام الشهري",3)});
                     w.WriteEndElement();
                 });
                 // Export-only 500-person SQLCipher batches reduce repeated COUNT/
@@ -219,6 +223,7 @@ public sealed class MonthlyExcelExportService
                 });
                 writer.WriteStartDocument();
                 writer.WriteStartElement("worksheet", SpreadsheetNs);
+                ExcelReportLayout.SheetProperties(writer);
                 writer.WriteStartElement("sheetViews", SpreadsheetNs);
                 writer.WriteStartElement("sheetView", SpreadsheetNs);
                 writer.WriteAttributeString("workbookViewId", "0");
@@ -232,14 +237,15 @@ public sealed class MonthlyExcelExportService
                 writer.WriteEndElement();
                 writer.WriteEndElement();
                 writer.WriteEndElement();
-                writer.WriteStartElement("sheetData", SpreadsheetNs);
-                WriteRow(writer, 1, new [] { "التمام الشهري — كشف محفوظ" });
-                WriteRow(writer, 2, new [] { $"الشهر: {year:D4}-{month:D2}", "الموقع:",
-                    site.Length == 0 ? "جميع المواقع" : site, "البحث:",
-                    term.Length == 0 ? "جميع الأفراد" : term });
                 var headings = new List<string> { "م", "الرقم (ع)", "الاسم", "الموقع" };
                 headings.AddRange(customColumns.Select(column => column.Caption));
                 for (int d = 1; d <= days; d++) headings.Add(d.ToString("00", CultureInfo.InvariantCulture));
+                ExcelReportLayout.Columns(writer,headings);
+                writer.WriteStartElement("sheetData", SpreadsheetNs);
+                WriteRow(writer, 1, new [] { "التمام الشهري — كشف محفوظ" });
+                WriteRow(writer, 2, new [] { $"الشهر: {year:D4}-{month:D2}", "الموقع:",
+                    previewData["siteName"]!.GetValue<string>(), "البحث:",
+                    term.Length == 0 ? "جميع الأفراد" : term });
                 WriteRow(writer, 3, headings);
                 long rowNumber = 0;
                 for (int pageNumber = 1; rowNumber < total; pageNumber++)
@@ -277,6 +283,7 @@ public sealed class MonthlyExcelExportService
                     progress?.Invoke(checked((int)rowNumber),checked((int)total));
                 }
                 writer.WriteEndElement();
+                ExcelReportLayout.FinishSheet(writer,headings.Count,checked((int)rowNumber+3),3);
                 writer.WriteEndElement();
                 writer.WriteEndDocument();
                 writer.Flush();
@@ -405,12 +412,14 @@ public sealed class MonthlyExcelExportService
     {
         w.WriteStartElement("row", SpreadsheetNs);
         w.WriteAttributeString("r", index.ToString(CultureInfo.InvariantCulture));
+        if(index<=3){w.WriteAttributeString("ht","34");w.WriteAttributeString("customHeight","1");}
         int column = 0;
         foreach (string value in values)
         {
             column++;
             w.WriteStartElement("c", SpreadsheetNs);
             w.WriteAttributeString("r", Column(column) + index.ToString(CultureInfo.InvariantCulture));
+            w.WriteAttributeString("s",ExcelReportLayout.Style(index,3));
             w.WriteAttributeString("t", "inlineStr");
             w.WriteStartElement("is", SpreadsheetNs);
             w.WriteStartElement("t", SpreadsheetNs);

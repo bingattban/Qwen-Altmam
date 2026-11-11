@@ -172,6 +172,50 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         var cells = personRow.Descendants(ns+"t").Select(x=>x.Value).ToArray();
         Assert.Equal("بكالوريوس",cells[4]);
         Assert.Empty(xml.Descendants(ns+"f")); // new values cannot become formulas
+        ExcelLayoutAssertions.Verify(archive,3);
+    }
+
+    [Fact]
+    public async Task ColumnAddedAfterFirstExport_ExtendsNextWorkbookAndFormatting()
+    {
+        var service=new MonthlyExcelExportService(_db);
+        var first=await service.ExportAsync(Period("SITE-UNSPECIFIED"),CancellationToken.None);
+        Assert.True(first.Success,first.UserMessage);
+        string original=((JsonObject)first.Data!)["filePath"]!.GetValue<string>();
+        _exports.Add(original);
+        using(var c=_db.CreateOpenConnection())
+        using(var q=c.CreateCommand())
+        {
+            q.CommandText="""
+                INSERT INTO CustomFieldDefinitions(FieldDefinitionId,TechnicalKey,ArabicCaption,
+                    FieldType,DisplayOrder,IsSystemProtected,VisibleFlag,ActiveFlag,CreatedAtUtc)
+                VALUES('FLD-LATER','custom_later','عمود أضيف لاحقا',1,9,0,1,1,'2026-10-01T00:00:00Z');
+                INSERT INTO CustomFieldValues(PersonId,FieldDefinitionId,FieldValueText,UpdatedAtUtc)
+                VALUES('TST-EX-0','FLD-LATER','=نص آمن','2026-10-01T00:00:00Z');
+                """;
+            await q.ExecuteNonQueryAsync();
+        }
+        var second=await service.ExportAsync(Period("SITE-UNSPECIFIED"),CancellationToken.None);
+        Assert.True(second.Success,second.UserMessage);
+        string current=((JsonObject)second.Data!)["filePath"]!.GetValue<string>();
+        _exports.Add(current);
+        using var before=ZipFile.OpenRead(original);
+        using var after=ZipFile.OpenRead(current);
+        XNamespace ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        XDocument Sheet(ZipArchive zip)
+        {
+            using var input=zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+            return XDocument.Load(input);
+        }
+        var oldSheet=Sheet(before);var newSheet=Sheet(after);
+        Assert.Equal(oldSheet.Descendants(ns+"row").Count(),newSheet.Descendants(ns+"row").Count());
+        var oldHeaders=oldSheet.Descendants(ns+"row").ElementAt(2).Elements(ns+"c").ToArray();
+        var newHeaders=newSheet.Descendants(ns+"row").ElementAt(2).Elements(ns+"c").ToArray();
+        Assert.Equal(oldHeaders.Length+1,newHeaders.Length);
+        Assert.Equal("عمود أضيف لاحقا",newHeaders[4].Value);
+        Assert.Contains(newSheet.Descendants(ns+"t"),text=>text.Value=="=نص آمن");
+        Assert.Empty(newSheet.Descendants(ns+"f"));
+        ExcelLayoutAssertions.Verify(after,3);
     }
 
     [Fact]

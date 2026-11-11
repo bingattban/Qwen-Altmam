@@ -155,12 +155,18 @@ public sealed class ExcelImportOutcomeService
                     writer.WriteAttributeString("PartName", "/xl/worksheets/sheet1.xml");
                     writer.WriteAttributeString("ContentType", "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml");
                     writer.WriteEndElement();
+                    writer.WriteStartElement("Override");
+                    writer.WriteAttributeString("PartName","/xl/styles.xml");
+                    writer.WriteAttributeString("ContentType","application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml");
+                    writer.WriteEndElement();
                     writer.WriteEndElement();
                 });
                 Part(zip, "_rels/.rels", w => Relationships(w,
                     ("rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument", "xl/workbook.xml")));
                 Part(zip, "xl/_rels/workbook.xml.rels", w => Relationships(w,
-                    ("rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet", "worksheets/sheet1.xml")));
+                    ("rId1", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet", "worksheets/sheet1.xml"),
+                    ("rId2", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles", "styles.xml")));
+                Part(zip,"xl/styles.xml",ExcelReportLayout.Styles);
                 Part(zip, "xl/workbook.xml", w =>
                 {
                     w.WriteStartElement("workbook", SheetNs);
@@ -172,17 +178,24 @@ public sealed class ExcelImportOutcomeService
                     w.WriteAttributeString("r", "id", RelNs, "rId1");
                     w.WriteEndElement();
                     w.WriteEndElement();
+                    ExcelReportLayout.PrintTitles(w,new[]{("أخطاء الاستيراد",3)});
                     w.WriteEndElement();
                 });
                 Part(zip, "xl/worksheets/sheet1.xml", w =>
                 {
                     w.WriteStartElement("worksheet", SheetNs);
+                    ExcelReportLayout.SheetProperties(w);
                     w.WriteStartElement("sheetViews", SheetNs);
                     w.WriteStartElement("sheetView", SheetNs);
                     w.WriteAttributeString("workbookViewId", "0");
                     w.WriteAttributeString("rightToLeft", "1");
+                    w.WriteStartElement("pane",SheetNs);
+                    w.WriteAttributeString("ySplit","3");w.WriteAttributeString("topLeftCell","A4");
+                    w.WriteAttributeString("activePane","bottomLeft");w.WriteAttributeString("state","frozen");
                     w.WriteEndElement();
                     w.WriteEndElement();
+                    w.WriteEndElement();
+                    ExcelReportLayout.Columns(w,new[]{"رقم الصف","الرقم (ع)","الاسم","الموقع","سبب الاستبعاد"});
                     w.WriteStartElement("sheetData", SheetNs);
                     Row(w, 1, new[] { "تقرير صفوف استيراد Excel المستبعدة" });
                     Row(w, 2, new[] { "الدفعة", batchId,
@@ -199,6 +212,7 @@ public sealed class ExcelImportOutcomeService
                             Read(item, "siteName"), Read(item, "reason") });
                     }
                     w.WriteEndElement();
+                    ExcelReportLayout.FinishSheet(w,5,index,3);
                     w.WriteEndElement();
                 });
             }
@@ -267,11 +281,13 @@ public sealed class ExcelImportOutcomeService
     {
         writer.WriteStartElement("row", SheetNs);
         writer.WriteAttributeString("r", index.ToString(CultureInfo.InvariantCulture));
+        if(index<=3){writer.WriteAttributeString("ht","34");writer.WriteAttributeString("customHeight","1");}
         int column = 0;
         foreach (var value in values)
         {
             writer.WriteStartElement("c", SheetNs);
             writer.WriteAttributeString("r", Column(++column) + index.ToString(CultureInfo.InvariantCulture));
+            writer.WriteAttributeString("s",ExcelReportLayout.Style(index,3));
             writer.WriteAttributeString("t", "inlineStr");
             writer.WriteStartElement("is", SheetNs);
             writer.WriteStartElement("t", SheetNs);
