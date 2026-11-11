@@ -80,4 +80,17 @@ assert.strictEqual(dispatcher("ResetApplicationData"),true);
 assert.deepEqual(Array.from(forwarded.at(-1)),["admin"],
  "Supervisor reset must never be reachable");
 assert.strictEqual(forwarded.length,before+3);
+const auditMarkup=fs.readFileSync(path.join(__dirname,
+  "../src/AlTamam.WebUI/assets/js/admin-settings.js"),"utf8");
+const auditCss=fs.readFileSync(path.join(__dirname,
+  "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
+assert.ok(auditMarkup.includes('t.wrap.firstChild.classList.add("audit-log-table")'),
+  "audit log must keep its dedicated table selector");
+assert.ok(auditMarkup.includes('revised.wrap.firstChild.classList.add("audit-history-table")'),
+  "audit history must keep its dedicated text-aware selector");
+assert.match(auditCss,/\.audit-log-table\s*\{min-width:1300px/);
+assert.match(auditCss,/\.audit-log-table tbody tr\s*\{height:auto\}/);
+assert.match(auditCss,/\.audit-history-table\s*\{min-width:1500px/);
+assert.match(auditCss,/\.audit-log-table :is\(th,td\),[\s\S]*?white-space:normal/);
+assert.match(auditCss,/\.data-table thead th,\.functional-table thead th\s*\{[\s\S]*?background:var\(--primary-navy\)/);
 console.log("AUDIT ROUTE RBAC PASS: 32 route/role checks including both audit display writes");

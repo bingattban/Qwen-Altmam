@@ -2309,29 +2309,48 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
   #appViewport .separation-tabs>.btn{flex:1 1 130px}
 }
 
-/* Operations log only: keep the original navy header, palette and Cairo/Tajawal
-   typography while fitting useful record fields into readable fixed columns. */
-.audit-log-card .audit-log-table-wrap{
-  max-width:100%;max-height:min(55dvh,550px);overflow:auto;
+/* Operations log only: preserve the existing navy/teal header, row colors,
+   Cairo/Tajawal typography and buttons. Long Arabic reasons/descriptions use
+   real multiline cells, not ellipses or 100px columns. Horizontal scrolling
+   on compact windows avoids squeezing nine separate columns into one line. */
+.audit-log-card .audit-log-table-wrap,
+.audit-log-card .audit-history-table-wrap{
+  max-width:100%;max-height:min(60dvh,600px);overflow:auto;
 }
-.audit-log-table{min-width:1010px;width:100%;table-layout:fixed}
-.audit-log-table :is(th,td){
+.audit-log-table{min-width:1300px;width:100%;table-layout:fixed}
+.audit-log-table :is(th,td),
+.audit-history-table :is(th,td){
   white-space:normal;word-break:normal;overflow-wrap:anywhere;
-  text-align:right;vertical-align:middle;line-height:1.65;padding:9px 10px;
+  text-align:right;vertical-align:top;line-height:1.75;padding:10px 12px;
 }
-.audit-log-table :is(th,td):nth-child(1){width:46px;text-align:center}
-.audit-log-table :is(th,td):nth-child(2){width:126px}
-.audit-log-table :is(th,td):nth-child(3){width:104px}
-.audit-log-table :is(th,td):nth-child(4){width:128px}
+.audit-log-table thead th,.audit-history-table thead th{vertical-align:middle}
+.audit-log-table :is(th,td):nth-child(1){width:50px;text-align:center}
+.audit-log-table :is(th,td):nth-child(2){width:145px}
+.audit-log-table :is(th,td):nth-child(3){width:145px}
+.audit-log-table :is(th,td):nth-child(4){width:150px}
 .audit-log-table :is(th,td):nth-child(5){
   width:155px;white-space:nowrap;direction:ltr;text-align:center;
 }
-.audit-log-table :is(th,td):nth-child(6){width:102px}
-.audit-log-table :is(th,td):nth-child(7){width:98px}
-.audit-log-table :is(th,td):nth-child(8){width:150px}
-.audit-log-table :is(th,td):nth-child(9){width:101px;text-align:center}
-.audit-log-table tbody tr{height:46px}
+.audit-log-table :is(th,td):nth-child(6){width:170px}
+.audit-log-table :is(th,td):nth-child(7){width:110px}
+.audit-log-table :is(th,td):nth-child(8){width:265px}
+.audit-log-table :is(th,td):nth-child(9){width:110px;text-align:center}
+.audit-log-table tbody tr{height:auto}
+.audit-log-table td:last-child{vertical-align:middle}
 .audit-log-table td:last-child .btn{white-space:nowrap;padding:7px 9px}
+/* The audit history popup uses the same visual system, with extra room for
+   its two historical descriptions and the mandatory reason text. */
+.audit-history-table{min-width:1500px;width:100%;table-layout:fixed}
+.audit-history-table :is(th,td):nth-child(1){width:125px;direction:ltr;text-align:center}
+.audit-history-table :is(th,td):nth-child(2){width:72px;text-align:center}
+.audit-history-table :is(th,td):nth-child(3){width:145px}
+.audit-history-table :is(th,td):nth-child(4),
+.audit-history-table :is(th,td):nth-child(5){width:235px}
+.audit-history-table :is(th,td):nth-child(6),
+.audit-history-table :is(th,td):nth-child(7){width:95px}
+.audit-history-table :is(th,td):nth-child(8){width:220px}
+.audit-history-table :is(th,td):nth-child(9){width:145px}
+.audit-history-table :is(th,td):nth-child(10){width:133px;direction:ltr;text-align:center}
 
 /* Phase 06: keep all declined-person diagnostics legible in Arabic RTL. */
 .attendance-conflict-warning{white-space:pre-line}

@@ -574,7 +574,7 @@
           for(const item of proposedSites)
             addRow(siteTable.body,[item.name,item.personCount]);
           summary.append(node("h3","section-title",
-            "مواقع جديدة لن تُنشأ إلا بموافقة مستقلة"),siteTable.wrap);
+            "مواقع جديدة ستُنشأ تلقائيا عند اعتماد الكشف"),siteTable.wrap);
         }
         const nameHints=Array.isArray(report.similarNames)?report.similarNames:[];
         if(nameHints.length){
@@ -615,20 +615,6 @@
             if(typeof detailsReview!=="function")
               throw Error("نافذة معاينة الاستيراد غير متاحة؛ لم يُحفظ أي تغيير.");
             const newSites=Array.isArray(plan.newSites)?plan.newSites:[];
-            const approvedSiteNames=newSites.map(x=>x.name);
-            if(newSites.length){
-              const siteApproved=await detailsReview({
-                rows:[["عدد المواقع الجديدة",newSites.length],
-                  ["التحقق","لن تُنشأ أي مواقع قبل الموافقة على الأسماء التالية."]],
-                columns:["الموقع الجديد","الأفراد المقترحون"],
-                items:newSites.map(x=>[x.name,x.personCount])
-              },{
-                title:"معاينة إنشاء مواقع جديدة",
-                message:"تأكيد مستقل لإنشاء المواقع غير الموجودة؛ تُسجل كل إضافة في التدقيق.",
-                confirmLabel:"أوافق على إنشاء هذه المواقع"
-              });
-              if(!siteApproved){previewToken="";return;}
-            }
             const customCount=Number(plan.customUpdateCount||0);
              if(customCount>0){
                const changes=Array.isArray(plan.customUpdatesPreview)?plan.customUpdatesPreview:[];
@@ -648,6 +634,8 @@
              const details={rows:[
               ["أفراد جدد",plan.newCount],["تحديث أعمدة أفراد موجودين",customCount],
                ["صفوف مستبعدة",plan.issueCount],
+               ["مواقع جديدة ستُنشأ تلقائيا",newSites.length],
+               ["أسماء المواقع الجديدة",newSites.map(x=>x.name).join("، ")||"لا توجد"],
               ["أسماء مشابهة تستدعي مراجعة بشرية",plan.similarNameCount??(plan.similarNames||[]).length],
               ["حماية السجلات","لن تتغير الهويات أو حالات التحضير أو السجلات القديمة."]
             ],columns:["الورقة","الصف","الاسم الجديد","الرقم (ع)","الموقع"],
@@ -657,7 +645,7 @@
               title:Number(plan.newCount)>0||customCount>0?
                  "معاينة خطة إضافة الأفراد وتحديث الأعمدة":"معاينة أرشفة أخطاء الاستيراد",
               message:Number(plan.newCount)>0||customCount>0?
-                "راجع الأسماء والأرقام (ع) والتعارضات قبل الاعتماد.":
+                "راجع الأسماء والأرقام (ع) والمواقع الجديدة التي ستُنشأ تلقائيا عند الاعتماد.":
                 "لن يُضاف أي فرد؛ يُحفظ فقط سجل الصفوف المرفوضة مع أسبابها لتتمكن من تصدير Excel.",
               confirmLabel:Number(plan.newCount)>0||customCount>0?
                  "تأكيد حفظ الدفعة وتحديث الأعمدة":"تأكيد حفظ سجل الأخطاء"
@@ -675,12 +663,13 @@
               confirmBox.replaceChildren(warning("جارٍ حفظ الاستيراد وتسجيل الدفعة في قاعدة البيانات..."));
               try{
                 const done=await api().invoke("CommitImport",{previewToken:token,operationId,
-                   approveCustomUpdates:customCount>0,
-                  confirmNewSites:newSites.length>0,approvedSiteNames},{timeoutMs:180000});
+                   approveCustomUpdates:customCount>0},{timeoutMs:180000});
                 if(!valid()||current!==serial)return;
                 const receipt=done?.data;
                 if(!Number.isInteger(receipt?.createdCount)||receipt.createdCount<0||
-                   typeof receipt.importBatchId!=="string"||!receipt.importBatchId.trim()){
+                   typeof receipt.importBatchId!=="string"||!receipt.importBatchId.trim()||
+                   !Number.isInteger(receipt.createdSitesCount)||
+                   receipt.createdSitesCount!==newSites.length){
                   const mismatch=new Error("لا يمكن تأكيد نتيجة الاستيراد من إيصال الدفعة؛ تحقق من سجل الاستيراد قبل إجراء جديد.");
                   mismatch.errorCode="BridgeResultMismatch";
                   throw mismatch;
@@ -691,7 +680,8 @@
                   (receipt.createdCount===0&&!receipt.customUpdatedCount?
                     "تم حفظ صفوف الرفض فقط دون إضافة أي فرد.":
                     "تم إنشاء "+receipt.createdCount+" فرداً جديداً وتحديث أعمدة "+
-                       (receipt.customUpdatedCount||0)+" فرد موجود مع توثيق العملية.")+
+                       (receipt.customUpdatedCount||0)+" فرد موجود، وإنشاء "+
+                       receipt.createdSitesCount+" موقع جديد مع توثيق العملية.")+
                   " معرف الدفعة: "+receipt.importBatchId));
                 workbookToken="";
                 // The history refresh is read-only and has its own error panel;
@@ -2243,6 +2233,8 @@
         const revised=table(["رقم القيد","الإصدار","العملية","الوصف قبل التعديل",
           "الوصف بعد التعديل","الحالة السابقة","الحالة الجديدة","السبب",
           "المنفّذ وقت الحدث","التاريخ"]);
+        revised.wrap.classList.add("audit-history-table-wrap");
+        revised.wrap.firstChild.classList.add("audit-history-table");
         for(const item of data.items||[])
           addRow(revised.body,[item.auditEventId,item.overlayVersion,
             item.operationCode,item.beforeState?.displayDescription||item.rawDescription,
