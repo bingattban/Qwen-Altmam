@@ -1,3 +1,18 @@
+## Live main evidence checkpoint — 2026-11-12 (CI candidate, NOT production approval)
+
+- Immutable `main` source SHA: `ed255a1420c047e8eb7b929bd3bdc509eeffa263` (merged PR #281). This is a **historical, exact-SHA CI candidate**, not the source SHA of this evidence-only PR.
+- [Windows Core run 43062807272](https://github.com/bingattban/Qwen-Altmam/actions/runs/43062807272): completed **success** on that source SHA (manifest guard + core-tests).
+- [Windows Release run 43062807273](https://github.com/bingattban/Qwen-Altmam/actions/runs/43062807273): completed **success** on the SAME SHA; release full-test job completed before independent win-x86/win-x64 package jobs, and the four-customer-package SHA-256 audit completed **success**.
+- The `0.0.1172-ci` Release run uploaded four distinct candidate packages: win-x86 Portable and Installer, win-x64 Portable and Installer, together with per-architecture checksum metadata and a four-package provenance artifact. The GitHub artifact wrapper hash is not a substitute for the actual customer-file SHA-256.
+- The Release `Clean-machine acceptance matrix (15.06) — manual evidence gate` job was **SKIPPED**; this is by design, NOT passed acceptance. The independent physical `WIN-01` through `WIN-10` checks remain **NOT EXECUTED**. Do not infer successful clean/offline installation, real first-run operator use, upgrade, real disk/power failure, cross-PC encrypted recovery, or complete 10,000-person WPF/Excel throughput from hosted CI.
+- The native WPF GeneralAdministration-reauthenticated restore and password-protected export of the original SQLCipher key exist, but independent destructive-restore acceptance is still missing. The WebView2 `RestoreDatabaseAtomically` action remains disabled. Pre-login import of a portable recovery key has no approved user-facing authorization policy or UI; it must not be enabled by inventing a GeneralAdmin session.
+- Main ruleset `26457705` is active with required checks; repository setting `allow_auto_merge=false` was observed and automatic PR merging is **not** configured. Do not bypass required checks or merge a failed/unfinished PR.
+- The current UI regression suite intentionally requires readable, flexible search widths rather than a global narrow `170px` override. The earlier 170×35 proposal conflicts with the live test contract; no UI geometry was changed in this evidence-only checkpoint.
+- Independent manual acceptance, review of every role/route, field hardware logs, operator and owner signatures are **PENDING**. See [issue #272](https://github.com/bingattban/Qwen-Altmam/issues/272), [acceptance matrix](PHASE15_ACCEPTANCE_MATRIX.md), and [offline checker](../../build/verify-clean-offline-candidate.ps1). Release decision: **NO-GO**.
+
+**Manual testing/acceptance is distinct from automated CI: WIN-01 through WIN-10 are NOT EXECUTED. Production release signoff has not been given.**
+
+---
 > **Audited R17 main CI candidate — 2026-11-10 — NO-GO for production.**
 > R17 PR #268 has been merged into `main` at `859cc9c7e889d73f0f23debd0235c3c912f397c8`.
 > [Windows Core 42698618350](https://github.com/bingattban/Qwen-Altmam/actions/runs/42698618350)
