@@ -1,5 +1,12 @@
 # Phase 15 executable evidence map — incremental handover
 
+## Latest known main CI candidate — 2026-11-12 (historical immutable SHA)
+
+`main` commit `ed255a1420c047e8eb7b929bd3bdc509eeffa263`: Windows Core [43062807272](https://github.com/bingattban/Qwen-Altmam/actions/runs/43062807272) and Windows Release [43062807273](https://github.com/bingattban/Qwen-Altmam/actions/runs/43062807273) both succeeded. The Release `0.0.1172-ci` workflow passed full tests before x86/x64 Portable/Installer packaging and the independent in-run four-file SHA-256 audit. This candidate supersedes the older 2026-11-03 CI checkpoint **only for CI provenance**, not independent acceptance.
+
+All independent WIN-01 through WIN-10 rows below remain **NOT EXECUTED**. The clean-machine manual job was **SKIPPED** by design; owner production decision remains **NO-GO**. No change in this documentation PR establishes real offline Windows evidence, enables the WebView2 destructive restore, or removes the mandatory independent cross-PC and physical-interruption checks.
+
+---
 **Scope:** approved PHASE 15 ONLY. No reopening closed PR #84/#91 or resurrecting retired screen_020. No change to approved two-admin audit-display/closed-day policy.
 
 ## Latest audited CI candidate — 2026-11-03 (fixed baseline, not production approval)

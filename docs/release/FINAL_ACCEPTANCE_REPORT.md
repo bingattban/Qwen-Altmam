@@ -1,3 +1,38 @@
+# Current Phase 15 release acceptance — 2026-11-12
+
+This is the newest audited **CI-only** main candidate. All older 2026-11-03, 2026-10-29 and 2026-10-23 sections below are preserved for historical provenance and must not be interpreted as newer evidence.
+
+## Live main evidence checkpoint — 2026-11-12 (CI candidate, NOT production approval)
+
+- Immutable `main` source SHA: `ed255a1420c047e8eb7b929bd3bdc509eeffa263` (merged PR #281). This is a **historical, exact-SHA CI candidate**, not the source SHA of this evidence-only PR.
+- [Windows Core run 43062807272](https://github.com/bingattban/Qwen-Altmam/actions/runs/43062807272): completed **success** on that source SHA (manifest guard + core-tests).
+- [Windows Release run 43062807273](https://github.com/bingattban/Qwen-Altmam/actions/runs/43062807273): completed **success** on the SAME SHA; release full-test job completed before independent win-x86/win-x64 package jobs, and the four-customer-package SHA-256 audit completed **success**.
+- The `0.0.1172-ci` Release run uploaded four distinct candidate packages: win-x86 Portable and Installer, win-x64 Portable and Installer, together with per-architecture checksum metadata and a four-package provenance artifact. The GitHub artifact wrapper hash is not a substitute for the actual customer-file SHA-256.
+- The Release `Clean-machine acceptance matrix (15.06) — manual evidence gate` job was **SKIPPED**; this is by design, NOT passed acceptance. The independent physical `WIN-01` through `WIN-10` checks remain **NOT EXECUTED**. Do not infer successful clean/offline installation, real first-run operator use, upgrade, real disk/power failure, cross-PC encrypted recovery, or complete 10,000-person WPF/Excel throughput from hosted CI.
+- The native WPF GeneralAdministration-reauthenticated restore and password-protected export of the original SQLCipher key exist, but independent destructive-restore acceptance is still missing. The WebView2 `RestoreDatabaseAtomically` action remains disabled. Pre-login import of a portable recovery key has no approved user-facing authorization policy or UI; it must not be enabled by inventing a GeneralAdmin session.
+- Main ruleset `26457705` is active with required checks; repository setting `allow_auto_merge=false` was observed and automatic PR merging is **not** configured. Do not bypass required checks or merge a failed/unfinished PR.
+- The current UI regression suite intentionally requires readable, flexible search widths rather than a global narrow `170px` override. The earlier 170×35 proposal conflicts with the live test contract; no UI geometry was changed in this evidence-only checkpoint.
+- Independent manual acceptance, review of every role/route, field hardware logs, operator and owner signatures are **PENDING**. See [issue #272](https://github.com/bingattban/Qwen-Altmam/issues/272), [acceptance matrix](PHASE15_ACCEPTANCE_MATRIX.md), and [offline checker](../../build/verify-clean-offline-candidate.ps1). Release decision: **NO-GO**.
+
+**Manual testing/acceptance is distinct from automated CI: WIN-01 through WIN-10 are NOT EXECUTED. Production release signoff has not been given.**
+
+---
+
+### Remaining execution ownership (no substitutions)
+
+| Gate | Verified status | Required next evidence |
+| --- | --- | --- |
+| Windows Core and Release on one immutable SHA | PASS at `ed255a1420c047e8eb7b929bd3bdc509eeffa263` | Reverify on the next delivery SHA, not this historical baseline |
+| Four CI candidate packages and independent in-run hashes | PASS at `0.0.1172-ci` | Rehash actual files again after transfer to each independent Windows machine |
+| Independent clean offline x86/x64 Portable/Installer | NOT EXECUTED | WIN-01, WIN-02, WIN-03, WIN-04 operator logs and hashes |
+| Real older-to-newer upgrade and disk/power failures | NOT EXECUTED | WIN-05, WIN-06 reproducible disposable-hardware evidence |
+| Different-PC recovery and absent E: chooser | NOT EXECUTED | WIN-07, WIN-08 explicit owner-approved security decisions and independent checks |
+| Whole WPF/Excel 10,000-person workload and role-by-role workflows | NOT EXECUTED | WIN-09, WIN-10 actual timing, memory, screens, and output equality |
+| Owner final signature | PENDING | No P0/P1 blocker, exact four customer hashes and signed GO decision |
+
+**NO-GO: the manual acceptance job is SKIPPED and all independent WIN-01…WIN-10 field gates are NOT EXECUTED.**
+
+---
 # 2026-11-03 — current Phase 15 evidence index (NO-GO)
 
 **Read [GO_NO_GO.md](GO_NO_GO.md) and

@@ -158,5 +158,19 @@ class Phase15Contract(unittest.TestCase):
         self.assertIn("ar.CommittedAtUtc", backend)
         self.assertIn('["committedAtUtc"] = reader.IsDBNull(12)', backend)
 
+    def test_current_main_release_evidence_distinguishes_ci_from_field_uat(self):
+        """The immutable November main candidate is not an independent field GO."""
+        main_sha = "ed255a1420c047e8eb7b929bd3bdc509eeffa263"
+        for name in ("docs/release/GO_NO_GO.md",
+                     "docs/release/FINAL_ACCEPTANCE_REPORT.md"):
+            with self.subTest(path=name):
+                body = read(name)
+                for required in (main_sha, "43062807272", "43062807273",
+                                 "0.0.1172-ci", "NO-GO", "NOT EXECUTED",
+                                 "manual", "WIN-01", "WIN-10"):
+                    self.assertIn(required, body,
+                        "Current real CI must not be substituted for independent acceptance")
+        self.assertIn("SKIPPED", read("docs/release/GO_NO_GO.md"))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
