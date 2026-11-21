@@ -239,7 +239,7 @@ public sealed class MonthlyExcelExportService
                 writer.WriteEndElement();
                 var rankColumn = customColumns.FirstOrDefault(column => column.Caption == "الرتبة");
                 var additionalColumns = customColumns.Where(column => column.Caption != "الرتبة").ToArray();
-                var headings = new List<string> { "م", "الرقم (ع)", "الرتبة", "الاسم", "الموقع" };
+                var headings = new List<string> { "الرقم", "الرقم (ع)", "الرتبة", "الاسم", "الموقع" };
                 headings.AddRange(additionalColumns.Select(column => column.Caption));
                 for (int d = 1; d <= days; d++) headings.Add(d.ToString("00", CultureInfo.InvariantCulture));
                 ExcelReportLayout.Columns(writer,headings);

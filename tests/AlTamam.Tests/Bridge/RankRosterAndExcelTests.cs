@@ -151,7 +151,7 @@ public sealed class RankRosterAndExcelTests : IAsyncLifetime, IDisposable
         Assert.True(result.Success, result.UserMessage);
         string file = ((JsonObject)result.Data!)["filePath"]!.GetValue<string>();
         string[] headers = ExcelRow(file, 1, 2);
-        Assert.Equal(new[] { "م", "الرقم (ع)", "الرتبة", "الاسم", "الموقع" },
+        Assert.Equal(new[] { "الرقم", "الرقم (ع)", "الرتبة", "الاسم", "الموقع" },
             headers.Take(5));
         Assert.Single(headers, h => h == "الرتبة");
         string[] person = ExcelRow(file, 1, 3);

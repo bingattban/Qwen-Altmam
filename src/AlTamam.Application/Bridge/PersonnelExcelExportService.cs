@@ -160,34 +160,56 @@ public sealed class PersonnelExcelExportService
     private static string[] Record(JsonNode? node,params string[] fields)
         => fields.Select(key => Val(node,key)).ToArray();
 
-    // A person field belongs to the PERSON category, not to a dated event.
-    // Preserve the existing column order and append the SAME visible headings
-    // to any worksheet whose first column is a person report ordinal.
+    private sealed record PersonExportIdentity(string ServiceNumber, string Name, string SiteName);
+
+    // Every PERSON worksheet starts with the same five identity columns.
+    // Preserve event-specific data in its original relative order after them;
+    // resolve current fallback identity by workbook-local ordinal, never the
+    // reusable service number, while historical event fields take precedence.
     private static void AppendRosterColumns(Sheet sheet,
         IReadOnlyList<RosterCustomFieldProjection.Column> columns,
-        IReadOnlyDictionary<string,string[]> valuesByOrdinal)
+        IReadOnlyDictionary<string,string[]> valuesByOrdinal,
+        IReadOnlyDictionary<string,PersonExportIdentity> identitiesByOrdinal)
     {
-        // Rank is a fixed field after service number, not a trailing custom column.
-        // Values are keyed by workbook-local ordinal (never the reusable service number).
-        int rankIndex=-1;
-        for(int i=0;i<columns.Count;i++)
-            if(columns[i].Caption=="الرتبة"){rankIndex=i;break;}
-        var others=columns.Select((c,i)=>(Column:c,Index:i))
-            .Where(x=>x.Index!=rankIndex).ToArray();
-        var header=sheet.Rows[0];
-        int serviceIndex=System.Array.FindIndex(header,h=>h.StartsWith("الرقم (ع)",StringComparison.Ordinal));
-        int insertion=Math.Max(1,serviceIndex+1);
-        sheet.Rows[0]=header.Take(insertion).Concat(new[]{"الرتبة"})
-            .Concat(header.Skip(insertion)).Concat(others.Select(x=>x.Column.Caption)).ToArray();
+        var header = sheet.Rows[0];
+        int serviceIndex = Array.FindIndex(header,h=>h.StartsWith("الرقم (ع)",StringComparison.Ordinal));
+        int nameIndex = Array.FindIndex(header,h=>h is "الاسم" or "اسم الفرد" or "الاسم التاريخي");
+        int siteIndex = Array.FindIndex(header,h=>h is "الموقع" or "الموقع المسجل" or "الموقع السابق" or "من موقع");
+        int mixedIndex = Array.FindIndex(header,h=>h=="الاسم / الموقع");
+        int kindIndex = Array.FindIndex(header,h=>h=="نوع الفترة");
+        int rankIndex = -1;
+        for (int i=0;i<columns.Count;i++)
+            if (columns[i].Caption=="الرتبة") { rankIndex=i; break; }
+        var others=columns.Select((column,index)=>(column,index))
+            .Where(entry=>entry.index!=rankIndex).ToArray();
+        var retained=Enumerable.Range(1,header.Length-1)
+            .Where(index=>index!=serviceIndex&&index!=nameIndex&&index!=siteIndex).ToArray();
+        sheet.Rows[0]=new[]{"الرقم","الرقم (ع)","الرتبة","الاسم","الموقع"}
+            .Concat(retained.Select(index=>header[index]))
+            .Concat(others.Select(entry=>entry.column.Caption)).ToArray();
+        static string At(string[] row,int index)
+            => index>=0&&index<row.Length ? row[index] : "";
         for(int i=1;i<sheet.Rows.Count;i++)
         {
-            string[] row=sheet.Rows[i];
-            string[] values=row.Length>0&&valuesByOrdinal.TryGetValue(row[0],out var stored)
-                ? stored : Enumerable.Repeat("",columns.Count).ToArray();
-            string rank=rankIndex<0||rankIndex>=values.Length?"":values[rankIndex];
-            sheet.Rows[i]=row.Take(insertion).Concat(new[]{rank})
-                .Concat(row.Skip(insertion)).Concat(others.Select(x=>
-                    x.Index<values.Length?values[x.Index]:"")).ToArray();
+            var row=sheet.Rows[i];
+            var ordinal=At(row,0);
+            identitiesByOrdinal.TryGetValue(ordinal,out var identity);
+            var values=valuesByOrdinal.TryGetValue(ordinal,out var saved)
+                ? saved : Array.Empty<string>();
+            string rank=rankIndex>=0&&rankIndex<values.Length?values[rankIndex]:"";
+            string number=At(row,serviceIndex);
+            if(number.Length==0)number=identity?.ServiceNumber??"";
+            string name=At(row,nameIndex);
+            string site=At(row,siteIndex);
+            string kind=At(row,kindIndex);
+            if(kind=="هوية"&&name.Length==0)name=At(row,mixedIndex);
+            if(kind=="موقع"&&site.Length==0)site=At(row,mixedIndex);
+            if(name.Length==0)name=identity?.Name??"";
+            if(site.Length==0)site=identity?.SiteName??"";
+            sheet.Rows[i]=new[]{ordinal,number,rank,name,site}
+                .Concat(retained.Select(index=>At(row,index)))
+                .Concat(others.Select(entry=>entry.index<values.Length?values[entry.index]:""))
+                .ToArray();
         }
     }
 
@@ -200,6 +222,7 @@ public sealed class PersonnelExcelExportService
             customColumns=await RosterCustomFieldProjection.VisibleAsync(
                 customConn,ct).ConfigureAwait(false);
         var valuesByOrdinal=new Dictionary<string,string[]>(StringComparer.Ordinal);
+        var identitiesByOrdinal=new Dictionary<string,PersonExportIdentity>(StringComparer.Ordinal);
         var summary=Start("ملخص التقرير","رقم الفرد في التقرير","الرقم (ع)","الاسم","حالة القيد",
             "تاريخ الإدراج","عدد أيام التحضير","عدد الحركات","الفترة من","الفترة إلى",
             "حالات التحضير وأعداد الأيام");
@@ -242,8 +265,13 @@ public sealed class PersonnelExcelExportService
                  var person=(JsonObject)data["person"]!;
                 string name=Val(person,"name"),number=Val(person,"serviceNumberA");
                 if(page==1)
+                {
                     valuesByOrdinal[sectionNumber]=customColumns.Select(column=>
                         RosterCustomFieldProjection.Cell(person,column)).ToArray();
+                    var latestSite=(Array(data,"siteHistory")??new JsonArray()).FirstOrDefault();
+                    identitiesByOrdinal[sectionNumber]=new PersonExportIdentity(number,name,
+                        Val(latestSite,"siteName"));
+                }
                 if(page==1)
                     summary.Add(sectionNumber,number,name,
                         Val(person,"active")=="true"?"نشط":"مؤرشف",
@@ -377,7 +405,7 @@ public sealed class PersonnelExcelExportService
         }
         foreach(var sheet in sheets)
             if(sheet.Name!="الإجمالي اليومي")
-                AppendRosterColumns(sheet,customColumns,valuesByOrdinal);
+                AppendRosterColumns(sheet,customColumns,valuesByOrdinal,identitiesByOrdinal);
         return sheets;
     }
 
@@ -399,6 +427,7 @@ public sealed class PersonnelExcelExportService
         var customColumns=await RosterCustomFieldProjection.VisibleAsync(
             customConn,ct).ConfigureAwait(false);
         var valuesByOrdinal=new Dictionary<string,string[]>(StringComparer.Ordinal);
+        var identitiesByOrdinal=new Dictionary<string,PersonExportIdentity>(StringComparer.Ordinal);
         // Workbook-local ordinals preserve distinct persons without exposing PersonId.
         var archiveOrdinals=new Dictionary<string,int>(StringComparer.Ordinal);
         int page=1;
@@ -437,6 +466,9 @@ public sealed class PersonnelExcelExportService
                 string section=sequence.ToString(CultureInfo.InvariantCulture);
                 valuesByOrdinal[section]=customColumns.Select(column=>
                     RosterCustomFieldProjection.Cell(row as JsonObject,column)).ToArray();
+                identitiesByOrdinal[section]=new PersonExportIdentity(
+                    Val(row,"serviceNumberA"),Val(row,"name"),
+                    dismissal?Val(row,"siteName"):Val(row,"sourceSite"));
                 if(dismissal)
                     sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
                         "siteName","reason","date","committedAtUtc","actorDisplay")).ToArray());
@@ -449,7 +481,7 @@ public sealed class PersonnelExcelExportService
         }
         if(sheet.Rows.Count==1)
             throw new InvalidDataException("لا توجد عمليات مطابقة في هذا الأرشيف لتصديرها.");
-        AppendRosterColumns(sheet,customColumns,valuesByOrdinal);
+        AppendRosterColumns(sheet,customColumns,valuesByOrdinal,identitiesByOrdinal);
         return [sheet];
     }
 
