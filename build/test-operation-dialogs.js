@@ -74,6 +74,10 @@ async function run(){
  assert.equal(overlay.classList.open,true,"review is shown inside app modal");
  assert.equal(body.all().filter(x=>x.tag==="table").length,1,
    "modal contains the entire server-verified attendance list");
+  const leadingPeopleColumns=()=>body.all().filter(x=>x.tag==="th")
+    .slice(0,5).map(x=>x.textContent);
+  assert.deepEqual(leadingPeopleColumns(),["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع"],
+    "attendance review must show rank between number and name");
  assert.equal(body.all().filter(x=>x.className==="app-preview-property").length,4,
    "review summary must show date, mode, target status and selected count in four cards");
  assert.ok(body.all().some(x=>x.textContent==="محمد صالح الحضرمي"));
@@ -110,6 +114,8 @@ async function run(){
  assert.equal(overlay.classList.open,true);
  const check=body.all().find(x=>x.tag==="input"&&x.type==="checkbox");
  assert.ok(check,"unprepared modal has an individual checkbox");
+  assert.deepEqual(leadingPeopleColumns(),["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع"],
+    "unprepared roster must have five mandatory identity columns");
  check.checked=true;check.handlers.change();
  button("معاينة حالة الأمس").click();
  assert.deepEqual([...await selection],["P1"]);
@@ -122,6 +128,8 @@ async function run(){
  assert.equal(overlay.classList.open,true,"transfer must use the centered modal");
  assert.equal(body.all().filter(x=>x.tag==="table").length,1,
    "the full transfer list is rendered in the review");
+  assert.deepEqual(leadingPeopleColumns(),["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع"],
+    "transfer preview must show rank between number and name");
  assert.ok(body.all().some(x=>x.textContent==="2026-10-25"));
  assert.ok(body.all().some(x=>x.textContent==="موقع حضرموت"));
  assert.ok(body.all().some(x=>x.textContent==="محمد صالح"));
