@@ -275,14 +275,14 @@ public sealed class R01NativeExcelLifecycleTests : IAsyncLifetime, IDisposable
         Assert.Contains("فرد 000", Text(exported["fileName"]));
         var daily = Sheet(Text(exported["filePath"]), "التفاصيل التاريخية");
         Assert.Equal(104, daily.Count);
-        Assert.Equal(expectedDays.Select(d => Text(d!["date"])).OrderBy(x => x), daily.Skip(1).Select(r => r[3]).OrderBy(x => x));
+        Assert.Equal(expectedDays.Select(d => Text(d!["date"])).OrderBy(x => x), daily.Skip(1).Select(r => r[4]).OrderBy(x => x));
         foreach (var row in daily.Skip(1))
         {
-            var day = Assert.Single(expectedDays, d => Text(d!["date"]) == row[3]);
-            Assert.Equal(new[] { "1", Text(day!["serviceNumberA"]), Text(day["name"]), Text(day["date"]), Text(day["statusName"]), Text(day["site"]), Text(day["source"]), Text(day["revision"]), Text(day["committedAtUtc"]) }, row);
+            var day = Assert.Single(expectedDays, d => Text(d!["date"]) == row[4]);
+            Assert.Equal(new[] { "1", Text(day!["serviceNumberA"]), "", Text(day["name"]), Text(day["date"]), Text(day["statusName"]), Text(day["site"]), Text(day["source"]), Text(day["revision"]), Text(day["committedAtUtc"]) }, row);
         }
         var summary = Sheet(Text(exported["filePath"]), "ملخص التقرير");
-        Assert.Equal("009000", summary[1][1]); Assert.Equal("فرد 000", summary[1][2]); Assert.Equal("103", summary[1][5]);
+        Assert.Equal("009000", summary[1][1]); Assert.Equal("فرد 000", summary[1][3]); Assert.Equal("103", summary[1][6]);
         foreach (string empty in new[] { "سجل التنقلات", "تغييرات العمليات", "تصحيحات التحضير" })
             Assert.Single(Sheet(Text(exported["filePath"]), empty));
         var group = new JsonObject {
@@ -297,14 +297,14 @@ public sealed class R01NativeExcelLifecycleTests : IAsyncLifetime, IDisposable
         var groupPreview = await Object("BuildPersonLifetimeReport", groupPreviewRequest);
         var grouped = await Object("ExportPersonLifetimeExcel", group);
         var groupedDays = Sheet(Text(grouped["filePath"]), "التفاصيل التاريخية");
-        Assert.Equal(3, groupedDays.Count); Assert.All(groupedDays.Skip(1), row => { Assert.Equal("2026-10-19", row[3]); Assert.Equal("غياب", row[4]); });
+        Assert.Equal(3, groupedDays.Count); Assert.All(groupedDays.Skip(1), row => { Assert.Equal("2026-10-19", row[4]); Assert.Equal("غياب", row[5]); });
         var aggregate = Sheet(Text(grouped["filePath"]), "الإجمالي اليومي");
         Assert.Equal(2, aggregate.Count);
         Assert.Equal("2026-10-19", aggregate[1][0]); Assert.Equal("غياب", aggregate[1][1]); Assert.Equal("2", aggregate[1][2]);
         var groupSummary = Sheet(Text(grouped["filePath"]), "ملخص التقرير");
         Assert.Equal(4, groupSummary.Count); // Header, two individuals, explicit combined total.
-        Assert.Equal("1", groupSummary[1][5]); Assert.Equal("1", groupSummary[2][5]);
-        Assert.Equal("إجمالي المجموعة", groupSummary[3][0]); Assert.Equal("2", groupSummary[3][5]);
+        Assert.Equal("1", groupSummary[1][6]); Assert.Equal("1", groupSummary[2][6]);
+        Assert.Equal("إجمالي المجموعة", groupSummary[3][0]); Assert.Equal("2", groupSummary[3][6]);
         // Prove the SAME historical workbook values under all three REAL DB roles.
         var roles = new[] { "OrdinaryAdministration", "Supervisor" };
         for (int i = 0; i < roles.Length; i++)
@@ -376,10 +376,10 @@ public sealed class R01NativeExcelLifecycleTests : IAsyncLifetime, IDisposable
         {
             var fact = facts[i]!;
             Assert.Equal("000123", rows[i + 1][1]);
-            Assert.Equal("الاسم التاريخي المحفوظ", rows[i + 1][2]);
-            Assert.Equal(Text(fact["date"]), rows[i + 1][3]);
-            Assert.Equal(Text(fact["statusName"]), rows[i + 1][4]);
-            Assert.Equal(Text(fact["site"]), rows[i + 1][5]);
+            Assert.Equal("الاسم التاريخي المحفوظ", rows[i + 1][3]);
+            Assert.Equal(Text(fact["date"]), rows[i + 1][4]);
+            Assert.Equal(Text(fact["statusName"]), rows[i + 1][5]);
+            Assert.Equal(Text(fact["site"]), rows[i + 1][6]);
         }
         Assert.Equal("104", Scalar("SELECT COUNT(*) FROM AttendanceRecords;"));
         Assert.True(_db.HasValidIntegrity());
@@ -423,8 +423,8 @@ public sealed class R01NativeExcelLifecycleTests : IAsyncLifetime, IDisposable
                 : ["serviceNumberA", "name", "type", "sourceSite", "destination", "date", "committedAtUtc"];
             for (int i = 0; i < fields.Length; i++)
                 if (fields[i] == "committedAtUtc")
-                    Assert.Equal(DateTimeOffset.Parse(Text(fact[fields[i]])), DateTimeOffset.Parse(rows[1][i + 1]));
-                else Assert.Equal(Text(fact[fields[i]]), rows[1][i + 1]);
+                    Assert.Equal(DateTimeOffset.Parse(Text(fact[fields[i]])), DateTimeOffset.Parse(rows[1][i + (i == 0 ? 1 : 2)]));
+                else Assert.Equal(Text(fact[fields[i]]), rows[1][i + (i == 0 ? 1 : 2)]);
         }
         Assert.Equal("3", Scalar("SELECT COUNT(*) FROM PersonnelMovements;"));
         Assert.Equal("104", Scalar("SELECT COUNT(*) FROM AttendanceRecords;"));

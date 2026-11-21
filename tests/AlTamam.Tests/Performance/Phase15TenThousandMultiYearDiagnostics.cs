@@ -280,16 +280,17 @@ public sealed class Phase15TenThousandMultiYearDiagnostics : IAsyncLifetime, IDi
                     string[] cells = actualRow.Elements(ns + "c")
                         .Select(c => c.Element(ns + "is")?.Element(ns + "t")?.Value ?? "")
                         .ToArray();
-                    Assert.Equal(35, cells.Length);
+                    Assert.Equal(36, cells.Length);
                     Assert.Equal(personOrdinal.ToString(
                         System.Globalization.CultureInfo.InvariantCulture), cells[0]);
                     Assert.Equal((100000 + personOrdinal).ToString(
                         System.Globalization.CultureInfo.InvariantCulture), cells[1]);
-                    Assert.Equal($"فرد اختباري {personOrdinal:D6}", cells[2]);
-                    Assert.Equal("غير محدد", cells[3]);
+                    Assert.Equal("", cells[2]);
+                    Assert.Equal($"فرد اختباري {personOrdinal:D6}", cells[3]);
+                    Assert.Equal("غير محدد", cells[4]);
                     string statusName = personOrdinal % 5 == 0 ? "غياب" : "موجود";
                     for (int day = 1; day <= CurrentMonthDays; day++)
-                        Assert.Equal(statusName, cells[day + 3]);
+                        Assert.Equal(statusName, cells[day + 4]);
                 }
             }
             Assert.Equal(Personnel + 3, excelWorksheetRows);
