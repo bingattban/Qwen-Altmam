@@ -673,7 +673,7 @@ async function run() {
   assert.ok(form,"single-person form is available");
   const inputs=form.all().filter(x=>x.tag==="input");
   const location=form.all().find(x=>x.tag==="select");
-  assert.equal(inputs.length,2);
+  assert.equal(inputs.length,3, "New person form now includes the rank field");
   inputs[0].value="شخص تجريبي راجع";inputs[1].value="4141";
   location.value="SITE-RETURN";
   await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
@@ -690,14 +690,14 @@ async function run() {
     "return binds explicit candidate ID and actor-bound preview");
   assert.equal(calls.filter(x=>x.name==="CreatePerson").length,0);
 
-  inputs[0].value="شخص جديد مكرر";inputs[1].value="6262";
+  inputs[0].value="شخص جديد مكرر";inputs[1].value="6262";inputs[2].value="ملازم";
   location.value="SITE-RETURN";
   await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
   assert.ok(buttonNamed("فرد آخر مختلف عن جميع المرشحين"),
     "name-only candidate requires explicit different-human resolution");
   await buttonNamed("فرد آخر مختلف عن جميع المرشحين").handlers.click();
   assert.ok(calls.some(x=>x.name==="CreatePerson"&&x.body.identityDecision==="different"&&
-    x.body.identityResolutionToken==="U".repeat(64)),
+    x.body.identityResolutionToken==="U".repeat(64)&&x.body.rank==="ملازم"),
     "independent identity requires the token-bound archived-name resolution");
 
   // 04.03(c): real authorized roster removal is a separate verified
