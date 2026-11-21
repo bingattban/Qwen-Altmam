@@ -49,9 +49,10 @@ async function transfer(host,external){
       if(current!==serial||!card.isConnected)return;
       const customColumns=window.AltamamRosterColumns?.columns(data)||[];
       const headings=window.AltamamRosterColumns?.headings(customColumns)||[];
-      const t=table(["اختيار","الرقم (ع)","الاسم","الموقع",...headings]);
-      for(const p of data.items||[]){
-        const tr=row(t.body,["",p.serviceNumberA,p.displayName,p.siteName,
+      const t=table(["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","اختيار",...headings]);
+      for(const [index,p] of (data.items||[]).entries()){
+        const tr=row(t.body,[(page-1)*100+index+1,p.serviceNumberA,
+          window.AltamamRosterColumns?.rank(p)||"—",p.displayName,p.siteName,"",
           ...(window.AltamamRosterColumns?.values(p,customColumns)||[])]);
         const cb=el("input");cb.type="checkbox";cb.checked=selected.has(p.personId);
         cb.setAttribute("aria-label","تحديد "+p.displayName);
@@ -59,9 +60,9 @@ async function transfer(host,external){
           if(cb.checked&&selected.size>=100){cb.checked=false;return err(note,new Error("الحد الأقصى 100 فرد."));}
           if(cb.checked)selected.add(p.personId);else selected.delete(p.personId);
           counter.textContent="الأفراد المحددون: "+selected.size;confirmation.replaceChildren();
-        });tr.children[0].appendChild(cb);
+        });tr.children[5].appendChild(cb);
       }
-      if(!t.body.children.length){const tr=row(t.body,["لا توجد أسماء"]);tr.children[0].colSpan=4+customColumns.length;}
+      if(!t.body.children.length){const tr=row(t.body,["لا توجد أسماء"]);tr.children[0].colSpan=6+customColumns.length;}
       const nav=el("div",undefined,"functional-pager"),prev=btn("السابق",()=>{page--;load();}),next=btn("التالي",()=>{page++;load();});
       prev.disabled=page<=1;next.disabled=!data.hasNext;
       nav.append(el("span","الإجمالي: "+(data.total||0)),prev,next);
@@ -207,9 +208,10 @@ async function archive(host,mode){
      if(request!==archiveRequest||!card.isConnected)return;
      const customColumns=window.AltamamRosterColumns?.columns(data)||[];
      const headings=window.AltamamRosterColumns?.headings(customColumns)||[];
-     const t=table(["الرقم (ع)","الاسم","النوع","الموقع السابق","الجهة الجديدة","التاريخ",...headings,"التفاصيل"]);
-     for(const m of data.items||[]){
-       const tr=row(t.body,[m.serviceNumberA,m.name,m.type,m.sourceSite,m.destination,m.date,
+     const t=table(["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","النوع","الجهة الجديدة","التاريخ",...headings,"التفاصيل"]);
+     for(const [index,m] of (data.items||[]).entries()){
+       const tr=row(t.body,[(page-1)*100+index+1,m.serviceNumberA,
+         window.AltamamRosterColumns?.rank(m)||"—",m.name,m.sourceSite,m.type,m.destination,m.date,
          ...(window.AltamamRosterColumns?.values(m,customColumns)||[])]);
        const cell=el("td");
        cell.appendChild(btn("تفاصيل",async()=>{
@@ -238,7 +240,7 @@ async function archive(host,mode){
        }));
        tr.appendChild(cell);
      }
-     if(!t.body.children.length){const tr=row(t.body,["لا توجد حركات مطابقة"]);tr.children[0].colSpan=7+customColumns.length;}
+     if(!t.body.children.length){const tr=row(t.body,["لا توجد حركات مطابقة"]);tr.children[0].colSpan=9+customColumns.length;}
      const pager=el("div",undefined,"functional-pager"),prev=btn("السابق",()=>{page--;load();}),next=btn("التالي",()=>{page++;load();});
      prev.disabled=page<=1;next.disabled=!data.hasNext;
      pager.append(el("span","إجمالي الحركات: "+(data.total||0)),prev,next);
