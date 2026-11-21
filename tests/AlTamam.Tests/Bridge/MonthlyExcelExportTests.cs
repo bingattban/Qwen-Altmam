@@ -148,7 +148,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         Assert.True(grid.Success,grid.UserMessage);
         var data = Assert.IsType<JsonObject>(grid.Data);
         var columns = Assert.IsType<JsonArray>(data["customColumns"]);
-        var col = Assert.Single(columns);
+        var col = Assert.Single(columns, c => c!["columnId"]!.GetValue<string>()=="FLD-GLOBAL-TEST");
         Assert.Equal("FLD-GLOBAL-TEST",col!["columnId"]!.GetValue<string>());
         Assert.Equal("المؤهل العلمي",col["caption"]!.GetValue<string>());
         var person = Assert.IsType<JsonArray>(data["items"]).OfType<JsonObject>()
@@ -166,11 +166,11 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
         var rows = xml.Descendants(ns+"row").ToArray();
         var headers = rows[2].Descendants(ns+"t").Select(x=>x.Value).ToArray();
-        Assert.Equal("المؤهل العلمي",headers[4]); // after the four fixed columns
+        Assert.Equal("المؤهل العلمي",headers[5]); // after the five fixed columns
         var personRow = rows.Skip(3).First(row=>row.Descendants(ns+"t")
             .Any(x=>x.Value=="91000"));
         var cells = personRow.Descendants(ns+"t").Select(x=>x.Value).ToArray();
-        Assert.Equal("بكالوريوس",cells[4]);
+        Assert.Equal("بكالوريوس",cells[5]);
         Assert.Empty(xml.Descendants(ns+"f")); // new values cannot become formulas
         ExcelLayoutAssertions.Verify(archive,3);
     }
@@ -212,7 +212,7 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
         var oldHeaders=oldSheet.Descendants(ns+"row").ElementAt(2).Elements(ns+"c").ToArray();
         var newHeaders=newSheet.Descendants(ns+"row").ElementAt(2).Elements(ns+"c").ToArray();
         Assert.Equal(oldHeaders.Length+1,newHeaders.Length);
-        Assert.Equal("عمود أضيف لاحقا",newHeaders[4].Value);
+        Assert.Equal("عمود أضيف لاحقا",newHeaders[5].Value);
         Assert.Contains(newSheet.Descendants(ns+"t"),text=>text.Value=="=نص آمن");
         Assert.Empty(newSheet.Descendants(ns+"f"));
         ExcelLayoutAssertions.Verify(after,3);
@@ -356,14 +356,15 @@ public sealed class MonthlyExcelExportTests : IAsyncLifetime, IDisposable
                 var row=rows[i+3].Descendants(ns+"t").Select(x=>x.Value).ToArray();
                 Assert.Equal(i+1+"",row[0]);
                 Assert.Equal(people[i]["serviceNumberA"]!.GetValue<string>(),row[1]);
-                Assert.Equal(people[i]["name"]!.GetValue<string>(),row[2]);
-                Assert.Equal(people[i]["siteName"]!.GetValue<string>(),row[3]);
+                Assert.Equal(people[i]["rank"]!.GetValue<string>(),row[2]);
+                Assert.Equal(people[i]["name"]!.GetValue<string>(),row[3]);
+                Assert.Equal(people[i]["siteName"]!.GetValue<string>(),row[4]);
                 var days=Assert.IsType<JsonObject>(people[i]["days"]);
                 for(int day=1;day<=31;day++)
                 {
                     string date="2026-10-"+day.ToString("D2");
                     string expected=(days[date] as JsonObject)?["name"]?.GetValue<string>()??"";
-                    Assert.Equal(expected,row[day+3]);
+                    Assert.Equal(expected,row[day+4]);
                 }
             }
             Assert.Empty(xml.Descendants(ns+"f")); // no formula injection

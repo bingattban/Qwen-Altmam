@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AlTamam.Contracts.Bridge;
 using Xunit;
 
@@ -23,8 +24,46 @@ internal static class R01WireShapeSnapshot
         while (root is not null && !File.Exists(Path.Combine(root.FullName, relative))) root = root.Parent;
         Assert.NotNull(root);
         using var snapshots = JsonDocument.Parse(File.ReadAllText(Path.Combine(root!.FullName, relative)));
-        Assert.Contains(Shape(response), snapshots.RootElement.GetProperty(action)
+        Assert.Contains(LegacyShape(response), snapshots.RootElement.GetProperty(action)
             .EnumerateArray().Select(item => item.GetString()!));
+    }
+
+    // Legacy R01 snapshots still require exact pre-V017 fields and types.
+    // Strip only the separately tested rank extension before comparing them.
+    private static string LegacyShape(BridgeResponse response)
+    {
+        JsonNode root = JsonSerializer.SerializeToNode(response,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        StripRankExtension(root);
+        using var document = JsonDocument.Parse(root.ToJsonString());
+        return Describe(document.RootElement);
+    }
+
+    private static void StripRankExtension(JsonNode? node)
+    {
+        if (node is JsonArray array)
+        {
+            foreach (var child in array) StripRankExtension(child);
+            return;
+        }
+        if (node is not JsonObject obj) return;
+        if (obj.TryGetPropertyValue("rank", out var rank))
+        {
+            Assert.True(rank is JsonValue value && value.TryGetValue<string>(out _),
+                "Rank must always be a string in roster responses.");
+            obj.Remove("rank");
+        }
+        if (obj["customFields"] is JsonObject fields)
+            fields.Remove("FLD-CORE-RANK-017");
+        if (obj["customColumns"] is JsonArray columns)
+        {
+            for (int i = columns.Count - 1; i >= 0; i--)
+                if (columns[i] is JsonObject col &&
+                    col["columnId"]?.GetValue<string>() == "FLD-CORE-RANK-017" &&
+                    col["caption"]?.GetValue<string>() == "الرتبة")
+                    columns.RemoveAt(i);
+        }
+        foreach (var child in obj.ToArray()) StripRankExtension(child.Value);
     }
 
     private static string Describe(JsonElement value, string? field = null)

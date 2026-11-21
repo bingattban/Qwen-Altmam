@@ -118,8 +118,8 @@ async function main(){
     "today must travel with its chronological day, not be fixed");
   assert.ok(scroller.lastScroll && Number.isFinite(scroller.lastScroll.left),
     "today must be adjacent to the last pinned core column at initial render");
-  assert.equal(scroller.lastScroll.left,-500,
-    "today must align beside fixed columns (right 1180 - fixed 480 - half day 30), not centered");
+  assert.equal(scroller.lastScroll.left,-380,
+    "today must align beside five fixed identity columns including rank (right 1180 - fixed 600 - half day 30), not centered");
   const monthlyCss=fs.readFileSync(path.join(__dirname,
     "../src/AlTamam.WebUI/assets/css/altamam.css"),"utf8");
   assert.match(monthlyCss,/#appViewport\.monthly-dashboard>\.monthly-grid-panel\s*\{/,

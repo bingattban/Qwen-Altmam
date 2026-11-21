@@ -195,12 +195,12 @@ public sealed class ExcelImportOutcomeService
                     w.WriteEndElement();
                     w.WriteEndElement();
                     w.WriteEndElement();
-                    ExcelReportLayout.Columns(w,new[]{"رقم الصف","الرقم (ع)","الاسم","الموقع","سبب الاستبعاد"});
+                    ExcelReportLayout.Columns(w,new[]{"رقم الصف","الرقم (ع)","الرتبة","الاسم","الموقع","سبب الاستبعاد"});
                     w.WriteStartElement("sheetData", SheetNs);
                     Row(w, 1, new[] { "تقرير صفوف استيراد Excel المستبعدة" });
                     Row(w, 2, new[] { "الدفعة", batchId,
                         "الملف", Read(batch, "fileName") });
-                    Row(w, 3, new[] { "رقم الصف", "الرقم (ع)", "الاسم", "الموقع", "سبب الاستبعاد" });
+                    Row(w, 3, new[] { "رقم الصف", "الرقم (ع)", "الرتبة", "الاسم", "الموقع", "سبب الاستبعاد" });
                     int index = 3;
                     foreach (var node in issues)
                     {
@@ -208,11 +208,11 @@ public sealed class ExcelImportOutcomeService
                         var item = (JsonObject)node!;
                         Row(w, ++index, new[] {
                             item["row"]!.GetValue<int>().ToString(CultureInfo.InvariantCulture),
-                            Read(item, "serviceNumberA"), Read(item, "name"),
+                            Read(item, "serviceNumberA"), "", Read(item, "name"),
                             Read(item, "siteName"), Read(item, "reason") });
                     }
                     w.WriteEndElement();
-                    ExcelReportLayout.FinishSheet(w,5,index,3);
+                    ExcelReportLayout.FinishSheet(w,6,index,3);
                     w.WriteEndElement();
                 });
             }

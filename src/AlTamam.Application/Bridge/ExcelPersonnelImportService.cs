@@ -614,8 +614,14 @@ public sealed class ExcelPersonnelImportService
         return rows;
     }
 
-    private static JsonArray PreviewNames(JsonArray accepted)
+    private JsonArray PreviewNames(JsonArray accepted)
     {
+        // Resolve the immutable rank definition once; no caption-based value
+        // lookup is done against each imported PERSON row.
+        var definitions=ReadCustomColumnHeadings();
+        string normalized=ArabicTextNormalizer.NormalizeForSearch("الرتبة");
+        string? rankColumnId=definitions.TryGetValue(normalized,out var definition)
+            ? definition.Id : null;
         var preview = new JsonArray();
         foreach (var row in accepted.Take(100))
         {
@@ -625,6 +631,7 @@ public sealed class ExcelPersonnelImportService
                 ["row"] = x["row"]!.GetValue<int>(),
                 ["name"] = x["name"]!.GetValue<string>(),
                 ["serviceNumberA"] = x["serviceNumberA"]!.GetValue<string>(),
+                ["rank"] = rankColumnId is null ? "" : Read(x["customFields"] as JsonObject,rankColumnId),
                 ["siteName"] = x["siteName"]!.GetValue<string>()
             });
         }

@@ -258,16 +258,17 @@
        calendar.appendChild(pager);report.appendChild(calendar);
        const perPerson=card("تفصيل كل فرد في المجموعة — دون دمج السجلات المتشابهة");
        const customColumns=window.AltamamRosterColumns?.columns(data)||[];
-       const t=table(["الرقم (ع)","اسم الفرد","نوع السجل","أيام التحضير",
+       const t=table(["الرقم","الرقم (ع)","الرتبة","اسم الفرد","الموقع","نوع السجل","أيام التحضير",
          "التنقلات","الحالات",
          ...(window.AltamamRosterColumns?.headings(customColumns)||[]),"التفاصيل"]);
+       let number=0;
        for(const person of data.persons){
          const tr=el("tr");
          const kind=person.active?"نشط":person.organizationalStatus===3?
            "مفصول":person.organizationalStatus===2?"منقول خارجيًا":"مؤرشف";
          const states=(person.statusTotals||[])
            .map(x=>x.statusName+" ("+x.count+")").join("، ")||"لا توجد";
-         [person.serviceNumberA,person.name,kind,person.attendanceTotal,
+         [++number,person.serviceNumberA,person.rank||"—",person.name,person.siteName||"—",kind,person.attendanceTotal,
            person.movementTotal,states,
            ...(window.AltamamRosterColumns?.values(person,customColumns)||[])]
            .forEach(x=>tr.appendChild(el("td",x)));
@@ -296,8 +297,9 @@
        if(ticket!==serial||!root.isConnected)return;
        const items=reply.data?.items||[];
        const customColumns=window.AltamamRosterColumns?.columns(reply.data)||[];
-       const t=table(["اختيار","الرقم (ع)","الاسم","حالة السجل","الموقع",
+       const t=table(["اختيار","الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","حالة السجل",
          ...(window.AltamamRosterColumns?.headings(customColumns)||[]),"التقرير"]);
+       let number=0;
        for(const person of items){
          const tr=el("tr");
          const selectCell=el("td");
@@ -314,7 +316,7 @@
          const lifecycle=person.active?"نشط":person.organizationalStatus===3?
            "مفصول — سجل تاريخي":person.organizationalStatus===2?
            "منقول خارجيًا — سجل تاريخي":"مؤرشف — سجل تاريخي";
-         [person.serviceNumberA,person.displayName,lifecycle,person.siteName,
+         [++number,person.serviceNumberA,person.rank||"—",person.displayName,person.siteName,lifecycle,
            ...(window.AltamamRosterColumns?.values(person,customColumns)||[])]
            .forEach(v=>tr.appendChild(el("td",v)));
          const cell=el("td");
@@ -326,7 +328,7 @@
        }
        if(!items.length){
          const tr=el("tr"),cell=el("td","لا يوجد فرد مطابق للبحث");
-         cell.colSpan=6+customColumns.length;tr.appendChild(cell);t.body.appendChild(tr);
+         cell.colSpan=8+customColumns.length;tr.appendChild(cell);t.body.appendChild(tr);
        }
        results.replaceChildren(t.wrap);
      }catch(e){if(ticket===serial&&root.isConnected)alert(results,e);}

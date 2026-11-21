@@ -673,7 +673,8 @@ async function run() {
   assert.ok(form,"single-person form is available");
   const inputs=form.all().filter(x=>x.tag==="input");
   const location=form.all().find(x=>x.tag==="select");
-  assert.equal(inputs.length,2);
+  assert.equal(inputs.length,3,"person admission includes editable rank after service number");
+  assert.ok(inputs[2].maxLength===80,"rank input applies the explicit server-side length limit");
   inputs[0].value="شخص تجريبي راجع";inputs[1].value="4141";
   location.value="SITE-RETURN";
   await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
@@ -1388,10 +1389,10 @@ async function run() {
   const rangeTable=rangeCard.all().find(x=>x.tag==="table");
   assert.ok(rangeTable,"table rendered below search");
   const rangeHeaders=rangeTable.children[0].children[0].children.map(x=>x.textContent);
-  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","اسم الفرد","2026-10-08","2026-10-09","2026-10-10"],
+  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","الرتبة","اسم الفرد","الموقع","2026-10-08","2026-10-09","2026-10-10"],
     "table columns match الرقم, الرقم (ع), اسم الفرد and the selected days");
   const rangeCells=rangeTable.children[1].children[0].children.map(x=>x.textContent);
-  assert.deepEqual(rangeCells,["1","C-1","اختبار","موجود","إجازة","غياب"],
+  assert.deepEqual(rangeCells,["1","C-1","—","اختبار","—","موجود","إجازة","غياب"],
     "table row displays sequence, serviceNumberA, person name, and each day's status box");
   assert.equal(changeBtn.disabled,false,"change status button enabled after search");
   changeBtn.handlers.click();

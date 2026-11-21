@@ -636,7 +636,7 @@
           throw Error("تعذر قراءة قائمة المحضّرين تلقائياً.");
         visiblePeople=result.items;
         const customColumns=window.AltamamRosterColumns?.columns(result)||[];
-        const tb=createTable([{label:"تحديد"},{label:"الرقم"},{label:"الرقم (ع)"},
+        const tb=createTable([{label:"تحديد"},{label:"الرقم"},{label:"الرقم (ع)"},{label:"الرتبة"},
           {label:"الاسم"},{label:"الموقع"},{label:"تاريخ التحضير"},
           {label:"مصدر التحضير"},{label:"وقت الاعتماد UTC"},{label:"الحالة المحفوظة"},
           ...customColumns.map(col=>({label:col.caption})),{label:"الإجراء"}]);
@@ -660,7 +660,7 @@
           });
           checkCell.appendChild(checkbox);row.appendChild(checkCell);
           [(page-1)*DAILY_PAGE_SIZE+i+1,person.serviceNumberA,
-            person.name,person.siteName,person.savedBusinessDate||date,
+            person.rank||"—",person.name,person.siteName,person.savedBusinessDate||date,
             person.autoSource||"مصدر غير موثق",person.committedAtUtc||"—",
             person.statusName].forEach(value=>
             row.appendChild(el("td","",value==null?"—":value)));
@@ -794,17 +794,17 @@
         counters.appendChild(card);
       }
       const customColumns=window.AltamamRosterColumns?.columns(rows)||[];
-      const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},{label:"الاسم"},
+      const tb=createTable([{label:"الرقم"},{label:"الرقم (ع)"},{label:"الرتبة"},{label:"الاسم"},
         {label:"الموقع"},{label:"الحالة"},
         ...customColumns.map(col=>({label:col.caption}))]);
       tableHost.replaceChildren(tb.wrap);
       (rows.items||[]).forEach((person,i)=>{
         const tr=el("tr");
         const data=[(STATE.dayPage-1)*DAILY_PAGE_SIZE+i+1, person.serviceNumberA,
-          person.name,person.siteName,person.statusName];
+          person.rank||"—",person.name,person.siteName,person.statusName];
         data.forEach((v,j)=> {
-          const td=el("td","",j===4?"":v);
-          if(j===4){
+          const td=el("td","",j===5?"":v);
+          if(j===5){
             const status=el("span","status-pill",v||"—");
             const color=String(person.statusColor||"");
             if(/^#[0-9a-fA-F]{6}$/.test(color)){
@@ -823,7 +823,7 @@
       });
       if(!(rows.items||[]).length) {
         const tr=el("tr"),td=el("td","","لا توجد بيانات مطابقة للفلاتر المحددة.");
-        td.colSpan=5+customColumns.length;tr.appendChild(td);tb.body.appendChild(tr);
+        td.colSpan=6+customColumns.length;tr.appendChild(td);tb.body.appendChild(tr);
       }
       pager(tableHost,STATE.dayPage,rows.total||0,DAILY_PAGE_SIZE,p=>{STATE.dayPage=p;renderDashboard();});
     } catch(e) { if(STATE.dashboardEpoch===epoch)showError(feedback,e); }
@@ -1274,8 +1274,9 @@
       const customColumns=window.AltamamRosterColumns?.columns(grid)||[];
       const cols=[{label:"الرقم",cls:"pinned fixed-one"},
         {label:"الرقم (ع)",cls:"pinned fixed-two"},
-        {label:"الاسم",cls:"pinned fixed-three"},
-        {label:"الموقع",cls:"pinned fixed-four"},
+        {label:"الرتبة",cls:"pinned fixed-three"},
+        {label:"الاسم",cls:"pinned fixed-four"},
+        {label:"الموقع",cls:"pinned fixed-five"},
         ...customColumns.map(col=>({label:col.caption,cls:"roster-custom-cell"}))];
       const currentDay=period===current?now.getDate():null;
       // Always keep real calendar order. A highlighted current day is NOT sticky:
@@ -1304,7 +1305,7 @@
       append(dayNav,earlierDays,el("span","","الأيام "+visibleStart+"–"+visibleEnd+
         " من "+dayCount),laterDays);
       tableHost.appendChild(dayNav);
-      // The first four identity/site columns are sticky at the RIGHT edge.
+      // The first five identity/site columns are sticky at the RIGHT edge.
       // Initial position: today's date immediately LEFT of the last pinned
       // identity/site column, without reordering the chronological dates.
       const revealCurrentDay=()=>{
@@ -1328,9 +1329,9 @@
         window.requestAnimationFrame(revealCurrentDay);
       for(const [index,person] of (grid.items||[]).entries()){
         const tr=el("tr");
-        [(STATE.monthPage-1)*STATE.monthPageSize+index+1,person.serviceNumberA,person.name,person.siteName]
+        [(STATE.monthPage-1)*STATE.monthPageSize+index+1,person.serviceNumberA,person.rank||"—",person.name,person.siteName]
           .forEach((v,j)=>{
-            const td=el("td","pinned fixed-"+["one","two","three","four"][j],v);
+            const td=el("td","pinned fixed-"+["one","two","three","four","five"][j],v);
             td.title=String(v??"");
             tr.appendChild(td);
           });

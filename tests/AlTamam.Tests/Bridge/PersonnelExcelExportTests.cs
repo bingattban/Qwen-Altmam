@@ -225,6 +225,9 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
         {
             Assert.Equal(9,zip.Entries.Count(e=>e.FullName.StartsWith("xl/worksheets/sheet")&&
                 e.FullName.EndsWith(".xml")));
+            for (int sheet=1;sheet<=8;sheet++)
+                Assert.Equal(new[] { "الرقم","الرقم (ع)","الرتبة","الاسم","الموقع" },
+                    Text(Rows(zip,sheet).First()).Take(5));
             var people=Rows(zip,1).Select(Text).ToArray();
             Assert.Equal(4,people.Length);
             Assert.Equal("1",people[1][0]);
@@ -243,14 +246,14 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             });
             Assert.Equal("إجمالي المجموعة",people[3][0]);
             Assert.Equal(canonical["attendanceTotal"]!.GetValue<long>().ToString(
-                System.Globalization.CultureInfo.InvariantCulture), people[3][5]);
-            Assert.Contains("غياب (1)",people[3][9]);
-            Assert.Contains("موجود (1)",people[3][9]);
+                System.Globalization.CultureInfo.InvariantCulture), people[3][7]);
+            Assert.Contains("غياب (1)",people[3][11]);
+            Assert.Contains("موجود (1)",people[3][11]);
             var history=Rows(zip,2).Select(Text).ToArray();
             Assert.Equal(canonical["attendanceTotal"]!.GetValue<long>(), (long)history.Length - 1);
             XNamespace spreadsheet="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
             var dateCell=Rows(zip,2).Skip(1).First()
-                .Elements(spreadsheet+"c").ElementAt(3);
+                .Elements(spreadsheet+"c").ElementAt(5);
             Assert.Equal("n",(string?)dateCell.Attribute("t"));
             Assert.Equal("1",(string?)dateCell.Attribute("s"));
             var dateSerial=double.Parse(dateCell.Element(spreadsheet+"v")!.Value,
@@ -259,8 +262,8 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             Assert.NotNull(zip.GetEntry("xl/styles.xml"));
             Assert.Equal("1",history[1][0]);
             Assert.Equal("2",history[2][0]);
-            Assert.Equal("غياب",history[1][4]);
-            Assert.Equal("موجود",history[2][4]);
+            Assert.Equal("غياب",history[1][6]);
+            Assert.Equal("موجود",history[2][6]);
             var combined=Rows(zip,9).Select(Text).ToArray();
             Assert.Equal(3,combined.Length);
             Assert.Equal("تاريخ التحضير",combined[0][0]);
@@ -274,14 +277,14 @@ public sealed class PersonnelExcelExportTests : IAsyncLifetime,IDisposable
             Assert.All(movements.Skip(1),x=>Assert.Equal("1",x[0]));
             var audits=Rows(zip,4).Select(Text).ToArray();
             Assert.Equal(2,audits.Length);
-            Assert.Equal("""{"name":"الاسم السابق"}""",audits[1][7]);
-            Assert.Equal("""{"name":"الاسم الجديد"}""",audits[1][8]);
+            Assert.Equal("""{"name":"الاسم السابق"}""",audits[1][9]);
+            Assert.Equal("""{"name":"الاسم الجديد"}""",audits[1][10]);
             var revisionRows=Rows(zip,6).Select(Text).ToArray();
             Assert.Equal(2,revisionRows.Length);
             Assert.Equal("1",revisionRows[1][0]);
-            Assert.Equal("تصحيح موثق",revisionRows[1][4]);
-            Assert.Equal("موجود",revisionRows[1][2]);
-            Assert.Equal("غياب",revisionRows[1][3]);
+            Assert.Equal("تصحيح موثق",revisionRows[1][8]);
+            Assert.Equal("موجود",revisionRows[1][6]);
+            Assert.Equal("غياب",revisionRows[1][7]);
             var names=Rows(zip,5).Select(Text).ToArray();
             Assert.Contains(names,x=>x.Contains("=HYPERLINK(\"http://evil.example\")"));
             foreach(var entry in zip.Entries.Where(e=>e.FullName.StartsWith("xl/worksheets/")))
