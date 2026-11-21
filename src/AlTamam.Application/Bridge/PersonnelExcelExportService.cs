@@ -187,7 +187,7 @@ public sealed class PersonnelExcelExportService
             customColumns=await RosterCustomFieldProjection.VisibleAsync(
                 customConn,ct).ConfigureAwait(false);
         var valuesByOrdinal=new Dictionary<string,string[]>(StringComparer.Ordinal);
-        var summary=Start("ملخص التقرير","رقم الفرد في التقرير","الرقم (ع)","الاسم","حالة القيد",
+        var summary=Start("ملخص التقرير","رقم الفرد في التقرير","الرقم (ع)","الرتبة","الاسم","حالة القيد",
             "تاريخ الإدراج","عدد أيام التحضير","عدد الحركات","الفترة من","الفترة إلى",
             "حالات التحضير وأعداد الأيام");
         var daily=Start("التفاصيل التاريخية","رقم الفرد في التقرير","الرقم (ع) التاريخي",
@@ -232,7 +232,7 @@ public sealed class PersonnelExcelExportService
                     valuesByOrdinal[sectionNumber]=customColumns.Select(column=>
                         RosterCustomFieldProjection.Cell(person,column)).ToArray();
                 if(page==1)
-                    summary.Add(sectionNumber,number,name,
+                    summary.Add(sectionNumber,number,Val(person,"rank"),name,
                         Val(person,"active")=="true"?"نشط":"مؤرشف",
                         Val(person,"firstRecordedDate"),Number(data,"attendanceTotal").ToString(CultureInfo.InvariantCulture),
                         Number(data,"movementTotal").ToString(CultureInfo.InvariantCulture),
@@ -376,10 +376,10 @@ public sealed class PersonnelExcelExportService
             throw new ArgumentException("اختر أرشيف النقل الداخلي أو الخارجي.");
         var title=dismissal?"أرشيف الفصل":type=="internal"?"نقل داخلي":"نقل خارجي";
         var sheet=dismissal
-            ? Start(title,"رقم الفرد في التقرير","الرقم (ع)","اسم الفرد",
+            ? Start(title,"الرقم","الرقم (ع)","الرتبة الحالية","الاسم",
                 "الموقع","سبب الفصل","تاريخ الفصل","زمن الاعتماد","منفذ العملية")
-            : Start(title,"رقم الفرد في التقرير","الرقم (ع)","اسم الفرد",
-                "نوع النقل","من موقع","إلى جهة","تاريخ النقل","زمن الاعتماد");
+            : Start(title,"الرقم","الرقم (ع)","الرتبة الحالية","الاسم",
+                "الموقع","نوع النقل","إلى جهة","تاريخ النقل","زمن الاعتماد");
         var svc=new PersonnelMovementService(_db);
         var sep=new PersonnelSeparationService(_db);
         using var customConn=_db.CreateOpenConnection();
@@ -425,11 +425,11 @@ public sealed class PersonnelExcelExportService
                 valuesByOrdinal[section]=customColumns.Select(column=>
                     RosterCustomFieldProjection.Cell(row as JsonObject,column)).ToArray();
                 if(dismissal)
-                    sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
+                    sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","rank","name",
                         "siteName","reason","date","committedAtUtc","actorDisplay")).ToArray());
                 else
-                    sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","name",
-                        "type","sourceSite","destination","date","committedAtUtc")).ToArray());
+                    sheet.Add(new[]{section}.Concat(Record(row,"serviceNumberA","rank","name",
+                        "sourceSite","type","destination","date","committedAtUtc")).ToArray());
             }
             if(!data["hasNext"]!.GetValue<bool>())break;
             if(page>=100000)throw new InvalidDataException("لم يكتمل استعراض صفحات الأرشيف.");

@@ -79,10 +79,10 @@ async function main(){
   const dayCount=new Date(year,month,0).getDate();
   const firstVisible=today.getDate();
   const visibleCount=Math.min(12,dayCount-firstVisible+1);
-  assert.equal(headers.length,4+visibleCount,
-    "four identity columns and only the requested bounded calendar day window");
+  assert.equal(headers.length,5+visibleCount,
+    "five identity columns and only the requested bounded calendar day window");
   for(let index=0;index<visibleCount;index++)
-    assert.equal(Number.parseInt(String(headers[4+index].textContent),10),firstVisible+index,
+    assert.equal(Number.parseInt(String(headers[5+index].textContent),10),firstVisible+index,
       "day cells preserve chronological order inside the visible window");
   assert.ok(viewport.all().some(x=>x.className.includes("monthly-day-window-nav")),
     "other days are reachable without requesting or painting the full month");
