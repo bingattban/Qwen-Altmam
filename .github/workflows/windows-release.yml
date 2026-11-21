@@ -165,8 +165,9 @@ jobs:
           node build/test-table-experience.js
           if ($LASTEXITCODE -ne 0) { throw 'Global tables and search usability regression' }
           node build/test-roster-columns-global.js
-          node build/test-personnel-rank.js
           if ($LASTEXITCODE -ne 0) { throw 'Shared personnel roster columns and Excel propagation regression' }
+          node build/test-personnel-rank.js
+          if ($LASTEXITCODE -ne 0) { throw 'Protected personnel rank column and UI regression' }
           node build/test-personnel-movements.js
           if ($LASTEXITCODE -ne 0) { throw 'Admin/settings navigation regression' }
           node build/test-session-idle.js
