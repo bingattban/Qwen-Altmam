@@ -673,7 +673,8 @@ async function run() {
   assert.ok(form,"single-person form is available");
   const inputs=form.all().filter(x=>x.tag==="input");
   const location=form.all().find(x=>x.tag==="select");
-  assert.equal(inputs.length,2);
+  assert.equal(inputs.length,3,"person admission includes editable rank after service number");
+  assert.ok(inputs[2].maxLength===80,"rank input applies the explicit server-side length limit");
   inputs[0].value="شخص تجريبي راجع";inputs[1].value="4141";
   location.value="SITE-RETURN";
   await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
