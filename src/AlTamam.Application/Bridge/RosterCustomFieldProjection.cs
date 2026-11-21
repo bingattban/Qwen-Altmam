@@ -12,6 +12,7 @@ namespace AlTamam.Application.Bridge;
 /// </summary>
 internal static class RosterCustomFieldProjection
 {
+    internal const string ProtectedRankFieldId = "FLD-SYS-RANK";
     internal sealed record Column(string Id, string Caption, int FieldType, int DisplayOrder);
 
     internal static async Task<IReadOnlyList<Column>> VisibleAsync(
@@ -62,6 +63,7 @@ internal static class RosterCustomFieldProjection
         {
             // Always create an isolated JSON object, even when no field exists.
             record["customFields"] = new JsonObject();
+            record["rank"] = ""; // Existing personnel have an honest, initially blank rank.
             var id = record["personId"]?.GetValue<string>();
             if (string.IsNullOrWhiteSpace(id)) continue;
             if (!persons.TryGetValue(id, out var instances))
@@ -69,7 +71,7 @@ internal static class RosterCustomFieldProjection
             instances.Add(record);
         }
 
-        if (persons.Count == 0 || columns.Count == 0)
+        if (persons.Count == 0)
             return Metadata(columns);
 
         // The UI reads at most 200 people; trusted Excel can request 500.
@@ -78,6 +80,10 @@ internal static class RosterCustomFieldProjection
             throw new InvalidOperationException("The roster projection page exceeds 500 people.");
 
         var allowed = new HashSet<string>(columns.Select(c => c.Id), StringComparer.Ordinal);
+        // The protected rank uses the same indexed values table and one batch query,
+        // while remaining outside user-editable custom column metadata.
+        var projectedIds = columns.Select(c => c.Id).Append(ProtectedRankFieldId)
+            .Distinct(StringComparer.Ordinal).ToArray();
         using var query = connection.CreateCommand();
         var placeholders = new List<string>(persons.Count);
         int index = 0;
@@ -92,19 +98,25 @@ internal static class RosterCustomFieldProjection
             FROM CustomFieldValues
             WHERE PersonId IN (
             """ + string.Join(",", placeholders) + ") AND FieldDefinitionId IN (" +
-            string.Join(",", columns.Select((_,i) => "$field" + i)) + ");";
-        for (int i = 0; i < columns.Count; i++)
-            query.Parameters.AddWithValue("$field" + i, columns[i].Id);
+            string.Join(",", projectedIds.Select((_,i) => "$field" + i)) + ");";
+        for (int i = 0; i < projectedIds.Length; i++)
+            query.Parameters.AddWithValue("$field" + i, projectedIds[i]);
         using var reader = await query.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
             string field = reader.GetString(0);
             string id = reader.GetString(1);
-            if (!allowed.Contains(field) || !persons.TryGetValue(id, out var targets))
-                continue;
+            if (!persons.TryGetValue(id, out var targets)) continue;
             string value = reader.IsDBNull(2) ? "" : reader.GetString(2);
-            foreach (var target in targets)
-                ((JsonObject)target["customFields"]!)[field] = value;
+            if (field == ProtectedRankFieldId)
+            {
+                foreach (var target in targets) target["rank"] = value;
+            }
+            else if (allowed.Contains(field))
+            {
+                foreach (var target in targets)
+                    ((JsonObject)target["customFields"]!)[field] = value;
+            }
         }
         return Metadata(columns);
     }
