@@ -13,6 +13,16 @@ namespace AlTamam.Application.Bridge;
 internal static class RosterCustomFieldProjection
 {
     internal const string ProtectedRankFieldId = "FLD-SYS-RANK";
+
+    // Presentation only: augment a deep-cloned server preview AFTER its one-time
+    // signed token was issued. The rank must never affect the sealed mutation intent.
+    internal static async Task AttachProtectedRankPreviewAsync(
+        SqliteConnection connection, JsonArray previewPersons, CancellationToken ct)
+    {
+        var rows = previewPersons.OfType<JsonObject>().ToArray();
+        await AttachAsync(connection, rows, ct, Array.Empty<Column>()).ConfigureAwait(false);
+        foreach (var row in rows) row.Remove("customFields");
+    }
     internal sealed record Column(string Id, string Caption, int FieldType, int DisplayOrder);
 
     internal static async Task<IReadOnlyList<Column>> VisibleAsync(

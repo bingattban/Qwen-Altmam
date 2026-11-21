@@ -7,6 +7,8 @@
   const body=document.getElementById("appModalBody");
   if(!backdrop||!title||!body)return;
   let current=null;
+  const rank=person=>window.AltamamRosterColumns?.rank?.(person)||
+    String(person?.rank??"").trim()||"—";
   const make=(tag,klass,txt)=>{
     const item=document.createElement(tag);
     if(klass)item.className=klass;
@@ -68,11 +70,11 @@
             const count=Number(data.total)||0;
             const table=make("table","data-table attendance-review-table");
             const head=make("thead"),tr=make("tr");
-            for(const label of ["تحديد","الرقم (ع)","اسم الفرد","الموقع"])
+            for(const label of ["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","تحديد"])
               tr.appendChild(make("th","",label));
             head.appendChild(tr);
             const rows=make("tbody");
-            for(const person of people){
+            for(const [index,person] of people.entries()){
               const line=make("tr"),cell=make("td");
               const checkbox=make("input");checkbox.type="checkbox";
               checkbox.checked=selectedPeople.has(person.personId);
@@ -87,9 +89,11 @@
                 else selectedPeople.delete(person.personId);
                 summary.textContent="المحددون: "+selectedPeople.size+" — اعتمد حالة كل فرد من أمس بعد المعاينة.";
               });
-              cell.appendChild(checkbox);line.appendChild(cell);
-              for(const value of [person.serviceNumberA,person.name,person.siteName])
+              cell.appendChild(checkbox);
+              for(const value of [(page-1)*100+index+1,person.serviceNumberA,
+                rank(person),person.name,person.siteName])
                 line.appendChild(make("td","",value));
+              line.appendChild(cell);
               rows.appendChild(line);
             }
             table.append(head,rows);scrolling.appendChild(table);
@@ -121,15 +125,15 @@
         const scrolling=make("div","attendance-review-scroll");
         const grid=make("table","data-table attendance-review-table");
         const head=make("thead"),header=make("tr");
-        for(const column of ["الرقم (ع)","اسم الفرد","الموقع","الحالة السابقة","الحالة الجديدة"]){
+        for(const column of ["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","الحالة السابقة","الحالة الجديدة"]){
           const th=make("th","",column);th.scope="col";header.appendChild(th);
         }
         head.appendChild(header);
         const rows=make("tbody");
-        for(const person of options.review.persons){
+        for(const [index,person] of options.review.persons.entries()){
           const tr=make("tr");
-          for(const value of [person.serviceNumberA,person.name,person.siteName,
-            person.previousStatusName,person.proposedStatusName||options.review.status])
+          for(const value of [index+1,person.serviceNumberA,rank(person),person.name,
+            person.siteName,person.previousStatusName,person.proposedStatusName||options.review.status])
             tr.appendChild(make("td","",value||"غير محضر"));
           rows.appendChild(tr);
         }
@@ -156,14 +160,14 @@
         const scrolling=make("div","attendance-review-scroll");
         const grid=make("table","data-table attendance-review-table");
         const head=make("thead"),header=make("tr");
-        for(const column of ["الرقم (ع)","اسم الفرد","الموقع المصدر","الجهة المستقبلة","تاريخ الحركة"]){
+        for(const column of ["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","الجهة المستقبلة","تاريخ الحركة"]){
           const th=make("th","",column);th.scope="col";header.appendChild(th);
         }
         head.appendChild(header);
         const rows=make("tbody");
-        for(const person of review.persons){
+        for(const [index,person] of review.persons.entries()){
           const tr=make("tr");
-          for(const value of [person.serviceNumberA,person.name,
+          for(const value of [index+1,person.serviceNumberA,rank(person),person.name,
             person.sourceSiteName,review.destinationName,review.businessDate])
             tr.appendChild(make("td","",value));
           rows.appendChild(tr);

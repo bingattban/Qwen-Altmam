@@ -127,6 +127,8 @@ public sealed class PersonnelMovementService
         string token=BridgePreviewTokens.Issue(_db,_time,Operation(external),actor.UserId,envelope,0,ct);
         var preview=(JsonObject)envelope.DeepClone();
         preview["previewToken"]=token;preview["count"]=ids.Length;
+        await RosterCustomFieldProjection.AttachProtectedRankPreviewAsync(
+            c,(JsonArray)preview["persons"]!,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(preview);
     }
 
