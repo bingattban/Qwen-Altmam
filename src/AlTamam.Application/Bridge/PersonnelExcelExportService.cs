@@ -594,7 +594,7 @@ public sealed class PersonnelExcelExportService
         out string? style)
     {
         serial="";style=null;
-        if(header is ("رقم الفرد في التقرير" or "عدد أيام التحضير" or
+        if(header is ("الرقم" or "رقم الفرد في التقرير" or "عدد أيام التحضير" or
             "عدد الحركات" or "عدد الوقائع" or "عدد الأفراد" or "رقم المراجعة"))
         {
             if(long.TryParse(value,NumberStyles.None,CultureInfo.InvariantCulture,out long count)
