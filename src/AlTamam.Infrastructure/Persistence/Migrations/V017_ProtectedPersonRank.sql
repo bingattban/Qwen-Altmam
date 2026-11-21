@@ -1,4 +1,7 @@
 -- V017: Preserve all existing persons, movement history, audit events and custom values.
+-- Shift custom column ordering only (values remain mapped to stable FieldDefinitionId).
+UPDATE CustomFieldDefinitions SET DisplayOrder=DisplayOrder+1
+WHERE IsSystemProtected=0 AND DisplayOrder>=5;
 -- Introduce rank as one protected fixed system column; rank values are keyed by PersonId
 -- and editable only through the already audited optimistic-concurrency value service.
 UPDATE CustomFieldDefinitions SET DisplayOrder=4
