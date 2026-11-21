@@ -160,7 +160,8 @@ public sealed class RosterColumnStructureService
             using var count=conn.CreateCommand();count.Transaction=tx;
             count.CommandText="""
                 SELECT COUNT(*) FROM CustomFieldDefinitions
-                WHERE IsSystemProtected=0 AND ActiveFlag=1;
+                WHERE IsSystemProtected=0 AND ActiveFlag=1
+                  AND TechnicalKey<>'system_rank' AND ArabicCaption<>'الرتبة';
                 """;
             long active=Convert.ToInt64(await count.ExecuteScalarAsync(ct).ConfigureAwait(false));
             if(active>=64)return Invalid("بلغت الحد الآمن للأعمدة الإضافية (64 عمودًا).");
@@ -202,7 +203,7 @@ public sealed class RosterColumnStructureService
         int type=Int(payload,"fieldType",-1),position=Int(payload,"displayOrder",-1);
         bool visible=Bool(payload,"visible",true);
         if(id.Length is <4 or >128||snapshot.Length!=64||!ValidCaption(caption)||
-           !ValidType(type)||position<5||position>1024)
+           !ValidType(type)||position<6||position>1024)
             return Invalid("راجع بيانات العمود وإصداره وترتيبه قبل الحفظ.");
         if(string.IsNullOrWhiteSpace(Read(payload,"operationId")))
             return Invalid("معرّف تعديل العمود مطلوب.");
@@ -222,9 +223,10 @@ public sealed class RosterColumnStructureService
             using var total=conn.CreateCommand();total.Transaction=tx;
             total.CommandText="""
                 SELECT COUNT(*) FROM CustomFieldDefinitions
-                WHERE ActiveFlag=1 AND IsSystemProtected=0;
+                WHERE ActiveFlag=1 AND IsSystemProtected=0
+                  AND TechnicalKey<>'system_rank' AND ArabicCaption<>'الرتبة';
                 """;
-            int maxPosition=Convert.ToInt32(await total.ExecuteScalarAsync(ct).ConfigureAwait(false))+4;
+            int maxPosition=Convert.ToInt32(await total.ExecuteScalarAsync(ct).ConfigureAwait(false))+5;
             if(position>maxPosition)
                 return Invalid("موضع العمود يتجاوز عدد الأعمدة المتاحة.");
             if(previous.Caption==caption && previous.Type==type &&
@@ -253,6 +255,7 @@ public sealed class RosterColumnStructureService
                     reorder.CommandText="""
                         UPDATE CustomFieldDefinitions SET DisplayOrder=DisplayOrder+1
                         WHERE ActiveFlag=1 AND IsSystemProtected=0
+                          AND TechnicalKey<>'system_rank' AND ArabicCaption<>'الرتبة'
                           AND FieldDefinitionId<>$id
                           AND DisplayOrder >= $position AND DisplayOrder < $old;
                         """;
@@ -262,6 +265,7 @@ public sealed class RosterColumnStructureService
                     reorder.CommandText="""
                         UPDATE CustomFieldDefinitions SET DisplayOrder=DisplayOrder-1
                         WHERE ActiveFlag=1 AND IsSystemProtected=0
+                          AND TechnicalKey<>'system_rank' AND ArabicCaption<>'الرتبة'
                           AND FieldDefinitionId<>$id
                           AND DisplayOrder <= $position AND DisplayOrder > $old;
                         """;
@@ -322,7 +326,9 @@ public sealed class RosterColumnStructureService
                 UPDATE CustomFieldDefinitions SET ActiveFlag=0,VisibleFlag=0
                 WHERE FieldDefinitionId=$id AND ActiveFlag=1 AND IsSystemProtected=0;
                 UPDATE CustomFieldDefinitions SET DisplayOrder=DisplayOrder-1
-                WHERE ActiveFlag=1 AND IsSystemProtected=0 AND DisplayOrder>$old;
+                WHERE ActiveFlag=1 AND IsSystemProtected=0
+                  AND TechnicalKey<>'system_rank' AND ArabicCaption<>'الرتبة'
+                  AND DisplayOrder>$old;
                 """;
             cmd.Parameters.AddWithValue("$id",id);
             cmd.Parameters.AddWithValue("$old",previous.Order);
