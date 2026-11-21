@@ -172,11 +172,11 @@ public sealed class PersonnelExcelExportService
         IReadOnlyDictionary<string,PersonExportIdentity> identitiesByOrdinal)
     {
         var header = sheet.Rows[0];
-        int serviceIndex = Array.FindIndex(header,h=>h.StartsWith("الرقم (ع)",StringComparison.Ordinal));
-        int nameIndex = Array.FindIndex(header,h=>h is "الاسم" or "اسم الفرد" or "الاسم التاريخي");
-        int siteIndex = Array.FindIndex(header,h=>h is "الموقع" or "الموقع المسجل" or "الموقع السابق" or "من موقع");
-        int mixedIndex = Array.FindIndex(header,h=>h=="الاسم / الموقع");
-        int kindIndex = Array.FindIndex(header,h=>h=="نوع الفترة");
+        int serviceIndex = System.Array.FindIndex(header,h=>h.StartsWith("الرقم (ع)",StringComparison.Ordinal));
+        int nameIndex = System.Array.FindIndex(header,h=>h is "الاسم" or "اسم الفرد" or "الاسم التاريخي");
+        int siteIndex = System.Array.FindIndex(header,h=>h is "الموقع" or "الموقع المسجل" or "الموقع السابق" or "من موقع");
+        int mixedIndex = System.Array.FindIndex(header,h=>h=="الاسم / الموقع");
+        int kindIndex = System.Array.FindIndex(header,h=>h=="نوع الفترة");
         int rankIndex = -1;
         for (int i=0;i<columns.Count;i++)
             if (columns[i].Caption=="الرتبة") { rankIndex=i; break; }
@@ -195,7 +195,7 @@ public sealed class PersonnelExcelExportService
             var ordinal=At(row,0);
             identitiesByOrdinal.TryGetValue(ordinal,out var identity);
             var values=valuesByOrdinal.TryGetValue(ordinal,out var saved)
-                ? saved : Array.Empty<string>();
+                ? saved : System.Array.Empty<string>();
             string rank=rankIndex>=0&&rankIndex<values.Length?values[rankIndex]:"";
             string number=At(row,serviceIndex);
             if(number.Length==0)number=identity?.ServiceNumber??"";
