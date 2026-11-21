@@ -188,6 +188,10 @@ public sealed class PersonRosterService
     {
         string visibleName = ReadRequiredString(payload, "visibleName").Trim();
         string serviceNumber = ReadRequiredString(payload, "serviceNumberA").Trim();
+        string rank = ReadString(payload, "rank").Trim();
+        if(rank.Length>80 || rank.Any(char.IsControl))
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "الرتبة يجب ألا تتجاوز 80 حرفاً أو تحتوي محارف تحكم.");
         string firstRecorded = ReadString(payload, "firstRecordedLocalDate");
         string effectiveDate = string.IsNullOrWhiteSpace(firstRecorded) ? Today() : firstRecorded;
         if (!IsValidIsoDate(effectiveDate))
@@ -365,6 +369,36 @@ public sealed class PersonRosterService
             insert.Parameters.Add("$now", SqliteType.Text).Value = nowUtc.ToString("O");
             await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
+            // The rank is part of initial admission. Store it atomically under
+            // the same immutable field ID used by audited edits and Excel imports.
+            if(rank.Length>0)
+            {
+                using var findRank=connection.CreateCommand();
+                findRank.Transaction=tx;
+                findRank.CommandText="""
+                    SELECT FieldDefinitionId FROM CustomFieldDefinitions
+                    WHERE ArabicCaption='الرتبة' AND ActiveFlag=1 AND VisibleFlag=1
+                    ORDER BY CASE WHEN TechnicalKey='system_rank' THEN 0 ELSE 1 END,
+                             FieldDefinitionId LIMIT 1;
+                    """;
+                string? rankColumnId=await findRank.ExecuteScalarAsync(ct)
+                    .ConfigureAwait(false) as string;
+                if(rankColumnId is null)
+                    return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                        "تعريف عمود الرتبة غير متوفر؛ أعد تشغيل البرنامج لتطبيق الترحيل.");
+                using var saveRank=connection.CreateCommand();
+                saveRank.Transaction=tx;
+                saveRank.CommandText="""
+                    INSERT INTO CustomFieldValues(PersonId,FieldDefinitionId,
+                        FieldValueText,UpdatedAtUtc) VALUES($person,$field,$value,$now);
+                    """;
+                saveRank.Parameters.AddWithValue("$person",personId);
+                saveRank.Parameters.AddWithValue("$field",rankColumnId);
+                saveRank.Parameters.AddWithValue("$value",rank);
+                saveRank.Parameters.AddWithValue("$now",nowUtc.ToString("O"));
+                await saveRank.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+
             using var snapshot = connection.CreateCommand();
             snapshot.Transaction = tx;
             snapshot.CommandText = """
@@ -400,7 +434,7 @@ public sealed class PersonRosterService
                 actorUserId: userId, actorUsername: username, actorDisplayName: visibleName,
                 targetEntityType: "Person", targetEntityId: personId, targetDisplay: $"{visibleName} ({serviceNumber})",
                 oldValueJson: null, newValueJson: new JsonObject { ["personId"] = personId, ["name"] = visibleName,
-                    ["serviceNumberA"] = serviceNumber,
+                    ["serviceNumberA"] = serviceNumber, ["rank"] = rank,
                     ["independentFromArchivedIdentity"] = matches.Count>0,
                     ["reusedDismissedNumber"] = replaceDismissed }.ToJsonString(),
                 description: $"أُنشئ سجل الفرد «{visibleName}» بالمعرف الثابت {personId}.",
