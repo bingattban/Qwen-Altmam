@@ -114,7 +114,7 @@ public sealed class AutomaticMonthlyExcelTests : IAsyncLifetime, IDisposable
             ExcelLayoutAssertions.Verify(workbook,3);
         Assert.Equal(2,Directory.GetFiles(monthRoot,"*.xlsx",SearchOption.AllDirectories).Length);
         string[] first=ReadStrings(combined);
-        foreach(var expected in new[]{"م","الرقم (ع)","الاسم","الموقع",
+        foreach(var expected in new[]{"الرقم","الرقم (ع)","الرتبة","الاسم","الموقع",
             "المؤهل العلمي","فرد الجدولة","90887","بكالوريوس"})
             Assert.Contains(expected,first);
         Assert.False(await svc.RunIfDueAsync()); // repeated scheduler tick has no side effects

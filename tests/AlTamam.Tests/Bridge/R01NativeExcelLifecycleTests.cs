@@ -223,11 +223,11 @@ public sealed class R01NativeExcelLifecycleTests : IAsyncLifetime, IDisposable
                 Assert.Equal("الاسم التاريخي المحفوظ", Text(known["days"]!["2026-10-19"]!["personName"]));
             }
             var rows = Sheet(path, "التمام الشهري");
-            Assert.Equal(new[] { "م", "الرقم (ع)", "الاسم", "الموقع" }, rows[2].Take(4));
+            Assert.Equal(new[] { "الرقم", "الرقم (ع)", "الرتبة", "الاسم", "الموقع" }, rows[2].Take(5));
             Assert.Equal(all.Count + 3, rows.Count);
             for (int i = 0; i < all.Count; i++)
             {
-                var expected = new List<string> { (i + 1).ToString(), Text(all[i]["serviceNumberA"]), Text(all[i]["name"]), Text(all[i]["siteName"]) };
+                var expected = new List<string> { (i + 1).ToString(), Text(all[i]["serviceNumberA"]), Text(all[i]["rank"]), Text(all[i]["name"]), Text(all[i]["siteName"]) };
                 for (int d = 1; d <= 31; d++) expected.Add(Text(all[i]["days"]![$"2026-10-{d:D2}"]?["name"]));
                 Assert.Equal(expected, rows[i + 3]);
             }
