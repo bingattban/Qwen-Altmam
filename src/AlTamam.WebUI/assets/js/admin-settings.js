@@ -986,17 +986,21 @@
           personId:selectedPerson.personId,
           personName:reportData.person?.name||selectedPerson.displayName||"",
           serviceNumberA:reportData.person?.serviceNumberA||selectedPerson.serviceNumberA||"",
+          rank:reportData.person?.rank||selectedPerson.rank||"",
+          siteName:selectedPerson.siteName||"غير محدد",
           dateFrom:fromVal,
           dateTo:toVal,
           days:dayEntries
         };
-        const columns=["الرقم","الرقم (ع)","اسم الفرد",...dates];
+        const columns=["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع",...dates];
         const grid=table(columns);
         const tr=node("tr");
         tr.append(
           node("td","","1"),
           node("td","",currentRangeData.serviceNumberA),
-          node("td","",currentRangeData.personName)
+          node("td","",window.AltamamRosterColumns?.rank(currentRangeData)||"—"),
+          node("td","",currentRangeData.personName),
+          node("td","",currentRangeData.siteName)
         );
         for(const entry of dayEntries){
           const cell=node("td","historical-day-box",entry.statusName);
@@ -1689,7 +1693,9 @@
     const toggle=node("summary","btn btn-primary","إضافة فرد");
     const creationFields=node("div","admin-site-form");
     const nameField=field("الاسم الكامل"),
-      numberField=field("الرقم (ع) — أربع خانات فأكثر");
+      numberField=field("الرقم (ع) — أربع خانات فأكثر"),
+      rankField=field("الرتبة (اختياري)");
+    rankField.input.maxLength=80;
     const selectSite=node("select","form-control");
     selectSite.setAttribute("aria-label","الموقع المسجل");
     const fallback=node("option","","غير محدد");
@@ -1724,20 +1730,22 @@
     let lastPersonPayload=null,lastPersonOperation=null;
     const saveNew=btn("تأكيد وإضافة الفرد",async()=>{
       const name=nameField.input.value.trim(),number=numberField.input.value.trim(),
-        siteId=siteField.input.value||"SITE-UNSPECIFIED",
+        rank=rankField.input.value.trim(),siteId=siteField.input.value||"SITE-UNSPECIFIED",
         siteName=Array.from(selectSite.children).find(option=>option.value===siteId)?.textContent||"غير محدد";
       if(name.length<3 || !/^[0-9٠-٩۰-۹]{4,70}$/.test(number) || !siteId)
         return errors(addMessage,new Error("أدخل الاسم والرقم (ع) بأربع خانات رقمية على الأقل والموقع."));
+      if(rank.length>80||/[\x00-\x1f\x7f]/.test(rank))
+        return errors(addMessage,new Error("الرتبة يجب أن تكون نصا حتى 80 حرفا."));
       const canonicalNumber=number.replace(/[٠-٩۰-۹]/g,c=>
         String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0)));
       const identityKey=()=>JSON.stringify([nameField.input.value.trim(),
         numberField.input.value.trim().replace(/[٠-٩۰-۹]/g,c=>
           String.fromCharCode(48+c.charCodeAt(0)-(c<="٩"?0x0660:0x06F0))),
-        siteField.input.value||"SITE-UNSPECIFIED"]);
-      const proposed=JSON.stringify([name,canonicalNumber,siteId]);
+        rankField.input.value.trim(),siteField.input.value||"SITE-UNSPECIFIED"]);
+      const proposed=JSON.stringify([name,canonicalNumber,rank,siteId]);
       const unchanged=()=>identityKey()===proposed;
       const resetForm=async(message)=>{
-        nameField.input.value="";numberField.input.value="";
+        nameField.input.value="";numberField.input.value="";rankField.input.value="";
         selectSite.value="SITE-UNSPECIFIED";
         lastPersonPayload=null;lastPersonOperation=null;
         addMessage.replaceChildren(node("p","settings-success",message));
@@ -1759,7 +1767,7 @@
             lastPersonPayload=createKey;lastPersonOperation=makeOperationId();
           }
           const response=await api().invoke("CreatePerson",{visibleName:name,
-            serviceNumberA:canonicalNumber,siteId,operationId:lastPersonOperation});
+            serviceNumberA:canonicalNumber,rank,siteId,operationId:lastPersonOperation});
           if(!response.data?.personId)throw Error("لم يتم تأكيد إنشاء السجل.");
           await resetForm("تمت إضافة الفرد بنجاح. رقم (ع): "+canonicalNumber+" — الموقع: "+siteName);
           return;
@@ -1814,7 +1822,7 @@
               "وستبقى الأدلة القديمة محفوظة في الأرشيف دون نسبتها إليه.");
             if(!confirmed)return;
             const response=await api().invoke("CreatePerson",{
-              visibleName:name,serviceNumberA:canonicalNumber,siteId,
+              visibleName:name,serviceNumberA:canonicalNumber,rank,siteId,
               identityResolutionToken:scanned.previewToken,
               identityDecision:"replaceDismissed",dismissedPersonId:former.personId,
               operationId:makeOperationId()
@@ -1832,7 +1840,7 @@
             if(!await dialogs.confirm("تأكيد نهائي: «"+name+"» شخص مختلف عن جميع الهويات المؤرشفة التالية: "+
               detail+". إنشاء هوية جديدة مستقلة بهذا الرقم المختلف؟"))return;
             const response=await api().invoke("CreatePerson",{
-              visibleName:name,serviceNumberA:canonicalNumber,siteId,
+              visibleName:name,serviceNumberA:canonicalNumber,rank,siteId,
               identityResolutionToken:scanned.previewToken,identityDecision:"different",
               operationId:makeOperationId()
             });
@@ -1846,11 +1854,11 @@
       }catch(e){errors(addMessage,e);}
       finally{saveNew.disabled=false;}
     },"btn btn-primary");
-    creationFields.append(nameField.wrap,numberField.wrap,siteField.wrap);
+    creationFields.append(nameField.wrap,numberField.wrap,rankField.wrap,siteField.wrap);
     const cancelCreation=btn("إلغاء",async()=>{
-      if((nameField.input.value.trim()||numberField.input.value.trim()) &&
+      if((nameField.input.value.trim()||numberField.input.value.trim()||rankField.input.value.trim()) &&
         !await dialogs.confirm("إلغاء بيانات الفرد قبل الحفظ؟"))return;
-      nameField.input.value="";numberField.input.value="";
+      nameField.input.value="";numberField.input.value="";rankField.input.value="";
       selectSite.value="SITE-UNSPECIFIED";
       creation.open=false;
       addMessage.replaceChildren();
@@ -1921,10 +1929,13 @@
         const customColumns=window.AltamamRosterColumns?.columns(data)||[];
         const customHeadings=window.AltamamRosterColumns?.headings(customColumns)||[];
         const t=table(canRemove
-          ?["تحديد","الرقم (ع)","الاسم","الموقع",...customHeadings,"إجراء"]
-          :["الرقم (ع)","الاسم","الموقع",...customHeadings,"إجراء"]);
-        for(const person of data.items||[]){
+          ?["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","تحديد",...customHeadings,"إجراء"]
+          :["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع",...customHeadings,"إجراء"]);
+        for(const [index,person] of (data.items||[]).entries()){
           const row=node("tr");
+          for(const value of [(state.page-1)*100+index+1,person.serviceNumberA,
+            window.AltamamRosterColumns?.rank(person)||"—",person.displayName,person.siteName])
+            row.appendChild(node("td","",value));
           if(canRemove){
             const cell=node("td"),check=node("input");
             check.type="checkbox";check.checked=selectedRemoval.has(person.personId);
@@ -1942,15 +1953,12 @@
             });
             cell.appendChild(check);row.appendChild(cell);
           }
-          for(const value of [person.serviceNumberA,person.displayName,person.siteName])
-            row.appendChild(node("td","",value));
           for(const value of window.AltamamRosterColumns?.values(person,customColumns)||[])
             row.appendChild(node("td","roster-custom-cell",value||"—"));
           const actions=node("td","admin-row-buttons");
           actions.appendChild(btn("تعديل الاسم والرقم",()=>editPerson(person)));
-          if(customColumns.length)
-            actions.appendChild(btn("تعديل بيانات الأعمدة",
-              ()=>editCustomValues(person,customColumns)));
+          actions.appendChild(btn("تعديل الرتبة والبيانات",
+            ()=>editCustomValues(person,customColumns)));
           // The native manifest independently restricts ArchivePersons to
           // GeneralAdministration / OrdinaryAdministration. Never show this
           // destructive roster-membership operation to Supervisors.
@@ -1958,7 +1966,7 @@
             actions.appendChild(btn("إزالة من القوة",()=>archivePerson(person)));
           row.appendChild(actions);t.body.appendChild(row);
         }
-        empty(t.body,(canRemove?5:4)+customColumns.length,"لا توجد أسماء مطابقة.");
+        empty(t.body,(canRemove?7:6)+customColumns.length,"لا توجد أسماء مطابقة.");
         const pager=node("div","functional-pager");
         const prev=btn("السابق",()=>{state.page--;load();}),next=btn("التالي",()=>{state.page++;load();});
         prev.disabled=state.page<=1;next.disabled=!data.hasNext;
@@ -2071,24 +2079,27 @@
         await dialogs.alert("نموذج تعديل الأعمدة أو نافذة التأكيد غير متاحة.");
         return;
       }
-      const fields=columns.map(col=>({
+      const editingColumns=[{columnId:"FLD-SYS-RANK",caption:"الرتبة",fieldType:1},...columns];
+      const currentValue=col=>col.columnId==="FLD-SYS-RANK"
+        ?person.rank:person.customFields?.[col.columnId];
+      const fields=editingColumns.map(col=>({
         name:col.columnId,label:col.caption+
           (col.fieldType===2?" (رقم)":col.fieldType===3?" (YYYY-MM-DD)":
             col.fieldType===4?" (نعم أو لا)":""),
-        type:"text",value:String(person.customFields?.[col.columnId]??""),
-        required:false,maxLength:250
+        type:"text",value:String(currentValue(col)??""),
+        required:false,maxLength:col.columnId==="FLD-SYS-RANK"?80:250
       }));
-      const values=await showForm(fields,{title:"تعديل بيانات الأعمدة الإضافية",
+      const values=await showForm(fields,{title:"تعديل الرتبة والأعمدة الإضافية",
         confirmLabel:"معاينة القيم",size:"lg"});
       if(values===null)return;
-      const modified=columns.filter(col=>
-        String(person.customFields?.[col.columnId]??"")!==String(values[col.columnId]??"").trim());
+      const modified=editingColumns.filter(col=>
+        String(currentValue(col)??"")!==String(values[col.columnId]??"").trim());
       if(!modified.length){
         await dialogs.alert("لم تتغير أي قيمة؛ لا توجد تعديلات لحفظها.");
         return;
       }
       const details=modified.map(col=>[col.caption,
-        String(person.customFields?.[col.columnId]??"")||"—",
+        String(currentValue(col)??"")||"—",
         String(values[col.columnId]??"").trim()||"—"]);
       const approved=await review({
         rows:[["الفرد",person.displayName],["الرقم (ع)",person.serviceNumberA],
