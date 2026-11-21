@@ -1389,10 +1389,10 @@ async function run() {
   const rangeTable=rangeCard.all().find(x=>x.tag==="table");
   assert.ok(rangeTable,"table rendered below search");
   const rangeHeaders=rangeTable.children[0].children[0].children.map(x=>x.textContent);
-  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","اسم الفرد","2026-10-08","2026-10-09","2026-10-10"],
+  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","الرتبة","اسم الفرد","الموقع","2026-10-08","2026-10-09","2026-10-10"],
     "table columns match الرقم, الرقم (ع), اسم الفرد and the selected days");
   const rangeCells=rangeTable.children[1].children[0].children.map(x=>x.textContent);
-  assert.deepEqual(rangeCells,["1","C-1","اختبار","موجود","إجازة","غياب"],
+  assert.deepEqual(rangeCells,["1","C-1","—","اختبار","—","موجود","إجازة","غياب"],
     "table row displays sequence, serviceNumberA, person name, and each day's status box");
   assert.equal(changeBtn.disabled,false,"change status button enabled after search");
   changeBtn.handlers.click();
