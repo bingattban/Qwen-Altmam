@@ -175,7 +175,7 @@ public sealed class PersonnelExcelExportService
         var others=columns.Select((c,i)=>(Column:c,Index:i))
             .Where(x=>x.Index!=rankIndex).ToArray();
         var header=sheet.Rows[0];
-        int serviceIndex=Array.FindIndex(header,h=>h.StartsWith("الرقم (ع)",StringComparison.Ordinal));
+        int serviceIndex=System.Array.FindIndex(header,h=>h.StartsWith("الرقم (ع)",StringComparison.Ordinal));
         int insertion=Math.Max(1,serviceIndex+1);
         sheet.Rows[0]=header.Take(insertion).Concat(new[]{"الرتبة"})
             .Concat(header.Skip(insertion)).Concat(others.Select(x=>x.Column.Caption)).ToArray();
