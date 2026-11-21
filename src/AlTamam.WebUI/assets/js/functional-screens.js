@@ -1331,7 +1331,7 @@
         const tr=el("tr");
         [(STATE.monthPage-1)*STATE.monthPageSize+index+1,person.serviceNumberA,person.rank||"—",person.name,person.siteName]
           .forEach((v,j)=>{
-            const td=el("td","pinned fixed-"+["one","two","three","four"][j],v);
+            const td=el("td","pinned fixed-"+["one","two","three","four","five"][j],v);
             td.title=String(v??"");
             tr.appendChild(td);
           });

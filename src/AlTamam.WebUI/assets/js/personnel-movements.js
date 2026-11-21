@@ -240,7 +240,7 @@ async function archive(host,mode){
        }));
        tr.appendChild(cell);
      }
-     if(!t.body.children.length){const tr=row(t.body,["لا توجد حركات مطابقة"]);tr.children[0].colSpan=7+customColumns.length;}
+     if(!t.body.children.length){const tr=row(t.body,["لا توجد حركات مطابقة"]);tr.children[0].colSpan=9+customColumns.length;}
      const pager=el("div",undefined,"functional-pager"),prev=btn("السابق",()=>{page--;load();}),next=btn("التالي",()=>{page++;load();});
      prev.disabled=page<=1;next.disabled=!data.hasNext;
      pager.append(el("span","إجمالي الحركات: "+(data.total||0)),prev,next);
