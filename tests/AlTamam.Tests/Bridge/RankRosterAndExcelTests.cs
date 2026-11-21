@@ -153,7 +153,7 @@ public sealed class RankRosterAndExcelTests : IAsyncLifetime, IDisposable
         string[] headers = ExcelRow(file, 1, 2);
         Assert.Equal(new[] { "م", "الرقم (ع)", "الرتبة", "الاسم", "الموقع" },
             headers.Take(5));
-        Assert.Single(headers.Where(h => h == "الرتبة"));
+        Assert.Single(headers, h => h == "الرتبة");
         string[] person = ExcelRow(file, 1, 3);
         Assert.Equal("98451", person[1]);
         Assert.Equal("ملازم", person[2]);
