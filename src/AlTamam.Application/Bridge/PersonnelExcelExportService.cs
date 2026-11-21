@@ -167,14 +167,27 @@ public sealed class PersonnelExcelExportService
         IReadOnlyList<RosterCustomFieldProjection.Column> columns,
         IReadOnlyDictionary<string,string[]> valuesByOrdinal)
     {
-        if(columns.Count == 0)return;
-        sheet.Rows[0]=sheet.Rows[0].Concat(columns.Select(c=>c.Caption)).ToArray();
+        // Rank is a fixed field after service number, not a trailing custom column.
+        // Values are keyed by workbook-local ordinal (never the reusable service number).
+        int rankIndex=-1;
+        for(int i=0;i<columns.Count;i++)
+            if(columns[i].Caption=="الرتبة"){rankIndex=i;break;}
+        var others=columns.Select((c,i)=>(Column:c,Index:i))
+            .Where(x=>x.Index!=rankIndex).ToArray();
+        var header=sheet.Rows[0];
+        int serviceIndex=Array.FindIndex(header,h=>h.StartsWith("الرقم (ع)",StringComparison.Ordinal));
+        int insertion=Math.Max(1,serviceIndex+1);
+        sheet.Rows[0]=header.Take(insertion).Concat(new[]{"الرتبة"})
+            .Concat(header.Skip(insertion)).Concat(others.Select(x=>x.Column.Caption)).ToArray();
         for(int i=1;i<sheet.Rows.Count;i++)
         {
             string[] row=sheet.Rows[i];
-            var values=row.Length>0&&valuesByOrdinal.TryGetValue(row[0],out var stored)
+            string[] values=row.Length>0&&valuesByOrdinal.TryGetValue(row[0],out var stored)
                 ? stored : Enumerable.Repeat("",columns.Count).ToArray();
-            sheet.Rows[i]=row.Concat(values).ToArray();
+            string rank=rankIndex<0||rankIndex>=values.Length?"":values[rankIndex];
+            sheet.Rows[i]=row.Take(insertion).Concat(new[]{rank})
+                .Concat(row.Skip(insertion)).Concat(others.Select(x=>
+                    x.Index<values.Length?values[x.Index]:"")).ToArray();
         }
     }
 

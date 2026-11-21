@@ -229,16 +229,18 @@ public sealed class MonthlyExcelExportService
                 writer.WriteAttributeString("workbookViewId", "0");
                 writer.WriteAttributeString("rightToLeft", "1");
                 writer.WriteStartElement("pane", SpreadsheetNs);
-                writer.WriteAttributeString("xSplit", "4");
+                writer.WriteAttributeString("xSplit", "5");
                 writer.WriteAttributeString("ySplit", "3");
-                writer.WriteAttributeString("topLeftCell", "E4");
+                writer.WriteAttributeString("topLeftCell", "F4");
                 writer.WriteAttributeString("activePane", "bottomRight");
                 writer.WriteAttributeString("state", "frozen");
                 writer.WriteEndElement();
                 writer.WriteEndElement();
                 writer.WriteEndElement();
-                var headings = new List<string> { "م", "الرقم (ع)", "الاسم", "الموقع" };
-                headings.AddRange(customColumns.Select(column => column.Caption));
+                var rankColumn = customColumns.FirstOrDefault(column => column.Caption == "الرتبة");
+                var additionalColumns = customColumns.Where(column => column.Caption != "الرتبة").ToArray();
+                var headings = new List<string> { "م", "الرقم (ع)", "الرتبة", "الاسم", "الموقع" };
+                headings.AddRange(additionalColumns.Select(column => column.Caption));
                 for (int d = 1; d <= days; d++) headings.Add(d.ToString("00", CultureInfo.InvariantCulture));
                 ExcelReportLayout.Columns(writer,headings);
                 writer.WriteStartElement("sheetData", SpreadsheetNs);
@@ -267,10 +269,11 @@ public sealed class MonthlyExcelExportService
                         {
                             rowNumber.ToString(CultureInfo.InvariantCulture),
                             person["serviceNumberA"]?.GetValue<string>() ?? "",
+                            rankColumn is null ? "" : RosterCustomFieldProjection.Cell(person,rankColumn),
                             person["name"]?.GetValue<string>() ?? "",
                             person["siteName"]?.GetValue<string>() ?? ""
                         };
-                        foreach (var custom in customColumns)
+                        foreach (var custom in additionalColumns)
                             cols.Add(RosterCustomFieldProjection.Cell(person,custom));
                         var entries = (JsonObject)person["days"]!;
                         for (int d = 1; d <= days; d++)
