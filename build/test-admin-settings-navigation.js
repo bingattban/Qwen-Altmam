@@ -1388,11 +1388,14 @@ async function run() {
   const rangeTable=rangeCard.all().find(x=>x.tag==="table");
   assert.ok(rangeTable,"table rendered below search");
   const rangeHeaders=rangeTable.children[0].children[0].children.map(x=>x.textContent);
-  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","اسم الفرد","2026-10-08","2026-10-09","2026-10-10"],
-    "table columns match الرقم, الرقم (ع), اسم الفرد and the selected days");
+  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع",
+    "2026-10-08","2026-10-09","2026-10-10"],
+    "rank and site must follow the fixed first five fields before dated status cells");
   const rangeCells=rangeTable.children[1].children[0].children.map(x=>x.textContent);
-  assert.deepEqual(rangeCells,["1","C-1","اختبار","موجود","إجازة","غياب"],
-    "table row displays sequence, serviceNumberA, person name, and each day's status box");
+  assert.equal(rangeCells.length,8);
+  assert.deepEqual(rangeCells.slice(0,4),["1","C-1","—","اختبار"]);
+  assert.deepEqual(rangeCells.slice(-3),["موجود","إجازة","غياب"],
+    "day values must retain their chronological order after adding rank");
   assert.equal(changeBtn.disabled,false,"change status button enabled after search");
   changeBtn.handlers.click();
   await new Promise(resolve=>setImmediate(resolve));
