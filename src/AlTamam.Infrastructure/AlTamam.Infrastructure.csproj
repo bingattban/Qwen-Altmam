@@ -21,5 +21,6 @@
     <EmbeddedResource Include="Persistence/Migrations/V014_AttendanceDateRanges.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V015_SameDayFirstAssignmentTransfer.sql" />
     <EmbeddedResource Include="Persistence/Migrations/V016_SameDaySeparationAndIdentity.sql" />
+    <EmbeddedResource Include="Persistence/Migrations/V017_RequiredPersonnelRank.sql" />
   </ItemGroup>
 </Project>
