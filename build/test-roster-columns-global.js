@@ -75,3 +75,6 @@ assert.match(backend,/\["personId"\]/);
 assert.doesNotMatch(backend,/UPDATE CustomFieldValues|DELETE FROM CustomFieldValues/,
   "Read-only global propagation may not rewrite historical/person fields");
 console.log("GLOBAL ROSTER COLUMNS PASS: shared ColumnId semantics, all person screens, native Excel exporters, hidden-field guards");
+
+// Mandatory cross-screen core-rank regression.
+require("./test-personnel-rank.js");
