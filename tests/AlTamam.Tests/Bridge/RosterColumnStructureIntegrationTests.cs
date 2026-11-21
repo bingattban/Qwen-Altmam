@@ -66,7 +66,7 @@ public sealed class RosterColumnStructureIntegrationTests : IAsyncLifetime, IDis
     {
         var svc=new RosterColumnStructureService(_db);
         var initial=await Items(svc);
-        Assert.Equal(4,initial.Length);
+        Assert.Equal(5,initial.Length);
         Assert.All(initial,x=>Assert.True(x["isSystemProtected"]!.GetValue<bool>()));
         var first=await svc.CreateAsync(Create("رقم آخر",1,"layout-create-first-20261026"),
             Actor,default);
@@ -83,17 +83,17 @@ public sealed class RosterColumnStructureIntegrationTests : IAsyncLifetime, IDis
         var a=Assert.IsType<JsonObject>(first.Data);
         var b=Assert.IsType<JsonObject>(second.Data);
         Assert.StartsWith("FLD-",Id(a));
-        Assert.Equal(5,a["displayOrder"]!.GetValue<int>());
-        Assert.Equal(6,b["displayOrder"]!.GetValue<int>());
+        Assert.Equal(6,a["displayOrder"]!.GetValue<int>());
+        Assert.Equal(7,b["displayOrder"]!.GetValue<int>());
         string key=b["technicalKey"]!.GetValue<string>();
-        var move=await svc.UpdateAsync(Update(b,position:5),Actor,default);
+        var move=await svc.UpdateAsync(Update(b,position:6),Actor,default);
         Assert.True(move.Success,move.UserMessage);
         var rows=await Items(svc);
-        Assert.Equal(6,rows.Length);
+        Assert.Equal(7,rows.Length);
         var original=rows.Single(x=>Id(x)==Id(a));
         var moved=rows.Single(x=>Id(x)==Id(b));
-        Assert.Equal(6,original["displayOrder"]!.GetValue<int>());
-        Assert.Equal(5,moved["displayOrder"]!.GetValue<int>());
+        Assert.Equal(7,original["displayOrder"]!.GetValue<int>());
+        Assert.Equal(6,moved["displayOrder"]!.GetValue<int>());
         Assert.Equal(key,moved["technicalKey"]!.GetValue<string>());
         var rename=await svc.UpdateAsync(Update(moved,caption:"تاريخ الالتحاق الجديد",
             visible:false),Actor,default);

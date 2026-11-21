@@ -188,6 +188,10 @@ public sealed class PersonRosterService
     {
         string visibleName = ReadRequiredString(payload, "visibleName").Trim();
         string serviceNumber = ReadRequiredString(payload, "serviceNumberA").Trim();
+        string rank = ReadString(payload, "rank").Trim();
+        if (!RosterCustomFieldValueService.TryCanonicalize(rank, 1, out rank) || rank.Length > 80)
+            return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
+                "الرتبة يجب أن تكون نصا حتى 80 حرفا دون محارف تحكم.");
         string firstRecorded = ReadString(payload, "firstRecordedLocalDate");
         string effectiveDate = string.IsNullOrWhiteSpace(firstRecorded) ? Today() : firstRecorded;
         if (!IsValidIsoDate(effectiveDate))
@@ -379,6 +383,19 @@ public sealed class PersonRosterService
             snapshot.Parameters.Add("$user", SqliteType.Text).Value = userId;
             snapshot.Parameters.Add("$now", SqliteType.Text).Value = nowUtc.ToString("O");
             await snapshot.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            if (rank.Length > 0)
+            {
+                using var rankInsert = connection.CreateCommand();
+                rankInsert.Transaction = tx;
+                rankInsert.CommandText = """
+                    INSERT INTO CustomFieldValues(PersonId,FieldDefinitionId,FieldValueText,UpdatedAtUtc)
+                    VALUES($person,'FLD-SYS-RANK',$rank,$now);
+                    """;
+                rankInsert.Parameters.AddWithValue("$person", personId);
+                rankInsert.Parameters.AddWithValue("$rank", rank);
+                rankInsert.Parameters.AddWithValue("$now", nowUtc.ToString("O"));
+                await rankInsert.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
             using (var assign = connection.CreateCommand())
             {
                 assign.Transaction = tx;
@@ -400,7 +417,7 @@ public sealed class PersonRosterService
                 actorUserId: userId, actorUsername: username, actorDisplayName: visibleName,
                 targetEntityType: "Person", targetEntityId: personId, targetDisplay: $"{visibleName} ({serviceNumber})",
                 oldValueJson: null, newValueJson: new JsonObject { ["personId"] = personId, ["name"] = visibleName,
-                    ["serviceNumberA"] = serviceNumber,
+                    ["serviceNumberA"] = serviceNumber, ["rank"] = rank,
                     ["independentFromArchivedIdentity"] = matches.Count>0,
                     ["reusedDismissedNumber"] = replaceDismissed }.ToJsonString(),
                 description: $"أُنشئ سجل الفرد «{visibleName}» بالمعرف الثابت {personId}.",

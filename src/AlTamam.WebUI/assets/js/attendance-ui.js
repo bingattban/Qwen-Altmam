@@ -169,7 +169,7 @@
    header.append(filters,rangePanel,choice,info,list);
    host.appendChild(draftPanel);
    host.insertBefore(header,draftPanel);
-   const fields=["تحديد","الرقم (ع)","الاسم","الموقع","الحالة الحالية"];
+   const fields=["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","تحديد","الحالة الحالية"];
    function table(headers){
      const outer=make("div",undefined,"functional-table-wrap");
      const t=make("table",undefined,"data-table functional-table");
@@ -192,7 +192,7 @@
        const d=response.data||{};
        const customColumns=window.AltamamRosterColumns?.columns(d)||[];
        const t=table([...fields,...customColumns.map(col=>col.caption)]);
-       for(const p of d.items||[]){
+       for(const [index,p] of (d.items||[]).entries()){
          const tr=make("tr"),td=make("td"),cb=make("input");
          cb.type="checkbox";cb.checked=selected.has(p.personId);
          cb.setAttribute("aria-label","تحديد "+p.name);
@@ -203,8 +203,11 @@
            if(cb.checked)selected.add(p.personId);else selected.delete(p.personId);
            summary();clearReview();
          });
-         td.appendChild(cb);tr.appendChild(td);
-         [p.serviceNumberA,p.name,p.siteName].forEach(v=>tr.appendChild(make("td",v)));
+         td.appendChild(cb);
+         [(pageNo-1)*DAILY_PAGE_SIZE+index+1,p.serviceNumberA,
+           window.AltamamRosterColumns?.rank(p)||"—",p.name,p.siteName]
+           .forEach(v=>tr.appendChild(make("td",v)));
+         tr.appendChild(td);
          const stateCell=make("td"),statePill=make("span",p.statusName,
            "status-pill attendance-status-pill");
          const savedColor=String(p.statusColor||"");

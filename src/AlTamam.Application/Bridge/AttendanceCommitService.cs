@@ -241,6 +241,8 @@ public sealed class AttendanceCommitService
         var summary=(JsonObject)sealedData.DeepClone();
         summary["previewToken"]=token;
         summary["count"]=ids.Length;
+        await RosterCustomFieldProjection.AttachProtectedRankPreviewAsync(
+            c,(JsonArray)summary["persons"]!,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(summary);
     }
 

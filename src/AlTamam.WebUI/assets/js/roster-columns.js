@@ -15,8 +15,12 @@
   function values(person,visibleColumns) {
     return visibleColumns.map(column=>value(person,column));
   }
+  function rank(person) {
+    const value=String(person?.rank??"").trim();
+    return value||"—";
+  }
   function headings(visibleColumns) {
     return visibleColumns.map(column=>column.caption);
   }
-  window.AltamamRosterColumns=Object.freeze({columns,value,values,headings});
+  window.AltamamRosterColumns=Object.freeze({columns,value,values,headings,rank});
 })();

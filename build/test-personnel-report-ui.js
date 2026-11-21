@@ -143,7 +143,8 @@ async function main(){
   assert.equal(calls.at(-1).payload.siteId,"SITE-OLD");
   assert.equal(calls.at(-1).payload.statusId,"STS-ABSENT");
   assert.equal(calls.at(-1).payload.movementType,3);
-  assert.ok(viewport.all().some(x=>x.textContent==="الاسم: فرد جديد مستقل — الرقم (ع): 5151"));
+  assert.ok(viewport.all().some(x=>x.textContent==="الاسم: فرد جديد مستقل — الرقم (ع): 5151 — الرتبة: —"),
+    "individual report must show unknown rank transparently without inventing it");
   assert.ok(viewport.all().some(x=>x.textContent.includes("العودة إلى التقرير الجماعي")));
   assert.ok(viewport.all().some(x=>x.textContent==="تاريخ المواقع والفترات الفعلية"));
   const exportButton=buttons("تصدير التقرير إلى Excel")[0];

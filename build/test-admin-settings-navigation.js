@@ -673,7 +673,7 @@ async function run() {
   assert.ok(form,"single-person form is available");
   const inputs=form.all().filter(x=>x.tag==="input");
   const location=form.all().find(x=>x.tag==="select");
-  assert.equal(inputs.length,2);
+  assert.equal(inputs.length,3, "New person form now includes the rank field");
   inputs[0].value="شخص تجريبي راجع";inputs[1].value="4141";
   location.value="SITE-RETURN";
   await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
@@ -690,14 +690,14 @@ async function run() {
     "return binds explicit candidate ID and actor-bound preview");
   assert.equal(calls.filter(x=>x.name==="CreatePerson").length,0);
 
-  inputs[0].value="شخص جديد مكرر";inputs[1].value="6262";
+  inputs[0].value="شخص جديد مكرر";inputs[1].value="6262";inputs[2].value="ملازم";
   location.value="SITE-RETURN";
   await buttonNamed("تأكيد وإضافة الفرد").handlers.click();
   assert.ok(buttonNamed("فرد آخر مختلف عن جميع المرشحين"),
     "name-only candidate requires explicit different-human resolution");
   await buttonNamed("فرد آخر مختلف عن جميع المرشحين").handlers.click();
   assert.ok(calls.some(x=>x.name==="CreatePerson"&&x.body.identityDecision==="different"&&
-    x.body.identityResolutionToken==="U".repeat(64)),
+    x.body.identityResolutionToken==="U".repeat(64)&&x.body.rank==="ملازم"),
     "independent identity requires the token-bound archived-name resolution");
 
   // 04.03(c): real authorized roster removal is a separate verified
@@ -1388,11 +1388,14 @@ async function run() {
   const rangeTable=rangeCard.all().find(x=>x.tag==="table");
   assert.ok(rangeTable,"table rendered below search");
   const rangeHeaders=rangeTable.children[0].children[0].children.map(x=>x.textContent);
-  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","اسم الفرد","2026-10-08","2026-10-09","2026-10-10"],
-    "table columns match الرقم, الرقم (ع), اسم الفرد and the selected days");
+  assert.deepEqual(rangeHeaders,["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع",
+    "2026-10-08","2026-10-09","2026-10-10"],
+    "rank and site must follow the fixed first five fields before dated status cells");
   const rangeCells=rangeTable.children[1].children[0].children.map(x=>x.textContent);
-  assert.deepEqual(rangeCells,["1","C-1","اختبار","موجود","إجازة","غياب"],
-    "table row displays sequence, serviceNumberA, person name, and each day's status box");
+  assert.equal(rangeCells.length,8);
+  assert.deepEqual(rangeCells.slice(0,4),["1","C-1","—","اختبار"]);
+  assert.deepEqual(rangeCells.slice(-3),["موجود","إجازة","غياب"],
+    "day values must retain their chronological order after adding rank");
   assert.equal(changeBtn.disabled,false,"change status button enabled after search");
   changeBtn.handlers.click();
   await new Promise(resolve=>setImmediate(resolve));

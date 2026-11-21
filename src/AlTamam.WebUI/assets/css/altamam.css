@@ -691,8 +691,9 @@ table.monthly-table thead .sticky-col-4 {
 .monthly-detail-revision{padding:10px 0;border-bottom:1px solid var(--border-color)}
 .monthly-scroll .fixed-one{right:0;width:62px;min-width:62px}
 .monthly-scroll .fixed-two{right:62px;width:118px;min-width:118px}
-.monthly-scroll .fixed-three{right:180px;width:190px;min-width:190px;max-width:190px;overflow:hidden;text-overflow:ellipsis}
-.monthly-scroll .fixed-four{right:370px;width:135px;min-width:135px}
+.monthly-scroll .fixed-three{right:180px;width:110px;min-width:110px;max-width:110px;overflow:hidden;text-overflow:ellipsis}
+.monthly-scroll .fixed-four{right:290px;width:205px;min-width:205px;max-width:205px;overflow:hidden;text-overflow:ellipsis}
+.monthly-scroll .fixed-five{right:495px;width:145px;min-width:145px}
 .monthly-scroll .pinned{position:sticky;z-index:3;background:var(--bg-surface)}
 .monthly-scroll th.pinned{z-index:8;background:var(--bg-subtle)}
 .functional-archive{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -880,12 +881,12 @@ body{min-width:0}
   font-size:14px;font-weight:700;line-height:1.65;
   vertical-align:middle;padding:8px 9px;
 }
-.monthly-scroll .fixed-three{
+.monthly-scroll .fixed-four{
   width:205px;min-width:205px;max-width:205px;
   white-space:normal;overflow:visible;text-overflow:clip;
   overflow-wrap:anywhere;font-weight:700;
 }
-.monthly-scroll .fixed-four{right:385px;width:145px;min-width:145px;
+.monthly-scroll .fixed-five{right:495px;width:145px;
   white-space:normal;overflow-wrap:anywhere}
 .monthly-scroll td.current-day-column .monthly-day-detail{font-size:18px}
 .monthly-scroll .monthly-day-detail{
@@ -1199,7 +1200,7 @@ body{min-width:0}
 }
 
 /* Monthly attendance: fit as many readable people as the window permits.
-   Keep the chronological calendar, four sticky columns and visible pager. */
+   Keep the chronological calendar, five sticky columns and visible pager. */
 #appViewport.monthly-dashboard{
   height:100%;min-height:0;overflow:hidden;gap:6px
 }
@@ -1264,11 +1265,11 @@ body{min-width:0}
 #appViewport.monthly-dashboard .monthly-scroll .functional-table tbody tr{
   height:35px
 }
-#appViewport.monthly-dashboard .monthly-scroll .functional-table td.fixed-three{
+#appViewport.monthly-dashboard .monthly-scroll .functional-table td.fixed-four{
   white-space:normal;overflow-wrap:anywhere;overflow:visible;
   text-overflow:clip;font-weight:750
 }
-#appViewport.monthly-dashboard .monthly-scroll .functional-table td.fixed-four{
+#appViewport.monthly-dashboard .monthly-scroll .functional-table td.fixed-five{
   white-space:normal;overflow-wrap:anywhere
 }
 #appViewport.monthly-dashboard .monthly-scroll .functional-table thead th.day-column{
@@ -1574,7 +1575,7 @@ label.app-unified-search-wrap>.app-unified-search-caption{
   display:none!important
 }
 .functional-export-preview>.form-control{width:100%;max-width:100%}
-.monthly-scroll th.fixed-four,.monthly-scroll td.fixed-four{
+.monthly-scroll th.fixed-five,.monthly-scroll td.fixed-five{
   box-shadow:-5px 0 7px -7px rgba(2,14,28,.65)
 }
 .monthly-day-detail{border-radius:6px;padding:3px 7px;min-height:24px}
@@ -2368,7 +2369,7 @@ body:has(.person-report-modal:not([hidden])) #appModalBackdrop.open{z-index:1450
 
 
 /* Phase 08: 12-day calendar window. The toolbar never scrolls away with
-   day cells; existing four sticky identity columns retain their colors. */
+   day cells; existing five sticky identity columns retain their colors. */
 #appViewport.monthly-dashboard>.monthly-grid-panel>.monthly-day-window-nav{
   flex:0 0 auto;display:flex;align-items:center;justify-content:center;
   gap:10px;min-height:39px;padding:4px 10px;background:var(--bg-surface);

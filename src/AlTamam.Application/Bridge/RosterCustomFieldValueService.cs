@@ -137,7 +137,9 @@ public sealed class RosterCustomFieldValueService
                     (SELECT v.FieldValueText FROM CustomFieldValues v
                      WHERE v.PersonId=$person AND v.FieldDefinitionId=d.FieldDefinitionId)
                 FROM CustomFieldDefinitions d
-                WHERE d.FieldDefinitionId=$field AND d.IsSystemProtected=0
+                WHERE d.FieldDefinitionId=$field
+                  AND (d.IsSystemProtected=0 OR
+                       (d.FieldDefinitionId='FLD-SYS-RANK' AND d.TechnicalKey='sys_rank'))
                   AND d.ActiveFlag=1 AND d.VisibleFlag=1;
                 """;
             q.Parameters.AddWithValue("$field",fieldId);
@@ -149,7 +151,8 @@ public sealed class RosterCustomFieldValueService
             string caption=reader.GetString(0);
             int type=reader.GetInt32(1);
             string? prior=reader.IsDBNull(2)?null:reader.GetString(2);
-            if(!TryCanonicalize(raw,type,out string normalized))
+            if(!TryCanonicalize(raw,type,out string normalized) ||
+               (fieldId=="FLD-SYS-RANK" && normalized.Length>80))
                 return BridgeHelpers.Error(BridgeErrorCodes.ValidationError,
                     "قيمة العمود «"+caption+"» لا تطابق نوعه المحفوظ.");
             if(!string.Equals(prior??"",normalized,StringComparison.Ordinal))

@@ -176,6 +176,8 @@ public sealed class ManualCarryForwardService
         response["previewToken"] = token;
         response["count"] = ids.Length;
         response["statusName"] = "حسب حالة كل فرد في أمس أو الحالة الافتراضية";
+        await RosterCustomFieldProjection.AttachProtectedRankPreviewAsync(
+            connection,(JsonArray)response["persons"]!,ct).ConfigureAwait(false);
         return BridgeHelpers.Ok(response);
     }
 

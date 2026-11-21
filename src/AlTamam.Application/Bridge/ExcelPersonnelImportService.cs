@@ -39,7 +39,9 @@ public sealed class ExcelPersonnelImportService
         using var query=c.CreateCommand();
         query.CommandText="""
             SELECT FieldDefinitionId,ArabicCaption,FieldType FROM CustomFieldDefinitions
-            WHERE IsSystemProtected=0 AND ActiveFlag=1 AND VisibleFlag=1;
+            WHERE (IsSystemProtected=0 OR
+                   (FieldDefinitionId='FLD-SYS-RANK' AND TechnicalKey='sys_rank'))
+              AND ActiveFlag=1 AND VisibleFlag=1;
             """;
         var result=new Dictionary<string,(string Id,int Type)>(StringComparer.Ordinal);
         using var rows=query.ExecuteReader();
@@ -797,7 +799,8 @@ public sealed class ExcelPersonnelImportService
                     string rawCustom=Value(rawCell);
                     if(rawCustom.Length==0)continue; // blank Excel cells never erase saved values
                     if(!RosterCustomFieldValueService.TryCanonicalize(
-                        rawCustom,extra.Type,out string normalized))
+                        rawCustom,extra.Type,out string normalized) ||
+                       (extra.Id=="FLD-SYS-RANK" && normalized.Length>80))
                     {
                         cellIssue="قيمة العمود الإضافي لا تطابق نوعه أو تجاوزت الحد الآمن.";
                         break;

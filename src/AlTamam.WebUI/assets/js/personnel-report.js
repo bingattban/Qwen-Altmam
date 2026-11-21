@@ -258,16 +258,17 @@
        calendar.appendChild(pager);report.appendChild(calendar);
        const perPerson=card("تفصيل كل فرد في المجموعة — دون دمج السجلات المتشابهة");
        const customColumns=window.AltamamRosterColumns?.columns(data)||[];
-       const t=table(["الرقم (ع)","اسم الفرد","نوع السجل","أيام التحضير",
+       const t=table(["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","نوع السجل","أيام التحضير",
          "التنقلات","الحالات",
          ...(window.AltamamRosterColumns?.headings(customColumns)||[]),"التفاصيل"]);
-       for(const person of data.persons){
+       for(const [index,person] of data.persons.entries()){
          const tr=el("tr");
          const kind=person.active?"نشط":person.organizationalStatus===3?
            "مفصول":person.organizationalStatus===2?"منقول خارجيًا":"مؤرشف";
          const states=(person.statusTotals||[])
            .map(x=>x.statusName+" ("+x.count+")").join("، ")||"لا توجد";
-         [person.serviceNumberA,person.name,kind,person.attendanceTotal,
+         [index+1,person.serviceNumberA,window.AltamamRosterColumns?.rank(person)||"—",
+           person.name,person.siteName||"غير محدد",kind,person.attendanceTotal,
            person.movementTotal,states,
            ...(window.AltamamRosterColumns?.values(person,customColumns)||[])]
            .forEach(x=>tr.appendChild(el("td",x)));
@@ -296,9 +297,9 @@
        if(ticket!==serial||!root.isConnected)return;
        const items=reply.data?.items||[];
        const customColumns=window.AltamamRosterColumns?.columns(reply.data)||[];
-       const t=table(["اختيار","الرقم (ع)","الاسم","حالة السجل","الموقع",
+       const t=table(["الرقم","الرقم (ع)","الرتبة","الاسم","الموقع","اختيار","حالة السجل",
          ...(window.AltamamRosterColumns?.headings(customColumns)||[]),"التقرير"]);
-       for(const person of items){
+       for(const [index,person] of items.entries()){
          const tr=el("tr");
          const selectCell=el("td");
          const toggle=btn(selected.has(person.personId)?"إلغاء الاختيار":"إضافة للمجموعة",()=>{
@@ -310,12 +311,14 @@
            toggle.textContent=selected.has(person.personId)?"إلغاء الاختيار":"إضافة للمجموعة";
            renderSelected();
          });
-         selectCell.appendChild(toggle);tr.appendChild(selectCell);
+         selectCell.appendChild(toggle);
+         [index+1,person.serviceNumberA,window.AltamamRosterColumns?.rank(person)||"—",
+           person.displayName,person.siteName].forEach(v=>tr.appendChild(el("td",v)));
+         tr.appendChild(selectCell);
          const lifecycle=person.active?"نشط":person.organizationalStatus===3?
            "مفصول — سجل تاريخي":person.organizationalStatus===2?
            "منقول خارجيًا — سجل تاريخي":"مؤرشف — سجل تاريخي";
-         [person.serviceNumberA,person.displayName,lifecycle,person.siteName,
-           ...(window.AltamamRosterColumns?.values(person,customColumns)||[])]
+         [lifecycle,...(window.AltamamRosterColumns?.values(person,customColumns)||[])]
            .forEach(v=>tr.appendChild(el("td",v)));
          const cell=el("td");
          cell.appendChild(btn("عرض التقرير",()=>{
@@ -326,7 +329,7 @@
        }
        if(!items.length){
          const tr=el("tr"),cell=el("td","لا يوجد فرد مطابق للبحث");
-         cell.colSpan=6+customColumns.length;tr.appendChild(cell);t.body.appendChild(tr);
+         cell.colSpan=8+customColumns.length;tr.appendChild(cell);t.body.appendChild(tr);
        }
        results.replaceChildren(t.wrap);
      }catch(e){if(ticket===serial&&root.isConnected)alert(results,e);}
@@ -371,7 +374,8 @@
        if(selected.size)report.appendChild(btn("العودة إلى التقرير الجماعي",()=>{void loadGroupReport();}));
        const identity=card("بيانات الفرد");
        identity.append(
-         el("p","الاسم: "+person.name+" — الرقم (ع): "+person.serviceNumberA),
+         el("p","الاسم: "+person.name+" — الرقم (ع): "+person.serviceNumberA+
+           " — الرتبة: "+(window.AltamamRosterColumns?.rank(person)||"—")),
          el("p","تاريخ الإدراج: "+person.firstRecordedDate),
          el("p","حالة الفرد: "+(person.active?"ضمن القوة النشطة":"غير نشط أو مؤرشف"))
        );

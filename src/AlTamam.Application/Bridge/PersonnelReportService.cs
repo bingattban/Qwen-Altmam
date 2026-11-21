@@ -111,7 +111,11 @@ public sealed class PersonnelReportService
         {
             query.CommandText=$"""
                 SELECT PersonId,CurrentVisibleName,CurrentServiceNumberA,
-                       FirstRecordedLocalDate,OrganizationalStatus,ActiveFlag
+                       FirstRecordedLocalDate,OrganizationalStatus,ActiveFlag,
+                       COALESCE((SELECT s.VisibleName FROM PersonAssignments a
+                         JOIN Sites s ON s.SiteId=a.SiteId
+                         WHERE a.PersonId=Persons.PersonId
+                         ORDER BY a.ValidFromLocalDate DESC, a.CreatedAtUtc DESC LIMIT 1),'غير محدد')
                 FROM Persons WHERE PersonId IN ({placeholders});
                 """;
             BindPeople(query);
@@ -126,6 +130,7 @@ public sealed class PersonnelReportService
                     ["firstRecordedDate"]=reader.GetString(3),
                     ["organizationalStatus"]=reader.GetInt32(4),
                     ["active"]=reader.GetInt32(5)==1,
+                    ["siteName"]=reader.GetString(6),
                     ["attendanceTotal"]=0L,["movementTotal"]=0L,
                     ["statusTotals"]=new JsonArray()
                 });
