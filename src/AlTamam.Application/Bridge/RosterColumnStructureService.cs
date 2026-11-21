@@ -60,7 +60,7 @@ public sealed class RosterColumnStructureService
     {
         ["columnId"]=c.Id,["technicalKey"]=c.Key,["caption"]=c.Caption,
         ["fieldType"]=c.Type,["displayOrder"]=c.Order,
-        ["isSystemProtected"]=c.System,["visible"]=c.Visible,
+        ["isSystemProtected"]=c.System || c.Key=="system_rank" || c.Caption=="الرتبة",["visible"]=c.Visible,
         ["active"]=c.Active,["storedValueCount"]=valueCount,
         ["snapshot"]=Fingerprint(c)
     };
@@ -214,8 +214,8 @@ public sealed class RosterColumnStructureService
             var previous=await GetAsync(conn,tx,id,ct).ConfigureAwait(false);
             if(previous is null||!previous.Active)
                 return Invalid("العمود غير موجود أو أصبح معطلاً.",BridgeErrorCodes.ConflictStale);
-            if(previous.System)
-                return Invalid("الأعمدة الأساسية محمية ولا يمكن تعديل تعريفها.");
+            if(previous.System || previous.Key=="system_rank" || previous.Caption=="الرتبة")
+                return Invalid("الأعمدة الأساسية والرتبة محمية ولا يمكن تعديل تعريفها.");
             if(Fingerprint(previous)!=snapshot)
                 return Invalid("تغيّر تعريف العمود؛ حدّث القائمة قبل حفظ التعديل.",
                     BridgeErrorCodes.ConflictStale);
@@ -312,7 +312,8 @@ public sealed class RosterColumnStructureService
             var previous=await GetAsync(conn,tx,id,ct).ConfigureAwait(false);
             if(previous is null||!previous.Active)
                 return Invalid("العمود أصبح معطلاً أو غير موجود.",BridgeErrorCodes.ConflictStale);
-            if(previous.System)return Invalid("لا يجوز حذف أو تعطيل الأعمدة الأساسية.");
+            if(previous.System || previous.Key=="system_rank" || previous.Caption=="الرتبة")
+                return Invalid("لا يجوز حذف أو تعطيل الأعمدة الأساسية أو الرتبة.");
             if(Fingerprint(previous)!=snapshot)
                 return Invalid("تغيّر تعريف العمود منذ عرضه؛ حدّثه قبل التعطيل.",
                     BridgeErrorCodes.ConflictStale);

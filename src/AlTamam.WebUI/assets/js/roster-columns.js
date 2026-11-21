@@ -6,7 +6,7 @@
   function columns(data) {
     return Array.isArray(data?.customColumns) ?
       data.customColumns.filter(c=>c&&typeof c.columnId==="string"&&
-        typeof c.caption==="string" && c.columnId.length>0) : [];
+        typeof c.caption==="string" && c.columnId.length>0 && c.caption!=="الرتبة") : [];
   }
   function value(person,column) {
     const field=person?.customFields?.[column.columnId];
@@ -18,5 +18,11 @@
   function headings(visibleColumns) {
     return visibleColumns.map(column=>column.caption);
   }
-  window.AltamamRosterColumns=Object.freeze({columns,value,values,headings});
+  function editableColumns(data) {
+    return Array.isArray(data?.customColumns) ?
+      data.customColumns.filter(c=>c&&typeof c.columnId==="string"&&
+        typeof c.caption==="string"&&c.columnId.length>0) : [];
+  }
+  function rank(person) { return String(person?.rank||"")||"—"; }
+  window.AltamamRosterColumns=Object.freeze({columns,editableColumns,rank,value,values,headings});
 })();

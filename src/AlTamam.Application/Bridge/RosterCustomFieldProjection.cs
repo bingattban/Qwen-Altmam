@@ -62,6 +62,7 @@ internal static class RosterCustomFieldProjection
         {
             // Always create an isolated JSON object, even when no field exists.
             record["customFields"] = new JsonObject();
+            record["rank"] = "";
             var id = record["personId"]?.GetValue<string>();
             if (string.IsNullOrWhiteSpace(id)) continue;
             if (!persons.TryGetValue(id, out var instances))
@@ -104,7 +105,11 @@ internal static class RosterCustomFieldProjection
                 continue;
             string value = reader.IsDBNull(2) ? "" : reader.GetString(2);
             foreach (var target in targets)
+            {
                 ((JsonObject)target["customFields"]!)[field] = value;
+                if (columns.Any(col => col.Id == field && col.Caption == "الرتبة"))
+                    target["rank"] = value;
+            }
         }
         return Metadata(columns);
     }
